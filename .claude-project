@@ -1,0 +1,140 @@
+{
+  "name": "Modler V2 Development",
+  "description": "3D modeling application rewrite with complexity budgets and specialized agent workflow",
+  "version": "2.0.0-dev",
+  "claude_config": {
+    "max_context_tokens": 200000,
+    "model": "claude-3-sonnet-20240229"
+  },
+  "project_info": {
+    "type": "web_application",
+    "technology_stack": ["Three.js", "JavaScript", "WebGL"],
+    "architecture": "layered_architecture",
+    "development_phase": "foundation_implementation"
+  },
+  "agent_roles": {
+    "architecture_guardian": {
+      "folder": "agents/architecture-guardian",
+      "responsibility": "Prevent over-engineering and complexity creep",
+      "primary_tools": ["Read", "Edit", "Grep", "Bash"],
+      "complexity_budgets": {
+        "max_file_lines": 300,
+        "max_function_calls": 5,
+        "max_core_files": 20
+      }
+    },
+    "implementation_specialist": {
+      "folder": "agents/implementation-specialist", 
+      "responsibility": "Build V2 features following architecture patterns",
+      "primary_tools": ["Write", "Edit", "MultiEdit", "Bash", "mcp__playwright__*"],
+      "target_metrics": {
+        "feature_time_hours": 1,
+        "bug_fix_minutes": 15,
+        "lines_per_feature": 50
+      }
+    },
+    "documentation_keeper": {
+      "folder": "agents/documentation-keeper",
+      "responsibility": "Maintain project documentation and track progress", 
+      "primary_tools": ["Read", "Edit", "MultiEdit", "TodoWrite"],
+      "update_frequency": "daily"
+    },
+    "system_health_monitor": {
+      "folder": "agents/system-health-monitor",
+      "responsibility": "Validate system health and performance",
+      "primary_tools": ["mcp__playwright__*", "Bash", "Read", "WebFetch"],
+      "performance_targets": {
+        "fps": 60,
+        "startup_ms": 500,
+        "memory_mb": 100
+      }
+    }
+  },
+  "development_workflow": {
+    "phases": [
+      {
+        "name": "Foundation Layer",
+        "status": "pending",
+        "target_lines": 250,
+        "components": ["scene-foundation.js", "input-foundation.js"]
+      },
+      {
+        "name": "Scene Layer", 
+        "status": "pending",
+        "target_lines": 350,
+        "components": ["scene-controller.js", "visual-effects.js"]
+      },
+      {
+        "name": "Interaction Layer",
+        "status": "pending", 
+        "target_lines": 350,
+        "components": ["input-handler.js", "selection-controller.js"]
+      },
+      {
+        "name": "Application Layer",
+        "status": "pending",
+        "target_lines": 250,
+        "components": ["tool-controller.js", "tools/"]
+      }
+    ]
+  },
+  "file_structure": {
+    "documentation": {
+      "README.md": "Agent selection and quick start",
+      "QUICK_START.md": "2-minute project overview",
+      "PROJECT_CONTEXT.md": "Detailed background and current state",
+      "V1_LESSONS.md": "Anti-patterns and lessons learned", 
+      "ARCHITECTURE_V2.md": "Strategic vision and patterns",
+      "IMPLEMENTATION_PLAN_V2.md": "Live progress tracking"
+    },
+    "agents": {
+      "architecture-guardian/": "Complexity prevention agent",
+      "implementation-specialist/": "Feature building agent", 
+      "documentation-keeper/": "Documentation maintenance agent",
+      "system-health-monitor/": "System validation agent"
+    },
+    "scripts": {
+      "health-check.js": "Project health validation",
+      "setup-dev-server.js": "Development server setup"
+    }
+  },
+  "quality_gates": {
+    "file_size_limit": 300,
+    "function_call_limit": 5,
+    "feature_time_limit_hours": 2,
+    "bug_fix_time_limit_minutes": 30,
+    "total_lines_budget": 5000
+  },
+  "v1_reference": {
+    "location": "../",
+    "status": "over_engineered",
+    "lines_of_code": 23000,
+    "files_count": 64,
+    "main_problems": [
+      "circular_dependencies",
+      "deep_call_stacks", 
+      "manager_explosion",
+      "premature_abstraction"
+    ]
+  },
+  "success_criteria": {
+    "functional": [
+      "face_highlighting_works_reliably",
+      "object_selection_works_consistently", 
+      "tool_switching_works_smoothly",
+      "cross_browser_compatibility"
+    ],
+    "performance": [
+      "60_fps_rendering",
+      "sub_500ms_startup", 
+      "sub_100mb_memory_usage",
+      "sub_500kb_bundle_size"
+    ],
+    "development": [
+      "sub_1hour_simple_features",
+      "sub_15min_bug_fixes",
+      "sub_2hour_onboarding",
+      "sub_5000_total_lines"
+    ]
+  }
+}

@@ -1,0 +1,3314 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Modler V2 - Working Baseline</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background: #1a1a1a;
+            color: #e0e0e0;
+            font-family: Arial, sans-serif;
+        }
+        
+        .app-container {
+            width: 100vw;
+            height: 100vh;
+            position: relative;
+        }
+        
+        .professional-toolbar {
+            position: absolute;
+            top: 16px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(42, 42, 42, 0.95);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(64, 64, 64, 0.8);
+            border-radius: 12px;
+            padding: 8px 16px;
+            height: 48px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+            z-index: 1000;
+        }
+        
+        .toolbar-section {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        
+        .toolbar-divider {
+            width: 1px;
+            height: 28px;
+            background: #555;
+            margin: 0 8px;
+        }
+        
+        .toolbar-button {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 36px;
+            height: 36px;
+            background: transparent;
+            border: 1px solid transparent;
+            border-radius: 6px;
+            color: #c0c0c0;
+            cursor: pointer;
+            transition: all 0.15s ease;
+            font-size: 14px;
+            font-weight: bold;
+        }
+        
+        .toolbar-button:hover {
+            background: rgba(74, 158, 255, 0.1);
+            border-color: #4a9eff;
+            color: #4a9eff;
+        }
+        
+        .toolbar-button.active {
+            background: #4a9eff;
+            color: white;
+            border-color: #4a9eff;
+        }
+        
+        .toolbar-button.active:hover {
+            background: #6bb6ff;
+            border-color: #6bb6ff;
+        }
+        
+        /* Professional icons */
+        .icon-select::before { content: "⌖"; }
+        .icon-move::before { content: "⇄"; }
+        .icon-push::before { content: "⇶"; }
+        .icon-layout::before { content: "⚏"; }
+        .icon-box-create::before { content: "⬛"; }
+        .icon-snap::before { content: "📌"; }
+        
+        /* System toolbar (positioned next to main toolbar with small gap) */
+        .system-toolbar {
+            position: absolute;
+            top: 16px;
+            left: calc(50% + 120px); /* Position to the right of main toolbar */
+            background: rgba(42, 42, 42, 0.95);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(64, 64, 64, 0.8);
+            border-radius: 12px;
+            padding: 8px 16px;
+            height: 48px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+            z-index: 1000;
+        }
+        
+        .content-area {
+            width: 100%;
+            height: 100vh;
+            display: flex;
+        }
+        
+        .left-panel {
+            width: 240px;
+            min-width: 200px;
+            max-width: 400px;
+            height: 100vh;
+            background: #252525;
+            border-right: 1px solid #404040;
+            padding: 16px;
+            padding-top: 80px; /* Space for floating toolbar */
+            overflow-y: auto;
+            resize: horizontal;
+        }
+        
+        .viewport-area {
+            flex: 1;
+            height: 100vh;
+            background: #1a1a1a;
+            position: relative;
+            min-width: 400px;
+        }
+        
+        #canvas {
+            width: 100%;
+            height: 100%;
+            display: block;
+            border: none;
+            outline: none;
+        }
+        
+        .right-panel {
+            width: 280px;
+            min-width: 250px;
+            max-width: 500px;
+            height: 100vh;
+            background: #252525;
+            border-left: 1px solid #404040;
+            padding: 16px;
+            padding-top: 80px; /* Space for floating toolbar */
+            overflow-y: auto;
+            resize: horizontal;
+        }
+        
+        .panel-title {
+            font-weight: 600;
+            margin-bottom: 16px;
+            color: #e0e0e0;
+            font-size: 13px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            border-bottom: 1px solid #404040;
+            padding-bottom: 8px;
+        }
+        
+        .settings-section {
+            margin-bottom: 20px;
+            padding-bottom: 20px;
+            border-bottom: 1px solid #404040;
+        }
+        
+        .config-category {
+            margin-bottom: 20px;
+            border-bottom: 1px solid #404040;
+            padding-bottom: 16px;
+        }
+        
+        .config-category:last-child {
+            border-bottom: none;
+        }
+        
+        .config-category h4 {
+            font-size: 11px;
+            font-weight: 600;
+            color: #999;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin: 0 0 12px 0;
+            border-bottom: 1px solid #333;
+            padding-bottom: 6px;
+        }
+        
+        .config-group {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 8px;
+            gap: 8px;
+        }
+        
+        .config-label {
+            font-size: 11px;
+            color: #e0e0e0;
+            margin: 0;
+            flex-shrink: 0;
+            min-width: 100px;
+        }
+        
+        .config-input {
+            background: #333;
+            border: 1px solid #555;
+            color: #fff;
+            padding: 4px 6px;
+            border-radius: 3px;
+            font-size: 11px;
+            width: 50px;
+            height: 24px;
+        }
+        
+        .config-input[type="color"] {
+            width: 40px;
+            height: 24px;
+            padding: 2px;
+            cursor: pointer;
+        }
+        
+        .config-slider {
+            background: #333;
+            border: none;
+            height: 4px;
+            border-radius: 2px;
+            outline: none;
+            flex: 1;
+            margin: 0 8px;
+            cursor: pointer;
+        }
+        
+        .config-slider::-webkit-slider-thumb {
+            appearance: none;
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+            background: #4a9eff;
+            cursor: pointer;
+        }
+        
+        .config-slider::-moz-range-thumb {
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+            background: #4a9eff;
+            cursor: pointer;
+            border: none;
+        }
+        
+        .config-value {
+            font-size: 10px;
+            color: #999;
+            min-width: 30px;
+            text-align: center;
+            font-family: 'Courier New', monospace;
+        }
+        
+        .selected-object-header {
+            background: #2a2a2a;
+            padding: 12px 16px;
+            margin: -16px -16px 16px -16px;
+            border-bottom: 1px solid #404040;
+        }
+        
+        .object-name-display {
+            font-size: 16px;
+            font-weight: 600;
+            color: #4a9eff;
+            margin-bottom: 4px;
+        }
+        
+        .object-type-display {
+            font-size: 12px;
+            color: #999;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        
+        .simple-input {
+            width: 50%;
+            padding: 8px 12px;
+            margin: 6px 0;
+            background: #1a1a1a;
+            border: 1px solid #404040;
+            color: #e0e0e0;
+            border-radius: 4px;
+            font-size: 12px;
+            transition: border-color 0.15s ease;
+        }
+        
+        .simple-input:focus {
+            outline: none;
+            border-color: #4a9eff;
+            background: #222;
+        }
+
+        /* Hide native number input spinners to prevent conflicts with custom drag behavior */
+        .simple-input[type="number"]::-webkit-outer-spin-button,
+        .simple-input[type="number"]::-webkit-inner-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+
+        .simple-input[type="number"] {
+            -moz-appearance: textfield; /* Firefox */
+            appearance: textfield; /* Standard property */
+        }
+
+        /* Custom number input wrapper with external arrows */
+        .number-input-wrapper {
+            position: relative;
+            display: inline-block;
+            width: 100%;
+        }
+
+        .number-input-wrapper .simple-input {
+            width: 100%;
+            padding-right: 0; /* Remove internal padding for arrows */
+        }
+
+        .number-input-arrows {
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            width: 18px;
+            margin-left: 2px;
+        }
+
+        .number-arrow {
+            width: 16px;
+            height: 12px;
+            background: #333;
+            border: 1px solid #555;
+            color: #aaa;
+            font-size: 10px;
+            line-height: 10px;
+            text-align: center;
+            cursor: pointer;
+            user-select: none;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .number-arrow:hover {
+            background: #444;
+            color: #ddd;
+        }
+
+        .number-arrow:active {
+            background: #555;
+        }
+
+        .number-arrow-up {
+            border-bottom: none;
+            border-radius: 2px 2px 0 0;
+        }
+
+        .number-arrow-down {
+            border-radius: 0 0 2px 2px;
+        }
+
+        /* Layout axis button group styling */
+        .axis-button-group {
+            display: flex;
+            gap: 4px;
+            margin-bottom: 8px;
+        }
+
+        .axis-button {
+            flex: 1;
+            background: #333;
+            border: 1px solid #555;
+            color: #ccc;
+            padding: 8px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.15s ease;
+            font-size: 14px;
+            font-weight: 500;
+        }
+
+        .axis-button:hover {
+            background: #404040;
+            border-color: #666;
+        }
+
+        .axis-button.active {
+            background: #4a9eff;
+            border-color: #4a9eff;
+            color: white;
+        }
+
+        .axis-button.active:hover {
+            background: #3a8eef;
+        }
+
+        /* Fill button styling for dimensions */
+        .xyz-input {
+            position: relative;
+        }
+
+        .fill-button {
+            background: #333;
+            border: 1px solid #555;
+            color: #ccc;
+            padding: 4px 8px;
+            border-radius: 3px;
+            cursor: pointer;
+            transition: all 0.15s ease;
+            font-size: 11px;
+            font-weight: 500;
+            margin-top: 2px;
+            width: 100%;
+            display: none; /* Hidden by default, shown when object is in layout container */
+        }
+
+        .fill-button:hover {
+            background: #404040;
+            border-color: #666;
+        }
+
+        .fill-button.active {
+            background: #ff6600;
+            border-color: #ff6600;
+            color: white;
+        }
+
+        .fill-button.active:hover {
+            background: #e55a00;
+        }
+
+        .dimension-input-disabled {
+            background: #2a2a2a;
+            color: #666;
+            cursor: not-allowed;
+        }
+
+        /* Custom resize handle styling */
+        .left-panel::-webkit-resizer {
+            background: #404040;
+            border-radius: 2px;
+        }
+        
+        .right-panel::-webkit-resizer {
+            background: #404040;
+            border-radius: 2px;
+        }
+        
+        /* Professional Accordion Styling */
+        .accordion {
+            margin-top: 8px;
+        }
+        
+        .accordion-item {
+            border-bottom: 1px solid #404040;
+            margin-bottom: 1px;
+        }
+        
+        .accordion-item:last-child {
+            border-bottom: none;
+        }
+        
+        .accordion-header {
+            display: flex;
+            align-items: center;
+            padding: 12px 0;
+            background: transparent;
+            border: none;
+            color: #e0e0e0;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            width: 100%;
+            text-align: left;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            transition: color 0.15s ease;
+        }
+        
+        .accordion-header:hover {
+            color: #4a9eff;
+        }
+        
+        .accordion-icon {
+            margin-left: auto;
+            font-size: 10px;
+            transition: transform 0.2s ease;
+        }
+        
+        .accordion-content {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.3s ease;
+        }
+        
+        .accordion-item.expanded .accordion-content {
+            max-height: 400px;
+        }
+        
+        .accordion-item.expanded .accordion-icon {
+            transform: rotate(90deg);
+        }
+        
+        .accordion-body {
+            padding: 16px 0;
+        }
+        
+        .form-group {
+            margin-bottom: 16px;
+        }
+        
+        .form-label {
+            display: block;
+            font-size: 10px;
+            color: #b0b0b0;
+            margin-bottom: 6px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        
+        .xyz-inputs {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 12px;
+        }
+
+        .xyz-input {
+            display: grid;
+            grid-template-columns: auto 1fr auto;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .xyz-label {
+            font-size: 9px;
+            color: #888;
+            white-space: nowrap;
+            min-width: 12px;
+            font-weight: 700;
+            text-transform: uppercase;
+        }
+        
+        /* Object Tree Styling */
+        .object-tree {
+            margin-top: 8px;
+        }
+        
+        .object-item {
+            display: flex;
+            align-items: center;
+            padding: 8px 12px;
+            margin: 2px 0;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: background-color 0.15s ease;
+            border: 1px solid transparent;
+        }
+        
+        .object-item:hover {
+            background: rgba(74, 158, 255, 0.1);
+            border-color: rgba(74, 158, 255, 0.3);
+        }
+        
+        .object-item.active {
+            background: rgba(74, 158, 255, 0.15);
+            border-color: #4a9eff;
+        }
+        
+        .object-icon {
+            margin-right: 8px;
+            font-size: 12px;
+            width: 16px;
+            text-align: center;
+        }
+        
+        .object-name {
+            font-size: 11px;
+            color: #e0e0e0;
+            font-weight: 500;
+            flex: 1;
+        }
+        
+        .object-item.active .object-name {
+            color: #4a9eff;
+            font-weight: 600;
+        }
+        
+        /* Container hierarchy styling */
+        .object-item {
+            display: flex;
+            align-items: center;
+        }
+        
+        .hierarchy-indent {
+            width: 16px;
+            height: 100%;
+        }
+        
+        .expand-collapse {
+            width: 16px;
+            height: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            font-size: 10px;
+            color: #888;
+            margin-right: 4px;
+        }
+        
+        .expand-collapse:hover {
+            color: #ccc;
+        }
+        
+        .object-item.container {
+            font-weight: 600;
+        }
+        
+        .object-item.child {
+            background: rgba(255,255,255,0.02);
+            border-left: 2px solid rgba(74, 158, 255, 0.2);
+        }
+        
+        /* Opacity display styling */
+        .opacity-value {
+            font-size: 10px;
+            color: #888;
+            text-align: center;
+            margin-top: 4px;
+            font-weight: 600;
+        }
+        
+        /* Drag and Drop Styling */
+        .object-item[draggable="true"] {
+            cursor: grab;
+        }
+        
+        .object-item.dragging {
+            opacity: 0.5;
+            cursor: grabbing;
+            transform: rotate(2deg);
+            background: rgba(74, 158, 255, 0.2);
+        }
+        
+        .object-item.drag-over {
+            background: rgba(255, 165, 0, 0.2);
+            border-color: #ffa500;
+            transform: scale(1.02);
+        }
+        
+        .object-item.container.drag-over {
+            background: rgba(0, 255, 0, 0.15);
+            border-color: #00ff00;
+            box-shadow: 0 0 8px rgba(0, 255, 0, 0.3);
+        }
+        
+        .drop-indicator {
+            height: 3px;
+            background: #4a9eff;
+            margin: 2px 0;
+            border-radius: 2px;
+            opacity: 0.8;
+            transition: all 0.2s ease;
+            box-shadow: 0 0 4px rgba(74, 158, 255, 0.5);
+        }
+        
+        .drop-indicator.active {
+            height: 4px;
+            background: #6bb6ff;
+            box-shadow: 0 0 8px rgba(74, 158, 255, 0.8);
+        }
+        
+        .object-item.drop-target {
+            border: 2px dashed #4a9eff;
+            background: rgba(74, 158, 255, 0.1);
+        }
+        
+        /* Root Drop Zone Styling */
+        .root-drop-zone {
+            height: 24px;
+            margin: 4px 8px;
+            border: 2px dashed transparent;
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 11px;
+            color: #666;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            transition: all 0.2s ease;
+            position: relative;
+        }
+        
+        .root-drop-zone::before {
+            content: "";
+            opacity: 0;
+            transition: opacity 0.2s ease;
+        }
+        
+        .root-drop-zone.drag-over {
+            border-color: #ff6600;
+            background: rgba(255, 102, 0, 0.1);
+            color: #ff6600;
+        }
+        
+        .root-drop-zone.drag-over::before {
+            opacity: 1;
+        }
+    </style>
+</head>
+<body>
+    <div class="app-container">
+        <div class="professional-toolbar">
+            <div class="toolbar-section">
+                <button class="toolbar-button icon-select active" id="select-tool" onclick="activateTool('select')" title="Select (Q)"></button>
+                <button class="toolbar-button icon-move" id="move-tool" onclick="activateTool('move')" title="Move (W)"></button>
+                <button class="toolbar-button icon-push" id="push-tool" onclick="activateTool('push')" title="Push (E)"></button>
+                <button class="toolbar-button icon-layout" id="layout-tool" onclick="activateTool('layout')" title="Layout (R)"></button>
+                <button class="toolbar-button icon-box-create" id="box-creation-tool" onclick="activateTool('box-creation')" title="Create Box (T)"></button>
+            </div>
+        </div>
+        
+        <div class="system-toolbar">
+            <div class="toolbar-section">
+                <button class="toolbar-button icon-snap active" id="snap-toggle" onclick="toggleSnapping()" title="Toggle Snapping"></button>
+            </div>
+        </div>
+        
+        <div class="content-area">
+            <div class="left-panel">
+                <div class="accordion">
+                    <div class="accordion-item expanded">
+                        <button class="accordion-header" onclick="toggleAccordion(this)">
+                            Settings <span class="accordion-icon">▼</span>
+                        </button>
+                        <div class="accordion-content">
+                            <div class="accordion-body settings-section">
+                    <!-- Visual Settings -->
+                    <div class="config-category">
+                        <h4>Visual Elements</h4>
+                        
+                        <!-- Selection Settings -->
+                        <div class="config-group">
+                            <label class="config-label">Selection Color</label>
+                            <input type="color" class="config-input" id="config-selection-color" value="#ff6600">
+                        </div>
+                        <div class="config-group">
+                            <label class="config-label">Selection Line Width</label>
+                            <input type="range" class="config-slider" id="config-selection-linewidth" min="1" max="5" step="1" value="2">
+                            <span class="config-value">2</span>
+                        </div>
+                        <div class="config-group">
+                            <label class="config-label">Selection Opacity</label>
+                            <input type="range" class="config-slider" id="config-selection-opacity" min="0.1" max="1.0" step="0.1" value="0.8">
+                            <span class="config-value">0.8</span>
+                        </div>
+                        
+                        <!-- Container Settings -->
+                        <div class="config-group">
+                            <label class="config-label">Container Color</label>
+                            <input type="color" class="config-input" id="config-container-color" value="#00ff00">
+                        </div>
+                        <div class="config-group">
+                            <label class="config-label">Box Creation Color</label>
+                            <input type="color" class="config-input" id="config-box-creation-color" value="#00ff00">
+                        </div>
+                        <div class="config-group">
+                            <label class="config-label">Container Line Width</label>
+                            <input type="range" class="config-slider" id="config-container-linewidth" min="1" max="5" step="1" value="1">
+                            <span class="config-value">1</span>
+                        </div>
+                        <div class="config-group">
+                            <label class="config-label">Container Opacity</label>
+                            <input type="range" class="config-slider" id="config-container-opacity" min="0.1" max="1.0" step="0.1" value="0.8">
+                            <span class="config-value">0.8</span>
+                        </div>
+                        
+                        <!-- Snapping Settings -->
+                        <div class="config-group">
+                            <label class="config-label">Snap Indicator Color</label>
+                            <input type="color" class="config-input" id="config-snap-color" value="#ffffff">
+                        </div>
+                        <div class="config-group">
+                            <label class="config-label">Snap Corner Size</label>
+                            <input type="range" class="config-slider" id="config-snap-cornersize" min="0.05" max="0.3" step="0.05" value="0.1">
+                            <span class="config-value">0.1</span>
+                        </div>
+                        <div class="config-group">
+                            <label class="config-label">Snap Border Width</label>
+                            <input type="range" class="config-slider" id="config-snap-borderwidth" min="1" max="5" step="1" value="2">
+                            <span class="config-value">2</span>
+                        </div>
+                    </div>
+                    
+                    <!-- Scene Settings -->
+                    <div class="config-category">
+                        <h4>Scene</h4>
+                        
+                        <div class="config-group">
+                            <label class="config-label">Background Color</label>
+                            <input type="color" class="config-input" id="config-scene-background" value="#1a1a1a">
+                        </div>
+                        <div class="config-group">
+                            <label class="config-label">Grid Size</label>
+                            <input type="range" class="config-slider" id="config-scene-gridsize" min="10" max="50" step="5" value="20">
+                            <span class="config-value">20</span>
+                        </div>
+                        <div class="config-group">
+                            <label class="config-label">Grid Density</label>
+                            <input type="range" class="config-slider" id="config-scene-griddensity" min="10" max="50" step="5" value="20">
+                            <span class="config-value">20</span>
+                        </div>
+                        <div class="config-group">
+                            <label class="config-label">Grid Main Color</label>
+                            <input type="color" class="config-input" id="config-scene-gridmain" value="#444444">
+                        </div>
+                        <div class="config-group">
+                            <label class="config-label">Grid Sub Color</label>
+                            <input type="color" class="config-input" id="config-scene-gridsub" value="#222222">
+                        </div>
+                    </div>
+                    
+                    <!-- UI Settings -->
+                    <div class="config-category">
+                        <h4>Interface</h4>
+                        
+                        <div class="config-group">
+                            <label class="config-label">Accent Color</label>
+                            <input type="color" class="config-input" id="config-ui-accent" value="#4a9eff">
+                        </div>
+                        <div class="config-group">
+                            <label class="config-label">Toolbar Opacity</label>
+                            <input type="range" class="config-slider" id="config-ui-toolbaropacity" min="0.5" max="1.0" step="0.05" value="0.95">
+                            <span class="config-value">0.95</span>
+                        </div>
+                    </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="accordion" style="margin-top: 20px;">
+                    <div class="accordion-item expanded">
+                        <button class="accordion-header" onclick="toggleAccordion(this)">
+                            Objects <span class="accordion-icon">▼</span>
+                        </button>
+                        <div class="accordion-content">
+                            <div class="accordion-body">
+                <div id="object-list" class="object-tree">
+                    <div class="object-item active" onclick="selectObjectFromList('Test Cube')">
+                        <span class="object-icon">🟥</span>
+                        <span class="object-name">Test Cube</span>
+                    </div>
+                    <div class="object-item" onclick="selectObjectFromList('Small Cube')">
+                        <span class="object-icon">🟦</span>
+                        <span class="object-name">Small Cube</span>
+                    </div>
+                    <div class="object-item" onclick="selectObjectFromList('Test Cylinder')">
+                        <span class="object-icon">🟢</span>
+                        <span class="object-name">Test Cylinder</span>
+                    </div>
+                    <div class="object-item" onclick="selectObjectFromList('Floor Grid')">
+                        <span class="object-icon">⬛</span>
+                        <span class="object-name">Floor Grid</span>
+                    </div>
+                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="viewport-area">
+                <canvas id="canvas"></canvas>
+            </div>
+            
+            <div class="right-panel">
+                <div id="selected-object-info" class="selected-object-header">
+                    <div class="object-name-display" id="selected-object-name">No object selected</div>
+                    <div class="object-type-display" id="selected-object-type"></div>
+                </div>
+                <div class="accordion">
+                    <div class="accordion-item expanded">
+                        <button class="accordion-header" onclick="toggleAccordion(this)">
+                            Transform <span class="accordion-icon">▶</span>
+                        </button>
+                        <div class="accordion-content">
+                            <div class="accordion-body">
+                                <div class="form-group">
+                                    <label class="form-label">Position</label>
+                                    <div class="xyz-inputs">
+                                        <div class="xyz-input">
+                                            <label class="xyz-label">X</label>
+                                            <div class="number-input-wrapper">
+                                                <input type="number" class="simple-input" id="pos-x" value="0.00" step="0.1" onchange="updateObjectProperty('position', 'x', this.value)" onkeydown="handlePropertyInputKeydown(event, 'position', 'x', this)">
+                                                <div class="number-input-arrows">
+                                                    <div class="number-arrow number-arrow-up" onclick="NumberInputDragger.incrementValue('pos-x', 0.1)">▲</div>
+                                                    <div class="number-arrow number-arrow-down" onclick="NumberInputDragger.decrementValue('pos-x', 0.1)">▼</div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="xyz-input">
+                                            <label class="xyz-label">Y</label>
+                                            <div class="number-input-wrapper">
+                                                <input type="number" class="simple-input" id="pos-y" value="0.00" step="0.1" onchange="updateObjectProperty('position', 'y', this.value)" onkeydown="handlePropertyInputKeydown(event, 'position', 'y', this)">
+                                                <div class="number-input-arrows">
+                                                    <div class="number-arrow number-arrow-up" onclick="NumberInputDragger.incrementValue('pos-y', 0.1)">▲</div>
+                                                    <div class="number-arrow number-arrow-down" onclick="NumberInputDragger.decrementValue('pos-y', 0.1)">▼</div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="xyz-input">
+                                            <label class="xyz-label">Z</label>
+                                            <div class="number-input-wrapper">
+                                                <input type="number" class="simple-input" id="pos-z" value="0.00" step="0.1" onchange="updateObjectProperty('position', 'z', this.value)" onkeydown="handlePropertyInputKeydown(event, 'position', 'z', this)">
+                                                <div class="number-input-arrows">
+                                                    <div class="number-arrow number-arrow-up" onclick="NumberInputDragger.incrementValue('pos-z', 0.1)">▲</div>
+                                                    <div class="number-arrow number-arrow-down" onclick="NumberInputDragger.decrementValue('pos-z', 0.1)">▼</div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label">Rotation</label>
+                                    <div class="xyz-inputs">
+                                        <div class="xyz-input">
+                                            <label class="xyz-label">X</label>
+                                            <div class="number-input-wrapper">
+                                                <input type="number" class="simple-input" id="rot-x" value="0" step="1" onchange="updateObjectProperty('rotation', 'x', this.value)" onkeydown="handlePropertyInputKeydown(event, 'rotation', 'x', this)">
+                                                <div class="number-input-arrows">
+                                                    <div class="number-arrow number-arrow-up" onclick="NumberInputDragger.incrementValue('rot-x', 1)">▲</div>
+                                                    <div class="number-arrow number-arrow-down" onclick="NumberInputDragger.decrementValue('rot-x', 1)">▼</div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="xyz-input">
+                                            <label class="xyz-label">Y</label>
+                                            <div class="number-input-wrapper">
+                                                <input type="number" class="simple-input" id="rot-y" value="0" step="1" onchange="updateObjectProperty('rotation', 'y', this.value)" onkeydown="handlePropertyInputKeydown(event, 'rotation', 'y', this)">
+                                                <div class="number-input-arrows">
+                                                    <div class="number-arrow number-arrow-up" onclick="NumberInputDragger.incrementValue('rot-y', 1)">▲</div>
+                                                    <div class="number-arrow number-arrow-down" onclick="NumberInputDragger.decrementValue('rot-y', 1)">▼</div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="xyz-input">
+                                            <label class="xyz-label">Z</label>
+                                            <div class="number-input-wrapper">
+                                                <input type="number" class="simple-input" id="rot-z" value="0" step="1" onchange="updateObjectProperty('rotation', 'z', this.value)" onkeydown="handlePropertyInputKeydown(event, 'rotation', 'z', this)">
+                                                <div class="number-input-arrows">
+                                                    <div class="number-arrow number-arrow-up" onclick="NumberInputDragger.incrementValue('rot-z', 1)">▲</div>
+                                                    <div class="number-arrow number-arrow-down" onclick="NumberInputDragger.decrementValue('rot-z', 1)">▼</div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label">Dimensions</label>
+                                    <div class="xyz-inputs">
+                                        <div class="xyz-input">
+                                            <label class="xyz-label">W</label>
+                                            <div class="number-input-wrapper">
+                                                <input type="number" class="simple-input" id="dim-x" value="0.00" step="0.01" onchange="updateObjectDimension('x', this.value)" onkeydown="handlePropertyInputKeydown(event, 'dimension', 'x', this)" tabindex="1">
+                                                <div class="number-input-arrows">
+                                                    <div class="number-arrow number-arrow-up" onclick="NumberInputDragger.incrementValue('dim-x', 0.1)">▲</div>
+                                                    <div class="number-arrow number-arrow-down" onclick="NumberInputDragger.decrementValue('dim-x', 0.1)">▼</div>
+                                                </div>
+                                            </div>
+                                            <button class="fill-button" id="fill-x" onclick="toggleFillDimension('x', this)" tabindex="-1">Fill</button>
+                                        </div>
+                                        <div class="xyz-input">
+                                            <label class="xyz-label">D</label>
+                                            <div class="number-input-wrapper">
+                                                <input type="number" class="simple-input" id="dim-z" value="0.00" step="0.01" onchange="updateObjectDimension('z', this.value)" onkeydown="handlePropertyInputKeydown(event, 'dimension', 'z', this)" tabindex="2">
+                                                <div class="number-input-arrows">
+                                                    <div class="number-arrow number-arrow-up" onclick="NumberInputDragger.incrementValue('dim-z', 0.1)">▲</div>
+                                                    <div class="number-arrow number-arrow-down" onclick="NumberInputDragger.decrementValue('dim-z', 0.1)">▼</div>
+                                                </div>
+                                            </div>
+                                            <button class="fill-button" id="fill-z" onclick="toggleFillDimension('z', this)" tabindex="-1">Fill</button>
+                                        </div>
+                                        <div class="xyz-input">
+                                            <label class="xyz-label">H</label>
+                                            <div class="number-input-wrapper">
+                                                <input type="number" class="simple-input" id="dim-y" value="0.00" step="0.01" onchange="updateObjectDimension('y', this.value)" onkeydown="handlePropertyInputKeydown(event, 'dimension', 'y', this)" tabindex="3">
+                                                <div class="number-input-arrows">
+                                                    <div class="number-arrow number-arrow-up" onclick="NumberInputDragger.incrementValue('dim-y', 0.1)">▲</div>
+                                                    <div class="number-arrow number-arrow-down" onclick="NumberInputDragger.decrementValue('dim-y', 0.1)">▼</div>
+                                                </div>
+                                            </div>
+                                            <button class="fill-button" id="fill-y" onclick="toggleFillDimension('y', this)">Fill</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="accordion-item expanded" id="layout-accordion" style="display: none;">
+                        <button class="accordion-header" onclick="toggleAccordion(this)">
+                            Layout <span class="accordion-icon">▼</span>
+                        </button>
+                        <div class="accordion-content">
+                            <div class="accordion-body">
+                                <div class="form-group">
+                                    <label class="form-label">Layout Axis</label>
+                                    <div class="axis-button-group">
+                                        <button class="axis-button" id="axis-w" onclick="selectLayoutAxis('x', this)">W</button>
+                                        <button class="axis-button" id="axis-h" onclick="selectLayoutAxis('y', this)">H</button>
+                                        <button class="axis-button" id="axis-d" onclick="selectLayoutAxis('z', this)">D</button>
+                                    </div>
+                                </div>
+                                <div class="form-group" id="layout-gap-section" style="display: none;">
+                                    <label class="form-label">Gap</label>
+                                    <div class="number-input-wrapper">
+                                        <input type="number" class="simple-input" id="layout-gap" value="0.0" step="0.01" onchange="updateLayoutProperty('gap', parseFloat(this.value))" onkeydown="handlePropertyInputKeydown(event, 'layout', 'gap', this)">
+                                        <div class="number-input-arrows">
+                                            <div class="number-arrow number-arrow-up" onclick="NumberInputDragger.incrementValue('layout-gap', 0.1)">▲</div>
+                                            <div class="number-arrow number-arrow-down" onclick="NumberInputDragger.decrementValue('layout-gap', 0.1)">▼</div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="form-group" id="layout-padding-section" style="display: none;">
+                                    <label class="form-label">Padding</label>
+                                    <div class="xyz-inputs">
+                                        <div class="xyz-input">
+                                            <label class="xyz-label">TOP</label>
+                                            <div class="number-input-wrapper">
+                                                <input type="number" class="simple-input" id="padding-top" value="0" step="0.1" onchange="updatePaddingProperty('top', parseFloat(this.value))" onkeydown="handlePropertyInputKeydown(event, 'padding', 'top', this)">
+                                                <div class="number-input-arrows">
+                                                    <div class="number-arrow number-arrow-up" onclick="NumberInputDragger.incrementValue('padding-top', 0.1)">▲</div>
+                                                    <div class="number-arrow number-arrow-down" onclick="NumberInputDragger.decrementValue('padding-top', 0.1)">▼</div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="xyz-input">
+                                            <label class="xyz-label">BTM</label>
+                                            <div class="number-input-wrapper">
+                                                <input type="number" class="simple-input" id="padding-bottom" value="0" step="0.1" onchange="updatePaddingProperty('bottom', parseFloat(this.value))" onkeydown="handlePropertyInputKeydown(event, 'padding', 'bottom', this)">
+                                                <div class="number-input-arrows">
+                                                    <div class="number-arrow number-arrow-up" onclick="NumberInputDragger.incrementValue('padding-bottom', 0.1)">▲</div>
+                                                    <div class="number-arrow number-arrow-down" onclick="NumberInputDragger.decrementValue('padding-bottom', 0.1)">▼</div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="xyz-input">
+                                            <label class="xyz-label">LFT</label>
+                                            <div class="number-input-wrapper">
+                                                <input type="number" class="simple-input" id="padding-left" value="0" step="0.1" onchange="updatePaddingProperty('left', parseFloat(this.value))" onkeydown="handlePropertyInputKeydown(event, 'padding', 'left', this)">
+                                                <div class="number-input-arrows">
+                                                    <div class="number-arrow number-arrow-up" onclick="NumberInputDragger.incrementValue('padding-left', 0.1)">▲</div>
+                                                    <div class="number-arrow number-arrow-down" onclick="NumberInputDragger.decrementValue('padding-left', 0.1)">▼</div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="xyz-inputs">
+                                        <div class="xyz-input">
+                                            <label class="xyz-label">RGT</label>
+                                            <div class="number-input-wrapper">
+                                                <input type="number" class="simple-input" id="padding-right" value="0" step="0.1" onchange="updatePaddingProperty('right', parseFloat(this.value))" onkeydown="handlePropertyInputKeydown(event, 'padding', 'right', this)">
+                                                <div class="number-input-arrows">
+                                                    <div class="number-arrow number-arrow-up" onclick="NumberInputDragger.incrementValue('padding-right', 0.1)">▲</div>
+                                                    <div class="number-arrow number-arrow-down" onclick="NumberInputDragger.decrementValue('padding-right', 0.1)">▼</div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="xyz-input">
+                                            <label class="xyz-label">FRT</label>
+                                            <div class="number-input-wrapper">
+                                                <input type="number" class="simple-input" id="padding-front" value="0" step="0.1" onchange="updatePaddingProperty('front', parseFloat(this.value))" onkeydown="handlePropertyInputKeydown(event, 'padding', 'front', this)">
+                                                <div class="number-input-arrows">
+                                                    <div class="number-arrow number-arrow-up" onclick="NumberInputDragger.incrementValue('padding-front', 0.1)">▲</div>
+                                                    <div class="number-arrow number-arrow-down" onclick="NumberInputDragger.decrementValue('padding-front', 0.1)">▼</div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="xyz-input">
+                                            <label class="xyz-label">BCK</label>
+                                            <div class="number-input-wrapper">
+                                                <input type="number" class="simple-input" id="padding-back" value="0" step="0.1" onchange="updatePaddingProperty('back', parseFloat(this.value))" onkeydown="handlePropertyInputKeydown(event, 'padding', 'back', this)">
+                                                <div class="number-input-arrows">
+                                                    <div class="number-arrow number-arrow-up" onclick="NumberInputDragger.incrementValue('padding-back', 0.1)">▲</div>
+                                                    <div class="number-arrow number-arrow-down" onclick="NumberInputDragger.decrementValue('padding-back', 0.1)">▼</div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="accordion-item">
+                        <button class="accordion-header" onclick="toggleAccordion(this)">
+                            Material <span class="accordion-icon">▶</span>
+                        </button>
+                        <div class="accordion-content">
+                            <div class="accordion-body">
+                                <div class="form-group">
+                                    <label class="form-label">Color</label>
+                                    <input type="color" class="simple-input" id="material-color" value="#ff0000" onchange="updateObjectMaterial('color', this.value)">
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label">Opacity</label>
+                                    <input type="range" class="simple-input" id="material-opacity" min="0" max="1" step="0.1" value="1" onchange="updateObjectMaterial('opacity', this.value)">
+                                    <div class="opacity-value" id="opacity-display">1.0</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="foundation/scene-foundation.js"></script>
+    <!-- input-foundation.js removed - consolidated into InputController -->
+    <script src="scene/scene-controller.js"></script>
+    <script src="scene/visual-effects.js"></script>
+    <script src="scene/snap-visualizer.js"></script>
+    <script src="interaction/container-visibility-manager.js"></script>
+    <script src="interaction/container-support-manager.js"></script>
+    <script src="interaction/container-manager.js"></script>
+    <script src="interaction/mesh-synchronizer.js"></script>
+    <script src="interaction/field-navigation-manager.js"></script>
+
+    <!-- Selection system components -->
+    <script src="interaction/selection-visualizer.js"></script>
+    <script src="interaction/container-context-manager.js"></script>
+    <script src="interaction/selection-controller.js"></script>
+
+    <!-- move-gizmo.js removed - face-based movement system replaces 3-axis gizmos -->
+    <script src="interaction/camera-math-utils.js"></script>
+    <script src="interaction/zoom-centering.js"></script>
+    <script src="interaction/camera-controller.js"></script>
+    <script src="layout/layout-engine.js"></script>
+    <script src="interaction/input-controller.js"></script>
+    <script src="application/tool-controller.js"></script>
+    <script src="application/configuration-manager.js"></script>
+    <script src="application/snap-controller.js"></script>
+    <script src="application/managers/hierarchical-selection-manager.js"></script>
+    <script src="application/tools/base-selection-behavior.js"></script>
+    <script src="application/tools/movement-utils.js"></script>
+    <script src="application/tools/base-face-tool-behavior.js"></script>
+    <script src="application/tools/base-face-tool-event-handler.js"></script>
+    <script src="application/tools/select-tool.js"></script>
+    <script src="application/tools/move-tool.js"></script>
+    <script src="application/tools/push-tool.js"></script>
+    <script src="application/utilities/position-transform.js"></script>
+    <script src="application/tools/layout-geometry.js"></script>
+    <script src="application/tools/container-manager.js"></script>
+    <script src="application/tools/layout-tool.js"></script>
+    <script src="application/tools/box-creation-tool.js"></script>
+    <script src="v2-main.js"></script>
+    
+    <script>
+        console.log('=== Modler V2 Working Baseline ===');
+        
+        // Simple initialization
+        const canvas = document.getElementById('canvas');
+        
+        initializeModlerV2(canvas).then((success) => {
+            if (success) {
+                console.log('✅ V2 system initialized successfully - 3D scene should be visible');
+                console.log('Status:', getModlerV2Status());
+                
+                // Make components global for testing
+                window.modlerComponents = modlerV2Components;
+                
+                // Auto-select the Test Cube to show its properties
+                setTimeout(() => {
+                    selectObjectFromList('Test Cube');
+                }, 100);
+                
+                // Setup keyboard shortcuts
+                setupKeyboardShortcuts();
+                
+                // Initialize configuration UI (delayed to ensure all components are registered)
+                setTimeout(() => {
+                    if (window.modlerComponents?.configurationManager) {
+                        initializeConfigurationUI();
+                    } else {
+                        console.warn('ConfigurationManager still not available after 500ms, retrying...');
+                        setTimeout(() => {
+                            initializeConfigurationUI();
+                        }, 300);
+                    }
+                }, 500);
+                
+            } else {
+                console.error('❌ Failed to initialize V2 system');
+            }
+        }).catch((error) => {
+            console.error('❌ Error:', error);
+        });
+        
+        function addTestCube() {
+            if (window.modlerComponents?.sceneController) {
+                const cubeNumber = document.querySelectorAll('.object-item').length - 1; // -1 for ground plane
+                const cubeName = `Cube ${cubeNumber}`;
+                
+                const geometry = new THREE.BoxGeometry(1, 1, 1);
+                const material = new THREE.MeshBasicMaterial({ color: Math.random() * 0xffffff });
+                window.modlerComponents.sceneController.addObject(geometry, material, {
+                    name: cubeName,
+                    type: 'cube',
+                    position: new THREE.Vector3(Math.random() * 4 - 2, Math.random() * 2, Math.random() * 4 - 2)
+                });
+                
+                // Add to object list
+                addObjectToList(cubeName, '⬜');
+                
+                console.log('Added new cube:', cubeName);
+            }
+        }
+        
+        function addObjectToList(objectName, icon) {
+            const objectList = document.getElementById('object-list');
+            
+            // Create new object item
+            const objectItem = document.createElement('div');
+            objectItem.className = 'object-item';
+            objectItem.onclick = () => selectObjectFromList(objectName);
+            
+            const objectIcon = document.createElement('span');
+            objectIcon.className = 'object-icon';
+            objectIcon.textContent = icon;
+            
+            const objectNameSpan = document.createElement('span');
+            objectNameSpan.className = 'object-name';
+            objectNameSpan.textContent = objectName;
+            
+            objectItem.appendChild(objectIcon);
+            objectItem.appendChild(objectNameSpan);
+            
+            // Insert before ground plane (keep it at bottom)
+            const groundPlane = Array.from(objectList.children).find(child => 
+                child.querySelector('.object-name').textContent === 'Ground Plane'
+            );
+            
+            if (groundPlane) {
+                objectList.insertBefore(objectItem, groundPlane);
+            } else {
+                objectList.appendChild(objectItem);
+            }
+        }
+        
+        function toggleAccordion(header) {
+            const item = header.parentElement;
+            const icon = header.querySelector('.accordion-icon');
+            
+            // Toggle expanded state
+            item.classList.toggle('expanded');
+            
+            // Update icon rotation (handled by CSS)
+            console.log('Toggled accordion:', header.textContent.trim());
+        }
+        
+        // ===== PROPERTY PANEL MANAGEMENT SYSTEM =====
+        // Consolidated property management for consistent behavior and maintainability
+
+        /**
+         * PropertyManager - Centralized property handling
+         * Consolidates all property update logic and provides consistent API
+         */
+        const PropertyManager = {
+            // Get current selection helper
+            getSelectedObjects() {
+                return window.modlerComponents?.selectionController?.getSelectedObjects() || [];
+            },
+
+            // Get scene controller helper
+            getSceneController() {
+                return window.modlerComponents?.sceneController;
+            },
+
+            // Temporarily hide gizmo during updates to prevent conflicts
+            withGizmoHidden(callback) {
+                const gizmo = window.modlerComponents?.moveGizmo;
+                const wasVisible = gizmo?.gizmoGroup?.visible;
+
+                if (gizmo && wasVisible) {
+                    gizmo.hide();
+                }
+
+                try {
+                    callback();
+                } finally {
+                    if (gizmo && wasVisible) {
+                        setTimeout(() => {
+                            const selectedObjects = this.getSelectedObjects();
+                            if (selectedObjects.length > 0) {
+                                gizmo.showForObject(selectedObjects[0]);
+                            }
+                        }, 10);
+                    }
+                }
+            },
+
+            // Update basic transform properties (position, rotation)
+            updateTransformProperty(propertyType, axis, value) {
+                const selectedObjects = this.getSelectedObjects();
+                if (selectedObjects.length === 0) return;
+
+                this.withGizmoHidden(() => {
+                    const numericValue = parseFloat(value);
+
+                    selectedObjects.forEach(object => {
+                        switch(propertyType) {
+                            case 'position':
+                                object.position[axis] = numericValue;
+                                break;
+                            case 'rotation':
+                                // Convert degrees to radians for Three.js
+                                object.rotation[axis] = (numericValue * Math.PI) / 180;
+                                break;
+                        }
+
+                        // Notify scene controller of transform change
+                        this.notifyTransformChange(object);
+                    });
+                });
+            },
+
+            // Update layout properties for containers
+            updateLayoutProperty(propertyType, value) {
+                const selectedObjects = this.getSelectedObjects();
+                const sceneController = this.getSceneController();
+
+                if (selectedObjects.length === 0 || !sceneController) {
+                    console.log('No container selected or scene controller not available');
+                    return;
+                }
+
+                selectedObjects.forEach(object => {
+                    if (object.userData && object.userData.id) {
+                        const objectData = sceneController.getObject(object.userData.id);
+                        if (objectData && objectData.isContainer) {
+                            // Initialize autoLayout if it doesn't exist (SceneController expects this structure)
+                            if (!objectData.autoLayout) {
+                                objectData.autoLayout = {
+                                    enabled: false,
+                                    direction: null,
+                                    gap: 0,
+                                    padding: { top: 0, bottom: 0, left: 0, right: 0, front: 0, back: 0 }
+                                };
+                            }
+
+                            // Update the specific property
+                            objectData.autoLayout[propertyType] = value;
+
+                            // Enable layout when direction is set
+                            if (propertyType === 'direction' && value) {
+                                objectData.autoLayout.enabled = true;
+                            }
+
+                            // Trigger layout update if layout is enabled
+                            if (objectData.autoLayout.enabled && objectData.autoLayout.direction && sceneController.updateLayout) {
+                                const layoutResult = sceneController.updateLayout(objectData.id);
+
+                                // Update container bounds after layout changes
+                                const containerManager = window.modlerComponents?.containerManager;
+                                if (containerManager) {
+                                    if (layoutResult && layoutResult.success && layoutResult.layoutBounds) {
+                                        containerManager.resizeContainerToLayoutBounds(objectData, layoutResult.layoutBounds);
+                                    } else {
+                                        containerManager.resizeContainerToFitChildren(objectData, null, true); // preservePosition = true
+                                    }
+                                }
+                            }
+
+                        }
+                    }
+                });
+            },
+
+            // Update padding properties for containers
+            updatePaddingProperty(side, value) {
+                const selectedObjects = this.getSelectedObjects();
+                const sceneController = this.getSceneController();
+
+                if (selectedObjects.length === 0 || !sceneController) return;
+
+                selectedObjects.forEach(object => {
+                    if (object.userData && object.userData.id) {
+                        const objectData = sceneController.getObject(object.userData.id);
+                        if (objectData && objectData.isContainer) {
+                            // Initialize autoLayout if needed
+                            if (!objectData.autoLayout) {
+                                objectData.autoLayout = {
+                                    enabled: false,
+                                    direction: null,
+                                    gap: 0,
+                                    padding: { top: 0, bottom: 0, left: 0, right: 0, front: 0, back: 0 }
+                                };
+                            }
+
+                            if (!objectData.autoLayout.padding) {
+                                objectData.autoLayout.padding = { top: 0, bottom: 0, left: 0, right: 0, front: 0, back: 0 };
+                            }
+
+                            objectData.autoLayout.padding[side] = value;
+
+                            // Update padding visualization when padding changes
+                            const unifiedContainerManager = window.modlerComponents?.unifiedContainerManager;
+                            if (unifiedContainerManager) {
+                                unifiedContainerManager.updatePaddingVisualization(objectData.id);
+                            }
+
+                            // Trigger layout update if layout is enabled
+                            if (objectData.autoLayout.enabled && objectData.autoLayout.direction && sceneController.updateLayout) {
+                                const layoutResult = sceneController.updateLayout(objectData.id);
+
+                                // Update container bounds and interactive mesh after padding changes
+                                const containerManager = window.modlerComponents?.containerManager;
+                                if (containerManager) {
+                                    if (layoutResult && layoutResult.success && layoutResult.layoutBounds) {
+                                        containerManager.resizeContainerToLayoutBounds(objectData, layoutResult.layoutBounds);
+                                    } else {
+                                        containerManager.resizeContainerToFitChildren(objectData, null, true);
+                                    }
+                                }
+
+                                // Sync interactive mesh position after container bounds change
+                                if (unifiedContainerManager) {
+                                    unifiedContainerManager.syncInteractiveMeshPosition(objectData.id);
+                                }
+                            }
+                        }
+                    }
+                });
+            },
+
+            // Update material properties
+            updateMaterialProperty(propertyType, value) {
+                const selectedObjects = this.getSelectedObjects();
+                if (selectedObjects.length === 0) return;
+
+                selectedObjects.forEach(object => {
+                    if (object.material) {
+                        switch(propertyType) {
+                            case 'color':
+                                const color = new THREE.Color(value);
+                                object.material.color = color;
+                                // Store original color for selection system
+                                object.material.userData.originalColor = color.getHex();
+                                break;
+                            case 'opacity':
+                                object.material.opacity = parseFloat(value);
+                                object.material.transparent = object.material.opacity < 1;
+                                break;
+                        }
+                    }
+                });
+            },
+
+            // Toggle fill properties for layout objects
+            toggleFillProperty(axis) {
+                console.log('🔄 FILL BUTTON PRESSED:', axis);
+
+                const selectedObjects = this.getSelectedObjects();
+                const sceneController = this.getSceneController();
+
+                if (selectedObjects.length === 0 || !sceneController) {
+                    console.log('❌ FILL FAILED: No selected objects or scene controller');
+                    return;
+                }
+
+                // Only affect the primary selected object (the one displayed in properties panel)
+                const primaryObject = selectedObjects[0];
+                console.log('🎯 PRIMARY OBJECT:', primaryObject.name, 'ID:', primaryObject.userData?.id);
+
+                if (primaryObject.userData && primaryObject.userData.id) {
+                    const objectData = sceneController.getObject(primaryObject.userData.id);
+                    if (objectData) {
+                        console.log('✅ OBJECT DATA FOUND:', {
+                            name: objectData.name,
+                            hasParentContainer: !!objectData.parentContainer,
+                            parentContainer: objectData.parentContainer
+                        });
+                        // Initialize layoutProperties for LayoutEngine compatibility
+                        if (!objectData.layoutProperties) {
+                            objectData.layoutProperties = {
+                                sizeX: 'fixed',
+                                sizeY: 'fixed',
+                                sizeZ: 'fixed'
+                            };
+                        }
+
+                        // Store original dimensions before enabling fill
+                        if (!objectData.originalDimensions) {
+                            objectData.originalDimensions = {
+                                width: objectData.width || 1.0,
+                                height: objectData.height || 1.0,
+                                depth: objectData.depth || 1.0
+                            };
+                        }
+
+                        // Toggle the fill state
+                        const fillProperty = `size${axis.toUpperCase()}`;
+                        const currentValue = objectData.layoutProperties[fillProperty] || 'fixed';
+                        const newValue = currentValue === 'fill' ? 'fixed' : 'fill';
+                        objectData.layoutProperties[fillProperty] = newValue;
+
+                        console.log('🔄 FILL STATE TOGGLED:', {
+                            axis,
+                            fillProperty,
+                            currentValue,
+                            newValue,
+                            layoutProperties: objectData.layoutProperties
+                        });
+
+                        // Restore original dimension when disabling fill
+                        if (newValue === 'fixed' && objectData.originalDimensions) {
+                            const dimensionMap = { x: 'width', y: 'height', z: 'depth' };
+                            const dimension = dimensionMap[axis.toLowerCase()];
+                            if (dimension && objectData.originalDimensions[dimension]) {
+                                objectData[dimension] = objectData.originalDimensions[dimension];
+
+                                // Update the mesh geometry to reflect restored size
+                                if (primaryObject.geometry && primaryObject.geometry.type === 'BoxGeometry') {
+                                    const newGeometry = new THREE.BoxGeometry(
+                                        objectData.width,
+                                        objectData.height,
+                                        objectData.depth
+                                    );
+                                    primaryObject.geometry.dispose();
+                                    primaryObject.geometry = newGeometry;
+                                }
+                            }
+                        }
+
+                        // Update UI state
+                        this.updateFillButtonState(axis, newValue === 'fill');
+                        this.updateDimensionInputState(axis, newValue === 'fill');
+
+                        // Trigger layout update if in layout container
+                        if (objectData.parentContainer) {
+                            const container = sceneController.getObject(objectData.parentContainer);
+                            console.log('🔍 CHECKING CONTAINER FOR LAYOUT UPDATE:', {
+                                containerExists: !!container,
+                                containerName: container?.name,
+                                hasAutoLayout: !!container?.autoLayout,
+                                layoutEnabled: container?.autoLayout?.enabled,
+                                layoutDirection: container?.autoLayout?.direction,
+                                hasUpdateMethod: !!sceneController.updateLayout
+                            });
+
+                            // Check autoLayout structure for container layout
+                            if (container && container.autoLayout && container.autoLayout.enabled && container.autoLayout.direction && sceneController.updateLayout) {
+                                console.log('✅ TRIGGERING LAYOUT UPDATE for container:', objectData.parentContainer);
+                                sceneController.updateLayout(objectData.parentContainer);
+                            } else {
+                                console.log('❌ LAYOUT UPDATE NOT TRIGGERED - missing requirements');
+                            }
+                        } else {
+                            console.log('❌ OBJECT NOT IN CONTAINER - fill only works for objects in layout containers');
+                        }
+
+                        // Update property panel to reflect changes
+                        if (window.updateSelectedObjectInfo) {
+                            window.updateSelectedObjectInfo(primaryObject);
+                        }
+                    }
+                }
+            },
+
+            // Helper to notify scene controller of transform changes
+            notifyTransformChange(object) {
+                const sceneController = this.getSceneController();
+                if (sceneController) {
+                    const objectData = sceneController.getObjectByMesh(object);
+                    if (objectData) {
+                        sceneController.notifyObjectTransformChanged(objectData.id);
+                    }
+                }
+            },
+
+            // Helper to update fill button visual state
+            updateFillButtonState(axis, isActive) {
+                const button = document.getElementById(`fill-${axis}`);
+                if (button) {
+                    if (isActive) {
+                        button.classList.add('active');
+                    } else {
+                        button.classList.remove('active');
+                    }
+                }
+            },
+
+            // Helper to update dimension input state
+            updateDimensionInputState(axis, isDisabled) {
+                const input = document.getElementById(`dim-${axis}`);
+                if (input) {
+                    if (isDisabled) {
+                        input.classList.add('dimension-input-disabled');
+                    } else {
+                        input.classList.remove('dimension-input-disabled');
+                    }
+                }
+            }
+        };
+
+        /**
+         * NumberInputDragger - Drag-to-adjust functionality for numeric inputs
+         * Reuses centralized real-time update and throttling patterns from MoveTool
+         */
+        const NumberInputDragger = {
+            activeDrag: null,
+            throttleState: null,
+
+            // Increment value using arrow buttons
+            incrementValue(inputId, step) {
+                // Don't allow arrow clicks during drag operations
+                if (this.activeDrag) return;
+
+                const inputElement = document.getElementById(inputId);
+                if (!inputElement) return;
+
+                const currentValue = parseFloat(inputElement.value) || 0;
+                const newValue = currentValue + step;
+                inputElement.value = newValue.toFixed(3); // Increased precision
+
+                // Trigger change event to update the property
+                inputElement.dispatchEvent(new Event('change'));
+            },
+
+            // Decrement value using arrow buttons
+            decrementValue(inputId, step) {
+                // Don't allow arrow clicks during drag operations
+                if (this.activeDrag) return;
+
+                const inputElement = document.getElementById(inputId);
+                if (!inputElement) return;
+
+                const currentValue = parseFloat(inputElement.value) || 0;
+                const newValue = currentValue - step;
+                inputElement.value = newValue.toFixed(3); // Increased precision
+
+                // Trigger change event to update the property
+                inputElement.dispatchEvent(new Event('change'));
+            },
+
+            // Initialize drag on mousedown for numeric inputs
+            initializeDrag(inputElement, propertyType, axis, startY, event) {
+                // Only start drag if clicking on the input field itself, not the arrow buttons
+                if (event && event.target !== inputElement) return;
+
+                // Additional check: don't start drag if clicking in the arrow area (right 25px)
+                if (event && event.offsetX > (inputElement.offsetWidth - 25)) return;
+                this.activeDrag = {
+                    input: inputElement,
+                    propertyType: propertyType,
+                    axis: axis,
+                    startY: startY,
+                    lastY: startY, // Track last mouse position to calculate deltas
+                    startValue: parseFloat(inputElement.value) || 0,
+                    isDragging: false
+                };
+
+                // Create throttle state for real-time updates (reusing MovementUtils pattern)
+                this.throttleState = window.MovementUtils?.createThrottleState(50) || { lastUpdateTime: 0, interval: 50 };
+
+                // Add global mouse events
+                document.addEventListener('mousemove', this.handleMouseMove.bind(this));
+                document.addEventListener('mouseup', this.handleMouseUp.bind(this));
+
+                // Prevent text selection during drag
+                document.body.style.userSelect = 'none';
+                inputElement.style.cursor = 'ns-resize';
+            },
+
+            // Handle mouse movement during drag
+            handleMouseMove(event) {
+                if (!this.activeDrag) return;
+
+                // Primary throttling at entry point to prevent excessive processing
+                const now = Date.now();
+                if (this.throttleState.lastUpdateTime && now - this.throttleState.lastUpdateTime < this.throttleState.interval) {
+                    return;
+                }
+
+                // Calculate delta from last position (not from start position)
+                const deltaY = this.activeDrag.lastY - event.clientY;
+
+                // Only process if there's actual movement (prevent jitter) - increased threshold
+                if (Math.abs(deltaY) < 3) return;
+
+                const step = parseFloat(this.activeDrag.input.step) || 0.1;
+                const sensitivity = event.shiftKey ? 0.1 : (event.ctrlKey ? 10 : 1); // Fine/coarse adjustment
+
+                // Calculate increment based on actual mouse movement delta
+                const increment = deltaY * step * sensitivity;
+                const currentValue = parseFloat(this.activeDrag.input.value) || 0;
+                const newValue = currentValue + increment;
+
+                // Update input display with increased precision
+                this.activeDrag.input.value = newValue.toFixed(3);
+                this.activeDrag.isDragging = true;
+
+                // Update last Y position for next delta calculation
+                this.activeDrag.lastY = event.clientY;
+
+                // Update throttle timestamp
+                this.throttleState.lastUpdateTime = now;
+
+                // Apply real-time updates using centralized PropertyManager
+                this.applyRealTimeUpdate();
+            },
+
+            // Apply real-time property updates (reusing PropertyManager patterns)
+            applyRealTimeUpdate() {
+                if (!this.activeDrag) return;
+
+                const { input, propertyType, axis } = this.activeDrag;
+                const value = parseFloat(input.value);
+
+                // Use PropertyManager for consistent property updates
+                if (propertyType === 'position' || propertyType === 'rotation') {
+                    PropertyManager.updateTransformProperty(propertyType, axis, value);
+                } else if (propertyType === 'layout') {
+                    PropertyManager.updateLayoutProperty(axis, value);
+                } else if (propertyType === 'padding') {
+                    PropertyManager.updatePaddingProperty(axis, value);
+                } else if (propertyType === 'material') {
+                    PropertyManager.updateMaterialProperty(axis, value);
+                }
+
+                // Real-time property panel updates (already throttled at entry point)
+                if (window.updatePropertyPanelFromObject) {
+                    const selectedObjects = PropertyManager.getSelectedObjects();
+                    if (selectedObjects.length > 0) {
+                        window.updatePropertyPanelFromObject(selectedObjects[0]);
+                    }
+                }
+
+                // Real-time container updates for position changes (reusing MovementUtils)
+                if (propertyType === 'position') {
+                    const selectedObjects = PropertyManager.getSelectedObjects();
+                    if (selectedObjects.length > 0 && window.MovementUtils) {
+                        window.MovementUtils.updateParentContainer(
+                            selectedObjects[0],
+                            false, // Use throttling for performance
+                            this.throttleState
+                        );
+                    }
+                }
+
+                // Real-time container updates for layout changes (already throttled at entry point)
+                if (propertyType === 'layout' || propertyType === 'padding') {
+                    const selectedObjects = PropertyManager.getSelectedObjects();
+                    const sceneController = PropertyManager.getSceneController();
+
+                    if (selectedObjects.length > 0 && sceneController) {
+                        const selectedObject = selectedObjects[0];
+
+                        // For layout containers, update the container itself after layout changes
+                        if (selectedObject.userData && selectedObject.userData.id) {
+                            const objectData = sceneController.getObject(selectedObject.userData.id);
+                            if (objectData && objectData.isContainer && objectData.autoLayout && objectData.autoLayout.enabled) {
+                                // Update the layout which will recalculate child positions
+                                if (sceneController.updateLayout) {
+                                    sceneController.updateLayout(objectData.id);
+                                }
+
+                                // Force container to resize to fit new layout (preserve position during drag)
+                                if (window.modlerComponents?.containerManager) {
+                                    window.modlerComponents.containerManager.resizeContainerToFitChildren(objectData, null, true);
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+
+            // End drag operation
+            handleMouseUp(event) {
+                if (!this.activeDrag) return;
+
+                // Final update without throttling for accuracy
+                if (this.activeDrag.isDragging) {
+                    this.applyFinalUpdate();
+                }
+
+                // Cleanup
+                document.removeEventListener('mousemove', this.handleMouseMove.bind(this));
+                document.removeEventListener('mouseup', this.handleMouseUp.bind(this));
+                document.body.style.userSelect = '';
+                this.activeDrag.input.style.cursor = '';
+
+                this.activeDrag = null;
+                this.throttleState = null;
+            },
+
+            // Apply final update without throttling
+            applyFinalUpdate() {
+                if (!this.activeDrag) return;
+
+                const { input, propertyType, axis } = this.activeDrag;
+                const value = parseFloat(input.value);
+
+                // Final update using PropertyManager
+                if (propertyType === 'position' || propertyType === 'rotation') {
+                    PropertyManager.updateTransformProperty(propertyType, axis, value);
+                } else if (propertyType === 'layout') {
+                    PropertyManager.updateLayoutProperty(axis, value);
+                } else if (propertyType === 'padding') {
+                    PropertyManager.updatePaddingProperty(axis, value);
+                } else if (propertyType === 'material') {
+                    PropertyManager.updateMaterialProperty(axis, value);
+                }
+
+                // Final container update without throttling
+                if (propertyType === 'position') {
+                    const selectedObjects = PropertyManager.getSelectedObjects();
+                    if (selectedObjects.length > 0 && window.MovementUtils) {
+                        window.MovementUtils.updateParentContainer(selectedObjects[0], true); // Force immediate update
+                    }
+                }
+
+                // Final container update for layout changes without throttling
+                if (propertyType === 'layout' || propertyType === 'padding') {
+                    const selectedObjects = PropertyManager.getSelectedObjects();
+                    const sceneController = PropertyManager.getSceneController();
+
+                    if (selectedObjects.length > 0 && sceneController) {
+                        const selectedObject = selectedObjects[0];
+
+                        if (selectedObject.userData && selectedObject.userData.id) {
+                            const objectData = sceneController.getObject(selectedObject.userData.id);
+                            if (objectData && objectData.isContainer && objectData.autoLayout && objectData.autoLayout.enabled) {
+                                // Final layout update without throttling
+                                if (sceneController.updateLayout) {
+                                    sceneController.updateLayout(objectData.id);
+                                }
+
+                                // Final container resize without throttling (preserve position for layout changes)
+                                if (window.modlerComponents?.containerManager) {
+                                    window.modlerComponents.containerManager.resizeContainerToFitChildren(objectData, null, true);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        };
+
+        /**
+         * Update property panel dimensions in real-time during box creation
+         */
+        function updatePropertyPanelDimensions(width, height, depth) {
+            // Update dimension displays if they exist
+            const widthDisplay = document.getElementById('dim-x');
+            const heightDisplay = document.getElementById('dim-y');
+            const depthDisplay = document.getElementById('dim-z');
+
+            if (widthDisplay) widthDisplay.value = width.toFixed(2);
+            if (heightDisplay) heightDisplay.value = height.toFixed(2);
+            if (depthDisplay) depthDisplay.value = depth.toFixed(2);
+        }
+
+        /**
+         * Apply dimension value from input field during box creation
+         */
+        function applyDimensionFromInput(fieldId, value) {
+            const toolController = window.modlerComponents?.toolController;
+            if (toolController && toolController.getActiveToolName() === 'box-creation') {
+                const boxTool = toolController.getActiveTool();
+                if (boxTool && boxTool.applyDimensionFromInput) {
+                    boxTool.applyDimensionFromInput(fieldId, value);
+                }
+            }
+        }
+
+        // Legacy function wrappers for backward compatibility
+        function updateObjectProperty(propertyType, axis, value) {
+            PropertyManager.updateTransformProperty(propertyType, axis, value);
+        }
+
+        function updateObjectDimension(axis, value) {
+            // Handle dimension updates (scale changes)
+            PropertyManager.updateTransformProperty('scale', axis, value);
+        }
+        
+        function updateSelectedObjectInfo(object) {
+            if (!object) return;
+            
+            // Get object name and type from SceneController metadata if available
+            const sceneController = window.modlerComponents?.sceneController;
+            let objectName = 'Unnamed Object';
+            let objectType = 'Object';
+            
+            if (sceneController) {
+                const objectData = sceneController.getObjectByMesh(object);
+                if (objectData) {
+                    objectName = objectData.name || objectData.metadata?.name || 'Unnamed Object';
+                    objectType = objectData.type || objectData.metadata?.type || 'Object';
+                    
+                    // Special handling for containers
+                    if (objectData.isContainer) {
+                        objectType = 'Container (' + objectType + ')';
+                    }
+                }
+            }
+            
+            // Fallback to object.name if no SceneController data
+            if (objectName === 'Unnamed Object' && object.name) {
+                objectName = object.name;
+            }
+            
+            // Determine type from geometry if no other info available
+            if (objectType === 'Object' && object.geometry) {
+                switch (object.geometry.type) {
+                    case 'BoxGeometry':
+                        objectType = 'Cube';
+                        break;
+                    case 'SphereGeometry':
+                        objectType = 'Sphere';
+                        break;
+                    case 'PlaneGeometry':
+                        objectType = 'Plane';
+                        break;
+                    case 'CylinderGeometry':
+                        objectType = 'Cylinder';
+                        break;
+                    default:
+                        objectType = object.geometry.type.replace('Geometry', '');
+                }
+            }
+            
+            // Update the display
+            document.getElementById('selected-object-name').textContent = objectName;
+            document.getElementById('selected-object-type').textContent = objectType;
+        }
+        
+        function updatePropertyPanelFromObject(object) {
+            const accordion = document.querySelector('.right-panel .accordion');
+
+            if (!object) {
+                // Clear selected object info when no object is selected
+                document.getElementById('selected-object-name').textContent = 'No object selected';
+                document.getElementById('selected-object-type').textContent = '';
+
+                // Clear dimension fields
+                ['x', 'y', 'z'].forEach(axis => {
+                    const input = document.getElementById(`dim-${axis}`);
+                    if (input) input.value = '0.00';
+                });
+
+                // Hide the accordion when no object is selected
+                if (accordion) {
+                    accordion.style.display = 'none';
+                }
+
+                return;
+            }
+
+            // Show the accordion when an object is selected
+            if (accordion) {
+                accordion.style.display = 'block';
+            }
+
+            // Update selected object info at the top of the right panel
+            updateSelectedObjectInfo(object);
+            
+            // Update position inputs
+            document.getElementById('pos-x').value = object.position.x.toFixed(2);
+            document.getElementById('pos-y').value = object.position.y.toFixed(2);
+            document.getElementById('pos-z').value = object.position.z.toFixed(2);
+            
+            // Update rotation inputs (convert radians to degrees)
+            document.getElementById('rot-x').value = Math.round((object.rotation.x * 180) / Math.PI);
+            document.getElementById('rot-y').value = Math.round((object.rotation.y * 180) / Math.PI);
+            document.getElementById('rot-z').value = Math.round((object.rotation.z * 180) / Math.PI);
+            
+
+            // Calculate and update actual geometry dimensions
+            if (object.geometry) {
+                // Force recomputation of bounding box
+                object.geometry.computeBoundingBox();
+                const bbox = object.geometry.boundingBox;
+
+                if (bbox && bbox.min && bbox.max) {
+                    const dimensions = {
+                        x: Math.abs(bbox.max.x - bbox.min.x),
+                        y: Math.abs(bbox.max.y - bbox.min.y),
+                        z: Math.abs(bbox.max.z - bbox.min.z)
+                    };
+
+                    ['x', 'y', 'z'].forEach(axis => {
+                        const input = document.getElementById(`dim-${axis}`);
+                        if (input) {
+                            input.value = isFinite(dimensions[axis]) ? dimensions[axis].toFixed(2) : '0.00';
+                        }
+                    });
+                } else {
+                    // Clear dimensions if no valid bounding box
+                    ['x', 'y', 'z'].forEach(axis => {
+                        const input = document.getElementById(`dim-${axis}`);
+                        if (input) input.value = '0.00';
+                    });
+                }
+            }
+
+            // Update material inputs
+            if (object.material) {
+                // Get original color (not selection color)
+                const colorHex = object.material.userData.originalColor !== undefined 
+                    ? object.material.userData.originalColor 
+                    : object.material.color.getHex();
+                document.getElementById('material-color').value = '#' + colorHex.toString(16).padStart(6, '0');
+                
+                // Update opacity
+                const opacity = object.material.opacity || 1;
+                document.getElementById('material-opacity').value = opacity;
+                document.getElementById('opacity-display').textContent = opacity.toFixed(1);
+            }
+            
+            // Handle layout properties for containers
+            updateLayoutPropertiesPanel(object);
+
+            // Update fill button visibility for child objects in layout containers
+            updateFillButtonsVisibility(object);
+        }
+        
+        function updateLayoutPropertiesPanel(object) {
+            const layoutAccordion = document.getElementById('layout-accordion');
+            const sceneController = window.modlerComponents?.sceneController;
+
+            if (!sceneController || !object.userData || !object.userData.id) {
+                if (layoutAccordion) layoutAccordion.style.display = 'none';
+                return;
+            }
+
+            const objectData = sceneController.getObject(object.userData.id);
+
+            // Read from autoLayout structure (SceneController compatible)
+            const layoutConfig = objectData?.autoLayout;
+
+            if (objectData && objectData.isContainer && layoutConfig && layoutConfig.enabled) {
+                // Show layout accordion for containers with layout enabled
+                if (layoutAccordion) layoutAccordion.style.display = 'block';
+
+                // Populate layout values from autoLayout structure
+                const direction = layoutConfig.direction;
+                if (direction) {
+                    updateLayoutAxisButtons(direction);
+                    // Show visual guides immediately when container with layout is selected
+                    showLayoutAxisGuides(direction);
+                }
+
+                const gapInput = document.getElementById('layout-gap');
+                if (gapInput) gapInput.value = layoutConfig.gap || 0;
+
+                // Populate padding values
+                const padding = layoutConfig.padding || {};
+                const paddingFields = [
+                    'padding-top', 'padding-bottom', 'padding-left',
+                    'padding-right', 'padding-front', 'padding-back'
+                ];
+                const paddingKeys = ['top', 'bottom', 'left', 'right', 'front', 'back'];
+
+                paddingFields.forEach((fieldId, index) => {
+                    const input = document.getElementById(fieldId);
+                    if (input) {
+                        input.value = padding[paddingKeys[index]] || 0;
+                    }
+                });
+            } else if (objectData && objectData.isContainer) {
+                // Container without layout enabled - show layout accordion but with default state
+                if (layoutAccordion) layoutAccordion.style.display = 'block';
+
+                // Clear layout axis selection
+                document.querySelectorAll('.axis-button').forEach(btn => {
+                    btn.classList.remove('active');
+                });
+
+                // Clear any existing guides for containers without layout direction
+                clearLayoutAxisGuides();
+
+                // Set default values
+                const gapInput = document.getElementById('layout-gap');
+                if (gapInput) gapInput.value = '0.0';
+
+                // Clear padding values
+                const paddingFields = [
+                    'padding-top', 'padding-bottom', 'padding-left',
+                    'padding-right', 'padding-front', 'padding-back'
+                ];
+                paddingFields.forEach(fieldId => {
+                    const input = document.getElementById(fieldId);
+                    if (input) input.value = '0';
+                });
+            } else {
+                // Hide layout accordion for non-containers
+                if (layoutAccordion) layoutAccordion.style.display = 'none';
+
+                // Clear layout axis guides for non-containers
+                clearLayoutAxisGuides();
+            }
+        }
+        
+        // Expose property panel and object list functions globally for tools to use
+        window.updatePropertyPanelFromObject = updatePropertyPanelFromObject;
+        window.updateObjectListSelection = updateObjectListSelection;
+        window.updateConfigUIFromValues = updateConfigUIFromValues;
+
+        // Object modification notification system
+        window.notifyObjectModified = function(object, modificationType = 'geometry') {
+            // Force immediate properties panel update for the modified object
+            updatePropertyPanelFromObject(object);
+        };
+        
+        // Dynamic object list management
+        // Track expand/collapse state for containers
+        let containerExpandState = {};
+        
+        function populateObjectList() {
+            const sceneController = window.modlerComponents?.sceneController;
+            if (!sceneController) return;
+            
+            const objectListContainer = document.getElementById('object-list');
+            if (!objectListContainer) return;
+            
+            // Get only permanent objects (user-created objects)
+            const permanentObjects = sceneController.getAllObjects()
+                .filter(obj => obj.category === 'permanent');
+            
+            // Build hierarchy structure
+            const rootObjects = [];
+            const objectMap = new Map();
+            
+            // First pass: create object map
+            permanentObjects.forEach(obj => {
+                objectMap.set(obj.id, { ...obj, children: [] });
+            });
+            
+            // Second pass: build parent-child relationships
+            permanentObjects.forEach(obj => {
+                const objData = objectMap.get(obj.id);
+                if (obj.parentContainer) {
+                    const parent = objectMap.get(obj.parentContainer);
+                    if (parent) {
+                        parent.children.push(objData);
+                    } else {
+                        rootObjects.push(objData); // Parent not found, treat as root
+                    }
+                } else {
+                    rootObjects.push(objData);
+                }
+            });
+            
+            // Sort root objects: containers first, then by name
+            rootObjects.sort((a, b) => {
+                if (a.isContainer && !b.isContainer) return -1;
+                if (!a.isContainer && b.isContainer) return 1;
+                return a.name.localeCompare(b.name);
+            });
+            
+            // Sort children within each container
+            objectMap.forEach(obj => {
+                if (obj.children.length > 0) {
+                    obj.children.sort((a, b) => a.name.localeCompare(b.name));
+                }
+            });
+            
+            // Clear existing list
+            objectListContainer.innerHTML = '';
+            
+            // Add root-level drop zone at top
+            const topDropZone = document.createElement('div');
+            topDropZone.className = 'root-drop-zone';
+            topDropZone.setAttribute('data-drop-type', 'root');
+            setupRootDropZone(topDropZone);
+            objectListContainer.appendChild(topDropZone);
+            
+            // Recursively render hierarchy
+            rootObjects.forEach(obj => {
+                renderObjectHierarchy(obj, objectListContainer, 0);
+            });
+            
+            // Add root-level drop zone at bottom
+            const bottomDropZone = document.createElement('div');
+            bottomDropZone.className = 'root-drop-zone';
+            bottomDropZone.setAttribute('data-drop-type', 'root');
+            setupRootDropZone(bottomDropZone);
+            objectListContainer.appendChild(bottomDropZone);
+        }
+        
+        function renderObjectHierarchy(obj, container, depth) {
+            const objectItem = document.createElement('div');
+            objectItem.className = 'object-item';
+            objectItem.dataset.objectId = obj.id;
+            objectItem.dataset.objectName = obj.name;
+            objectItem.dataset.depth = depth;
+            
+            // Make items draggable
+            objectItem.draggable = true;
+            
+            // Add container class if this is a container
+            if (obj.isContainer) {
+                objectItem.classList.add('container');
+            }
+            
+            // Add child class if this is nested
+            if (depth > 0) {
+                objectItem.classList.add('child');
+            }
+            
+            // Choose icon based on object type
+            let icon = '📦'; // default cube
+            if (obj.type === 'cylinder') icon = '🟢';
+            if (obj.type === 'light') icon = '💡';
+            if (obj.isContainer) icon = '📁';
+            
+            // Build indentation
+            let indentHTML = '';
+            for (let i = 0; i < depth; i++) {
+                indentHTML += '<div class="hierarchy-indent"></div>';
+            }
+            
+            // Build expand/collapse button for containers with children
+            let expandCollapseHTML = '';
+            if (obj.isContainer && obj.children.length > 0) {
+                const isExpanded = containerExpandState[obj.id] !== false; // default expanded
+                const expandIcon = isExpanded ? '▼' : '▶';
+                expandCollapseHTML = `<div class="expand-collapse" onclick="toggleContainerExpansion(${obj.id}, event)">${expandIcon}</div>`;
+            } else {
+                expandCollapseHTML = '<div class="expand-collapse"></div>'; // spacer
+            }
+            
+            // Build item content
+            objectItem.innerHTML = `
+                ${indentHTML}
+                ${expandCollapseHTML}
+                <span class="object-icon">${icon}</span>
+                <span class="object-name">${obj.name}</span>
+            `;
+            
+            // Add click handler for selection (but not on expand/collapse button)
+            objectItem.addEventListener('click', (e) => {
+                if (!e.target.classList.contains('expand-collapse')) {
+                    selectObjectFromList(obj.name, e);
+                }
+            });
+            
+            // Add drag and drop event listeners
+            setupObjectItemDragAndDrop(objectItem, obj);
+            
+            container.appendChild(objectItem);
+            
+            // Render children if container is expanded
+            if (obj.isContainer && obj.children.length > 0) {
+                const isExpanded = containerExpandState[obj.id] !== false; // default expanded
+                if (isExpanded) {
+                    obj.children.forEach(child => {
+                        renderObjectHierarchy(child, container, depth + 1);
+                    });
+                }
+            }
+        }
+        
+        function toggleContainerExpansion(containerId, event) {
+            event.stopPropagation(); // Prevent object selection
+            
+            // Toggle expansion state
+            const currentState = containerExpandState[containerId];
+            containerExpandState[containerId] = currentState === false ? true : false;
+            
+            // Refresh the object list to show/hide children
+            populateObjectList();
+        }
+        
+        // Drag and Drop Functionality
+        let draggedItem = null;
+        let draggedObjectData = null;
+        
+        function setupObjectItemDragAndDrop(objectItem, objData) {
+            // Drag start
+            objectItem.addEventListener('dragstart', (e) => {
+                draggedItem = objectItem;
+                draggedObjectData = objData;
+                objectItem.classList.add('dragging');
+                
+                // Set drag data
+                e.dataTransfer.effectAllowed = 'move';
+                e.dataTransfer.setData('text/plain', objData.id.toString());
+            });
+            
+            // Drag end
+            objectItem.addEventListener('dragend', (e) => {
+                objectItem.classList.remove('dragging');
+                clearAllDropIndicators();
+                draggedItem = null;
+                draggedObjectData = null;
+            });
+            
+            // Drag over - for drop zones
+            objectItem.addEventListener('dragover', (e) => {
+                if (draggedItem && draggedItem !== objectItem) {
+                    e.preventDefault();
+                    e.dataTransfer.dropEffect = 'move';
+                    
+                    // Determine drop type
+                    const rect = objectItem.getBoundingClientRect();
+                    const y = e.clientY;
+                    const itemMiddle = rect.top + rect.height / 2;
+                    
+                    clearAllDropIndicators();
+                    
+                    if (objData.isContainer && Math.abs(y - itemMiddle) < 8) {
+                        // Drop INTO container
+                        objectItem.classList.add('drag-over');
+                        showDropIndicator(objectItem, 'container');
+                    } else {
+                        // Drop BETWEEN items
+                        const insertBefore = y < itemMiddle;
+                        showDropIndicator(objectItem, insertBefore ? 'before' : 'after');
+                    }
+                }
+            });
+            
+            // Drag leave
+            objectItem.addEventListener('dragleave', (e) => {
+                // Only clear if we're actually leaving the item (not entering a child)
+                if (!objectItem.contains(e.relatedTarget)) {
+                    objectItem.classList.remove('drag-over');
+                }
+            });
+            
+            // Drop
+            objectItem.addEventListener('drop', (e) => {
+                if (draggedItem && draggedObjectData && draggedItem !== objectItem) {
+                    e.preventDefault();
+                    
+                    const rect = objectItem.getBoundingClientRect();
+                    const y = e.clientY;
+                    const itemMiddle = rect.top + rect.height / 2;
+                    
+                    if (objData.isContainer && Math.abs(y - itemMiddle) < 8) {
+                        // Drop INTO container
+                        handleDropIntoContainer(draggedObjectData.id, objData.id);
+                    } else {
+                        // Drop BETWEEN items (reorder)
+                        const insertBefore = y < itemMiddle;
+                        handleDropBetweenItems(draggedObjectData.id, objData.id, insertBefore);
+                    }
+                    
+                    clearAllDropIndicators();
+                    objectItem.classList.remove('drag-over');
+                }
+            });
+        }
+        
+        function setupRootDropZone(dropZone) {
+            // Drag over
+            dropZone.addEventListener('dragover', (e) => {
+                if (draggedItem && draggedObjectData) {
+                    e.preventDefault();
+                    e.dataTransfer.dropEffect = 'move';
+                    dropZone.classList.add('drag-over');
+                }
+            });
+            
+            // Drag leave
+            dropZone.addEventListener('dragleave', (e) => {
+                if (!dropZone.contains(e.relatedTarget)) {
+                    dropZone.classList.remove('drag-over');
+                }
+            });
+            
+            // Drop
+            dropZone.addEventListener('drop', (e) => {
+                if (draggedItem && draggedObjectData) {
+                    e.preventDefault();
+                    
+                    // Move object to root level (remove from any container)
+                    handleDropToRoot(draggedObjectData.id);
+                    
+                    dropZone.classList.remove('drag-over');
+                }
+            });
+        }
+        
+        function showDropIndicator(objectItem, type) {
+            const indicator = document.createElement('div');
+            indicator.className = 'drop-indicator active';
+            
+            if (type === 'container') {
+                // Show container highlight
+                objectItem.classList.add('drag-over');
+            } else if (type === 'before') {
+                objectItem.parentNode.insertBefore(indicator, objectItem);
+            } else if (type === 'after') {
+                const nextSibling = objectItem.nextSibling;
+                if (nextSibling) {
+                    objectItem.parentNode.insertBefore(indicator, nextSibling);
+                } else {
+                    objectItem.parentNode.appendChild(indicator);
+                }
+            }
+        }
+        
+        function clearAllDropIndicators() {
+            // Remove all drop indicators
+            document.querySelectorAll('.drop-indicator').forEach(indicator => {
+                indicator.remove();
+            });
+            
+            // Remove all drag-over classes
+            document.querySelectorAll('.object-item').forEach(item => {
+                item.classList.remove('drag-over');
+            });
+            
+            // Remove drag-over class from root drop zones
+            document.querySelectorAll('.root-drop-zone').forEach(zone => {
+                zone.classList.remove('drag-over');
+            });
+        }
+        
+        function handleDropIntoContainer(draggedId, containerId) {
+            const sceneController = window.modlerComponents?.sceneController;
+            if (!sceneController) return;
+            
+            // Prevent dropping container into itself or its children
+            if (draggedId === containerId || isChildOfContainer(draggedId, containerId)) {
+                console.warn('Cannot drop container into itself or its children');
+                return;
+            }
+            
+            // Set parent container
+            sceneController.setParentContainer(draggedId, containerId, false);
+            console.log(`Moved object ${draggedId} into container ${containerId}`);
+            
+            // Resize container to fit new child
+            const containerData = sceneController.getObject(containerId);
+            if (containerData && containerData.isContainer && window.modlerComponents?.toolController) {
+                const layoutTool = window.modlerComponents.toolController.tools.layout;
+                if (layoutTool && layoutTool.resizeContainerToFitChildren) {
+                    layoutTool.resizeContainerToFitChildren(containerData);
+                }
+            }
+            
+            // Refresh object list
+            populateObjectList();
+        }
+        
+        function handleDropBetweenItems(draggedId, targetId, insertBefore) {
+            const sceneController = window.modlerComponents?.sceneController;
+            if (!sceneController) return;
+            
+            const draggedObj = sceneController.getObject(draggedId);
+            const targetObj = sceneController.getObject(targetId);
+            
+            if (!draggedObj || !targetObj) return;
+            
+            // Move to same parent as target (or root if target has no parent)
+            const newParentId = targetObj.parentContainer;
+            
+            // Only change parent if different
+            if (draggedObj.parentContainer !== newParentId) {
+                const oldParentId = draggedObj.parentContainer;
+                sceneController.setParentContainer(draggedId, newParentId, false);
+                console.log(`Moved object ${draggedId} to same level as ${targetId}`);
+                
+                // Resize both old and new containers if they exist
+                if (window.modlerComponents?.toolController) {
+                    const layoutTool = window.modlerComponents.toolController.tools.layout;
+                    if (layoutTool && layoutTool.resizeContainerToFitChildren) {
+                        // Resize old container
+                        if (oldParentId) {
+                            const oldContainerData = sceneController.getObject(oldParentId);
+                            if (oldContainerData && oldContainerData.isContainer) {
+                                layoutTool.resizeContainerToFitChildren(oldContainerData);
+                            }
+                        }
+                        
+                        // Resize new container
+                        if (newParentId) {
+                            const newContainerData = sceneController.getObject(newParentId);
+                            if (newContainerData && newContainerData.isContainer) {
+                                layoutTool.resizeContainerToFitChildren(newContainerData);
+                            }
+                        }
+                    }
+                }
+            } else {
+                console.log(`Reordered object ${draggedId} relative to ${targetId}`);
+            }
+            
+            // Refresh object list
+            populateObjectList();
+        }
+        
+        function handleDropToRoot(draggedId) {
+            const sceneController = window.modlerComponents?.sceneController;
+            if (!sceneController) return;
+            
+            const draggedObj = sceneController.getObject(draggedId);
+            if (!draggedObj) return;
+            
+            // Remove from any container (set parent to null)
+            if (draggedObj.parentContainer) {
+                const oldContainerId = draggedObj.parentContainer;
+                sceneController.setParentContainer(draggedId, null, false);
+                console.log(`Moved object ${draggedId} to root level`);
+                
+                // Resize the old container to fit remaining children
+                const oldContainerData = sceneController.getObject(oldContainerId);
+                if (oldContainerData && oldContainerData.isContainer && window.modlerComponents?.toolController) {
+                    const layoutTool = window.modlerComponents.toolController.tools.layout;
+                    if (layoutTool && layoutTool.resizeContainerToFitChildren) {
+                        layoutTool.resizeContainerToFitChildren(oldContainerData);
+                    }
+                }
+                
+                // Refresh object list
+                populateObjectList();
+            }
+        }
+        
+        function isChildOfContainer(objectId, potentialParentId) {
+            const sceneController = window.modlerComponents?.sceneController;
+            if (!sceneController) return false;
+            
+            const obj = sceneController.getObject(objectId);
+            if (!obj || !obj.parentContainer) return false;
+            
+            // Check if potentialParentId is in the parent chain
+            let currentParentId = obj.parentContainer;
+            while (currentParentId) {
+                if (currentParentId === potentialParentId) return true;
+                const parentObj = sceneController.getObject(currentParentId);
+                currentParentId = parentObj?.parentContainer;
+            }
+            
+            return false;
+        }
+        
+        // Expose globally for SceneController events
+        window.populateObjectList = populateObjectList;
+        
+        // Handle dimension changes for both box creation and regular objects
+        function handleDimensionChange(axis, value) {
+            // Check if we're in box creation mode
+            const toolController = window.modlerComponents?.toolController;
+            const isBoxCreation = toolController?.getActiveToolName() === 'box-creation';
+            
+            if (isBoxCreation) {
+                // Apply dimensions to box creation
+                const boxTool = toolController.getActiveTool();
+                if (boxTool && boxTool.applyDimensionsFromInputs) {
+                    boxTool.applyDimensionsFromInputs();
+                }
+            } else {
+                // Apply as direct geometry modification (scale removed)
+            }
+        }
+        
+        // Handle Enter and Tab key for property inputs
+        function handlePropertyInputKeydown(event, propertyType, axis, inputElement) {
+            const toolController = window.modlerComponents?.toolController;
+            const isBoxCreation = toolController?.getActiveToolName() === 'box-creation';
+
+            if (event.key === 'Tab' && isBoxCreation && propertyType === 'dimension') {
+                event.preventDefault();
+
+                // Apply current field value first
+                const boxTool = toolController.getActiveTool();
+                if (boxTool && boxTool.applyDimensionFromInput) {
+                    boxTool.applyDimensionFromInput(axis, inputElement.value);
+                }
+
+                // Handle Tab navigation between fields
+                if (axis === 'dim-x') {
+                    // From W: focus D
+                    const depthField = document.getElementById('dim-z');
+                    if (depthField) {
+                        depthField.focus();
+                        depthField.select();
+                    }
+                } else if (axis === 'dim-z') {
+                    // From D: focus H and switch to height mode
+                    const heightField = document.getElementById('dim-y');
+                    if (heightField) {
+                        heightField.focus();
+                        heightField.select();
+                    }
+
+                    // Switch to height extraction mode
+                    if (boxTool && boxTool.state === 'setting_corner_1') {
+                        if (!boxTool.currentPosition) {
+                            boxTool.currentPosition = boxTool.startPosition.clone();
+                            boxTool.currentPosition.x += 1.0;
+                            boxTool.currentPosition.z += 1.0;
+                        }
+                        boxTool.state = 'setting_height';
+                        boxTool.initializeHeightFromCurrentMouse();
+                        boxTool.createPreview();
+                    }
+                } else if (axis === 'dim-y' && boxTool && boxTool.state === 'setting_height') {
+                    // From H: complete box creation
+                    boxTool.finalizeBox();
+                }
+                return;
+            }
+
+            if (event.key === 'Enter' || event.keyCode === 13) {
+                event.preventDefault();
+
+                if (isBoxCreation && propertyType === 'dimension') {
+                    // Apply dimension value to box creation using tool instance
+                    const boxTool = toolController.getActiveTool();
+                    if (boxTool && boxTool.applyDimensionFromInput) {
+                        boxTool.applyDimensionFromInput(axis, inputElement.value);
+
+                        // If we're in height extraction mode and pressing Enter on height field, finish creation
+                        if (boxTool.state === 'setting_height' && axis === 'dim-y') {
+                            boxTool.finalizeBox();
+                        }
+                    }
+                } else {
+                    // Apply the property change to selected object based on property type
+                    if (propertyType === 'position' || propertyType === 'rotation') {
+                        updateObjectProperty(propertyType, axis, inputElement.value);
+                    } else if (propertyType === 'layout') {
+                        updateLayoutProperty(axis, parseFloat(inputElement.value));
+                    } else if (propertyType === 'padding') {
+                        updatePaddingProperty(axis, parseFloat(inputElement.value));
+                    } else if (propertyType === 'material') {
+                        updateObjectMaterial(axis, inputElement.value);
+                    }
+                }
+
+                // Remove focus from input
+                inputElement.blur();
+            }
+        }
+
+        // Handle real-time property updates as user types or changes values
+        function handlePropertyRealTimeUpdate(propertyType, axis, value) {
+            // Use throttling to prevent excessive updates while user is typing
+            const throttleKey = `${propertyType}_${axis}`;
+            const now = Date.now();
+
+            // Initialize throttle state if needed
+            if (!window.propertyUpdateThrottle) {
+                window.propertyUpdateThrottle = {};
+            }
+
+            // Throttle to 100ms intervals
+            if (window.propertyUpdateThrottle[throttleKey] &&
+                now - window.propertyUpdateThrottle[throttleKey] < 100) {
+                return;
+            }
+
+            window.propertyUpdateThrottle[throttleKey] = now;
+
+            // Apply the property change immediately
+            if (propertyType === 'position' || propertyType === 'rotation') {
+                updateObjectProperty(propertyType, axis, value);
+            } else if (propertyType === 'layout') {
+                updateLayoutProperty(axis, parseFloat(value));
+            } else if (propertyType === 'padding') {
+                updatePaddingProperty(axis, parseFloat(value));
+            } else if (propertyType === 'material') {
+                updateObjectMaterial(axis, value);
+            }
+        }
+
+        // Focus dimension field based on push tool's active axis
+        function focusDimensionFieldForPushAxis(pushAxis) {
+            let fieldId;
+            if (pushAxis === 'x') {
+                fieldId = 'dim-x';
+            } else if (pushAxis === 'y') {
+                fieldId = 'dim-y';
+            } else if (pushAxis === 'z') {
+                fieldId = 'dim-z';
+            } else {
+                return; // Unknown axis
+            }
+
+            const field = document.getElementById(fieldId);
+            if (field) {
+                field.focus();
+                field.select(); // Select all text for easy editing
+            }
+        }
+
+        // Expose function globally for push tool
+        window.focusDimensionFieldForPushAxis = focusDimensionFieldForPushAxis;
+        
+        function selectObjectFromList(objectName, event = null) {
+            if (!window.modlerComponents?.sceneController || !window.modlerComponents?.selectionController) {
+                console.log('Scene or selection controller not available');
+                return;
+            }
+            
+            // Find the object by name in the scene
+            const scene = window.modlerComponents.sceneController.scene;
+            let targetObject = null;
+            
+            scene.traverse((child) => {
+                if (child.name === objectName) {
+                    // Handle both regular objects (with geometry) and special objects like GridHelper
+                    if (child.geometry || child.type === 'GridHelper') {
+                        targetObject = child;
+                    }
+                }
+            });
+            
+            if (targetObject) {
+                const selectionController = window.modlerComponents.selectionController;
+                
+                // Check for multi-select modifiers
+                const isMultiSelect = event && (event.shiftKey || event.ctrlKey || event.metaKey);
+                
+                if (isMultiSelect) {
+                    // Multi-select mode: toggle selection (keep existing selections)
+                    if (targetObject.geometry && targetObject.material) {
+                        selectionController.toggle(targetObject);
+                    }
+                } else {
+                    // Single-select mode: clear previous selection and select this object
+                    selectionController.clearSelection();
+                    
+                    // Only select if it's a regular mesh object (not grid helper)
+                    if (targetObject.geometry && targetObject.material) {
+                        selectionController.select(targetObject);
+                        updatePropertyPanelFromObject(targetObject);
+                        
+                        // CRITICAL FIX: If this is a container, ensure proper visibility handling
+                        const sceneController = window.modlerComponents.sceneController;
+                        const visibilityManager = window.modlerComponents.containerVisibilityManager;
+                        const objectData = sceneController.getObjectByMesh(targetObject);
+                        
+                        if (objectData && objectData.isContainer && visibilityManager) {
+                            // Ensure container and children are properly managed
+                            console.log(`Container selected from list: ${objectData.name}, using visibility manager`);
+                            // Container visibility is now handled by ContainerVisibilityManager
+                            // through the SelectionController's showContainerWireframe method
+                        }
+                    } else {
+                        // For non-selectable objects like grid, just update UI
+                        clearPropertyPanel();
+                    }
+                }
+                
+                // Update UI to show selection (handle both single and multi-selection)
+                if (isMultiSelect) {
+                    // For multi-select, update with all currently selected object names
+                    const selectedObjects = selectionController.getSelectedObjects();
+                    const selectedNames = selectedObjects.map(obj => obj.name);
+                    updateObjectListSelection(selectedNames);
+                } else {
+                    // For single select, update with just this object name
+                    updateObjectListSelection(targetObject.geometry && targetObject.material ? [objectName] : []);
+                }
+                
+                console.log('Selected object from list:', objectName);
+            } else {
+                console.log('Object not found:', objectName);
+            }
+        }
+        
+        function updateObjectListSelection(selectedObjectNames) {
+            // Handle both single selection (string) and multi-selection (array)
+            const nameArray = Array.isArray(selectedObjectNames) 
+                ? selectedObjectNames 
+                : (selectedObjectNames ? [selectedObjectNames] : []);
+            
+            // Update visual selection in object list
+            const objectItems = document.querySelectorAll('.object-item');
+            objectItems.forEach(item => {
+                const objectName = item.querySelector('.object-name').textContent;
+                if (nameArray.includes(objectName)) {
+                    item.classList.add('active');
+                } else {
+                    item.classList.remove('active');
+                }
+            });
+        }
+        
+        // Material and scene control functions
+        function updateObjectMaterial(propertyType, value) {
+            PropertyManager.updateMaterialProperty(propertyType, value);
+
+            // Handle special UI updates
+            if (propertyType === 'opacity') {
+                document.getElementById('opacity-display').textContent = parseFloat(value).toFixed(1);
+            }
+        }
+
+        // Layout axis button group management
+        function selectLayoutAxis(axis, buttonElement) {
+            // Check if this axis is already active (toggle off functionality)
+            const isCurrentlyActive = buttonElement.classList.contains('active');
+
+            if (isCurrentlyActive) {
+                // Toggle OFF - disable layout
+                updateLayoutAxisButtons(null); // Clear all active states
+                updateLayoutProperty('direction', null);
+                clearLayoutAxisGuides();
+                hideLayoutSections();
+                setDimensionInputsState(false); // Enable dimension inputs when layout disabled
+            } else {
+                // Toggle ON - enable layout
+                updateLayoutAxisButtons(axis);
+                updateLayoutProperty('direction', axis);
+                showLayoutAxisGuides(axis);
+                showLayoutSections();
+                updateContainerBoundsAfterLayout();
+                setDimensionInputsState(true); // Disable dimension inputs in layout mode
+            }
+        }
+
+        function showLayoutSections() {
+            const gapSection = document.getElementById('layout-gap-section');
+            const paddingSection = document.getElementById('layout-padding-section');
+            if (gapSection) gapSection.style.display = 'block';
+            if (paddingSection) paddingSection.style.display = 'block';
+        }
+
+        function hideLayoutSections() {
+            const gapSection = document.getElementById('layout-gap-section');
+            const paddingSection = document.getElementById('layout-padding-section');
+            if (gapSection) gapSection.style.display = 'none';
+            if (paddingSection) paddingSection.style.display = 'none';
+        }
+
+        function updateContainerBoundsAfterLayout() {
+            // Get currently selected container
+            const selectionController = window.modlerComponents?.selectionController;
+            const sceneController = window.modlerComponents?.sceneController;
+            const containerManager = window.modlerComponents?.containerManager;
+
+            if (!selectionController || !sceneController || !containerManager) return;
+
+            const selectedObjects = selectionController.getSelectedObjects();
+            if (selectedObjects.length === 0) return;
+
+            // Check if selected object is a container
+            const selectedObject = selectedObjects[0];
+            const objectData = sceneController.getObjectByMesh(selectedObject);
+
+            if (objectData && objectData.isContainer) {
+                // Update layout and get calculated bounds
+                const layoutResult = sceneController.updateLayout(objectData.id);
+
+                if (layoutResult && layoutResult.success && layoutResult.layoutBounds) {
+                    console.log('🔍 LAYOUT BOUNDS UPDATE:', {
+                        containerName: objectData.name,
+                        layoutBounds: layoutResult.layoutBounds,
+                        meshVisibleBefore: selectedObject.visible
+                    });
+
+                    // Use layout-calculated bounds for container resize
+                    containerManager.resizeContainerToLayoutBounds(objectData, layoutResult.layoutBounds);
+
+                    // CRITICAL: Ensure container is visible after geometry update
+                    const unifiedContainerManager = window.modlerComponents?.unifiedContainerManager;
+                    if (unifiedContainerManager) {
+                        console.log('🔍 ENSURING CONTAINER VISIBILITY after layout update');
+                        unifiedContainerManager.showContainer(objectData.id, true); // Bypass debounce for layout updates
+                        unifiedContainerManager.syncInteractiveMeshPosition(objectData.id);
+                    }
+
+                    console.log('🔍 LAYOUT UPDATE COMPLETE:', {
+                        containerName: objectData.name,
+                        meshVisibleAfter: selectedObject.visible
+                    });
+                } else {
+                    // Fallback to original method if layout result is invalid
+                    containerManager.resizeContainerToFitChildren(objectData, null, true);
+                }
+            }
+        }
+
+        function setDimensionInputsState(disabled) {
+            const dimensionInputs = ['dim-x', 'dim-y', 'dim-z'];
+            dimensionInputs.forEach(inputId => {
+                const input = document.getElementById(inputId);
+                if (input) {
+                    input.disabled = disabled;
+                    // Add visual feedback
+                    if (disabled) {
+                        input.style.opacity = '0.5';
+                        input.style.cursor = 'not-allowed';
+                    } else {
+                        input.style.opacity = '1';
+                        input.style.cursor = '';
+                    }
+                }
+            });
+        }
+
+        function updateLayoutAxisButtons(selectedAxis) {
+            // Clear all active states
+            document.querySelectorAll('.axis-button').forEach(btn => {
+                btn.classList.remove('active');
+            });
+
+            // Set active state for selected axis
+            const buttonMap = { 'x': 'axis-w', 'y': 'axis-h', 'z': 'axis-d' };
+            const activeButtonId = buttonMap[selectedAxis];
+            if (activeButtonId) {
+                const activeButton = document.getElementById(activeButtonId);
+                if (activeButton) {
+                    activeButton.classList.add('active');
+                }
+            }
+        }
+
+        function showLayoutAxisGuides(axis) {
+            const selectedObjects = window.modlerComponents?.selectionController?.getSelectedObjects();
+            const visualEffects = window.modlerComponents?.visualEffects;
+            const sceneController = window.modlerComponents?.sceneController;
+
+            if (!selectedObjects || selectedObjects.length === 0 || !visualEffects || !sceneController) {
+                return;
+            }
+
+            // Only show guides if the selected object is a container
+            const selectedObject = selectedObjects[0];
+            if (selectedObject && selectedObject.userData && selectedObject.userData.id) {
+                const objectData = sceneController.getObject(selectedObject.userData.id);
+
+                // Only show layout axis guides for containers
+                if (objectData && objectData.isContainer) {
+                    visualEffects.showLayoutAxisGuides(selectedObject, axis);
+                } else {
+                    // Clear guides if selected object is not a container
+                    visualEffects.clearLayoutAxisGuides();
+                }
+            }
+        }
+
+        function clearLayoutAxisGuides() {
+            const visualEffects = window.modlerComponents?.visualEffects;
+            if (visualEffects) {
+                visualEffects.clearLayoutAxisGuides();
+            }
+        }
+
+        // Fill dimension functionality
+        function toggleFillDimension(axis, buttonElement) {
+            PropertyManager.toggleFillProperty(axis);
+        }
+
+        function updateFillButtonState(axis, isActive) {
+            const button = document.getElementById(`fill-${axis}`);
+            if (button) {
+                if (isActive) {
+                    button.classList.add('active');
+                } else {
+                    button.classList.remove('active');
+                }
+            }
+        }
+
+        function updateDimensionInputState(axis, isDisabled) {
+            const input = document.getElementById(`dim-${axis}`);
+            if (input) {
+                if (isDisabled) {
+                    input.classList.add('dimension-input-disabled');
+                } else {
+                    input.classList.remove('dimension-input-disabled');
+                }
+            }
+        }
+
+        function updateFillButtonsVisibility(object) {
+            const sceneController = window.modlerComponents?.sceneController;
+
+            // Hide all fill buttons by default
+            ['x', 'y', 'z'].forEach(axis => {
+                const button = document.getElementById(`fill-${axis}`);
+                if (button) {
+                    button.style.display = 'none';
+                }
+            });
+
+            if (sceneController && object.userData && object.userData.id) {
+                const objectData = sceneController.getObject(object.userData.id);
+
+                // Show fill buttons only if object is in a layout-enabled container
+                if (objectData && objectData.parentContainer) {
+                    const container = sceneController.getObject(objectData.parentContainer);
+
+                    // Check if container has autoLayout enabled
+                    if (container && container.autoLayout && container.autoLayout.enabled && container.autoLayout.direction) {
+                        // Show fill buttons and update their states
+                        ['x', 'y', 'z'].forEach(axis => {
+                            const button = document.getElementById(`fill-${axis}`);
+                            if (button) {
+                                button.style.display = 'block';
+
+                                // Update button state based on object's fill settings
+                                const fillProperty = `size${axis.toUpperCase()}`;
+                                const fillState = objectData.layoutProperties &&
+                                                objectData.layoutProperties[fillProperty] === 'fill';
+
+                                updateFillButtonState(axis, fillState);
+                                updateDimensionInputState(axis, fillState);
+                            }
+                        });
+                    }
+                }
+            }
+        }
+
+        function updateLayoutProperty(propertyType, value) {
+            PropertyManager.updateLayoutProperty(propertyType, value);
+        }
+        
+        function updatePaddingProperty(side, value) {
+            PropertyManager.updatePaddingProperty(side, value);
+        }
+
+        function updateSceneBackground(colorValue) {
+            if (!window.modlerComponents?.sceneFoundation?.renderer) {
+                console.log('Scene renderer not available');
+                return;
+            }
+            
+            // Convert hex to Three.js color
+            const colorHex = parseInt(colorValue.replace('#', ''), 16);
+            window.modlerComponents.sceneFoundation.renderer.setClearColor(colorHex);
+            
+            console.log(`Updated scene background to ${colorValue}`);
+        }
+        
+        // Configuration UI Management
+        function initializeConfigurationUI() {
+            const configManager = window.modlerComponents?.configurationManager;
+            if (!configManager) {
+                console.warn('ConfigurationManager not available for UI initialization');
+                return;
+            }
+            
+            console.log('ConfigurationManager found:', configManager);
+            console.log('Current config values:', configManager.getAll());
+            
+            // Initialize all configuration inputs with current values
+            updateConfigUIFromValues(configManager.getAll());
+            
+            // Setup event listeners for all configuration inputs
+            setupConfigurationEventListeners();
+            
+            // Apply current configuration values to systems
+            const backgroundColor = configManager.get('scene.backgroundColor');
+            if (backgroundColor) {
+                updateSceneBackground(backgroundColor);
+            }
+            
+            console.log('Configuration UI initialized');
+        }
+        
+        function setupConfigurationEventListeners() {
+            const configManager = window.modlerComponents?.configurationManager;
+            if (!configManager) return;
+            
+            // Color inputs
+            document.getElementById('config-selection-color')?.addEventListener('change', (e) => {
+                configManager.set('visual.selection.color', e.target.value);
+            });
+            
+            document.getElementById('config-container-color')?.addEventListener('change', (e) => {
+                configManager.set('visual.containers.wireframeColor', e.target.value);
+            });
+
+            document.getElementById('config-box-creation-color')?.addEventListener('change', (e) => {
+                configManager.set('visual.boxCreation.color', e.target.value);
+            });
+            
+            document.getElementById('config-snap-color')?.addEventListener('change', (e) => {
+                configManager.set('visual.snapping.indicatorColor', e.target.value);
+            });
+            
+            document.getElementById('config-scene-background')?.addEventListener('change', (e) => {
+                console.log('Background color changed to:', e.target.value);
+                configManager.set('scene.backgroundColor', e.target.value);
+                // Also update the actual scene background
+                updateSceneBackground(e.target.value);
+            });
+            
+            document.getElementById('config-scene-gridmain')?.addEventListener('change', (e) => {
+                configManager.set('scene.gridMainColor', e.target.value);
+            });
+            
+            document.getElementById('config-scene-gridsub')?.addEventListener('change', (e) => {
+                configManager.set('scene.gridSubColor', e.target.value);
+            });
+            
+            document.getElementById('config-ui-accent')?.addEventListener('change', (e) => {
+                configManager.set('ui.accentColor', e.target.value);
+            });
+            
+            // Range inputs with value display updates
+            setupRangeInput('config-selection-linewidth', 'visual.selection.lineWidth');
+            setupRangeInput('config-selection-opacity', 'visual.selection.opacity');
+            setupRangeInput('config-container-linewidth', 'visual.containers.lineWidth');
+            setupRangeInput('config-container-opacity', 'visual.containers.opacity');
+            setupRangeInput('config-snap-cornersize', 'visual.snapping.cornerSize');
+            setupRangeInput('config-snap-borderwidth', 'visual.snapping.borderWidth');
+            setupRangeInput('config-scene-gridsize', 'scene.gridSize');
+            setupRangeInput('config-scene-griddensity', 'scene.gridDensity');
+            setupRangeInput('config-ui-toolbaropacity', 'ui.toolbarOpacity');
+        }
+        
+        function setupRangeInput(inputId, configPath) {
+            const configManager = window.modlerComponents?.configurationManager;
+            const input = document.getElementById(inputId);
+            const valueDisplay = input?.parentElement?.querySelector('.config-value');
+            
+            if (!input || !configManager) {
+                console.warn(`setupRangeInput failed for ${inputId}:`, { input: !!input, configManager: !!configManager });
+                return;
+            }
+            
+            console.log(`Setting up range input ${inputId} for ${configPath}`);
+            
+            // Update value display when slider changes
+            input.addEventListener('input', (e) => {
+                const value = parseFloat(e.target.value);
+                if (valueDisplay) {
+                    valueDisplay.textContent = value.toString();
+                }
+                console.log(`Range input ${inputId} changed to:`, value);
+            });
+            
+            // Update configuration when slider changes
+            input.addEventListener('change', (e) => {
+                const value = parseFloat(e.target.value);
+                console.log(`Setting config ${configPath} to:`, value);
+                configManager.set(configPath, value);
+            });
+        }
+        
+        function updateConfigUIFromValues(config) {
+            // Update color inputs
+            updateColorInput('config-selection-color', config.visual?.selection?.color);
+            updateColorInput('config-container-color', config.visual?.containers?.wireframeColor);
+            updateColorInput('config-box-creation-color', config.visual?.boxCreation?.color);
+            updateColorInput('config-snap-color', config.visual?.snapping?.indicatorColor);
+            updateColorInput('config-scene-background', config.scene?.backgroundColor);
+            updateColorInput('config-scene-gridmain', config.scene?.gridMainColor);
+            updateColorInput('config-scene-gridsub', config.scene?.gridSubColor);
+            updateColorInput('config-ui-accent', config.ui?.accentColor);
+            
+            // Update range inputs
+            updateRangeInput('config-selection-linewidth', config.visual?.selection?.lineWidth);
+            updateRangeInput('config-selection-opacity', config.visual?.selection?.opacity);
+            updateRangeInput('config-container-linewidth', config.visual?.containers?.lineWidth);
+            updateRangeInput('config-container-opacity', config.visual?.containers?.opacity);
+            updateRangeInput('config-snap-cornersize', config.visual?.snapping?.cornerSize);
+            updateRangeInput('config-snap-borderwidth', config.visual?.snapping?.borderWidth);
+            updateRangeInput('config-scene-gridsize', config.scene?.gridSize);
+            updateRangeInput('config-scene-griddensity', config.scene?.gridDensity);
+            updateRangeInput('config-ui-toolbaropacity', config.ui?.toolbarOpacity);
+        }
+        
+        function updateColorInput(inputId, value) {
+            const input = document.getElementById(inputId);
+            if (input && value) {
+                input.value = value;
+            }
+        }
+        
+        function updateRangeInput(inputId, value) {
+            const input = document.getElementById(inputId);
+            const valueDisplay = input?.parentElement?.querySelector('.config-value');
+            
+            if (input && value !== undefined) {
+                input.value = value;
+                if (valueDisplay) {
+                    valueDisplay.textContent = value.toString();
+                }
+            }
+        }
+        
+        // Keyboard shortcuts and tool management
+        function setupKeyboardShortcuts() {
+            document.addEventListener('keydown', function(event) {
+                // Only handle shortcuts when not typing in input fields
+                if (event.target.tagName === 'INPUT') return;
+                
+                switch(event.key) {
+                    case '1':
+                        activateTool('select');
+                        event.preventDefault();
+                        break;
+                    case '2':
+                        activateTool('move');
+                        event.preventDefault();
+                        break;
+                    case 'Tab':
+                        // Handle Tab key for push tool field highlighting
+                        const toolController = window.modlerComponents?.toolController;
+                        if (toolController?.getActiveToolName() === 'push') {
+                            const pushTool = toolController.getActiveTool();
+                            if (pushTool && pushTool.isPushing && pushTool.pushAxis) {
+                                window.focusDimensionFieldForPushAxis(pushTool.pushAxis);
+                                event.preventDefault();
+                            }
+                        }
+                        break;
+                    case 'f':
+                    case 'F':
+                        // Only frame objects if no modifier keys are pressed
+                        // Cmd+F and Ctrl+F are handled by ToolController for container creation
+                        if (!event.metaKey && !event.ctrlKey) {
+                            frameSelectedObject();
+                            event.preventDefault();
+                        }
+                        break;
+                }
+            });
+            
+            console.log('Keyboard shortcuts enabled: Q=Select, W=Move, E=Layout, R=Box, F=Frame');
+        }
+        
+        function toggleSnapping() {
+            if (!window.modlerComponents?.snapController) {
+                console.log('Snap controller not available');
+                return;
+            }
+            
+            const currentState = window.modlerComponents.snapController.getEnabled();
+            window.modlerComponents.snapController.setEnabled(!currentState);
+            
+            console.log('Snapping toggled:', !currentState ? 'ON' : 'OFF');
+        }
+        
+        function activateTool(toolName) {
+            if (!window.modlerComponents?.toolController) {
+                console.log('Tool controller not available');
+                return;
+            }
+            
+            // Switch to the tool
+            window.modlerComponents.toolController.switchToTool(toolName);
+            
+            // Update toolbar visual state
+            document.querySelectorAll('.toolbar-button').forEach(btn => btn.classList.remove('active'));
+            document.getElementById(`${toolName}-tool`)?.classList.add('active');
+            
+            console.log(`Activated ${toolName} tool`);
+        }
+        
+        
+        function clearPropertyPanel() {
+            // Reset transform inputs
+            document.getElementById('pos-x').value = '0.00';
+            document.getElementById('pos-y').value = '0.00';
+            document.getElementById('pos-z').value = '0.00';
+            document.getElementById('rot-x').value = '0';
+            document.getElementById('rot-y').value = '0';
+            document.getElementById('rot-z').value = '0';
+            
+            // Reset material inputs
+            document.getElementById('material-color').value = '#ff0000';
+            document.getElementById('material-opacity').value = '1';
+            document.getElementById('opacity-display').textContent = '1.0';
+        }
+        
+        // Camera control functions
+        function frameSelectedObject() {
+            if (!window.modlerComponents?.cameraController || !window.modlerComponents?.selectionController) {
+                console.log('Camera or selection controller not available');
+                return;
+            }
+            
+            const selectedObjects = window.modlerComponents.selectionController.getSelectedObjects();
+            
+            if (selectedObjects.length === 0) {
+                console.log('No objects selected to frame');
+                return;
+            }
+            
+            // Frame the first selected object
+            window.modlerComponents.cameraController.frameObject(selectedObjects[0]);
+            console.log('Framed selected object');
+        }
+        
+        function resetCamera() {
+            if (!window.modlerComponents?.cameraController) {
+                console.log('Camera controller not available');
+                return;
+            }
+            
+            window.modlerComponents.cameraController.resetCamera();
+            console.log('Camera reset to default position');
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,468 @@
+// Modler V2 - Layout Tool Utilities
+// Geometry and bounds calculation utilities for layout containers
+// Target: ~100 lines - focused geometry utilities
+
+class LayoutGeometry {
+    /**
+     * Calculate bounding box of selected objects
+     * @param {Array} selectedObjects - Array of mesh objects
+     * @returns {Object} Bounds object with center, size, min, max
+     */
+    static calculateSelectionBounds(selectedObjects) {
+        if (selectedObjects.length === 0) {
+            return {
+                center: new THREE.Vector3(0, 0, 0),
+                size: new THREE.Vector3(1, 1, 1),
+                min: new THREE.Vector3(0, 0, 0),
+                max: new THREE.Vector3(1, 1, 1)
+            };
+        }
+        
+        // Filter to only objects with valid geometry and compute bounding boxes
+        const validObjects = selectedObjects.filter(obj => {
+            if (!obj || !obj.geometry) return false;
+            
+            // Ensure bounding box is computed
+            obj.geometry.computeBoundingBox();
+            
+            // Check if bounding box was successfully computed
+            return obj.geometry.boundingBox !== null;
+        });
+        
+        if (validObjects.length === 0) {
+            console.warn('No valid objects with geometry found for bounds calculation');
+            console.warn('Original objects:', selectedObjects.map(obj => ({
+                name: obj.name || 'unnamed',
+                hasGeometry: !!obj.geometry,
+                geometryType: obj.geometry?.type || 'none',
+                boundingBox: obj.geometry?.boundingBox
+            })));
+            return {
+                center: new THREE.Vector3(0, 0, 0),
+                size: new THREE.Vector3(1, 1, 1),
+                min: new THREE.Vector3(0, 0, 0),
+                max: new THREE.Vector3(1, 1, 1)
+            };
+        }
+        
+        let minX = Infinity, minY = Infinity, minZ = Infinity;
+        let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
+        
+        validObjects.forEach(obj => {
+            // Calculate object's world bounding box
+            if (obj.geometry) {
+                obj.geometry.computeBoundingBox();
+                const box = obj.geometry.boundingBox;
+                
+                if (box) {
+                    // Transform bounding box points to world coordinates
+                    const corners = [
+                        new THREE.Vector3(box.min.x, box.min.y, box.min.z),
+                        new THREE.Vector3(box.max.x, box.min.y, box.min.z),
+                        new THREE.Vector3(box.min.x, box.max.y, box.min.z),
+                        new THREE.Vector3(box.max.x, box.max.y, box.min.z),
+                        new THREE.Vector3(box.min.x, box.min.y, box.max.z),
+                        new THREE.Vector3(box.max.x, box.min.y, box.max.z),
+                        new THREE.Vector3(box.min.x, box.max.y, box.max.z),
+                        new THREE.Vector3(box.max.x, box.max.y, box.max.z)
+                    ];
+                    
+                    corners.forEach(corner => {
+                        // CRITICAL FIX: Use world transform matrix instead of individual transforms
+                        // This ensures correct positioning regardless of object's parent hierarchy
+                        corner.applyMatrix4(obj.matrixWorld);
+                        
+                        // Update overall bounds
+                        minX = Math.min(minX, corner.x);
+                        minY = Math.min(minY, corner.y);
+                        minZ = Math.min(minZ, corner.z);
+                        maxX = Math.max(maxX, corner.x);
+                        maxY = Math.max(maxY, corner.y);
+                        maxZ = Math.max(maxZ, corner.z);
+                    });
+                }
+            }
+        });
+        
+        // Add small padding to ensure container fully wraps objects
+        const padding = 0.1;
+        minX -= padding; minY -= padding; minZ -= padding;
+        maxX += padding; maxY += padding; maxZ += padding;
+        
+        const min = new THREE.Vector3(minX, minY, minZ);
+        const max = new THREE.Vector3(maxX, maxY, maxZ);
+        const center = new THREE.Vector3(
+            (minX + maxX) / 2,
+            (minY + maxY) / 2,
+            (minZ + maxZ) / 2
+        );
+        const size = new THREE.Vector3(
+            maxX - minX,
+            maxY - minY,
+            maxZ - minZ
+        );
+        
+        return { center, size, min, max };
+    }
+    
+    /**
+     * Create container geometry with clean edge visualization and collision detection
+     * @param {THREE.Vector3} size - Container size
+     * @returns {Object} Object with visual mesh, collision mesh, and materials
+     */
+    static createContainerGeometry(size) {
+        // Create container box geometry for collision detection
+        const containerGeometry = new THREE.BoxGeometry(size.x, size.y, size.z);
+
+        // Get container configuration values
+        const configManager = window.modlerComponents?.configurationManager;
+        const wireframeColor = configManager ?
+            configManager.get('visual.containers.wireframeColor', '#00ff00') : '#00ff00';
+        const opacity = configManager ?
+            configManager.get('visual.containers.opacity', 0.8) : 0.8;
+        const lineWidth = configManager ?
+            configManager.get('visual.containers.lineWidth', 1) : 1;
+        const renderOrder = configManager ?
+            configManager.get('visual.containers.renderOrder', 998) : 998;
+
+        // Convert hex color to THREE.js color
+        const color = new THREE.Color(wireframeColor).getHex();
+
+        // Try to use centralized VisualEffects wireframe creation to prevent triangulation issues
+        const visualEffects = window.modlerComponents?.visualEffects;
+        let edgeContainer, edgeMaterial;
+
+        if (visualEffects) {
+            // Use centralized wireframe creation (prevents triangles)
+            edgeContainer = visualEffects.createPreviewBox(
+                size.x, size.y, size.z,
+                new THREE.Vector3(0, 0, 0), // Position at origin, will be positioned by SceneController
+                color, // Use configured color
+                opacity // Use configured opacity
+            );
+            edgeMaterial = edgeContainer.material;
+
+            // Update line width if supported
+            if (edgeMaterial && edgeMaterial.linewidth !== undefined) {
+                edgeMaterial.linewidth = lineWidth;
+            }
+        } else {
+            // Fallback to manual wireframe creation if VisualEffects not available
+            console.warn('VisualEffects not available, using fallback wireframe creation');
+            const edgeGeometry = new THREE.EdgesGeometry(containerGeometry);
+            edgeMaterial = new THREE.LineBasicMaterial({
+                color: color, // Use configured color
+                linewidth: lineWidth, // Use configured line width
+                transparent: true,
+                opacity: opacity // Use configured opacity
+            });
+            edgeContainer = new THREE.LineSegments(edgeGeometry, edgeMaterial);
+        }
+        
+        // Use configured renderOrder to ensure wireframes render after solid objects but remain visible during orbit
+        edgeContainer.renderOrder = renderOrder;
+        
+        // Create interactive face geometry from wireframe for reliable face detection
+        // This eliminates the need for separate collision meshes and child object conflicts
+        const faceGeometry = this.createInteractiveFacesFromWireframe(containerGeometry);
+
+        const interactiveMaterial = new THREE.MeshBasicMaterial({
+            transparent: true,
+            opacity: 0.1, // DEBUG: Still visible for testing, will reduce to 0.01 after confirmation
+            visible: true,
+            side: THREE.DoubleSide, // Ensure faces can be hit from both sides
+            depthTest: false, // Ensure it doesn't get occluded by child objects
+            color: 0xff0000, // DEBUG: Red color for testing
+            wireframe: false // Solid faces for visibility
+        });
+
+        const interactiveMesh = new THREE.Mesh(faceGeometry, interactiveMaterial);
+        interactiveMesh.visible = true;
+        interactiveMesh.renderOrder = 1000; // Higher than wireframe for raycasting priority
+        interactiveMesh.userData.isContainerInteractive = true;
+        interactiveMesh.userData.containerType = 'interactive';
+
+        // CRITICAL FIX: Add interactive mesh to scene instead of container child
+        // This ensures it remains visible and raycastable even when wireframe is hidden
+        const scene = window.modlerComponents?.sceneFoundation?.scene;
+        if (scene) {
+            scene.add(interactiveMesh);
+
+            // Position at origin initially - will be positioned by SceneController when container is added
+            interactiveMesh.position.set(0, 0, 0);
+
+            // Store reference to container for position syncing
+            interactiveMesh.userData.containerMesh = edgeContainer;
+
+        } else {
+            console.warn('Scene not available, adding interactive mesh as container child (may have visibility issues)');
+            edgeContainer.add(interactiveMesh);
+            interactiveMesh.position.set(0, 0, 0);
+        }
+
+        // Update matrices for proper raycasting
+        interactiveMesh.updateMatrixWorld(true);
+
+        // Make visual container invisible by default - only show when selected
+        edgeContainer.visible = false;
+
+        // Interactive mesh is now independent and always visible for selection
+        interactiveMesh.visible = true;
+        
+        // Enable raycasting on the visual container (collision mesh will handle hits)
+        // Remove the raycast disabling so collision mesh can be detected
+        delete edgeContainer.raycast;
+        
+        // Mark the visual container with container metadata
+        edgeContainer.userData.isContainer = true;
+        edgeContainer.userData.containerType = 'visual';
+        
+        // Optimize raycast for more precise clicking
+        if (edgeContainer.geometry) {
+            edgeContainer.geometry.computeBoundingBox();
+            edgeContainer.geometry.computeBoundingSphere();
+        }
+        containerGeometry.computeBoundingBox();
+        containerGeometry.computeBoundingSphere();
+        
+        return {
+            mesh: edgeContainer,
+            interactiveMesh: interactiveMesh,
+            geometry: edgeContainer.geometry,
+            interactiveGeometry: faceGeometry,
+            material: edgeMaterial,
+            interactiveMaterial: interactiveMaterial,
+            isInteractiveMeshSceneLevel: !!scene // Flag to indicate if interactive mesh is at scene level
+        };
+    }
+    
+    /**
+     * Update container geometry to new size
+     * @param {THREE.Object3D} containerMesh - Container mesh to update
+     * @param {THREE.Vector3} newSize - New container size
+     * @param {THREE.Vector3} newCenter - New container center position
+     * @param {boolean} shouldReposition - Whether to update container position (default: true)
+     */
+    static updateContainerGeometry(containerMesh, newSize, newCenter, shouldReposition = true) {
+        if (!containerMesh) {
+            console.error('Container mesh not found for geometry update');
+            return false;
+        }
+        
+        // Store current visibility state
+        const wasVisible = containerMesh.visible;
+        
+        // Get container configuration values
+        const configManager = window.modlerComponents?.configurationManager;
+        const wireframeColor = configManager ?
+            configManager.get('visual.containers.wireframeColor', '#00ff00') : '#00ff00';
+        const opacity = configManager ?
+            configManager.get('visual.containers.opacity', 0.8) : 0.8;
+        const lineWidth = configManager ?
+            configManager.get('visual.containers.lineWidth', 1) : 1;
+        const renderOrder = configManager ?
+            configManager.get('visual.containers.renderOrder', 998) : 998;
+
+        // Convert hex color to THREE.js color
+        const color = new THREE.Color(wireframeColor).getHex();
+
+        // Try to create new wireframe using centralized function (prevents triangles)
+        const visualEffects = window.modlerComponents?.visualEffects;
+        let newEdgeGeometry, newMaterial;
+        const newGeometry = new THREE.BoxGeometry(newSize.x, newSize.y, newSize.z);
+
+        if (visualEffects) {
+            // Use centralized wireframe creation
+            const newWireframe = visualEffects.createPreviewBox(
+                newSize.x, newSize.y, newSize.z,
+                new THREE.Vector3(0, 0, 0), // Position will be set below
+                color, // Use configured color
+                opacity // Use configured opacity
+            );
+            newEdgeGeometry = newWireframe.geometry;
+            newMaterial = newWireframe.material;
+
+            // Update line width if supported
+            if (newMaterial && newMaterial.linewidth !== undefined) {
+                newMaterial.linewidth = lineWidth;
+            }
+
+            // Clean up the temporary wireframe object (we only needed its geometry and material)
+            newWireframe.geometry = null; // Don't dispose, we're using it
+            newWireframe.material = null; // Don't dispose, we're using it
+        } else {
+            // Fallback to manual wireframe creation
+            console.warn('VisualEffects not available, using fallback wireframe update');
+            newEdgeGeometry = new THREE.EdgesGeometry(newGeometry);
+            newMaterial = new THREE.LineBasicMaterial({
+                color: color, // Use configured color
+                linewidth: lineWidth, // Use configured line width
+                transparent: true,
+                opacity: opacity // Use configured opacity
+            });
+        }
+        
+        // Find interactive mesh child
+        const interactiveMesh = containerMesh.children.find(child =>
+            child.userData.isContainerInteractive
+        );
+
+        // Dispose old geometry to prevent memory leaks
+        if (containerMesh.geometry) {
+            containerMesh.geometry.dispose();
+        }
+        if (interactiveMesh && interactiveMesh.geometry) {
+            interactiveMesh.geometry.dispose();
+        }
+
+        // Update the visual container mesh with new geometry and material
+        containerMesh.geometry = newEdgeGeometry;
+        containerMesh.material = newMaterial;
+        containerMesh.renderOrder = renderOrder;
+
+        // CRITICAL FIX: Only update position if explicitly requested
+        // This prevents moving containers during initial creation when repositionContainer=false
+        if (shouldReposition) {
+            containerMesh.position.copy(newCenter);
+        }
+
+        // Update interactive mesh geometry if it exists
+        if (interactiveMesh) {
+            // Create new interactive face geometry
+            const newInteractiveGeometry = this.createInteractiveFacesFromWireframe(newGeometry);
+            interactiveMesh.geometry = newInteractiveGeometry;
+
+            // Ensure interactive mesh properties for reliable raycasting
+            if (interactiveMesh.material) {
+                interactiveMesh.material.depthTest = false;
+                interactiveMesh.material.opacity = 0.0; // Keep invisible
+            }
+            interactiveMesh.renderOrder = 1000;
+
+            // CRITICAL FIX: Ensure interactive mesh position stays at (0,0,0) relative to parent
+            interactiveMesh.position.set(0, 0, 0);
+
+            // CRITICAL FIX: Force matrix world update after geometry change for proper raycasting
+            interactiveMesh.updateMatrixWorld(true);
+        }
+        
+        // Restore visibility state
+        containerMesh.visible = wasVisible;
+
+        console.log('🔍 GEOMETRY UPDATE COMPLETE:', {
+            containerName: containerMesh.name || 'unnamed',
+            wasVisible,
+            isVisibleNow: containerMesh.visible,
+            shouldReposition,
+            newSize: newSize.clone(),
+            newCenter: newCenter.clone()
+        });
+        
+        // Optimize raycast for updated geometry
+        newEdgeGeometry.computeBoundingBox();
+        newEdgeGeometry.computeBoundingSphere();
+        newGeometry.computeBoundingBox();
+        newGeometry.computeBoundingSphere();
+        
+        // CRITICAL FIX: Update selection wireframe after geometry change
+        // Container geometry changed, so wireframe needs to be recreated
+        const selectionController = window.modlerComponents?.selectionController;
+        const selectionVisualizer = window.modlerComponents?.selectionVisualizer;
+        if (selectionController && selectionVisualizer && selectionController.isSelected(containerMesh)) {
+            // Remove old wireframe and create new one with updated geometry
+            selectionVisualizer.removeEdgeHighlight(containerMesh);
+            selectionVisualizer.createEdgeHighlight(containerMesh);
+        }
+        
+        return true;
+    }
+
+    /**
+     * Update all existing container wireframes with new configuration values
+     * Called when container visual configuration changes
+     */
+    static updateAllContainerMaterials() {
+        const sceneController = window.modlerComponents?.sceneController;
+        const configManager = window.modlerComponents?.configurationManager;
+
+        if (!sceneController || !configManager) {
+            // Don't warn during initialization - this is expected
+            return false;
+        }
+
+        // Check if scene controller is fully initialized
+        if (!sceneController.getAllObjects) {
+            return false;
+        }
+
+        // Get new configuration values
+        const wireframeColor = configManager.get('visual.containers.wireframeColor', '#00ff00');
+        const opacity = configManager.get('visual.containers.opacity', 0.8);
+        const lineWidth = configManager.get('visual.containers.lineWidth', 1);
+        const renderOrder = configManager.get('visual.containers.renderOrder', 998);
+
+        // Convert hex color to THREE.js color
+        const color = new THREE.Color(wireframeColor).getHex();
+
+        // Get all container objects
+        const allObjects = sceneController.getAllObjects();
+        let updatedCount = 0;
+
+        allObjects.forEach(objectData => {
+            if (objectData.isContainer && objectData.mesh) {
+                const containerMesh = objectData.mesh;
+
+                // Update material properties
+                if (containerMesh.material) {
+                    containerMesh.material.color.setHex(color);
+                    containerMesh.material.opacity = opacity;
+                    containerMesh.material.transparent = opacity < 1.0;
+
+                    // Update line width if supported
+                    if (containerMesh.material.linewidth !== undefined) {
+                        containerMesh.material.linewidth = lineWidth;
+                    }
+
+                    // Update render order
+                    containerMesh.renderOrder = renderOrder;
+
+                    // Mark material for update
+                    containerMesh.material.needsUpdate = true;
+
+                    updatedCount++;
+                }
+            }
+        });
+
+        return updatedCount > 0;
+    }
+
+    /**
+     * Create interactive face geometry from container wireframe
+     * Converts box geometry into faces that can be raycast for interaction
+     * @param {THREE.BoxGeometry} containerGeometry - Original container geometry
+     * @returns {THREE.BufferGeometry} Face geometry for interaction
+     */
+    static createInteractiveFacesFromWireframe(containerGeometry) {
+        // For box containers, create 6 faces that match the wireframe bounds
+        if (containerGeometry.type === 'BoxGeometry' && containerGeometry.parameters) {
+            const { width, height, depth } = containerGeometry.parameters;
+
+            // Create a larger box geometry to extend beyond child objects for reliable raycasting
+            // This ensures the interactive mesh is hit instead of child objects
+            const faceGeometry = new THREE.BoxGeometry(
+                width * 1.1,  // 10% larger to extend beyond child objects
+                height * 1.1,
+                depth * 1.1
+            );
+
+            return faceGeometry;
+        } else {
+            // Fallback: clone the original geometry for non-box containers
+            return containerGeometry.clone();
+        }
+    }
+}
+
+// Export for use in main application
+window.LayoutGeometry = LayoutGeometry;
