@@ -729,7 +729,6 @@
                 <button class="toolbar-button icon-select active" id="select-tool" onclick="activateTool('select')" title="Select (Q)"></button>
                 <button class="toolbar-button icon-move" id="move-tool" onclick="activateTool('move')" title="Move (W)"></button>
                 <button class="toolbar-button icon-push" id="push-tool" onclick="activateTool('push')" title="Push (E)"></button>
-                <button class="toolbar-button icon-layout" id="layout-tool" onclick="activateTool('layout')" title="Layout (R)"></button>
                 <button class="toolbar-button icon-box-create" id="box-creation-tool" onclick="activateTool('box-creation')" title="Create Box (T)"></button>
             </div>
         </div>
@@ -982,7 +981,7 @@
                                                     <div class="number-arrow number-arrow-down" onclick="NumberInputDragger.decrementValue('dim-x', 0.1)">▼</div>
                                                 </div>
                                             </div>
-                                            <button class="fill-button" id="fill-x" onclick="toggleFillDimension('x', this)" tabindex="-1">Fill</button>
+                                            <button class="fill-button" id="fill-x" onclick="toggleFillDimension('x', this)" onmouseenter="showFillAxisPreview('x')" onmouseleave="clearFillAxisPreview()" tabindex="-1">Fill</button>
                                         </div>
                                         <div class="xyz-input">
                                             <label class="xyz-label">D</label>
@@ -993,7 +992,7 @@
                                                     <div class="number-arrow number-arrow-down" onclick="NumberInputDragger.decrementValue('dim-z', 0.1)">▼</div>
                                                 </div>
                                             </div>
-                                            <button class="fill-button" id="fill-z" onclick="toggleFillDimension('z', this)" tabindex="-1">Fill</button>
+                                            <button class="fill-button" id="fill-z" onclick="toggleFillDimension('z', this)" onmouseenter="showFillAxisPreview('z')" onmouseleave="clearFillAxisPreview()" tabindex="-1">Fill</button>
                                         </div>
                                         <div class="xyz-input">
                                             <label class="xyz-label">H</label>
@@ -1004,7 +1003,7 @@
                                                     <div class="number-arrow number-arrow-down" onclick="NumberInputDragger.decrementValue('dim-y', 0.1)">▼</div>
                                                 </div>
                                             </div>
-                                            <button class="fill-button" id="fill-y" onclick="toggleFillDimension('y', this)">Fill</button>
+                                            <button class="fill-button" id="fill-y" onclick="toggleFillDimension('y', this)" onmouseenter="showFillAxisPreview('y')" onmouseleave="clearFillAxisPreview()">Fill</button>
                                         </div>
                                     </div>
                                 </div>
@@ -1134,8 +1133,6 @@
     <script src="scene/scene-controller.js"></script>
     <script src="scene/visual-effects.js"></script>
     <script src="scene/snap-visualizer.js"></script>
-    <script src="interaction/container-visibility-manager.js"></script>
-    <script src="interaction/container-support-manager.js"></script>
     <script src="interaction/container-manager.js"></script>
     <script src="interaction/mesh-synchronizer.js"></script>
     <script src="interaction/field-navigation-manager.js"></script>
@@ -1165,7 +1162,7 @@
     <script src="application/utilities/position-transform.js"></script>
     <script src="application/tools/layout-geometry.js"></script>
     <script src="application/tools/container-manager.js"></script>
-    <script src="application/tools/layout-tool.js"></script>
+    <script src="application/handlers/property-update-handler.js"></script>
     <script src="application/tools/box-creation-tool.js"></script>
     <script src="v2-main.js"></script>
     
@@ -1280,9 +1277,22 @@
          * Consolidates all property update logic and provides consistent API
          */
         const PropertyManager = {
+            // Store the current property panel target object (may differ from selection)
+            currentPropertyTarget: null,
+
             // Get current selection helper
             getSelectedObjects() {
                 return window.modlerComponents?.selectionController?.getSelectedObjects() || [];
+            },
+
+            // Set the current property target object
+            setPropertyTarget(object) {
+                this.currentPropertyTarget = object;
+            },
+
+            // Get the object that should be modified by property panel changes
+            getPropertyTarget() {
+                return this.currentPropertyTarget;
             },
 
             // Get scene controller helper
@@ -1315,42 +1325,73 @@
 
             // Update basic transform properties (position, rotation)
             updateTransformProperty(propertyType, axis, value) {
-                const selectedObjects = this.getSelectedObjects();
-                if (selectedObjects.length === 0) return;
+
+                // Use property target object instead of selected objects for direct manipulation
+                const targetObject = this.getPropertyTarget();
+                if (!targetObject) {
+                    console.warn('PropertyManager: No property target object set');
+                    return;
+                }
 
                 this.withGizmoHidden(() => {
                     const numericValue = parseFloat(value);
 
-                    selectedObjects.forEach(object => {
-                        switch(propertyType) {
-                            case 'position':
-                                object.position[axis] = numericValue;
-                                break;
-                            case 'rotation':
-                                // Convert degrees to radians for Three.js
-                                object.rotation[axis] = (numericValue * Math.PI) / 180;
-                                break;
-                        }
+                    switch(propertyType) {
+                        case 'position':
+                            targetObject.position[axis] = numericValue;
+                            break;
+                        case 'rotation':
+                            // Convert degrees to radians for Three.js
+                            targetObject.rotation[axis] = (numericValue * Math.PI) / 180;
+                            break;
+                        case 'scale':
+                            // Update object geometry dimensions (CAD approach)
+                            this.updateObjectGeometryDimension(targetObject, axis, numericValue);
+                            // Use geometry changeType for dimension changes (like push tool)
+                            this.completeObjectModification(targetObject, 'geometry');
+                            return; // Skip transform notification for geometry changes
+                    }
 
-                        // Notify scene controller of transform change
-                        this.notifyTransformChange(object);
-                    });
+                    // Complete object modification for transform changes (position/rotation)
+                    this.completeObjectModification(targetObject, 'transform');
                 });
             },
 
             // Update layout properties for containers
             updateLayoutProperty(propertyType, value) {
+                console.log('🔧 PropertyManager.updateLayoutProperty called with:', { propertyType, value });
+
                 const selectedObjects = this.getSelectedObjects();
                 const sceneController = this.getSceneController();
 
+                console.log('🔧 PropertyManager context:', {
+                    selectedObjectCount: selectedObjects.length,
+                    hasSceneController: !!sceneController,
+                    selectedObjectNames: selectedObjects.map(obj => obj.name || 'unnamed')
+                });
+
                 if (selectedObjects.length === 0 || !sceneController) {
-                    console.log('No container selected or scene controller not available');
+                    console.log('🔧 No container selected or scene controller not available');
                     return;
                 }
 
                 selectedObjects.forEach(object => {
+                    console.log('🔧 Processing selected object:', {
+                        objectName: object.name || 'unnamed',
+                        hasUserData: !!object.userData,
+                        userDataId: object.userData?.id
+                    });
+
                     if (object.userData && object.userData.id) {
                         const objectData = sceneController.getObject(object.userData.id);
+                        console.log('🔧 Object data from SceneController:', {
+                            hasObjectData: !!objectData,
+                            objectName: objectData?.name,
+                            isContainer: objectData?.isContainer,
+                            objectType: objectData?.type,
+                            hasAutoLayout: !!objectData?.autoLayout
+                        });
+
                         if (objectData && objectData.isContainer) {
                             // Initialize autoLayout if it doesn't exist (SceneController expects this structure)
                             if (!objectData.autoLayout) {
@@ -1365,24 +1406,18 @@
                             // Update the specific property
                             objectData.autoLayout[propertyType] = value;
 
-                            // Enable layout when direction is set
-                            if (propertyType === 'direction' && value) {
-                                objectData.autoLayout.enabled = true;
-                            }
-
-                            // Trigger layout update if layout is enabled
-                            if (objectData.autoLayout.enabled && objectData.autoLayout.direction && sceneController.updateLayout) {
-                                const layoutResult = sceneController.updateLayout(objectData.id);
-
-                                // Update container bounds after layout changes
-                                const containerManager = window.modlerComponents?.containerManager;
-                                if (containerManager) {
-                                    if (layoutResult && layoutResult.success && layoutResult.layoutBounds) {
-                                        containerManager.resizeContainerToLayoutBounds(objectData, layoutResult.layoutBounds);
-                                    } else {
-                                        containerManager.resizeContainerToFitChildren(objectData, null, true); // preservePosition = true
-                                    }
-                                }
+                            // Use PropertyUpdateHandler for layout property changes
+                            const propertyUpdateHandler = window.modlerComponents?.propertyUpdateHandler;
+                            console.log('🔧 Calling PropertyUpdateHandler:', {
+                                hasHandler: !!propertyUpdateHandler,
+                                objectId: objectData.id,
+                                propertyType: propertyType,
+                                value: value
+                            });
+                            if (propertyUpdateHandler) {
+                                propertyUpdateHandler.handlePropertyChange(objectData.id, propertyType, value);
+                            } else {
+                                console.log('🔧 PropertyUpdateHandler not available!');
                             }
 
                         }
@@ -1423,24 +1458,10 @@
                                 unifiedContainerManager.updatePaddingVisualization(objectData.id);
                             }
 
-                            // Trigger layout update if layout is enabled
-                            if (objectData.autoLayout.enabled && objectData.autoLayout.direction && sceneController.updateLayout) {
-                                const layoutResult = sceneController.updateLayout(objectData.id);
-
-                                // Update container bounds and interactive mesh after padding changes
-                                const containerManager = window.modlerComponents?.containerManager;
-                                if (containerManager) {
-                                    if (layoutResult && layoutResult.success && layoutResult.layoutBounds) {
-                                        containerManager.resizeContainerToLayoutBounds(objectData, layoutResult.layoutBounds);
-                                    } else {
-                                        containerManager.resizeContainerToFitChildren(objectData, null, true);
-                                    }
-                                }
-
-                                // Sync interactive mesh position after container bounds change
-                                if (unifiedContainerManager) {
-                                    unifiedContainerManager.syncInteractiveMeshPosition(objectData.id);
-                                }
+                            // Use PropertyUpdateHandler for layout property changes
+                            const propertyUpdateHandler = window.modlerComponents?.propertyUpdateHandler;
+                            if (propertyUpdateHandler) {
+                                propertyUpdateHandler.handlePropertyChange(objectData.id, `padding.${side}`, value);
                             }
                         }
                     }
@@ -1581,14 +1602,118 @@
                 }
             },
 
-            // Helper to notify scene controller of transform changes
-            notifyTransformChange(object) {
-                const sceneController = this.getSceneController();
-                if (sceneController) {
-                    const objectData = sceneController.getObjectByMesh(object);
-                    if (objectData) {
-                        sceneController.notifyObjectTransformChanged(objectData.id);
-                    }
+            // Helper to complete object modifications using exact push tool pattern
+            completeObjectModification(object, changeType = 'transform') {
+                // CRITICAL FIX: Property Panel Integration - Mirror Push Tool Flow
+                // Problem: Property panel operations weren't providing visual feedback like push tool
+                // Solution: Use identical execution sequence as push tool for consistent behavior
+                const selectionController = window.modlerComponents?.selectionController;
+                const meshSynchronizer = window.modlerComponents?.meshSynchronizer;
+
+                // Step 1: Direct mesh sync (like push tool)
+                if (meshSynchronizer) {
+                    meshSynchronizer.syncAllRelatedMeshes(object, changeType);
+                }
+
+                // Step 2: Selection visualizer refresh (like push tool)
+                if (selectionController?.selectionVisualizer && selectionController.isSelected(object)) {
+                    selectionController.selectionVisualizer.updateObjectVisual(object, true);
+                }
+
+                // Step 3: Property panel refresh (like push tool)
+                if (selectionController?.updatePropertyPanelForCurrentSelection) {
+                    selectionController.updatePropertyPanelForCurrentSelection();
+                }
+
+                // Step 4: Direct container update (like push tool) with immediate visuals
+                if (window.MovementUtils) {
+                    window.MovementUtils.updateParentContainer(object, true, null, null, true);
+                }
+            },
+
+            // Update object geometry dimensions (CAD approach)
+            updateObjectGeometryDimension(object, axis, targetDimension) {
+                if (!object.geometry) {
+                    console.warn('PropertyManager.updateObjectGeometryDimension: Object has no geometry');
+                    return;
+                }
+
+                const geometry = object.geometry;
+
+                // Compute current bounding box
+                geometry.computeBoundingBox();
+                const bbox = geometry.boundingBox;
+
+                if (!bbox) {
+                    console.warn('PropertyManager.updateObjectGeometryDimension: Could not compute bounding box');
+                    return;
+                }
+
+                // Calculate current dimension and required scale factor
+                let currentDimension, axisIndex;
+                switch(axis) {
+                    case 'x':
+                        currentDimension = bbox.max.x - bbox.min.x;
+                        axisIndex = 0;
+                        break;
+                    case 'y':
+                        currentDimension = bbox.max.y - bbox.min.y;
+                        axisIndex = 1;
+                        break;
+                    case 'z':
+                        currentDimension = bbox.max.z - bbox.min.z;
+                        axisIndex = 2;
+                        break;
+                    default:
+                        console.warn('PropertyManager.updateObjectGeometryDimension: Invalid axis:', axis);
+                        return;
+                }
+
+                // Avoid division by zero or invalid dimensions
+                if (currentDimension <= 0 || targetDimension <= 0) {
+                    console.warn('PropertyManager.updateObjectGeometryDimension: Invalid dimensions:', {
+                        current: currentDimension,
+                        target: targetDimension,
+                        axis
+                    });
+                    return;
+                }
+
+                // Calculate scale factor for this axis only
+                const scaleFactor = targetDimension / currentDimension;
+
+                // Get geometry center for scaling from center
+                const center = new THREE.Vector3();
+                bbox.getCenter(center);
+
+                // Modify geometry vertices directly
+                const positions = geometry.getAttribute('position');
+                if (!positions) {
+                    console.warn('PropertyManager.updateObjectGeometryDimension: No position attribute');
+                    return;
+                }
+
+                const vertices = positions.array;
+
+                // Scale vertices along the specified axis from center
+                for (let i = 0; i < vertices.length; i += 3) {
+                    const vertexCoord = vertices[i + axisIndex];
+                    const distanceFromCenter = vertexCoord - center.getComponent(axisIndex);
+                    vertices[i + axisIndex] = center.getComponent(axisIndex) + (distanceFromCenter * scaleFactor);
+                }
+
+                // Update geometry
+                positions.needsUpdate = true;
+                geometry.computeBoundingBox();
+                geometry.computeBoundingSphere();
+
+                // Force matrix world update to ensure accurate bounds calculations
+                object.updateMatrixWorld(true);
+
+                // Synchronize related meshes (wireframes, etc.) using existing system
+                const meshSynchronizer = window.modlerComponents?.meshSynchronizer;
+                if (meshSynchronizer) {
+                    meshSynchronizer.syncAllRelatedMeshes(object, 'geometry');
                 }
             },
 
@@ -1950,6 +2075,11 @@
         }
         
         function updatePropertyPanelFromObject(object) {
+            // CRITICAL FIX: Set the property target object for PropertyManager
+            if (PropertyManager && PropertyManager.setPropertyTarget) {
+                PropertyManager.setPropertyTarget(object);
+            }
+
             const accordion = document.querySelector('.right-panel .accordion');
 
             if (!object) {
@@ -2032,6 +2162,9 @@
                 document.getElementById('opacity-display').textContent = opacity.toFixed(1);
             }
             
+            // Handle container sizing mode - enable/disable dimension inputs based on sizing mode
+            updateDimensionInputsForContainerMode(object);
+
             // Handle layout properties for containers
             updateLayoutPropertiesPanel(object);
 
@@ -2450,10 +2583,10 @@
             
             // Resize container to fit new child
             const containerData = sceneController.getObject(containerId);
-            if (containerData && containerData.isContainer && window.modlerComponents?.toolController) {
-                const layoutTool = window.modlerComponents.toolController.tools.layout;
-                if (layoutTool && layoutTool.resizeContainerToFitChildren) {
-                    layoutTool.resizeContainerToFitChildren(containerData);
+            if (containerData && containerData.isContainer) {
+                const containerManager = window.modlerComponents?.containerManager;
+                if (containerManager && containerManager.resizeContainerToFitChildren) {
+                    containerManager.resizeContainerToFitChildren(containerData);
                 }
             }
             
@@ -2480,23 +2613,21 @@
                 console.log(`Moved object ${draggedId} to same level as ${targetId}`);
                 
                 // Resize both old and new containers if they exist
-                if (window.modlerComponents?.toolController) {
-                    const layoutTool = window.modlerComponents.toolController.tools.layout;
-                    if (layoutTool && layoutTool.resizeContainerToFitChildren) {
-                        // Resize old container
-                        if (oldParentId) {
-                            const oldContainerData = sceneController.getObject(oldParentId);
-                            if (oldContainerData && oldContainerData.isContainer) {
-                                layoutTool.resizeContainerToFitChildren(oldContainerData);
-                            }
+                const containerManager = window.modlerComponents?.containerManager;
+                if (containerManager && containerManager.resizeContainerToFitChildren) {
+                    // Resize old container
+                    if (oldParentId) {
+                        const oldContainerData = sceneController.getObject(oldParentId);
+                        if (oldContainerData && oldContainerData.isContainer) {
+                            containerManager.resizeContainerToFitChildren(oldContainerData);
                         }
-                        
-                        // Resize new container
-                        if (newParentId) {
-                            const newContainerData = sceneController.getObject(newParentId);
-                            if (newContainerData && newContainerData.isContainer) {
-                                layoutTool.resizeContainerToFitChildren(newContainerData);
-                            }
+                    }
+
+                    // Resize new container
+                    if (newParentId) {
+                        const newContainerData = sceneController.getObject(newParentId);
+                        if (newContainerData && newContainerData.isContainer) {
+                            containerManager.resizeContainerToFitChildren(newContainerData);
                         }
                     }
                 }
@@ -2523,10 +2654,10 @@
                 
                 // Resize the old container to fit remaining children
                 const oldContainerData = sceneController.getObject(oldContainerId);
-                if (oldContainerData && oldContainerData.isContainer && window.modlerComponents?.toolController) {
-                    const layoutTool = window.modlerComponents.toolController.tools.layout;
-                    if (layoutTool && layoutTool.resizeContainerToFitChildren) {
-                        layoutTool.resizeContainerToFitChildren(oldContainerData);
+                if (oldContainerData && oldContainerData.isContainer) {
+                    const containerManager = window.modlerComponents?.containerManager;
+                    if (containerManager && containerManager.resizeContainerToFitChildren) {
+                        containerManager.resizeContainerToFitChildren(oldContainerData);
                     }
                 }
                 
@@ -2639,6 +2770,8 @@
                     // Apply the property change to selected object based on property type
                     if (propertyType === 'position' || propertyType === 'rotation') {
                         updateObjectProperty(propertyType, axis, inputElement.value);
+                    } else if (propertyType === 'dimension') {
+                        updateObjectDimension(axis, inputElement.value);
                     } else if (propertyType === 'layout') {
                         updateLayoutProperty(axis, parseFloat(inputElement.value));
                     } else if (propertyType === 'padding') {
@@ -2810,6 +2943,8 @@
 
         // Layout axis button group management
         function selectLayoutAxis(axis, buttonElement) {
+            console.log('🔧 selectLayoutAxis called with:', { axis, buttonName: buttonElement?.textContent });
+
             // Check if this axis is already active (toggle off functionality)
             const isCurrentlyActive = buttonElement.classList.contains('active');
 
@@ -2826,7 +2961,6 @@
                 updateLayoutProperty('direction', axis);
                 showLayoutAxisGuides(axis);
                 showLayoutSections();
-                updateContainerBoundsAfterLayout();
                 setDimensionInputsState(true); // Disable dimension inputs in layout mode
             }
         }
@@ -2845,53 +2979,6 @@
             if (paddingSection) paddingSection.style.display = 'none';
         }
 
-        function updateContainerBoundsAfterLayout() {
-            // Get currently selected container
-            const selectionController = window.modlerComponents?.selectionController;
-            const sceneController = window.modlerComponents?.sceneController;
-            const containerManager = window.modlerComponents?.containerManager;
-
-            if (!selectionController || !sceneController || !containerManager) return;
-
-            const selectedObjects = selectionController.getSelectedObjects();
-            if (selectedObjects.length === 0) return;
-
-            // Check if selected object is a container
-            const selectedObject = selectedObjects[0];
-            const objectData = sceneController.getObjectByMesh(selectedObject);
-
-            if (objectData && objectData.isContainer) {
-                // Update layout and get calculated bounds
-                const layoutResult = sceneController.updateLayout(objectData.id);
-
-                if (layoutResult && layoutResult.success && layoutResult.layoutBounds) {
-                    console.log('🔍 LAYOUT BOUNDS UPDATE:', {
-                        containerName: objectData.name,
-                        layoutBounds: layoutResult.layoutBounds,
-                        meshVisibleBefore: selectedObject.visible
-                    });
-
-                    // Use layout-calculated bounds for container resize
-                    containerManager.resizeContainerToLayoutBounds(objectData, layoutResult.layoutBounds);
-
-                    // CRITICAL: Ensure container is visible after geometry update
-                    const unifiedContainerManager = window.modlerComponents?.unifiedContainerManager;
-                    if (unifiedContainerManager) {
-                        console.log('🔍 ENSURING CONTAINER VISIBILITY after layout update');
-                        unifiedContainerManager.showContainer(objectData.id, true); // Bypass debounce for layout updates
-                        unifiedContainerManager.syncInteractiveMeshPosition(objectData.id);
-                    }
-
-                    console.log('🔍 LAYOUT UPDATE COMPLETE:', {
-                        containerName: objectData.name,
-                        meshVisibleAfter: selectedObject.visible
-                    });
-                } else {
-                    // Fallback to original method if layout result is invalid
-                    containerManager.resizeContainerToFitChildren(objectData, null, true);
-                }
-            }
-        }
 
         function setDimensionInputsState(disabled) {
             const dimensionInputs = ['dim-x', 'dim-y', 'dim-z'];
@@ -2909,6 +2996,26 @@
                     }
                 }
             });
+        }
+
+        function updateDimensionInputsForContainerMode(object) {
+            // Default: enable dimension inputs for regular objects
+            let shouldDisableInputs = false;
+
+            // Check if this is a container and get its sizing mode
+            const sceneController = window.modlerComponents?.sceneController;
+            if (sceneController && object.userData && object.userData.id) {
+                const objectData = sceneController.getObject(object.userData.id);
+
+                if (objectData && objectData.isContainer) {
+                    // Disable dimension inputs if container is in 'hug' mode (default)
+                    // Enable dimension inputs if container is in 'fixed' mode (set by push tool)
+                    shouldDisableInputs = (objectData.sizingMode === 'hug' || !objectData.sizingMode);
+                }
+            }
+
+            // Apply the dimension input state
+            setDimensionInputsState(shouldDisableInputs);
         }
 
         function updateLayoutAxisButtons(selectedAxis) {
@@ -2962,6 +3069,22 @@
         // Fill dimension functionality
         function toggleFillDimension(axis, buttonElement) {
             PropertyManager.toggleFillProperty(axis);
+        }
+
+        function showFillAxisPreview(axis) {
+            // Show face highlighting for the specified axis
+            const visualEffects = window.modlerComponents?.visualEffects;
+            if (visualEffects) {
+                visualEffects.showAxisFaceHighlight(axis);
+            }
+        }
+
+        function clearFillAxisPreview() {
+            // Clear the axis face highlighting
+            const visualEffects = window.modlerComponents?.visualEffects;
+            if (visualEffects) {
+                visualEffects.clearHighlight();
+            }
         }
 
         function updateFillButtonState(axis, isActive) {
@@ -3044,7 +3167,6 @@
             const colorHex = parseInt(colorValue.replace('#', ''), 16);
             window.modlerComponents.sceneFoundation.renderer.setClearColor(colorHex);
             
-            console.log(`Updated scene background to ${colorValue}`);
         }
         
         // Configuration UI Management
@@ -3055,8 +3177,6 @@
                 return;
             }
             
-            console.log('ConfigurationManager found:', configManager);
-            console.log('Current config values:', configManager.getAll());
             
             // Initialize all configuration inputs with current values
             updateConfigUIFromValues(configManager.getAll());
@@ -3070,7 +3190,6 @@
                 updateSceneBackground(backgroundColor);
             }
             
-            console.log('Configuration UI initialized');
         }
         
         function setupConfigurationEventListeners() {
@@ -3135,7 +3254,6 @@
                 return;
             }
             
-            console.log(`Setting up range input ${inputId} for ${configPath}`);
             
             // Update value display when slider changes
             input.addEventListener('input', (e) => {

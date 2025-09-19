@@ -113,6 +113,9 @@ function initializeApplication() {
     // Initialize ContainerManager globally to fix global scope references
     modlerV2Components.containerManager = new ContainerManager();
 
+    // Initialize PropertyUpdateHandler for property-panel driven layout system
+    modlerV2Components.propertyUpdateHandler = new PropertyUpdateHandler();
+
     // Initialize components that depend on ConfigurationManager
     if (modlerV2Components.selectionVisualizer) {
         modlerV2Components.selectionVisualizer.initializeWithConfigurationManager();
@@ -141,8 +144,8 @@ function initializeApplication() {
         ['select', SelectTool],
         ['move', MoveTool],
         ['push', PushTool],
-        ['layout', LayoutTool],
         ['box-creation', BoxCreationTool]
+        // REMOVED: LayoutTool - Layout functionality moved to property-panel driven approach
     ];
     tools.forEach(([name, tool]) => modlerV2Components.toolController.registerTool(name, tool));
     modlerV2Components.toolController.switchToTool('select');

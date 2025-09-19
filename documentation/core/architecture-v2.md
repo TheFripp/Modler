@@ -307,8 +307,8 @@ The 3D Auto Layout system demonstrates V2's extensibility principles - adding Fi
 ┌─────────────────────────────────────┐
 │        APPLICATION LAYER             │
 │  ┌─────────────┐  ┌─────────────┐  │
-│  │LayoutTool   │  │PropertyPanel│  │ ← Layout configuration UI
-│  │(150 lines)  │  │Extensions   │  │
+│  │PropUpdate  │  │PropertyPanel│  │ ← Layout configuration UI
+│  │Handler      │  │Extensions   │  │
 │  └─────────────┘  └─────────────┘  │
 └─────────────────────────────────────┘
 ┌─────────────────────────────────────┐
@@ -343,10 +343,10 @@ The 3D Auto Layout system demonstrates V2's extensibility principles - adding Fi
 - Supports X/Y/Z linear and XY/XYZ grid layouts
 - Fill/Fixed/Hug sizing behavior algorithms
 
-**LayoutTool** (150 lines, new component)
-- Container creation and configuration
-- Layout property editing interface
-- Visual feedback coordination
+**PropertyUpdateHandler** (100 lines, new component)
+- Property-driven layout activation
+- Container property change coordination
+- Layout engine integration
 - Keyboard shortcuts (1-5 for layout directions)
 
 **VisualEffects Extensions** (+100 lines)
@@ -358,19 +358,18 @@ The 3D Auto Layout system demonstrates V2's extensibility principles - adding Fi
 #### Data Flow
 
 ```javascript
-// Layout Creation Flow (5 function calls max)
-user.clickEmptySpace() 
-  → LayoutTool.createContainer()
-  → SceneController.addObject({isContainer: true})
-  → SceneController.enableAutoLayout(containerId, config)
-  → LayoutEngine.calculateLayout(children, config)
-  → SceneController.applyLayoutPositions(objects, positions)
+// Container Creation Flow (3 function calls max)
+user.pressCmdF()
+  → ToolController.createContainerFromSelection()
+  → ContainerManager.createContainerFromSelection()
+  → SceneController.addObject({isContainer: true, sizingMode: 'hug'})
 
-// Layout Update Flow (3 function calls max)  
-user.adjustGap()
-  → LayoutTool.adjustGap(delta)
+// Layout Activation Flow (5 function calls max)
+user.changePanelProperty()
+  → PropertyUpdateHandler.handlePropertyChange()
   → SceneController.updateLayout(containerId)
-  → VisualEffects.updateLayoutGuides(container)
+  → LayoutEngine.calculateLayout(children, config)
+  → ContainerManager.resizeContainerToLayoutBounds()
 ```
 
 #### Complexity Budget Compliance

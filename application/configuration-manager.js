@@ -25,7 +25,6 @@ class ConfigurationManager {
         // Setup system integrations
         this.setupSystemIntegrations();
 
-        console.log('ConfigurationManager initialized');
     }
     
     /**
@@ -117,7 +116,6 @@ class ConfigurationManager {
             }
         });
 
-        console.log('ConfigurationManager system integrations setup');
     }
     
     /**
@@ -149,7 +147,6 @@ class ConfigurationManager {
             window.updateConfigUIFromValues(this.getAll());
         }
         
-        console.log('Configuration applied to all systems');
     }
     
     /**
@@ -283,7 +280,6 @@ class ConfigurationManager {
                     this.config = this.mergeConfigs(this.defaultConfig, parsedConfig);
                 }
                 
-                console.log('Configuration loaded from storage');
                 
                 // Apply configuration to systems after loading
                 this.applyConfigurationToSystems();

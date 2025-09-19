@@ -21,7 +21,6 @@ class MeshSynchronizer {
         // Bind methods for use as callbacks
         this.onMeshTransformChanged = this.onMeshTransformChanged.bind(this);
         
-        console.log('MeshSynchronizer initialized - centralized mesh coordination enabled');
     }
     
     /**
@@ -103,28 +102,54 @@ class MeshSynchronizer {
     }
     
     /**
-     * Synchronize all related meshes for a main mesh
+     * Check if sync type requires immediate visual update
+     * @param {string} syncType - Sync type to check
+     * @returns {boolean} True if sync should be immediate
+     */
+    isImmediateSync(syncType) {
+        const immediateSyncTypes = ['selection', 'highlight', 'visibility'];
+        return immediateSyncTypes.includes(syncType);
+    }
+
+    /**
+     * Synchronize all related meshes for a main mesh with immediate vs deferred prioritization
      * @param {THREE.Object3D} mainMesh - Main mesh that changed
      * @param {string} changeType - Type of change (transform, geometry, visibility)
+     * @param {boolean} immediateOnly - If true, only sync immediate visual updates
      */
-    syncAllRelatedMeshes(mainMesh, changeType = 'transform') {
+    syncAllRelatedMeshes(mainMesh, changeType = 'transform', immediateOnly = false) {
         const relatedMeshes = this.meshRegistry.get(mainMesh);
         if (!relatedMeshes || relatedMeshes.length === 0) {
             return; // No relationships to sync
         }
-        
+
         let syncCount = 0;
-        
+        const deferredSyncs = [];
+
         relatedMeshes.forEach(({ relatedMesh, syncType, syncOptions }) => {
             if (!syncOptions.enabled) {
                 return; // Skip disabled relationships
             }
-            
+
             // Check if this sync type should respond to this change type
             if (!this.shouldSync(syncType, changeType)) {
                 return;
             }
-            
+
+            const isImmediate = this.isImmediateSync(syncType);
+
+            // If immediate only mode, skip non-immediate syncs
+            if (immediateOnly && !isImmediate) {
+                deferredSyncs.push({ relatedMesh, syncType, syncOptions });
+                return;
+            }
+
+            // If not immediate only mode but this is deferred, queue for later
+            if (!immediateOnly && !isImmediate) {
+                deferredSyncs.push({ relatedMesh, syncType, syncOptions });
+                return;
+            }
+
             try {
                 const success = this.performSync(mainMesh, relatedMesh, syncType, syncOptions);
                 if (success) {
@@ -134,7 +159,20 @@ class MeshSynchronizer {
                 console.error(`MeshSynchronizer: Error syncing ${syncType} mesh:`, error);
             }
         });
-        
+
+        // Schedule deferred syncs for next frame
+        if (deferredSyncs.length > 0 && !immediateOnly) {
+            requestAnimationFrame(() => {
+                deferredSyncs.forEach(({ relatedMesh, syncType, syncOptions }) => {
+                    try {
+                        this.performSync(mainMesh, relatedMesh, syncType, syncOptions);
+                    } catch (error) {
+                        console.error(`MeshSynchronizer: Error in deferred sync ${syncType}:`, error);
+                    }
+                });
+            });
+        }
+
         this.syncStats.totalSyncs += syncCount;
     }
     
@@ -211,7 +249,7 @@ class MeshSynchronizer {
      */
     syncPosition(mainMesh, relatedMesh, syncOptions) {
         const { offset = new THREE.Vector3(), relativeToParent = false } = syncOptions;
-        
+
         if (relativeToParent && relatedMesh.parent) {
             // Position relative to parent (for child meshes like collision boxes)
             relatedMesh.position.copy(offset);
@@ -221,7 +259,7 @@ class MeshSynchronizer {
             relatedMesh.rotation.copy(mainMesh.rotation);
             relatedMesh.scale.copy(mainMesh.scale);
         }
-        
+
         return true;
     }
     

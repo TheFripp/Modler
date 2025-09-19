@@ -13,15 +13,17 @@ User experience patterns and mental models for Modler V2's CAD-focused 3D interf
 - **Container selection** shows design intent and maintains object relationships
 - **Visual feedback** through green wireframes indicates selected containers
 
-### Hierarchy Traversal Pattern
-**Double-Click Navigation**: Provides escape hatch from container-first logic when direct access is needed.
+### Hierarchy Traversal Pattern (Step-Into)
+**Double-Click Navigation**: Establishes container context for individual object access within design hierarchy.
 
 **Interaction Flow**:
 1. Single-click child → parent container selected
-2. Double-click same child → direct child selection
-3. User can now manipulate individual object within container context
+2. Double-click same child → step into container, select child object
+3. Container context established with faded wireframe visual feedback
+4. Face highlighting and tool operations work immediately on stepped-into objects
+5. Click empty space to exit container context
 
-**Why This Works**: Matches file browser conventions (single-click folder, double-click to enter) and maintains design hierarchy by default.
+**Why This Works**: Matches file browser conventions (double-click to enter folder) while maintaining design hierarchy context. Visual feedback shows current navigation state.
 
 ### Two-Phase Creation Pattern
 **Interactive Geometry Creation**: Complex objects created through intuitive multi-step interaction rather than parameter dialogs.
@@ -47,6 +49,8 @@ User experience patterns and mental models for Modler V2's CAD-focused 3D interf
 
 **Move Tool** - Precision Manipulation:
 - **Face highlighting** - cyan overlays show interaction surfaces
+- **Container context support** - works immediately after step-into operations
+- **Interactive mesh resolution** - handles both legacy and new container architectures
 - **Face-constrained dragging** - objects move along face normals for precise control
 - **Real-time visual feedback** - wireframes update during movement
 

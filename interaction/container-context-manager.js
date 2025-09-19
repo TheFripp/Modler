@@ -14,10 +14,21 @@ class ContainerContextManager {
      * Step into a container - sets container context and shows faded selection frame
      */
     stepIntoContainer(containerObject) {
+        console.log(`[CLICK TRACE] STEPPING INTO container:`, {
+            containerName: containerObject?.name || 'unnamed',
+            containerType: containerObject?.userData?.containerType
+        });
+
         // Clear any previous container context
         this.stepOutOfContainer();
 
         this.containerContext = containerObject;
+
+        // Clear any selection wireframe to prevent dual wireframe conflict
+        this.clearSelectionWireframe();
+
+        // Disable container collision meshes to prevent accidental interaction
+        this.disableContainerCollisionMeshes();
 
         // Create faded edge highlight for the container
         this.createContainerEdgeHighlight(containerObject);
@@ -28,8 +39,19 @@ class ContainerContextManager {
      * Step out of current container context
      */
     stepOutOfContainer() {
+        console.log(`[CLICK TRACE] STEPPING OUT of container:`, {
+            containerName: this.containerContext?.name || 'none',
+            wasInContext: this.containerContext !== null
+        });
+
         // Commit any pending object position changes before stepping out
         this.commitObjectPositions();
+
+        // Re-enable container collision meshes when stepping out
+        this.enableContainerCollisionMeshes();
+
+        // Store previous container for wireframe restoration
+        const previousContainer = this.containerContext;
 
         if (this.containerEdgeHighlight) {
             if (this.containerEdgeHighlight.parent) {
@@ -42,6 +64,9 @@ class ContainerContextManager {
         }
 
         this.containerContext = null;
+
+        // Restore selection wireframe if the container was previously selected
+        this.restoreSelectionWireframe(previousContainer);
     }
 
     /**
@@ -71,7 +96,10 @@ class ContainerContextManager {
 
             if (visualEffects) {
                 // Extract dimensions from container geometry for centralized wireframe creation
-                const box = new THREE.Box3().setFromObject(object);
+                // Use geometry bounds instead of world bounds to avoid double positioning
+                const geometry = object.geometry;
+                geometry.computeBoundingBox();
+                const box = geometry.boundingBox;
                 const size = box.getSize(new THREE.Vector3());
 
                 // Get container color from configuration (same as regular container selection)
@@ -85,7 +113,7 @@ class ContainerContextManager {
                 // Use centralized VisualEffects wireframe creation (prevents triangles)
                 edgeMesh = visualEffects.createPreviewBox(
                     size.x, size.y, size.z,
-                    new THREE.Vector3(0, 0, 0), // Position will be set below
+                    new THREE.Vector3(0, 0, 0), // Position will be set below using object's position
                     containerColorHex, // Use configured container color
                     0.25 // 25% opacity for container context as specified
                 );
@@ -106,6 +134,7 @@ class ContainerContextManager {
                         renderOrder: 998
                     });
 
+                // Use the same geometry-based approach for consistency
                 const edgeGeometry = new THREE.EdgesGeometry(object.geometry);
                 edgeMesh = new THREE.LineSegments(edgeGeometry, containerMaterial);
             }
@@ -178,12 +207,116 @@ class ContainerContextManager {
     handleSelectionClear(reason = 'normal') {
         // ENHANCED LOGIC: Only step out of container for specific reasons
         // Stay in container context when selecting different objects within the same container
+        const containerPreservingReasons = [
+            'step-into-container',
+            'object-selection',
+            'drill-down-selection',      // During drill-down operations within container
+            'drill-down-enter',          // When entering drill-down mode
+            'drill-down-enter-child',    // When entering drill-down for specific child
+            'hierarchical-selection',    // During hierarchical selection within container
+            'double-click-selection',    // Double-click selection within container
+            'tool-operation'             // During move/push tool operations
+            // Note: 'empty-space' is NOT in this list - clicking empty space should exit container context
+        ];
+
         const shouldStepOut = this.isInContainerContext() &&
-            reason !== 'step-into-container' &&
-            reason !== 'object-selection'; // Don't step out when selecting objects within container
+            !containerPreservingReasons.includes(reason);
+
+        // CLICK TRACING: Log container context decision
+        console.log(`[CLICK TRACE] Container context decision:`, {
+            reason: reason,
+            isInContainerContext: this.isInContainerContext(),
+            containerContext: this.containerContext?.name || 'none',
+            shouldStepOut: shouldStepOut,
+            containerPreservingReasons: containerPreservingReasons
+        });
 
         if (shouldStepOut) {
+            console.log(`[CLICK TRACE] STEPPING OUT of container context due to reason: '${reason}'`);
             this.stepOutOfContainer();
+        } else {
+            console.log(`[CLICK TRACE] STAYING IN container context (reason: '${reason}' is preserved)`);
+        }
+    }
+
+    /**
+     * Disable container collision meshes to prevent accidental interaction during drill-down
+     * Only disables OTHER containers, not the current container context
+     */
+    disableContainerCollisionMeshes() {
+        const scene = window.modlerComponents?.sceneFoundation?.scene;
+        if (!scene || !this.containerContext) return;
+
+        // Find all container collision meshes EXCEPT the current container context
+        scene.traverse((object) => {
+            if (object.userData.isContainerCollision || object.userData.isContainerInteractive) {
+                // Check if this collision mesh belongs to the current container context
+                const isCurrentContainer = object.parent === this.containerContext;
+
+                if (!isCurrentContainer) {
+                    // Store original raycast function if it exists
+                    if (!object.userData.originalRaycast) {
+                        object.userData.originalRaycast = object.raycast || null;
+                    }
+                    // Disable raycasting by replacing with empty function
+                    object.raycast = () => {};
+                }
+            }
+        });
+    }
+
+    /**
+     * Re-enable container collision meshes when stepping out of container context
+     */
+    enableContainerCollisionMeshes() {
+        const scene = window.modlerComponents?.sceneFoundation?.scene;
+        if (!scene) return;
+
+        // Find all container collision meshes and restore raycasting
+        scene.traverse((object) => {
+            if (object.userData.isContainerCollision || object.userData.isContainerInteractive) {
+                // Restore original raycast function
+                if (object.userData.originalRaycast !== undefined) {
+                    if (object.userData.originalRaycast === null) {
+                        // Remove the custom raycast function to restore default behavior
+                        delete object.raycast;
+                    } else {
+                        // Restore the original custom raycast function
+                        object.raycast = object.userData.originalRaycast;
+                    }
+                    // Clean up the stored reference
+                    delete object.userData.originalRaycast;
+                }
+            }
+        });
+    }
+
+    /**
+     * Clear selection wireframe to prevent dual wireframe conflict
+     * Called before creating container context wireframe
+     */
+    clearSelectionWireframe() {
+        const selectionVisualizer = window.modlerComponents?.selectionVisualizer;
+        if (selectionVisualizer && this.containerContext) {
+            // Temporarily hide the selection wireframe for the container
+            selectionVisualizer.updateObjectVisual(this.containerContext, false);
+        }
+    }
+
+    /**
+     * Restore selection wireframe when stepping out of container context
+     * @param {THREE.Object3D} containerObject - Container to restore wireframe for
+     */
+    restoreSelectionWireframe(containerObject) {
+        if (!containerObject) return;
+
+        const selectionController = window.modlerComponents?.selectionController;
+        const selectionVisualizer = window.modlerComponents?.selectionVisualizer;
+
+        // Check if the container is still selected and restore its wireframe
+        if (selectionController && selectionVisualizer &&
+            selectionController.isSelected(containerObject)) {
+            selectionVisualizer.updateObjectVisual(containerObject, true);
         }
     }
 

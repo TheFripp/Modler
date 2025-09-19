@@ -36,6 +36,8 @@ The Modler V2 face highlighting system provides professional CAD-like face highl
 
 #### Key Features:
 - **Selective Highlighting**: Only highlights faces of selected objects
+- **Container Context Integration**: Works immediately after step-into operations
+- **Interactive Mesh Support**: Highlights container faces when container is selected in context
 - **Drag State Management**: Disables highlighting during drag operations
 - **Clear Triggers**: Automatically clears highlights on tool deactivation and selection changes
 
@@ -49,7 +51,9 @@ The Modler V2 face highlighting system provides professional CAD-like face highl
 ```javascript
 // Highlighting logic
 - Only highlight faces of SELECTED objects
-- Don't highlight during drag operations  
+- Support container step-into: highlight container faces when stepped-into
+- Interactive mesh resolution: handle both legacy and new container architectures
+- Don't highlight during drag operations
 - Clear highlights when mouse leaves face
 - Clear highlights on tool switch
 - Clear highlights on selection change
@@ -169,6 +173,8 @@ onSelectionChange(selectedObjects) {
 - Raycasting hit data with face information
 - Scene graph for mesh management
 - Tool system for state coordination
+- **Container Context Manager**: Step-into state management
+- **Interactive Mesh Resolution**: Legacy and new container architecture support
 
 ### API Compatibility:
 - Compatible with Three.js r128+

@@ -47,11 +47,32 @@ CAD software featuring rule-based parametric design through intelligent 3D auto-
 - Performance testing required
 - Cross-browser testing needed
 
+#### 🧹 Code Cleaner - **USE AFTER USER CONFIRMS FEATURE WORKS**
+**Activate when user says "this works" or "this is working correctly":**
+- Remove excessive debug logging and console spam
+- Delete unused methods and dead code
+- Consolidate duplicate code patterns
+- Clean up orphaned script inclusions
+- Eliminate verbose object state dumps
+- Maintain only essential error logs and user feedback
+
+#### 🚀 Git Agent - **USE FOR REPOSITORY OPERATIONS**
+**Activate when user approves feature for commit:**
+- "This feature is working correctly"
+- "This is approved for commit"
+- "Push this to the repository"
+- "Commit and push these changes"
+- Follows DevOps best practices with conventional commits
+- Ensures clean commit history and proper branch management
+- Includes automated quality checks and push safety
+
 ### Agent Locations
 - Architecture Guardian: `/agents/architecture-guardian/AGENT_INSTRUCTIONS.md`
 - Implementation Specialist: `/agents/implementation-specialist/AGENT_INSTRUCTIONS.md`
 - Documentation Keeper: `/agents/documentation-keeper/AGENT_INSTRUCTIONS.md`
 - System Health Monitor: `/agents/system-health-monitor/AGENT_INSTRUCTIONS.md`
+- Code Cleaner: `/agents/code-cleaner/AGENT_INSTRUCTIONS.md`
+- Git Agent: `/agents/git-agent/AGENT_INSTRUCTIONS.md`
 
 ## Core Principles
 
@@ -71,7 +92,7 @@ CAD software featuring rule-based parametric design through intelligent 3D auto-
 
 #### **Container Creation Pattern**
 - **Correct**: Direct command (Cmd+F) → ToolController → ContainerManager
-- **Wrong**: User activates LayoutTool → container creation through tool
+- **Wrong**: Container creation requires tool activation
 - **Implementation**: `ToolController.handleKeyCombo()` detects Cmd+F and calls ContainerManager directly
 
 #### **Container Modes**
@@ -84,7 +105,50 @@ CAD software featuring rule-based parametric design through intelligent 3D auto-
 - **Wrong**: Tool activation → layout mode through button clicks
 - **Key Principle**: Layout mode is a property state, not a tool state
 
-### 4. File Size Limits
+### 4. CAD Geometry Principles - CRITICAL FOR ACCURACY
+
+**ALWAYS use geometry-based manipulation, NEVER visual transforms**
+
+#### **Dimension Changes**
+- **Correct**: Modify geometry vertices directly via `PropertyManager.updateObjectGeometryDimension()`
+- **Wrong**: Use `object.scale[axis] = value` (visual transform only)
+- **Why**: CAD accuracy, proper bounding boxes, container updates work correctly
+
+#### **Geometry Manipulation Pattern**
+```javascript
+// 1. Compute current geometry bounds
+geometry.computeBoundingBox();
+const bbox = geometry.boundingBox;
+
+// 2. Calculate scale factor from real dimensions
+const currentDimension = bbox.max.x - bbox.min.x;
+const scaleFactor = targetDimension / currentDimension;
+
+// 3. Modify vertices directly
+const positions = geometry.getAttribute('position');
+const vertices = positions.array;
+for (let i = 0; i < vertices.length; i += 3) {
+    vertices[i + axisIndex] = center + (distanceFromCenter * scaleFactor);
+}
+
+// 4. Update geometry and trigger container updates
+positions.needsUpdate = true;
+geometry.computeBoundingBox();
+sceneController.notifyObjectTransformChanged(objectId);
+```
+
+#### **Unified System Benefits**
+- **Property panel** and **tool operations** use same geometry manipulation
+- **Container updates** work consistently across all input methods
+- **Bounding box calculations** are accurate for all operations
+- **True CAD behavior** rather than visual effects
+
+#### **Reference Implementation**
+- Property panel: `PropertyManager.updateObjectGeometryDimension()`
+- Push tool: Direct vertex manipulation in `modifyPushedFace()`
+- Move tool: Uses same coordinate transformation principles
+
+### 5. File Size Limits
 - **Tools**: 200 lines max
 - **Controllers**: 300 lines max
 - **Any file over limits**: Requires Architecture Guardian review
@@ -186,21 +250,29 @@ CAD software featuring rule-based parametric design through intelligent 3D auto-
 
 **Phase 2: User Validation (Only after YOU confirm it works)**
 5. **User testing feedback** - Confirm feature works as intended
-6. **System Health Monitor** - Comprehensive technical validation only after user approval
-7. **Documentation Keeper** - Final technical documentation only after validation
-8. **Feature Roadmap updates** - Mark as completed with actual metrics
+6. **Code Cleaner** - Clean up excessive logging and dead code after user confirms "this works"
+7. **System Health Monitor** - Comprehensive technical validation only after user approval
+8. **Documentation Keeper** - Final technical documentation only after validation
+9. **Feature Roadmap updates** - Mark as completed with actual metrics
 
 ### ⚠️ CRITICAL RULE CHANGES
 
 **DO NOT activate System Health Monitor or Documentation Keeper until:**
 - ✅ User has tested the feature manually
-- ✅ User confirms "this works as intended" 
+- ✅ User confirms "this works as intended"
+- ✅ Code Cleaner has been activated to clean up the implementation
 - ✅ User indicates ready for final validation
 
-**Reasons**: 
+**DO ACTIVATE Code Cleaner immediately when:**
+- ✅ User says "this works" or "this is working correctly"
+- ✅ Feature functionality is confirmed by user
+- ✅ Before moving to next development task
+
+**Reasons**:
 - Saves significant time and tokens on non-working features
-- Avoids premature documentation of broken implementations  
+- Prevents accumulation of debug code and technical debt
 - Focuses effort on working solutions rather than theoretical validation
+- Maintains clean codebase for future development
 
 ## Common Issues & Solutions
 
@@ -210,8 +282,19 @@ CAD software featuring rule-based parametric design through intelligent 3D auto-
 ### Container Issues ⚠️ **CRITICAL ARCHITECTURE AREA**
 **FIRST**: Read [`/systems/container-architecture-master.md`](documentation/systems/container-architecture-master.md) to understand correct architecture patterns
 
+**Implementation Status** (Phase B: Core Architecture Fixes):
+- ✅ Direct Container Creation - Cmd+F → ContainerManager call
+- ✅ Container Sizing Mode - Default 'hug' mode with Push Tool → 'fixed' mode switching
+- ⚠️ PropertyUpdateHandler - Property-panel driven layout system (pending)
+
+**Container Todo List:**
+1. ✅ Fix container creation flow (no tool dependency)
+2. ✅ Add container sizing modes (hug/fixed)
+3. ⚠️ Property panel integration for sizing mode UI
+4. ⚠️ PropertyUpdateHandler implementation
+
 **Common Architecture Mistakes:**
-- Assuming container creation requires LayoutTool activation ❌
+- Assuming container creation requires tool activation ❌
 - Designing layout mode as tool-driven instead of property-driven ❌
 - Creating tool dependencies for simple container operations ❌
 
@@ -245,6 +328,14 @@ CAD software featuring rule-based parametric design through intelligent 3D auto-
 
 ### Mesh Synchronization Problems
 **Activate Implementation Specialist** → Reference [`/systems/mesh-synchronization.md`](documentation/systems/mesh-synchronization.md) for centralized coordination patterns
+
+### 🧹 Code Cleanup After Feature Completion
+**Activate Code Cleaner** → When user confirms feature works correctly:
+- Remove excessive debug logging and console spam
+- Delete unused methods and dead code
+- Consolidate duplicate code patterns
+- Clean up orphaned script inclusions
+- Prevent technical debt accumulation
 
 ---
 

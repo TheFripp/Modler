@@ -17,8 +17,6 @@ class SceneFoundation {
         if (width <= 0) width = 800;
         if (height <= 0) height = 600;
         
-        console.log('SceneFoundation - Container:', container?.className);
-        console.log('SceneFoundation - Dimensions:', width, 'x', height);
         
         this.camera = new THREE.PerspectiveCamera(75, width / height, 0.1, 1000);
         
@@ -50,14 +48,10 @@ class SceneFoundation {
         const width = container.clientWidth || 800;
         const height = container.clientHeight || 600;
         
-        console.log('Simple renderer setup - Container size:', width, 'x', height);
-        
         // Set renderer size - let it handle canvas sizing
         this.renderer.setSize(width, height);
         this.renderer.setClearColor(0x1a1a1a);
         // Shadows disabled for modeling app simplicity
-        
-        console.log('Renderer initialized with size:', width, 'x', height);
     }
     
     

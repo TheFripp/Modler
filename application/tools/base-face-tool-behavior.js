@@ -44,12 +44,19 @@ class BaseFaceToolBehavior {
             return false;
         }
 
-        // Check if this is a container interactive mesh (new wireframe approach)
+        // Handle container detection for both old and new architectures
         const isContainerInteractive = hit.object.userData.isContainerInteractive;
+        const isContainerCollision = hit.object.userData.isContainerCollision;
 
         let targetObject;
-        if (isContainerInteractive) {
-            // For scene-level interactive meshes, find container by ID
+        if (isContainerInteractive && hit.object.userData.containerMesh) {
+            // NEW ARCHITECTURE: Interactive mesh has direct containerMesh reference
+            targetObject = hit.object.userData.containerMesh;
+        } else if (isContainerCollision && hit.object.parent) {
+            // OLD ARCHITECTURE: Collision mesh is child of container
+            targetObject = hit.object.parent;
+        } else if (isContainerInteractive) {
+            // FALLBACK: Scene-level interactive mesh with parent container ID
             const sceneController = window.modlerComponents?.sceneController;
             const containerId = hit.object.userData.parentContainer;
 
@@ -57,57 +64,33 @@ class BaseFaceToolBehavior {
                 const containerData = sceneController.getObject(containerId);
                 targetObject = containerData?.mesh || hit.object;
             } else {
-                // Fallback: try parent reference (for child interactive meshes)
                 targetObject = hit.object.parent || hit.object;
             }
         } else {
+            // Regular objects
             targetObject = hit.object;
         }
 
-        console.log('🎯 FACE DETECTION:', {
-            hasHit: !!hit,
-            hitObjectName: hit.object.name || 'unnamed',
-            isContainerInteractive,
-            containerId: hit.object.userData?.parentContainer,
-            targetObjectName: targetObject?.name || 'unnamed',
-            isSelected: this.selectionController.isSelected(targetObject),
-            hasUserData: !!hit.object.userData,
-            userData: hit.object.userData,
-            hitObjectType: hit.object.type,
-            hitObjectRenderOrder: hit.object.renderOrder,
-            hitObjectMaterial: hit.object.material?.type,
-            hitObjectOpacity: hit.object.material?.opacity,
-            hitObjectParent: hit.object.parent?.name || 'scene',
-            hitObjectVisible: hit.object.visible,
-            // Enhanced debugging
-            timestamp: Date.now(),
-            selectionCount: this.selectionController.getSelectedObjects().length,
-            selectedObjectNames: this.selectionController.getSelectedObjects().map(obj => obj.name || 'unnamed')
-        });
+        // Face detection completed
 
         // Only highlight faces of selected objects (including interactive meshes of selected containers)
         if (this.selectionController.isSelected(targetObject)) {
+            // CONTAINER MODE CHECK: Only show face highlights for containers in layout mode, not hug mode
+            if (this.isContainerInHugMode(targetObject)) {
+                // Container is in hug mode - don't show face highlights
+                this.clearHover();
+                return false;
+            }
+
             // Store the actual target object for interaction
             this.hoveredObject = targetObject;
             this.hoveredHit = hit;
 
-            console.log('✅ FACE HIGHLIGHTING: Showing face highlight for', targetObject.name, {
-                isContainerInteractive,
-                containerId: hit.object.userData?.parentContainer,
-                targetObjectSelected: this.selectionController.isSelected(targetObject),
-                hitObjectMaterial: hit.object.material?.type,
-                hitObjectOpacity: hit.object.material?.opacity
-            });
+            // Face highlighting activated
             this.visualEffects.showFaceHighlight(hit);
             return true;
         } else {
-            console.log('❌ FACE HIGHLIGHTING: Object not selected, clearing hover', {
-                targetObjectName: targetObject?.name || 'unnamed',
-                isContainerInteractive,
-                containerId: hit.object.userData?.parentContainer,
-                selectedObjects: this.selectionController.getSelectedObjects().map(obj => obj.name || 'unnamed'),
-                reasonForFailure: 'Target object not in selectedObjects Set'
-            });
+            // Object not selected - clearing hover
             this.clearHover();
             return false;
         }
@@ -122,11 +105,19 @@ class BaseFaceToolBehavior {
     hasValidFaceHover(hit) {
         if (!hit || !hit.object || !hit.face) return false;
 
+        // Use same detection logic as handleFaceDetection
         const isContainerInteractive = hit.object.userData.isContainerInteractive;
+        const isContainerCollision = hit.object.userData.isContainerCollision;
 
         let targetObject;
-        if (isContainerInteractive) {
-            // For scene-level interactive meshes, find container by ID
+        if (isContainerInteractive && hit.object.userData.containerMesh) {
+            // NEW ARCHITECTURE: Interactive mesh has direct containerMesh reference
+            targetObject = hit.object.userData.containerMesh;
+        } else if (isContainerCollision && hit.object.parent) {
+            // OLD ARCHITECTURE: Collision mesh is child of container
+            targetObject = hit.object.parent;
+        } else if (isContainerInteractive) {
+            // FALLBACK: Scene-level interactive mesh with parent container ID
             const sceneController = window.modlerComponents?.sceneController;
             const containerId = hit.object.userData.parentContainer;
 
@@ -134,17 +125,18 @@ class BaseFaceToolBehavior {
                 const containerData = sceneController.getObject(containerId);
                 targetObject = containerData?.mesh || hit.object;
             } else {
-                // Fallback: try parent reference (for child interactive meshes)
                 targetObject = hit.object.parent || hit.object;
             }
         } else {
+            // Regular objects
             targetObject = hit.object;
         }
 
         const isSelectedObject = targetObject && this.selectionController.isSelected(targetObject);
         const hasHighlightedFace = this.hoveredObject === targetObject;
+        const isNotHugMode = !this.isContainerInHugMode(targetObject);
 
-        return isSelectedObject && hasHighlightedFace;
+        return isSelectedObject && hasHighlightedFace && isNotHugMode;
     }
 
     /**
@@ -156,10 +148,18 @@ class BaseFaceToolBehavior {
     getTargetObject(hit) {
         if (!hit || !hit.object) return null;
 
+        // Use same detection logic as handleFaceDetection
         const isContainerInteractive = hit.object.userData.isContainerInteractive;
+        const isContainerCollision = hit.object.userData.isContainerCollision;
 
-        if (isContainerInteractive) {
-            // For scene-level interactive meshes, find container by ID
+        if (isContainerInteractive && hit.object.userData.containerMesh) {
+            // NEW ARCHITECTURE: Interactive mesh has direct containerMesh reference
+            return hit.object.userData.containerMesh;
+        } else if (isContainerCollision && hit.object.parent) {
+            // OLD ARCHITECTURE: Collision mesh is child of container
+            return hit.object.parent;
+        } else if (isContainerInteractive) {
+            // FALLBACK: Scene-level interactive mesh with parent container ID
             const sceneController = window.modlerComponents?.sceneController;
             const containerId = hit.object.userData.parentContainer;
 
@@ -167,10 +167,10 @@ class BaseFaceToolBehavior {
                 const containerData = sceneController.getObject(containerId);
                 return containerData?.mesh || hit.object;
             } else {
-                // Fallback: try parent reference (for child interactive meshes)
                 return hit.object.parent || hit.object;
             }
         } else {
+            // Regular objects
             return hit.object;
         }
     }
@@ -188,11 +188,16 @@ class BaseFaceToolBehavior {
 
     /**
      * Check if tool has active face highlighting
+     * Only returns true when there's a valid face hover that can be interacted with
      *
-     * @returns {boolean} True if currently highlighting a face
+     * @returns {boolean} True if currently highlighting a face that can be interacted with
      */
     hasActiveHighlight() {
-        return this.hoveredObject !== null;
+        // Must have a hovered object first
+        if (!this.hoveredObject || !this.hoveredHit) return false;
+
+        // Use same validation logic as mouse interaction
+        return this.hasValidFaceHover(this.hoveredHit);
     }
 
     /**
@@ -206,6 +211,29 @@ class BaseFaceToolBehavior {
             hit: this.hoveredHit,
             isActive: this.hoveredObject !== null
         };
+    }
+
+    /**
+     * Check if a container is in hug mode (sizing mode is 'hug')
+     * Face highlights should only show for containers in layout/fixed mode, not hug mode
+     *
+     * @param {THREE.Object3D} object - Object to check (should be container mesh)
+     * @returns {boolean} True if container is in hug mode
+     */
+    isContainerInHugMode(object) {
+        if (!object) return false;
+
+        const sceneController = window.modlerComponents?.sceneController;
+        if (!sceneController) return false;
+
+        const objectData = sceneController.getObjectByMesh(object);
+        if (!objectData || !objectData.isContainer) {
+            // Not a container - face highlights are OK for regular objects
+            return false;
+        }
+
+        // Check if container is in hug sizing mode
+        return objectData.sizingMode === 'hug';
     }
 }
 

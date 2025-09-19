@@ -5,6 +5,9 @@
  */
 
 class PositionTransform {
+    // Cache for object bounds to avoid recalculating unchanged objects
+    static boundsCache = new Map(); // objectId -> { bounds, lastMatrix, timestamp }
+    static cacheMaxAge = 1000; // Cache expires after 1 second
     
     /**
      * Preserve world position when changing object parent
@@ -89,18 +92,89 @@ class PositionTransform {
             }
         });
         
-        console.log(`🔄 POSITION TRANSFORM: Moved ${successCount}/${objects.length} objects to new parent`);
         
         return successCount === objects.length;
     }
     
     /**
+     * Check if object transform has changed since last bounds calculation
+     * @param {THREE.Object3D} object - Object to check
+     * @param {Object} cacheEntry - Previous cache entry
+     * @returns {boolean} True if transform changed
+     */
+    static hasTransformChanged(object, cacheEntry) {
+        if (!object || !cacheEntry || !cacheEntry.lastMatrix) return true;
+
+        // Compare current matrix with cached matrix
+        const currentMatrix = object.matrixWorld;
+        const cachedMatrix = cacheEntry.lastMatrix;
+
+        // Quick check: compare matrix elements (positions 12,13,14 for translation)
+        return (
+            Math.abs(currentMatrix.elements[12] - cachedMatrix.elements[12]) > 0.001 ||
+            Math.abs(currentMatrix.elements[13] - cachedMatrix.elements[13]) > 0.001 ||
+            Math.abs(currentMatrix.elements[14] - cachedMatrix.elements[14]) > 0.001 ||
+            Math.abs(currentMatrix.elements[0] - cachedMatrix.elements[0]) > 0.001 ||   // Scale X
+            Math.abs(currentMatrix.elements[5] - cachedMatrix.elements[5]) > 0.001 ||   // Scale Y
+            Math.abs(currentMatrix.elements[10] - cachedMatrix.elements[10]) > 0.001    // Scale Z
+        );
+    }
+
+    /**
+     * Combine multiple bounds objects into a single bounds
+     * @param {Array} boundsArray - Array of bounds objects
+     * @returns {Object} Combined bounds object
+     */
+    static combineBounds(boundsArray) {
+        if (boundsArray.length === 0) {
+            return {
+                center: new THREE.Vector3(0, 0, 0),
+                size: new THREE.Vector3(1, 1, 1),
+                min: new THREE.Vector3(0, 0, 0),
+                max: new THREE.Vector3(1, 1, 1)
+            };
+        }
+
+        if (boundsArray.length === 1) {
+            return boundsArray[0];
+        }
+
+        let minX = Infinity, minY = Infinity, minZ = Infinity;
+        let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
+
+        boundsArray.forEach(bounds => {
+            minX = Math.min(minX, bounds.min.x);
+            minY = Math.min(minY, bounds.min.y);
+            minZ = Math.min(minZ, bounds.min.z);
+            maxX = Math.max(maxX, bounds.max.x);
+            maxY = Math.max(maxY, bounds.max.y);
+            maxZ = Math.max(maxZ, bounds.max.z);
+        });
+
+        const min = new THREE.Vector3(minX, minY, minZ);
+        const max = new THREE.Vector3(maxX, maxY, maxZ);
+        const center = new THREE.Vector3(
+            (minX + maxX) / 2,
+            (minY + maxY) / 2,
+            (minZ + maxZ) / 2
+        );
+        const size = new THREE.Vector3(
+            maxX - minX,
+            maxY - minY,
+            maxZ - minZ
+        );
+
+        return { center, size, min, max };
+    }
+
+    /**
      * Calculate bounds of objects in their current coordinate space
-     * Ensures proper matrix world updates before calculation
+     * Enhanced with smart caching to avoid recalculating unchanged objects
      * @param {Array} objects - Array of THREE.Object3D objects
+     * @param {boolean} bypassCache - If true, skip caching for immediate real-time updates
      * @returns {Object} Bounds with center, size, min, max
      */
-    static calculateObjectBounds(objects) {
+    static calculateObjectBounds(objects, bypassCache = false) {
         if (!Array.isArray(objects) || objects.length === 0) {
             return {
                 center: new THREE.Vector3(0, 0, 0),
@@ -109,18 +183,103 @@ class PositionTransform {
                 max: new THREE.Vector3(1, 1, 1)
             };
         }
-        
-        // Force matrix world updates for all objects to ensure accurate bounds
+
+        // If bypassing cache (for real-time updates), calculate directly
+        if (bypassCache) {
+            // Force matrix world updates for all objects to ensure accurate bounds
+            objects.forEach(obj => {
+                if (obj && obj.updateMatrixWorld) {
+                    obj.updateMatrixWorld(true);
+                }
+            });
+            return window.LayoutGeometry.calculateSelectionBounds(objects);
+        }
+
+        const now = Date.now();
+        const objectsToCalculate = [];
+        const cachedBounds = [];
+
+        // Check each object for cached bounds
         objects.forEach(obj => {
-            if (obj && obj.updateMatrixWorld) {
+            if (!obj || !obj.uuid) {
+                objectsToCalculate.push(obj);
+                return;
+            }
+
+            // Update matrix for comparison
+            if (obj.updateMatrixWorld) {
                 obj.updateMatrixWorld(true);
             }
+
+            const cacheEntry = this.boundsCache.get(obj.uuid);
+
+            // Use cached bounds if valid and unchanged
+            if (cacheEntry &&
+                (now - cacheEntry.timestamp) < this.cacheMaxAge &&
+                !this.hasTransformChanged(obj, cacheEntry)) {
+                cachedBounds.push(cacheEntry.bounds);
+            } else {
+                objectsToCalculate.push(obj);
+            }
         });
-        
-        // Use LayoutGeometry for consistent bounds calculation
-        return window.LayoutGeometry.calculateSelectionBounds(objects);
+
+        // Calculate bounds for objects that need it
+        let newBounds = null;
+        if (objectsToCalculate.length > 0) {
+            newBounds = window.LayoutGeometry.calculateSelectionBounds(objectsToCalculate);
+
+            // Cache bounds for objects that were calculated
+            objectsToCalculate.forEach(obj => {
+                if (obj && obj.uuid && obj.matrixWorld) {
+                    this.boundsCache.set(obj.uuid, {
+                        bounds: {
+                            center: newBounds.center.clone(),
+                            size: newBounds.size.clone(),
+                            min: newBounds.min.clone(),
+                            max: newBounds.max.clone()
+                        },
+                        lastMatrix: obj.matrixWorld.clone(),
+                        timestamp: now
+                    });
+                }
+            });
+        }
+
+        // Combine cached and new bounds
+        if (cachedBounds.length === 0 && newBounds) {
+            return newBounds;
+        } else if (cachedBounds.length > 0 && !newBounds) {
+            return this.combineBounds(cachedBounds);
+        } else if (cachedBounds.length > 0 && newBounds) {
+            return this.combineBounds([...cachedBounds, newBounds]);
+        } else {
+            // Fallback to original calculation
+            return window.LayoutGeometry.calculateSelectionBounds(objects);
+        }
     }
-    
+
+    /**
+     * Clean up expired cache entries to prevent memory leaks
+     */
+    static cleanupBoundsCache() {
+        const now = Date.now();
+        for (const [uuid, cacheEntry] of this.boundsCache.entries()) {
+            if ((now - cacheEntry.timestamp) > this.cacheMaxAge) {
+                this.boundsCache.delete(uuid);
+            }
+        }
+    }
+
+    /**
+     * Clear cache for specific object (useful when object is deleted)
+     * @param {string} uuid - Object UUID to remove from cache
+     */
+    static clearCacheForObject(uuid) {
+        if (uuid) {
+            this.boundsCache.delete(uuid);
+        }
+    }
+
     /**
      * Create container at specific position with proper coordinate handling
      * @param {THREE.Vector3} size - Container size
@@ -173,4 +332,3 @@ class PositionTransform {
 // Export for use in main application
 window.PositionTransform = PositionTransform;
 
-console.log('🔧 PositionTransform utility loaded');

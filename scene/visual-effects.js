@@ -38,13 +38,6 @@ class VisualEffects {
     
     // Show face highlight on a specific face
     showFaceHighlight(hit) {
-        console.log('🔥 FACE HIGHLIGHT: showFaceHighlight called', {
-            hasHit: !!hit,
-            hasObject: !!hit?.object,
-            hasFace: !!hit?.face,
-            objectName: hit?.object?.name || 'unnamed',
-            isContainerCollision: hit?.object?.userData?.isContainerCollision
-        });
 
         if (!hit || !hit.object || !hit.face) {
             console.warn('VisualEffects.showFaceHighlight: invalid hit data', hit);
@@ -86,11 +79,18 @@ class VisualEffects {
         // Create highlight mesh
         this.highlightMesh = new THREE.Mesh(faceGeometry, this.highlightMaterial);
 
-        // CONTAINER FIX: Handle collision mesh positioning properly
+        // CONTAINER FIX: Handle both collision and interactive mesh positioning properly
         const isContainerCollision = hit.object.userData.isContainerCollision;
-        if (isContainerCollision && hit.object.parent) {
-            // For container collision meshes, use the parent container's transform
-            // since collision mesh is at (0,0,0) relative to its parent
+        const isContainerInteractive = hit.object.userData.isContainerInteractive;
+
+        if (isContainerInteractive && hit.object.userData.containerMesh) {
+            // NEW ARCHITECTURE: Interactive mesh is scene-level with containerMesh reference
+            const containerMesh = hit.object.userData.containerMesh;
+            this.highlightMesh.position.copy(containerMesh.position);
+            this.highlightMesh.rotation.copy(containerMesh.rotation);
+            this.highlightMesh.scale.copy(containerMesh.scale);
+        } else if (isContainerCollision && hit.object.parent) {
+            // OLD ARCHITECTURE: Collision mesh is child with parent transform
             this.highlightMesh.position.copy(hit.object.parent.position);
             this.highlightMesh.rotation.copy(hit.object.parent.rotation);
             this.highlightMesh.scale.copy(hit.object.parent.scale);
@@ -115,8 +115,19 @@ class VisualEffects {
         // Register with MeshSynchronizer for automatic position sync
         const meshSynchronizer = window.modlerComponents?.meshSynchronizer;
         if (meshSynchronizer) {
-            // CONTAINER FIX: Register with the correct target object
-            const targetObject = isContainerCollision && hit.object.parent ? hit.object.parent : hit.object;
+            // CONTAINER FIX: Register with the correct target object for both architectures
+            let targetObject;
+            if (isContainerInteractive && hit.object.userData.containerMesh) {
+                // NEW ARCHITECTURE: Use the container mesh from userData
+                targetObject = hit.object.userData.containerMesh;
+            } else if (isContainerCollision && hit.object.parent) {
+                // OLD ARCHITECTURE: Use the parent container
+                targetObject = hit.object.parent;
+            } else {
+                // Regular objects: use the hit object directly
+                targetObject = hit.object;
+            }
+
             meshSynchronizer.registerRelatedMesh(targetObject, this.highlightMesh, 'highlight', {
                 enabled: true,
                 description: 'Face highlight',
@@ -294,7 +305,6 @@ class VisualEffects {
     // Show object highlight (for entire object selection)
     showObjectHighlight(hit) {
         // Reduced logging for better console readability
-        console.log('VisualEffects: Showing object highlight for', hit?.object?.name || 'unnamed');
         
         if (!hit || !hit.object) {
             console.warn('VisualEffects.showObjectHighlight: invalid hit data', hit);
@@ -382,6 +392,152 @@ class VisualEffects {
 
         // Clear rectangle preview if it exists
         this.clearRectanglePreview();
+    }
+
+    /**
+     * Show axis-specific face highlighting for selected object
+     * Highlights faces that are perpendicular to the specified axis
+     * @param {string} axis - The axis ('x', 'y', or 'z')
+     */
+    showAxisFaceHighlight(axis) {
+        // Get currently selected object
+        const selectionController = window.modlerComponents?.selectionController;
+        if (!selectionController) return false;
+
+        const selectedObjects = selectionController.getSelectedObjects();
+        if (selectedObjects.length === 0) return false;
+
+        const selectedObject = selectedObjects[0];
+        if (!selectedObject || !selectedObject.geometry) return false;
+
+        // Clear existing highlight
+        this.clearHighlight();
+
+        // Create highlight for both faces of the specified axis
+        const faceGeometry = this.createAxisFaceGeometry(selectedObject, axis);
+        if (!faceGeometry) return false;
+
+        // Create highlight mesh with a different material for axis highlighting
+        const axisMaterial = new THREE.MeshBasicMaterial({
+            color: 0x00ff88,
+            opacity: 0.3,
+            transparent: true,
+            side: THREE.DoubleSide,
+            depthTest: false,
+            depthWrite: false
+        });
+
+        this.highlightMesh = new THREE.Mesh(faceGeometry, axisMaterial);
+
+        // Position the highlight mesh
+        this.highlightMesh.position.copy(selectedObject.position);
+        this.highlightMesh.rotation.copy(selectedObject.rotation);
+        this.highlightMesh.scale.copy(selectedObject.scale);
+
+        // Add to scene
+        const scene = window.modlerComponents?.scene;
+        if (scene) {
+            scene.add(this.highlightMesh);
+        }
+
+        // Store highlight state for cleanup
+        this.currentHighlight = {
+            object: selectedObject,
+            axis: axis,
+            type: 'axis'
+        };
+
+        return true;
+    }
+
+    /**
+     * Create geometry for highlighting both faces of a specific axis
+     * @param {THREE.Object3D} object - The object to highlight
+     * @param {string} axis - The axis ('x', 'y', or 'z')
+     * @returns {THREE.BufferGeometry|null} Face geometry or null if failed
+     */
+    createAxisFaceGeometry(object, axis) {
+        if (!object.geometry) return null;
+
+        // Calculate bounding box
+        object.geometry.computeBoundingBox();
+        const box = object.geometry.boundingBox;
+        if (!box) return null;
+
+        let faceVertices = [];
+
+        // Create vertices for both faces of the specified axis
+        switch (axis) {
+            case 'x':
+                // Left face (min.x)
+                faceVertices.push(
+                    box.min.x, box.min.y, box.min.z,
+                    box.min.x, box.max.y, box.min.z,
+                    box.min.x, box.max.y, box.max.z,
+                    box.min.x, box.min.y, box.min.z,
+                    box.min.x, box.max.y, box.max.z,
+                    box.min.x, box.min.y, box.max.z
+                );
+                // Right face (max.x)
+                faceVertices.push(
+                    box.max.x, box.min.y, box.min.z,
+                    box.max.x, box.max.y, box.max.z,
+                    box.max.x, box.max.y, box.min.z,
+                    box.max.x, box.min.y, box.min.z,
+                    box.max.x, box.min.y, box.max.z,
+                    box.max.x, box.max.y, box.max.z
+                );
+                break;
+            case 'y':
+                // Bottom face (min.y)
+                faceVertices.push(
+                    box.min.x, box.min.y, box.min.z,
+                    box.max.x, box.min.y, box.min.z,
+                    box.max.x, box.min.y, box.max.z,
+                    box.min.x, box.min.y, box.min.z,
+                    box.max.x, box.min.y, box.max.z,
+                    box.min.x, box.min.y, box.max.z
+                );
+                // Top face (max.y)
+                faceVertices.push(
+                    box.min.x, box.max.y, box.min.z,
+                    box.max.x, box.max.y, box.max.z,
+                    box.max.x, box.max.y, box.min.z,
+                    box.min.x, box.max.y, box.min.z,
+                    box.min.x, box.max.y, box.max.z,
+                    box.max.x, box.max.y, box.max.z
+                );
+                break;
+            case 'z':
+                // Front face (min.z)
+                faceVertices.push(
+                    box.min.x, box.min.y, box.min.z,
+                    box.max.x, box.min.y, box.min.z,
+                    box.max.x, box.max.y, box.min.z,
+                    box.min.x, box.min.y, box.min.z,
+                    box.max.x, box.max.y, box.min.z,
+                    box.min.x, box.max.y, box.min.z
+                );
+                // Back face (max.z)
+                faceVertices.push(
+                    box.min.x, box.min.y, box.max.z,
+                    box.max.x, box.max.y, box.max.z,
+                    box.max.x, box.min.y, box.max.z,
+                    box.min.x, box.min.y, box.max.z,
+                    box.min.x, box.max.y, box.max.z,
+                    box.max.x, box.max.y, box.max.z
+                );
+                break;
+            default:
+                return null;
+        }
+
+        // Create geometry from vertices
+        const geometry = new THREE.BufferGeometry();
+        const positions = new Float32Array(faceVertices);
+        geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+
+        return geometry;
     }
 
     /**
@@ -564,7 +720,6 @@ class VisualEffects {
         }
         
         this.stopFadeAnimation();
-        console.log('VisualEffects destroyed');
     }
 
     /**
@@ -618,7 +773,9 @@ class VisualEffects {
             dashSize: 0.2,
             gapSize: 0.1,
             transparent: true,
-            opacity: 0.8
+            opacity: 0.8,
+            depthTest: false, // Disable depth testing to render on top
+            depthWrite: false // Don't write to depth buffer
         });
 
         // Create line mesh

@@ -21,9 +21,11 @@ Container-first selection with direct object access through double-click. **Stre
 - Container wireframe show/hide logic
 
 **ContainerContextManager**: Container step-in/out logic
-- Container context state and highlighting
-- Position commitment for context transitions
-- Context-aware selection clearing rules
+- **Double-click step-into**: Establishes container context with faded wireframe
+- **Container collision management**: Disables other containers during step-into
+- **Interactive mesh resolution**: Handles both legacy and new container architectures
+- **Position commitment**: Prevents coordinate jumps during context transitions
+- **Context-aware clearing**: Preserves context for within-container operations
 
 ### Benefits
 - **Single Responsibility**: Each component has one clear purpose
@@ -51,13 +53,21 @@ Click → Tool → SelectionController
 - **Multi-select** with modifier keys (Ctrl/Cmd/Shift) works on containers
 - **Visual feedback** through container wireframe (green edges)
 
-### 2. Direct Object Selection
-- **Double-click** on child object → selects the actual clicked object
-- **Bypasses** container-first logic completely
-- **Useful** for editing individual objects within containers
+### 2. Container Step-Into (Double-Click)
+- **Double-click** on child object → steps into parent container, selects child object
+- **Double-click** on container → steps into container, selects container (enables face highlights)
+- **Establishes container context** with visual feedback (faded container wireframe)
+- **Interactive mesh resolution** works for both legacy and new container architectures
+- **Enables face highlighting** immediately after step-into for push/move tools
 
-### 3. Empty Space Behavior
-- **Single click** on empty space → clears selection (unless multi-select modifier held)
+### 3. Container Context Behavior
+- **Step-into establishes context**: Container shows faded wireframe, other containers disabled
+- **Context preservation**: Selecting objects within same container maintains context
+- **Context exit triggers**: Empty space click, tool switch, or selection outside container
+- **Face highlighting integration**: Tools immediately work with step-into selections
+
+### 4. Empty Space Behavior
+- **Single click** on empty space → clears selection and exits container context
 - **Camera operations** preserve selection through movement-based detection
 
 ## Key Components

@@ -36,7 +36,6 @@ class CameraController {
         this.setupEventListeners();
         this.updateSphericalFromCamera();
 
-        console.log('CameraController initialized - streamlined version');
     }
 
     setupEventListeners() {

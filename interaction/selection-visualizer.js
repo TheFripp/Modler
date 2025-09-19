@@ -13,7 +13,6 @@ class SelectionVisualizer {
 
         this.createEdgeMaterials();
 
-        console.log('SelectionVisualizer initialized - handles all selection visual feedback');
     }
 
     /**
@@ -21,7 +20,6 @@ class SelectionVisualizer {
      */
     initializeWithConfigurationManager() {
         this.registerConfigurationCallbacks();
-        console.log('SelectionVisualizer connected to ConfigurationManager');
     }
 
     /**
@@ -110,7 +108,6 @@ class SelectionVisualizer {
         }
 
         this.edgeMaterial.needsUpdate = true;
-        console.log(`Selection material ${property} updated to:`, value);
     }
 
     /**
@@ -129,34 +126,25 @@ class SelectionVisualizer {
         }
 
         this.containerEdgeMaterial.needsUpdate = true;
-        console.log(`Container material ${property} updated to:`, value);
     }
 
     /**
      * Create edge highlight for selected object
      */
     createEdgeHighlight(object) {
-        console.log('🔶 CREATE EDGE HIGHLIGHT called for:', object.name || 'unnamed', {
-            hasExisting: this.edgeHighlights.has(object),
-            hasGeometry: !!object.geometry,
-            hideFromSelection: object.userData?.hideFromSelection
-        });
 
         // Don't create duplicate highlights
         if (this.edgeHighlights.has(object)) {
-            console.log('⏭️ SKIPPED: Edge highlight already exists');
             return;
         }
 
         // Only highlight objects with geometry
         if (!object.geometry) {
-            console.log('⏭️ SKIPPED: No geometry');
             return;
         }
 
         // Skip highlighting for objects marked as hidden from selection (e.g., box creation objects)
         if (object.userData && object.userData.hideFromSelection) {
-            console.log('⏭️ SKIPPED: hideFromSelection flag');
             return;
         }
 
@@ -165,7 +153,6 @@ class SelectionVisualizer {
         if (sceneController) {
             const objectData = sceneController.getObjectByMesh(object);
             if (objectData && objectData.isContainer) {
-                console.log('⏭️ SKIPPED: Container uses own green wireframes, not edge highlights');
                 return; // Don't create orange edge highlights for containers
             }
         }
@@ -219,17 +206,9 @@ class SelectionVisualizer {
      * Remove edge highlight for object
      */
     removeEdgeHighlight(object) {
-        console.log('🗑️ REMOVE EDGE HIGHLIGHT called for:', object.name || 'unnamed', {
-            hasEdgeMesh: this.edgeHighlights.has(object),
-            totalHighlights: this.edgeHighlights.size
-        });
 
         const edgeMesh = this.edgeHighlights.get(object);
         if (edgeMesh) {
-            console.log('✅ REMOVING edge highlight mesh:', {
-                edgeMeshName: edgeMesh.name,
-                edgeMeshVisible: edgeMesh.visible
-            });
             // Unregister from MeshSynchronizer first
             const meshSynchronizer = window.modlerComponents?.meshSynchronizer;
             if (meshSynchronizer) {
@@ -249,7 +228,6 @@ class SelectionVisualizer {
             // Remove from tracking
             this.edgeHighlights.delete(object);
         } else {
-            console.log('ℹ️ NO EDGE HIGHLIGHT to remove (expected for containers)');
         }
     }
 
@@ -266,29 +244,9 @@ class SelectionVisualizer {
         if (sceneController && containerManager) {
             const objectData = sceneController.getObjectByMesh(object);
             if (objectData && objectData.isContainer) {
-                console.log('🔍 ATTEMPTING TO SHOW CONTAINER:', {
-                    containerName: objectData.name,
-                    meshVisibleBefore: object.visible,
-                    containerId: objectData.id
-                });
 
                 // Use unified ContainerManager for proper visibility handling
-                const showResult = containerManager.showContainer(objectData.id);
-
-                console.log('🔍 CONTAINER SHOW RESULT:', {
-                    containerName: objectData.name,
-                    showResult,
-                    meshVisibleAfter: object.visible,
-                    containerState: containerManager.containerStates?.get(objectData.id)
-                });
-
-                // Only update UI state if the show operation actually succeeded
-                if (showResult !== false) {
-                    // Set material opacity for visual feedback
-                    if (object.material) {
-                        object.material.opacity = 0.8;
-                    }
-                }
+                containerManager.showContainer(objectData.id);
             }
         }
     }
@@ -307,7 +265,7 @@ class SelectionVisualizer {
             const objectData = sceneController.getObjectByMesh(object);
             if (objectData && objectData.isContainer) {
                 // Use unified ContainerManager for proper visibility handling
-                const hideResult = containerManager.hideContainer(objectData.id);
+                containerManager.hideContainer(objectData.id);
             }
         }
     }
@@ -316,12 +274,6 @@ class SelectionVisualizer {
      * Update visual feedback for an object
      */
     updateObjectVisual(object, isSelected) {
-        console.log('🎨 UPDATE OBJECT VISUAL:', {
-            objectName: object.name || 'unnamed',
-            isSelected,
-            isContainer: object.userData?.isContainer || 'unknown'
-        });
-
         if (isSelected) {
             this.createEdgeHighlight(object);
             this.showContainerWireframe(object);
@@ -345,9 +297,9 @@ class SelectionVisualizer {
         if (sceneController && containerManager) {
             const objectData = sceneController.getObjectByMesh(object);
             if (objectData && objectData.isContainer) {
-                // Show padding visualization if container has layout enabled OR non-zero padding values
-                if ((objectData.autoLayout && objectData.autoLayout.enabled) ||
-                    this.hasNonZeroPadding(objectData)) {
+                // Show padding visualization only if container has layout enabled AND non-zero padding
+                if (objectData.autoLayout && objectData.autoLayout.enabled &&
+                    containerManager.hasNonZeroPadding && containerManager.hasNonZeroPadding(objectData)) {
                     containerManager.showPaddingVisualization(objectData.id);
                 }
             }
@@ -366,6 +318,7 @@ class SelectionVisualizer {
         if (sceneController && containerManager) {
             const objectData = sceneController.getObjectByMesh(object);
             if (objectData && objectData.isContainer) {
+                // Always hide padding when container is deselected
                 containerManager.hidePaddingVisualization(objectData.id);
             }
         }
@@ -376,7 +329,7 @@ class SelectionVisualizer {
      */
     destroy() {
         // Clean up all edge highlights
-        for (const [object, edgeMesh] of this.edgeHighlights) {
+        for (const [, edgeMesh] of this.edgeHighlights) {
             if (edgeMesh.parent) {
                 edgeMesh.parent.remove(edgeMesh);
             }
@@ -386,22 +339,8 @@ class SelectionVisualizer {
         }
         this.edgeHighlights.clear();
 
-        console.log('SelectionVisualizer destroyed');
     }
 
-    /**
-     * Check if container has any non-zero padding values
-     * @param {Object} containerData - Container object data
-     * @returns {boolean} True if any padding value is greater than 0
-     */
-    hasNonZeroPadding(containerData) {
-        if (!containerData.autoLayout?.padding) return false;
-
-        const padding = containerData.autoLayout.padding;
-        return padding.top > 0 || padding.bottom > 0 ||
-               padding.left > 0 || padding.right > 0 ||
-               padding.front > 0 || padding.back > 0;
-    }
 
     /**
      * Update wireframe geometry when main object geometry changes

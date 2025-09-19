@@ -38,8 +38,7 @@ class UnifiedContainerManager {
         // Ensure container wireframe has proper interactive mesh for face detection
         this.setupContainerInteraction(containerData);
 
-        // Create padding visualization (initially hidden)
-        this.createPaddingVisualization(containerData);
+        // Padding visualization will be created only when needed (layout mode + non-zero padding)
 
         // Register with MeshSynchronizer for coordinated updates
         this.registerMeshSynchronization(containerData);
@@ -223,31 +222,21 @@ class UnifiedContainerManager {
     showContainer(containerId, bypassDebounce = false) {
         const state = this.containerStates.get(containerId);
         if (!state) {
-            console.log('🔍 SHOW CONTAINER FAILED: No state found for', containerId);
             return false;
         }
 
         // Debounce rapid operations (unless bypassed for layout updates)
         if (!bypassDebounce && !this.shouldAllowOperation(containerId, 'show')) {
-            console.log('🔍 SHOW CONTAINER DEBOUNCED for', containerId);
             return false;
         }
 
         const sceneController = window.modlerComponents?.sceneController;
         const containerData = sceneController?.getObject(containerId);
         if (!containerData?.mesh) {
-            console.log('🔍 SHOW CONTAINER FAILED: No mesh found for', containerId);
             return false;
         }
 
         const containerMesh = containerData.mesh;
-
-        console.log('🔍 SHOW CONTAINER STARTING:', {
-            containerId,
-            containerName: containerData.name,
-            meshVisibleBefore: containerMesh.visible,
-            stateWireframeVisible: state.wireframeVisible
-        });
 
         // Show container wireframe components
         containerMesh.visible = true; // Ensure parent container is visible
@@ -310,14 +299,6 @@ class UnifiedContainerManager {
         state.wireframeVisible = true;
         state.isSelected = true;
 
-        console.log('🔍 SHOW CONTAINER COMPLETE:', {
-            containerId,
-            containerName: containerData.name,
-            meshVisibleAfter: containerMesh.visible,
-            stateWireframeVisible: state.wireframeVisible,
-            success: true
-        });
-
         return true;
     }
 
@@ -336,8 +317,8 @@ class UnifiedContainerManager {
             return false;
         }
 
-        // Debounce rapid operations
-        if (!this.shouldAllowOperation(containerId, 'hide')) {
+        // Debounce rapid operations (but allow legitimate selection sequences)
+        if (!this.shouldAllowOperation(containerId, 'hide', true)) {
             console.warn(`❌ HIDE FAILED: Operation debounced for container ${containerId}`);
             return false;
         }
@@ -450,8 +431,8 @@ class UnifiedContainerManager {
         // Remove existing padding visualization
         this.removePaddingVisualization(containerData.id);
 
-        // Only create for containers with layout enabled OR padding values set
-        if (!containerData.autoLayout?.enabled && !this.hasNonZeroPadding(containerData)) {
+        // Only create for containers with layout enabled AND padding values set
+        if (!containerData.autoLayout?.enabled || !this.hasNonZeroPadding(containerData)) {
             return null;
         }
 
@@ -620,12 +601,26 @@ class UnifiedContainerManager {
      * @returns {boolean} Success status
      */
     showPaddingVisualization(containerId) {
+        const sceneController = window.modlerComponents?.sceneController;
+        if (!sceneController) return false;
+
+        const containerData = sceneController.getObject(containerId);
+        if (!containerData) return false;
+
+        // Only show/create padding if layout is enabled AND has non-zero padding
+        if (!containerData.autoLayout?.enabled || !this.hasNonZeroPadding(containerData)) {
+            return false;
+        }
+
+        // Try to show existing padding mesh first
         const paddingMesh = this.paddingBoxes.get(containerId);
         if (paddingMesh) {
             paddingMesh.visible = true;
             return true;
         }
-        return false;
+
+        // Create padding if it doesn't exist (will respect the layout + padding checks)
+        return this.createPaddingVisualization(containerData) !== null;
     }
 
     /**
@@ -654,8 +649,15 @@ class UnifiedContainerManager {
         const containerData = sceneController.getObject(containerId);
         if (!containerData) return false;
 
-        // Recreate padding visualization with updated dimensions
-        return this.createPaddingVisualization(containerData) !== null;
+        // CRITICAL FIX: Only show padding for containers with layout enabled
+        if (containerData.autoLayout && containerData.autoLayout.enabled) {
+            // Recreate padding visualization with updated dimensions
+            return this.createPaddingVisualization(containerData) !== null;
+        } else {
+            // Hide padding if layout is not enabled
+            this.hidePaddingVisualization(containerId);
+            return false;
+        }
     }
 
     /**
@@ -695,17 +697,50 @@ class UnifiedContainerManager {
 
         const containerMesh = containerData.mesh;
 
-        // Register interactive mesh synchronization
-        const interactiveMesh = containerMesh.children.find(child =>
+        // Register interactive mesh synchronization - check both as child and at scene level
+        let interactiveMesh = containerMesh.children.find(child =>
             child.userData.isContainerInteractive
         );
 
+        // If not found as child, look for scene-level interactive mesh linked to this container
+        if (!interactiveMesh) {
+            const scene = window.modlerComponents?.sceneFoundation?.scene;
+            if (scene) {
+                scene.traverse((object) => {
+                    if (object.userData.isContainerInteractive &&
+                        object.userData.containerMesh === containerMesh) {
+                        interactiveMesh = object;
+                    }
+                });
+            }
+        }
+
         if (interactiveMesh) {
+            // Determine synchronization parameters based on mesh hierarchy
+            const isSceneLevel = interactiveMesh.parent !== containerMesh;
+
+            // Register for both transform and geometry sync types
             meshSynchronizer.registerRelatedMesh(containerMesh, interactiveMesh, 'transform', {
                 enabled: true,
-                relativeToParent: true,
+                relativeToParent: !isSceneLevel, // Scene-level meshes need absolute positioning
                 offset: new THREE.Vector3(0, 0, 0),
-                description: 'Container interactive faces'
+                description: 'Container interactive faces (transform)'
+            });
+
+            meshSynchronizer.registerRelatedMesh(containerMesh, interactiveMesh, 'geometry', {
+                enabled: true,
+                relativeToParent: !isSceneLevel, // Scene-level meshes need absolute positioning
+                offset: new THREE.Vector3(0, 0, 0),
+                description: 'Container interactive faces (geometry)',
+                geometryUpdater: (containerMesh, interactiveMesh) => {
+                    // Custom geometry updater that only updates position, not scale
+                    // (geometry is already created at correct size by updateContainerGeometry)
+                    interactiveMesh.position.copy(containerMesh.position);
+                    interactiveMesh.rotation.copy(containerMesh.rotation);
+                    // DO NOT copy scale - geometry is already correctly sized
+                    interactiveMesh.updateMatrixWorld(true);
+                    return true;
+                }
             });
         }
 
@@ -772,11 +807,23 @@ class UnifiedContainerManager {
      * @param {string} operation - Operation type ('show' or 'hide')
      * @returns {boolean} True if operation should proceed
      */
-    shouldAllowOperation(containerId, operation) {
+    shouldAllowOperation(containerId, operation, allowSelectionSequence = false) {
         const now = Date.now();
         const pending = this.pendingOperations.get(containerId);
 
         if (pending && (now - pending.timestamp) < this.debounceDelay) {
+            // Allow show/hide sequences during selection operations
+            if (allowSelectionSequence &&
+                ((pending.operation === 'show' && operation === 'hide') ||
+                 (pending.operation === 'hide' && operation === 'show'))) {
+                // Update timestamp but allow the operation
+                this.pendingOperations.set(containerId, {
+                    operation: operation,
+                    timestamp: now
+                });
+                return true;
+            }
+
             // Only block same operation types
             if (pending.operation === operation) {
                 return false;
@@ -841,15 +888,13 @@ class UnifiedContainerManager {
             // Update interactive mesh position to match container world position
             const containerWorldPosition = containerData.mesh.getWorldPosition(new THREE.Vector3());
             const containerWorldRotation = containerData.mesh.getWorldQuaternion(new THREE.Quaternion());
-            const containerWorldScale = containerData.mesh.getWorldScale(new THREE.Vector3());
 
-            // Copy transform directly
+            // Copy transform directly (position and rotation only)
             interactiveMesh.position.copy(containerWorldPosition);
             interactiveMesh.quaternion.copy(containerWorldRotation);
 
-            // Use base scale with 1.1 multiplier
-            const baseScale = 1.1; // 10% larger for extending beyond children
-            interactiveMesh.scale.set(baseScale, baseScale, baseScale);
+            // DO NOT apply scale - geometry is already created at correct size (1.01x) in createInteractiveFacesFromWireframe
+            // The previous 1.1x scale application caused double scaling: 1.01 * 1.1 ≈ 1.111x total size
 
             // Update matrices after changes
             interactiveMesh.updateMatrixWorld(true);

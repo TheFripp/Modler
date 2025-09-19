@@ -12,10 +12,12 @@ Each container consists of two synchronized components:
 - **Visual wireframe** - Green edges rendered with `renderOrder: 999` for visibility
 - **Collision mesh** - Invisible box geometry for reliable click detection and face highlighting
 
-### Container-First Selection
-Containers are not directly selectable. Users interact with containers by:
+### Container-First Selection & Step-Into
+Container interaction supports both group-level and individual object manipulation:
 - **Single-click child object** → selects parent container
-- **Double-click child object** → selects child directly (bypasses container logic)
+- **Double-click child object** → steps into parent container, selects child object
+- **Double-click container** → steps into container, selects container (enables face highlights)
+- **Container context state** → faded wireframe shows active container context
 
 ### Three.js Hierarchy Integration
 Containers maintain both metadata relationships AND proper Three.js parent-child hierarchy to ensure object movement follows container transformations.
@@ -54,9 +56,12 @@ Containers automatically resize to fit their children:
 
 **Implementation**: BaseSelectionBehavior checks for `parentContainer` metadata and selects the container mesh instead of the child object.
 
-### Visual Feedback
-- **Selected containers** show green wireframe
+### Visual Feedback & Container Context
+- **Selected containers** show green wireframe (regular selection)
+- **Container context** shows faded wireframe (25% opacity) when stepped-into
 - **Child containers** keep wireframes visible when nested
+- **Interactive mesh resolution** handles both legacy and new architectures
+- **Face highlighting** works immediately after step-into operations
 - **Selection wireframes** automatically sync with container position changes
 
 **⚠️ Known Issue - Layout Mode Visibility**: Container wireframes may become invisible during layout mode activation due to debouncing interference. **Solution**: Explicit `showContainer()` calls after geometry updates bypass debounce timing issues.

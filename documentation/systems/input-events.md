@@ -39,6 +39,7 @@ Events are processed differently based on:
 - **Modifier keys** (Shift for pan, Ctrl/Cmd for multi-select)
 - **Current tool** (different tools have different interaction patterns)
 - **Selection state** (selected objects enable different behaviors)
+- **Container context** (step-into mode affects interaction patterns)
 
 ## Event Types
 
@@ -46,12 +47,12 @@ Events are processed differently based on:
 - **MouseDown**: Initiates operations (selection, dragging, camera control)
 - **MouseUp**: Completes operations and processes final actions
 - **MouseMove**: Continuous feedback during operations (hover, drag, camera)
-- **DoubleClick**: Special selection behaviors (direct object selection)
+- **DoubleClick**: Container step-into functionality (establish container context)
 
 ### Keyboard Events
 - **Tool switching**: Q=select, W=move, E=layout, R=box-creation
 - **Operation modifiers**: Shift=pan, Ctrl/Cmd=multi-select
-- **Tool-specific shortcuts**: G for gap adjustment in layout tool, Tab for dimension inputs
+- **Tool-specific shortcuts**: Tab for dimension inputs, property panel shortcuts
 - **Input field safety**: All shortcuts disabled when input fields are focused
 
 ### Specialized Events
@@ -101,6 +102,30 @@ Priority-based event handling ensures consistent behavior regardless of timing o
 
 ### Tool Independence
 Tools can focus on their specific behaviors without worrying about conflicts with camera controls or other tools.
+
+## Container Step-Into Interaction Patterns
+
+### Double-Click Step-Into
+**Primary Pattern**: Double-click establishes container context for individual object manipulation within design hierarchy.
+
+**Interaction Flow**:
+1. **Double-click child object** → step into parent container, select child
+2. **Double-click container** → step into container, select container (enables face highlights)
+3. **Container context established** → faded wireframe shows active context
+4. **Other containers disabled** → prevents accidental interaction during context
+5. **Face highlighting enabled** → tools work immediately with stepped-into objects
+6. **Click empty space** → exit container context
+
+### Context State Management
+**Visual Feedback**: Container context shown through 25% opacity faded wireframe
+**Collision Management**: Other container collision meshes disabled during step-into
+**Selection Preservation**: Context maintained during within-container object selection
+**Context Exit**: Empty space click, tool switch, or selection outside container
+
+### Interactive Mesh Resolution
+**Legacy Architecture Support**: Handles old interactive mesh patterns
+**New Architecture Support**: Handles registered interactive mesh patterns
+**Unified Resolution**: BaseSelectionBehavior resolves both architectures consistently
 
 ## File References
 - `interaction/input-controller.js` - Consolidated input system (replaces InputFoundation + InputHandler)

@@ -1,4 +1,4 @@
-// Modler V2 - Layout Tool Utilities
+// Modler V2 - Layout Geometry Utilities
 // Geometry and bounds calculation utilities for layout containers
 // Target: ~100 lines - focused geometry utilities
 
@@ -84,11 +84,12 @@ class LayoutGeometry {
             }
         });
         
-        // Add small padding to ensure container fully wraps objects
-        const padding = 0.1;
-        minX -= padding; minY -= padding; minZ -= padding;
-        maxX += padding; maxY += padding; maxZ += padding;
-        
+        // Object bounds calculated without artificial padding for exact container-child alignment
+
+        // REMOVED: Hardcoded 0.1 padding that caused container-child offset issues
+        // Container should wrap objects exactly without artificial padding
+        // If padding is needed, it should come from layout config, not hardcoded values
+
         const min = new THREE.Vector3(minX, minY, minZ);
         const max = new THREE.Vector3(maxX, maxY, maxZ);
         const center = new THREE.Vector3(
@@ -101,7 +102,14 @@ class LayoutGeometry {
             maxY - minY,
             maxZ - minZ
         );
-        
+
+        console.log(`[WIREFRAME DEBUG] Final calculated bounds:`, {
+            center: center,
+            size: size,
+            min: min,
+            max: max
+        });
+
         return { center, size, min, max };
     }
     
@@ -111,6 +119,12 @@ class LayoutGeometry {
      * @returns {Object} Object with visual mesh, collision mesh, and materials
      */
     static createContainerGeometry(size) {
+        console.log(`[WIREFRAME DEBUG] Creating container with size:`, {
+            x: size.x,
+            y: size.y,
+            z: size.z
+        });
+
         // Create container box geometry for collision detection
         const containerGeometry = new THREE.BoxGeometry(size.x, size.y, size.z);
 
@@ -133,6 +147,12 @@ class LayoutGeometry {
         let edgeContainer, edgeMaterial;
 
         if (visualEffects) {
+            console.log(`[WIREFRAME DEBUG] Using VisualEffects.createPreviewBox with size:`, {
+                x: size.x,
+                y: size.y,
+                z: size.z
+            });
+
             // Use centralized wireframe creation (prevents triangles)
             edgeContainer = visualEffects.createPreviewBox(
                 size.x, size.y, size.z,
@@ -142,6 +162,8 @@ class LayoutGeometry {
             );
             edgeMaterial = edgeContainer.material;
 
+            console.log(`[WIREFRAME DEBUG] Created wireframe with geometry:`, edgeContainer.geometry?.parameters);
+
             // Update line width if supported
             if (edgeMaterial && edgeMaterial.linewidth !== undefined) {
                 edgeMaterial.linewidth = lineWidth;
@@ -149,6 +171,8 @@ class LayoutGeometry {
         } else {
             // Fallback to manual wireframe creation if VisualEffects not available
             console.warn('VisualEffects not available, using fallback wireframe creation');
+            console.log(`[WIREFRAME DEBUG] Fallback creation using containerGeometry:`, containerGeometry.parameters);
+
             const edgeGeometry = new THREE.EdgesGeometry(containerGeometry);
             edgeMaterial = new THREE.LineBasicMaterial({
                 color: color, // Use configured color
@@ -157,6 +181,8 @@ class LayoutGeometry {
                 opacity: opacity // Use configured opacity
             });
             edgeContainer = new THREE.LineSegments(edgeGeometry, edgeMaterial);
+
+            console.log(`[WIREFRAME DEBUG] Created fallback wireframe with edge geometry`);
         }
         
         // Use configured renderOrder to ensure wireframes render after solid objects but remain visible during orbit
@@ -168,19 +194,34 @@ class LayoutGeometry {
 
         const interactiveMaterial = new THREE.MeshBasicMaterial({
             transparent: true,
-            opacity: 0.1, // DEBUG: Still visible for testing, will reduce to 0.01 after confirmation
+            opacity: 0.2, // DEBUG: Temporarily visible to see collision area
             visible: true,
             side: THREE.DoubleSide, // Ensure faces can be hit from both sides
             depthTest: false, // Ensure it doesn't get occluded by child objects
-            color: 0xff0000, // DEBUG: Red color for testing
-            wireframe: false // Solid faces for visibility
+            color: 0xff0000, // DEBUG: Red color for debugging collision area
+            wireframe: false // Solid faces for raycasting
+        });
+
+        console.log(`[WIREFRAME DEBUG] Interactive mesh material:`, {
+            opacity: interactiveMaterial.opacity,
+            color: interactiveMaterial.color,
+            visible: interactiveMaterial.visible
         });
 
         const interactiveMesh = new THREE.Mesh(faceGeometry, interactiveMaterial);
         interactiveMesh.visible = true;
         interactiveMesh.renderOrder = 1000; // Higher than wireframe for raycasting priority
         interactiveMesh.userData.isContainerInteractive = true;
+        interactiveMesh.userData.isContainerCollision = true;  // For tool compatibility
         interactiveMesh.userData.containerType = 'interactive';
+
+        console.log(`[WIREFRAME DEBUG] Interactive mesh created:`, {
+            geometry: faceGeometry.parameters,
+            position: interactiveMesh.position,
+            scale: interactiveMesh.scale,
+            visible: interactiveMesh.visible,
+            renderOrder: interactiveMesh.renderOrder
+        });
 
         // CRITICAL FIX: Add interactive mesh to scene instead of container child
         // This ensures it remains visible and raycastable even when wireframe is hidden
@@ -193,6 +234,23 @@ class LayoutGeometry {
 
             // Store reference to container for position syncing
             interactiveMesh.userData.containerMesh = edgeContainer;
+
+            // ARCHITECTURAL FIX: Register interactive mesh separately as selectable
+            // This allows it to be hit by raycast when wireframe is non-selectable
+            const sceneController = window.modlerComponents?.sceneController;
+            if (sceneController) {
+                // Register interactive mesh as its own selectable object
+                const interactiveMeshObject = sceneController.addObject(interactiveMesh, null, {
+                    name: edgeContainer.name + ' (Interactive)',
+                    type: 'container-interactive',
+                    selectable: true, // INTERACTIVE MESH IS SELECTABLE
+                    category: 'system', // System object, not user-created
+                    isContainer: false, // Not a container itself, but container interaction
+                    parentContainer: null // Will be linked to container via userData
+                });
+
+                console.log(`[WIREFRAME DEBUG] Interactive mesh registered as selectable object:`, interactiveMeshObject);
+            }
 
         } else {
             console.warn('Scene not available, adding interactive mesh as container child (may have visibility issues)');
@@ -209,18 +267,33 @@ class LayoutGeometry {
         // Interactive mesh is now independent and always visible for selection
         interactiveMesh.visible = true;
         
-        // Enable raycasting on the visual container (collision mesh will handle hits)
-        // Remove the raycast disabling so collision mesh can be detected
-        delete edgeContainer.raycast;
+        // CRITICAL FIX: DISABLE wireframe raycasting - only interactive mesh should be raycastable
+        // The wireframe is purely visual - collision detection should go through interactive mesh only
+        edgeContainer.raycast = () => {}; // Disable raycasting on wireframe
+
+        console.log(`[WIREFRAME DEBUG] Wireframe raycasting DISABLED - only interactive mesh should be hit`);
         
         // Mark the visual container with container metadata
         edgeContainer.userData.isContainer = true;
         edgeContainer.userData.containerType = 'visual';
-        
+
+        console.log(`[WIREFRAME DEBUG] Final wireframe state:`, {
+            name: edgeContainer.name || 'unnamed',
+            position: edgeContainer.position,
+            scale: edgeContainer.scale,
+            boundingBox: edgeContainer.geometry?.boundingBox,
+            geometryParams: edgeContainer.geometry?.parameters
+        });
+
         // Optimize raycast for more precise clicking
         if (edgeContainer.geometry) {
             edgeContainer.geometry.computeBoundingBox();
             edgeContainer.geometry.computeBoundingSphere();
+
+            console.log(`[WIREFRAME DEBUG] After bounding calculations:`, {
+                boundingBox: edgeContainer.geometry.boundingBox,
+                boundingSphere: edgeContainer.geometry.boundingSphere
+            });
         }
         containerGeometry.computeBoundingBox();
         containerGeometry.computeBoundingSphere();
@@ -249,8 +322,8 @@ class LayoutGeometry {
             return false;
         }
         
-        // Store current visibility state
-        const wasVisible = containerMesh.visible;
+        // Container visibility is managed entirely by selection system
+        // Geometry updates should not interfere with visibility state
         
         // Get container configuration values
         const configManager = window.modlerComponents?.configurationManager;
@@ -302,10 +375,23 @@ class LayoutGeometry {
             });
         }
         
-        // Find interactive mesh child
-        const interactiveMesh = containerMesh.children.find(child =>
+        // Find interactive mesh - check both as child and at scene level
+        let interactiveMesh = containerMesh.children.find(child =>
             child.userData.isContainerInteractive
         );
+
+        // If not found as child, look for scene-level interactive mesh linked to this container
+        if (!interactiveMesh) {
+            const scene = window.modlerComponents?.sceneFoundation?.scene;
+            if (scene) {
+                scene.traverse((object) => {
+                    if (object.userData.isContainerInteractive &&
+                        object.userData.containerMesh === containerMesh) {
+                        interactiveMesh = object;
+                    }
+                });
+            }
+        }
 
         // Dispose old geometry to prevent memory leaks
         if (containerMesh.geometry) {
@@ -339,24 +425,22 @@ class LayoutGeometry {
             }
             interactiveMesh.renderOrder = 1000;
 
-            // CRITICAL FIX: Ensure interactive mesh position stays at (0,0,0) relative to parent
-            interactiveMesh.position.set(0, 0, 0);
+            // Update interactive mesh position based on its hierarchy
+            if (interactiveMesh.parent === containerMesh) {
+                // Interactive mesh is child of container - keep at (0,0,0) relative position
+                interactiveMesh.position.set(0, 0, 0);
+            } else {
+                // Interactive mesh is at scene level - copy container's world position
+                interactiveMesh.position.copy(containerMesh.position);
+            }
 
             // CRITICAL FIX: Force matrix world update after geometry change for proper raycasting
             interactiveMesh.updateMatrixWorld(true);
         }
         
-        // Restore visibility state
-        containerMesh.visible = wasVisible;
+        // Visibility is entirely managed by selection system - don't interfere here
 
-        console.log('🔍 GEOMETRY UPDATE COMPLETE:', {
-            containerName: containerMesh.name || 'unnamed',
-            wasVisible,
-            isVisibleNow: containerMesh.visible,
-            shouldReposition,
-            newSize: newSize.clone(),
-            newCenter: newCenter.clone()
-        });
+        // Geometry update completed successfully
         
         // Optimize raycast for updated geometry
         newEdgeGeometry.computeBoundingBox();
@@ -364,14 +448,12 @@ class LayoutGeometry {
         newGeometry.computeBoundingBox();
         newGeometry.computeBoundingSphere();
         
-        // CRITICAL FIX: Update selection wireframe after geometry change
-        // Container geometry changed, so wireframe needs to be recreated
-        const selectionController = window.modlerComponents?.selectionController;
-        const selectionVisualizer = window.modlerComponents?.selectionVisualizer;
-        if (selectionController && selectionVisualizer && selectionController.isSelected(containerMesh)) {
-            // Remove old wireframe and create new one with updated geometry
-            selectionVisualizer.removeEdgeHighlight(containerMesh);
-            selectionVisualizer.createEdgeHighlight(containerMesh);
+        // CRITICAL FIX: Force MeshSynchronizer to update all related meshes after geometry change
+        // This ensures selection wireframes and other related meshes get updated geometry
+        const meshSynchronizer = window.modlerComponents?.meshSynchronizer;
+        if (meshSynchronizer) {
+            // Force geometry sync for all related meshes (selection wireframes, etc.)
+            meshSynchronizer.syncAllRelatedMeshes(containerMesh, 'geometry');
         }
         
         return true;
@@ -448,12 +530,12 @@ class LayoutGeometry {
         if (containerGeometry.type === 'BoxGeometry' && containerGeometry.parameters) {
             const { width, height, depth } = containerGeometry.parameters;
 
-            // Create a larger box geometry to extend beyond child objects for reliable raycasting
-            // This ensures the interactive mesh is hit instead of child objects
+            // Create slightly larger box geometry for reliable raycasting without oversized selection
+            // Minimal increase ensures interactive mesh is hit instead of child objects
             const faceGeometry = new THREE.BoxGeometry(
-                width * 1.1,  // 10% larger to extend beyond child objects
-                height * 1.1,
-                depth * 1.1
+                width * 1.01,  // 1% larger - enough for reliable raycasting, not user-noticeable
+                height * 1.01,
+                depth * 1.01
             );
 
             return faceGeometry;

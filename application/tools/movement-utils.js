@@ -14,6 +14,14 @@
  * @class MovementUtils
  */
 class MovementUtils {
+    // Performance monitoring for container updates
+    static performanceStats = {
+        totalUpdates: 0,
+        immediateUpdates: 0,
+        throttledUpdates: 0,
+        averageUpdateTime: 0,
+        lastUpdateTime: 0
+    };
     /**
      * Calculate and validate mouse movement
      *
@@ -84,27 +92,43 @@ class MovementUtils {
     /**
      * Update parent container with fill-aware resizing support
      *
+     * CRITICAL: Shared logic used by both push tool and property panel to ensure identical behavior.
+     * This centralizes container update operations to prevent tool-specific behavioral differences.
+     *
      * @param {THREE.Object3D} object - Object whose container should be updated
      * @param {boolean} realTime - If true, updates immediately; if false, uses throttling
      * @param {Object} throttleState - Throttling state object (lastUpdateTime, interval)
      * @param {THREE.Vector3} newContainerSize - Optional new container size for fill calculations
+     * @param {boolean} immediateVisuals - If true, bypasses throttling for visual updates
      * @returns {boolean} True if update was performed
      */
-    static updateParentContainer(object, realTime = false, throttleState = null, newContainerSize = null) {
+    static updateParentContainer(object, realTime = false, throttleState = null, newContainerSize = null, immediateVisuals = false) {
+        const startTime = performance.now();
+
         const sceneController = window.modlerComponents?.sceneController;
         const containerManager = window.modlerComponents?.containerManager;
 
         if (!sceneController || !containerManager || !object) return false;
 
-        // Apply throttling for real-time updates
-        if (!realTime && throttleState) {
+        // Apply throttling for real-time updates (but allow immediate visual updates to bypass)
+        if (!realTime && throttleState && !immediateVisuals) {
             const now = Date.now();
-            const interval = throttleState.interval || 50;
+            const interval = throttleState.interval || 16; // Default to 60 FPS
 
             if (throttleState.lastUpdateTime && now - throttleState.lastUpdateTime < interval) {
                 return false;
             }
             throttleState.lastUpdateTime = now;
+        }
+
+        // Track immediate visual updates to prevent excessive calls (but be very permissive)
+        if (immediateVisuals && throttleState) {
+            const now = Date.now();
+            // Use very light throttling (1ms) only to prevent same-frame duplicate calls
+            if (throttleState.immediateUpdateTime && now - throttleState.immediateUpdateTime < 1) {
+                return false; // Allow up to 1000 FPS to prevent same-millisecond duplicates
+            }
+            throttleState.immediateUpdateTime = now;
         }
 
         const objectData = sceneController.getObjectByMesh(object);
@@ -120,11 +144,31 @@ class MovementUtils {
 
             // For the immediate parent, pass the new container size for fill calculations
             const containerSizeToUse = (updatedContainers === 0) ? newContainerSize : null;
-            containerManager.resizeContainerToFitChildren(containerData, containerSizeToUse);
+            const resizeSuccess = containerManager.resizeContainerToFitChildren(containerData, containerSizeToUse, false, immediateVisuals);
+
+            // Container visibility and padding are handled by selection visualizer - don't override here
 
             updatedContainers++;
             currentContainerId = containerData.parentContainer;
         }
+
+        // Track performance stats
+        const endTime = performance.now();
+        const updateTime = endTime - startTime;
+
+        this.performanceStats.totalUpdates++;
+        if (immediateVisuals) {
+            this.performanceStats.immediateUpdates++;
+        } else {
+            this.performanceStats.throttledUpdates++;
+        }
+
+        // Update average time (running average)
+        this.performanceStats.averageUpdateTime =
+            (this.performanceStats.averageUpdateTime * (this.performanceStats.totalUpdates - 1) + updateTime) /
+            this.performanceStats.totalUpdates;
+
+        this.performanceStats.lastUpdateTime = updateTime;
 
         return updatedContainers > 0;
     }
@@ -145,13 +189,15 @@ class MovementUtils {
         return snapController.getCurrentSnapPoint();
     }
 
+
     /**
      * Synchronize related meshes after object modification
      *
      * @param {THREE.Object3D} object - Object that was modified
      * @param {string} changeType - Type of change ('transform' or 'geometry')
+     * @param {boolean} immediateVisuals - If true, use immediate sync for visual feedback
      */
-    static syncRelatedMeshes(object, changeType = 'transform') {
+    static syncRelatedMeshes(object, changeType = 'transform', immediateVisuals = false) {
         if (!object) return;
 
         // Update UI system
@@ -160,22 +206,24 @@ class MovementUtils {
         }
 
         // Update related meshes through MeshSynchronizer
+        // Use immediate sync for visual updates during real-time operations
         const meshSynchronizer = window.modlerComponents?.meshSynchronizer;
         if (meshSynchronizer) {
-            meshSynchronizer.syncAllRelatedMeshes(object, changeType);
+            meshSynchronizer.syncAllRelatedMeshes(object, changeType, immediateVisuals);
         }
     }
 
     /**
      * Create throttling state object for container updates
      *
-     * @param {number} interval - Throttling interval in milliseconds (default: 50)
+     * @param {number} interval - Throttling interval in milliseconds (default: 16 for 60 FPS)
      * @returns {Object} Throttling state object
      */
-    static createThrottleState(interval = 50) {
+    static createThrottleState(interval = 16) {
         return {
             lastUpdateTime: 0,
-            interval: interval
+            interval: interval,
+            immediateUpdateTime: 0 // Track immediate updates separately
         };
     }
 
@@ -200,6 +248,30 @@ class MovementUtils {
             lastMousePosition &&
             window.CameraMathUtils
         );
+    }
+
+    /**
+     * Get performance statistics for container updates
+     * @returns {Object} Performance statistics
+     */
+    static getPerformanceStats() {
+        return {
+            ...this.performanceStats,
+            cacheStats: window.PositionTransform?.boundsCache?.size || 0
+        };
+    }
+
+    /**
+     * Reset performance statistics
+     */
+    static resetPerformanceStats() {
+        this.performanceStats = {
+            totalUpdates: 0,
+            immediateUpdates: 0,
+            throttledUpdates: 0,
+            averageUpdateTime: 0,
+            lastUpdateTime: 0
+        };
     }
 }
 

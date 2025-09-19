@@ -13,7 +13,6 @@ class SelectionController {
         this.selectionVisualizer = null;
         this.containerContextManager = null;
 
-        console.log('SelectionController initialized - core selection state management only');
     }
 
     /**
@@ -36,22 +35,8 @@ class SelectionController {
             this.selectionVisualizer.updateObjectVisual(object, true);
         }
 
-        // DEBUG: Check if this is a container and log selection details
-        const sceneController = window.modlerComponents?.sceneController;
-        const objectData = sceneController?.getObjectByMesh(object);
-
-        console.log('🎯 SELECTION:', {
-            objectName: object.name || 'unnamed',
-            isContainer: objectData?.isContainer,
-            objectType: objectData?.type,
-            selectable: objectData?.selectable,
-            hasAutoLayout: !!objectData?.autoLayout,
-            selectedCount: this.selectedObjects.size
-        });
-
         // Update property panel with the selected object
         if (window.updatePropertyPanelFromObject) {
-            console.log('🔧 Updating property panel for:', objectData?.type || 'unknown');
             window.updatePropertyPanelFromObject(object);
         }
 
@@ -78,7 +63,6 @@ class SelectionController {
             this.selectionVisualizer.updateObjectVisual(object, false);
         }
 
-        console.log('Deselected:', object.name || 'unnamed', '- Total selected:', this.selectedObjects.size);
         return true;
     }
 
@@ -94,14 +78,16 @@ class SelectionController {
     }
 
     updatePropertyPanelForCurrentSelection() {
+        // Update object list selection with current selection
+        if (window.updateObjectListSelection) {
+            const allSelectedNames = Array.from(this.selectedObjects).map(obj => obj.name);
+            window.updateObjectListSelection(allSelectedNames);
+        }
+
         if (this.selectedObjects.size === 0) {
-            // No selection - clear property panel and object list
+            // No selection - clear property panel
             if (window.clearPropertyPanel) {
                 window.clearPropertyPanel();
-            }
-            if (window.updateObjectListSelection) {
-                const allSelectedNames = Array.from(this.selectedObjects).map(obj => obj.name);
-                window.updateObjectListSelection(allSelectedNames);
             }
         } else {
             // Show properties for the most recently selected object
@@ -109,20 +95,17 @@ class SelectionController {
             if (window.updatePropertyPanelFromObject) {
                 window.updatePropertyPanelFromObject(lastSelected);
             }
-            if (window.updateObjectListSelection) {
-                const allSelectedNames = Array.from(this.selectedObjects).map(obj => obj.name);
-                window.updateObjectListSelection(allSelectedNames);
-            }
         }
     }
 
     clearSelection(reason = 'normal') {
         const objectsToDeselect = Array.from(this.selectedObjects);
 
-        console.log('🗑️ CLEAR SELECTION:', {
-            reason: reason,
-            objectsToDeselect: objectsToDeselect.length,
-            objectNames: objectsToDeselect.map(obj => obj.name || 'unnamed')
+        // CLICK TRACING: Log selection clearing
+        console.log(`[CLICK TRACE] clearSelection called with reason: '${reason}'`, {
+            isInContainerContext: this.isInContainerContext(),
+            containerContext: this.getContainerContext()?.name || 'none',
+            selectedCount: objectsToDeselect.length
         });
 
         // Delegate container context handling to ContainerContextManager
@@ -201,36 +184,6 @@ class SelectionController {
         return this.selectedObjects.size > 0;
     }
 
-    // Multi-selection operations
-    selectMultiple(objects) {
-        if (!Array.isArray(objects)) return 0;
-
-        let selectedCount = 0;
-        objects.forEach(object => {
-            if (this.select(object)) {
-                selectedCount++;
-            }
-        });
-
-        return selectedCount;
-    }
-
-    selectAll(availableObjects) {
-        return this.selectMultiple(availableObjects);
-    }
-
-    invertSelection(availableObjects) {
-        if (!Array.isArray(availableObjects)) return 0;
-
-        let changedCount = 0;
-        availableObjects.forEach(object => {
-            if (this.toggle(object)) {
-                changedCount++;
-            }
-        });
-
-        return changedCount;
-    }
 
     // Selection history
     addToHistory(action, object) {
@@ -250,29 +203,7 @@ class SelectionController {
         }
     }
 
-    getSelectionHistory() {
-        return [...this.selectionHistory];
-    }
 
-    // Selection validation
-    validateSelection() {
-        // Remove any objects that no longer exist or are invalid
-        const invalidObjects = [];
-
-        for (const object of this.selectedObjects) {
-            if (!object || !object.material || !object.geometry) {
-                invalidObjects.push(object);
-            }
-        }
-
-        invalidObjects.forEach(obj => this.selectedObjects.delete(obj));
-
-        if (invalidObjects.length > 0) {
-            console.log('Removed', invalidObjects.length, 'invalid objects from selection');
-        }
-
-        return invalidObjects.length;
-    }
 
     // Wireframe synchronization (delegates to MeshSynchronizer)
     updateSelectionWireframe(object) {
@@ -334,7 +265,6 @@ class SelectionController {
             this.containerContextManager.destroy();
         }
 
-        console.log('SelectionController destroyed');
     }
 }
 

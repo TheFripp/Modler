@@ -5,9 +5,10 @@
 
 ### Methods
 - `handleObjectClick(object, event)` → `boolean` - Container-first selection logic
-- `handleDoubleClick(hit, event)` → `boolean` - Direct object selection  
-- `handleEmptySpaceClick(event)` → `void` - Clear selection on empty clicks
+- `handleDoubleClick(hit, event)` → `boolean` - Container step-into functionality
+- `handleEmptySpaceClick(event)` → `void` - Clear selection and exit container context
 - `isSelectableObject(object)` → `boolean` - Check if object can be selected
+- `isPartOfContainerContext(object, container)` → `boolean` - Check if object is part of container context
 
 ## SelectionController  
 **File**: `interaction/selection-controller.js`
@@ -18,6 +19,9 @@
 - `toggle(object)` → `boolean` - Toggle object selection state
 - `clearSelection(reason)` → `void` - Clear all selected objects
 - `isSelected(object)` → `boolean` - Check if object is selected
+- `stepIntoContainer(containerObject)` → `void` - Establish container context
+- `stepOutOfContainer()` → `void` - Exit container context
+- `isInContainerContext()` → `boolean` - Check if in container context
 
 ### Properties
 - `selectedObjects` → `Set` - Currently selected objects
@@ -82,7 +86,6 @@
 ### Tool Names
 - `'select'` - Selection tool (keyboard: 1)
 - `'move'` - Movement tool (keyboard: 2)  
-- `'layout'` - Layout tool (keyboard: 3)
 
 ## InputHandler
 **File**: `interaction/input-handler.js`
@@ -103,8 +106,25 @@
 }
 ```
 
-## ContainerVisibilityManager  
-**File**: `interaction/container-visibility-manager.js`
+## ContainerContextManager
+**File**: `interaction/container-context-manager.js`
+
+### Methods
+- `stepIntoContainer(containerObject)` → `void` - Establish container context with faded wireframe
+- `stepOutOfContainer()` → `void` - Exit container context and restore collision meshes
+- `isInContainerContext()` → `boolean` - Check if currently in container context
+- `getContainerContext()` → `Object|null` - Get current container context object
+- `handleSelectionClear(reason)` → `void` - Context-aware selection clearing
+- `updateContainerEdgeHighlight()` → `void` - Update container context highlight
+
+### Container Context Features
+- **Interactive mesh resolution**: Handles both legacy and new container architectures
+- **Collision mesh management**: Disables other containers during step-into
+- **Visual feedback**: 25% opacity faded wireframe shows active context
+- **Position commitment**: Prevents coordinate jumps during context transitions
+
+## ContainerVisibilityManager
+**File**: `interaction/container-visibility-manager.js` (❌ Disabled)
 
 ### Methods
 - `registerContainer(containerId)` → `void` - Register container for visibility tracking

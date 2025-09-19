@@ -169,6 +169,15 @@ class HierarchicalSelectionManager {
                 this.enterDrillDown(objectData);
                 return true;
             }
+        } else if (this.mode === 'container-first' && objectData.parentContainer) {
+            // CRITICAL FIX: Double-click on child object - enter drill-down mode for parent container
+            // and automatically select the double-clicked child object
+            const parentContainer = sceneController.getObject(objectData.parentContainer);
+            if (parentContainer) {
+                console.log(`🎯 DOUBLE-CLICK DRILL-DOWN: Entering container ${parentContainer.name} and selecting child ${objectData.name}`);
+                this.enterDrillDownWithChildSelection(parentContainer, object);
+                return true;
+            }
         }
         
         return false;
@@ -183,18 +192,43 @@ class HierarchicalSelectionManager {
         if (this.activeContainer) {
             this.drillDownPath.push(this.activeContainer);
         }
-        
+
         this.mode = 'drill-down';
         this.activeContainer = containerData;
-        
+
         // Select the container to show it and move children back
         this.selectionController.clearSelection('drill-down-enter');
         this.selectionController.select(containerData.mesh);
-        
+
         // Show visual feedback for drill-down mode
         this.showDrillDownFeedback();
-        
+
         // Entered drill-down mode for container
+    }
+
+    /**
+     * Enter drill-down mode for a container and automatically select a specific child object
+     * @param {Object} containerData - Container to drill into
+     * @param {THREE.Object3D} childObject - Child object to select after entering drill-down
+     */
+    enterDrillDownWithChildSelection(containerData, childObject) {
+        // Add current container to navigation path
+        if (this.activeContainer) {
+            this.drillDownPath.push(this.activeContainer);
+        }
+
+        this.mode = 'drill-down';
+        this.activeContainer = containerData;
+
+        // CRITICAL FIX: Select the child object instead of the container
+        // This provides the expected behavior when double-clicking a child object
+        this.selectionController.clearSelection('drill-down-enter-child');
+        this.selectionController.select(childObject);
+
+        // Show visual feedback for drill-down mode
+        this.showDrillDownFeedback();
+
+        console.log(`🎯 DRILL-DOWN COMPLETE: Entered container ${containerData.name}, selected child ${childObject.name || 'unnamed'}`);
     }
     
     /**

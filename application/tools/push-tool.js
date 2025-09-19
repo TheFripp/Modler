@@ -52,8 +52,8 @@ class PushTool {
         this.lastMousePosition = null; // For proper movement calculation
         this.cumulativePushAmount = 0; // Track total push amount
 
-        // Container update throttling using shared utils
-        this.containerThrottleState = MovementUtils.createThrottleState(50);
+        // Container update throttling using shared utils - use default 16ms for smooth updates
+        this.containerThrottleState = MovementUtils.createThrottleState();
 
         // Face highlight smart update tracking
         this.lastHighlightUpdateAmount = 0;
@@ -61,6 +61,7 @@ class PushTool {
 
         // Track raw cursor movement independently of snap adjustments
         this.rawCursorMovement = 0;
+        this.lastPushDelta = undefined; // Track previous delta for direction change detection
     }
 
     /**
@@ -133,11 +134,19 @@ class PushTool {
 
         // Get face normal in world space
         const worldNormal = hit.face.normal.clone();
-        if (isContainerPush && hit.object.userData.isContainerCollision) {
-            // For container collision meshes, use the collision mesh transform
+
+        // Handle both container architectures for normal transformation
+        const isContainerCollision = hit.object.userData.isContainerCollision;
+        const isContainerInteractive = hit.object.userData.isContainerInteractive;
+
+        if (isContainerInteractive && hit.object.userData.containerMesh) {
+            // NEW ARCHITECTURE: Interactive mesh with containerMesh reference
+            worldNormal.transformDirection(hit.object.userData.containerMesh.matrixWorld);
+        } else if (isContainerCollision && hit.object.parent) {
+            // OLD ARCHITECTURE: Collision mesh is child of container
             worldNormal.transformDirection(hit.object.matrixWorld);
         } else {
-            // For regular objects, use the object's transform
+            // Regular objects or fallback
             worldNormal.transformDirection(hit.object.matrixWorld);
         }
         worldNormal.normalize();
@@ -147,6 +156,20 @@ class PushTool {
         this.determinePushAxis(worldNormal);
 
         if (isContainerPush) {
+            // Switch container to fixed sizing mode when push tool is used
+            const sceneController = window.modlerComponents?.sceneController;
+            if (sceneController) {
+                const containerData = sceneController.getObjectByMesh(targetObject);
+                if (containerData && containerData.sizingMode === 'hug') {
+                    containerData.sizingMode = 'fixed';
+
+                    // Update property panel to reflect new sizing mode (enable dimension inputs)
+                    if (window.updatePropertyPanelFromObject) {
+                        window.updatePropertyPanelFromObject(targetObject);
+                    }
+                }
+            }
+
             // Store original container size for reference
             this.originalContainerSize = this.getContainerSize(targetObject);
             console.log('🔧 Starting container push:', {
@@ -165,12 +188,11 @@ class PushTool {
             this.lastMousePosition = inputController.mouse.clone();
         }
 
-        // Reset cumulative push amount for new operation
+        // Reset cumulative push amount and direction tracking for new operation
         this.cumulativePushAmount = 0;
-        this.lastHighlightUpdateAmount = 0;
-
-        // Reset raw cursor tracking for new operation
         this.rawCursorMovement = 0;
+        this.lastPushDelta = undefined;
+        this.lastHighlightUpdateAmount = 0;
 
         // Request snap detection for push operation
         const snapController = window.modlerComponents?.snapController;
@@ -243,6 +265,22 @@ class PushTool {
         this.rawCursorMovement += pushDelta;
         let incrementalDelta = pushDelta;
 
+        // Detect direction changes and reset throttle state for immediate response
+        if (this.lastPushDelta !== undefined) {
+            const directionChanged = (this.lastPushDelta > 0) !== (pushDelta > 0);
+            if (directionChanged && Math.abs(pushDelta) > 0.001) {
+                // Reset throttle states to ensure immediate response on direction change
+                this.containerThrottleState.lastUpdateTime = 0;
+                this.containerThrottleState.immediateUpdateTime = 0;
+
+                // Clear bounds cache for this object to force fresh calculation
+                if (window.PositionTransform && this.pushObject?.uuid) {
+                    window.PositionTransform.clearCacheForObject(this.pushObject.uuid);
+                }
+            }
+        }
+        this.lastPushDelta = pushDelta;
+
         // Handle snap detection with geometric constraints for push tool
         const snapController = window.modlerComponents?.snapController;
         const currentSnapPoint = this.handlePushSnapDetection(snapController);
@@ -261,9 +299,12 @@ class PushTool {
         // Apply geometry modification with incremental delta
         this.modifyGeometryIncremental(incrementalDelta);
 
-        // Update parent container with fill-aware calculations
+        // Update face highlighting to follow the geometry changes
+        this.refreshVisualFeedback();
+
+        // Update parent container with fill-aware calculations - use immediate visuals for real-time feedback
         const newContainerSize = this.calculateContainerSizeForFillObjects();
-        MovementUtils.updateParentContainer(this.pushObject, true, this.containerThrottleState, newContainerSize);
+        MovementUtils.updateParentContainer(this.pushObject, false, this.containerThrottleState, newContainerSize, true);
     }
 
     /**
@@ -418,8 +459,8 @@ class PushTool {
         geometry.computeBoundingBox();
         geometry.computeBoundingSphere();
 
-        // Synchronize related meshes using shared utils
-        MovementUtils.syncRelatedMeshes(this.pushObject, 'geometry');
+        // Synchronize related meshes using shared utils with immediate feedback
+        MovementUtils.syncRelatedMeshes(this.pushObject, 'geometry', true);
 
         // Refresh visual feedback
         this.refreshVisualFeedback();
@@ -434,22 +475,29 @@ class PushTool {
     refreshVisualFeedback() {
         const hoverState = this.faceToolBehavior.getHoverState();
 
-        // Update face highlighting if hovering (with smart throttling)
-        if (hoverState.isActive && hoverState.object === this.pushObject) {
-            const changeAmount = Math.abs(this.cumulativePushAmount - this.lastHighlightUpdateAmount);
-            if (changeAmount >= this.highlightUpdateThreshold) {
-                this.lastHighlightUpdateAmount = this.cumulativePushAmount;
-                this.visualEffects.clearHighlight();
+        // Update face highlighting if hovering - check target object correctly for containers
+        if (hoverState.isActive) {
+            // For containers, hoverState.object is the interactive mesh, but pushObject is the container wireframe
+            // Use getTargetObject to resolve both to the same container for comparison
+            const hoverTargetObject = this.faceToolBehavior.getTargetObject(hoverState.hit);
 
-                const updatedHit = this.createUpdatedHitInfo(hoverState.hit);
-                if (updatedHit) {
-                    this.visualEffects.showFaceHighlight(updatedHit);
+            if (hoverTargetObject === this.pushObject) {
+                // Reduce throttling threshold for smoother highlighting during real-time movement
+                const changeAmount = Math.abs(this.cumulativePushAmount - this.lastHighlightUpdateAmount);
+                if (changeAmount >= 0.001) { // Much lower threshold for immediate feedback
+                    this.lastHighlightUpdateAmount = this.cumulativePushAmount;
+                    this.visualEffects.clearHighlight();
+
+                    const updatedHit = this.createUpdatedHitInfo(hoverState.hit);
+                    if (updatedHit) {
+                        this.visualEffects.showFaceHighlight(updatedHit);
+                    }
                 }
             }
         }
 
-        // Update selection wireframes using shared utils
-        MovementUtils.syncRelatedMeshes(this.pushObject, 'geometry');
+        // Update selection wireframes using shared utils with immediate feedback
+        MovementUtils.syncRelatedMeshes(this.pushObject, 'geometry', true);
 
         // Update container selection wireframes if container is selected
         this.updateContainerSelectionWireframes();
@@ -502,8 +550,70 @@ class PushTool {
      */
     createUpdatedHitInfo(originalHit) {
         if (!originalHit || !this.pushObject) return null;
-        // Face topology unchanged, reuse original hit with current object
-        return { ...originalHit, object: this.pushObject };
+
+        // For geometry modifications, we need to recalculate the face position
+        // since the vertices have moved but the face topology remains the same
+        try {
+            // CONTAINER FIX: For containers, get geometry from the interactive mesh, not wireframe
+            let sourceGeometry;
+            let sourceObject;
+
+            if (this.isContainerPush && originalHit.object.userData.isContainerInteractive) {
+                // For container push, use the interactive mesh geometry that has the faces
+                sourceGeometry = originalHit.object.geometry;
+                sourceObject = originalHit.object;
+            } else {
+                // For regular objects, use the push object geometry
+                sourceGeometry = this.pushObject.geometry;
+                sourceObject = this.pushObject;
+            }
+
+            if (!sourceGeometry || !originalHit.face) return null;
+
+            // Get the face vertices from current geometry
+            const face = originalHit.face;
+            const positionAttribute = sourceGeometry.attributes.position;
+
+            if (!positionAttribute) return null;
+
+            // Get the three vertices of the face
+            const a = new THREE.Vector3().fromBufferAttribute(positionAttribute, face.a);
+            const b = new THREE.Vector3().fromBufferAttribute(positionAttribute, face.b);
+            const c = new THREE.Vector3().fromBufferAttribute(positionAttribute, face.c);
+
+            // Transform vertices to world space using the source object's matrix
+            a.applyMatrix4(sourceObject.matrixWorld);
+            b.applyMatrix4(sourceObject.matrixWorld);
+            c.applyMatrix4(sourceObject.matrixWorld);
+
+            // Calculate face center as the new hit point
+            const faceCenter = new THREE.Vector3()
+                .add(a)
+                .add(b)
+                .add(c)
+                .divideScalar(3);
+
+            // Recalculate face normal
+            const edge1 = new THREE.Vector3().subVectors(b, a);
+            const edge2 = new THREE.Vector3().subVectors(c, a);
+            const normal = new THREE.Vector3().crossVectors(edge1, edge2).normalize();
+
+            // Create updated hit info with recalculated position and normal
+            return {
+                ...originalHit,
+                object: originalHit.object, // Keep the original hit object (interactive mesh for containers)
+                point: faceCenter,
+                face: {
+                    ...originalHit.face,
+                    normal: normal
+                }
+            };
+
+        } catch (error) {
+            console.warn('Failed to update hit info for face highlighting:', error);
+            // Fallback to original method
+            return { ...originalHit, object: this.pushObject };
+        }
     }
 
     /**
@@ -713,11 +823,13 @@ class PushTool {
         if (pushedObject && this.selectionController.isSelected(pushedObject)) {
             const meshSynchronizer = window.modlerComponents?.meshSynchronizer;
             if (meshSynchronizer) {
-                // Force geometry update for selection wireframes
-                meshSynchronizer.syncAllRelatedMeshes(pushedObject, 'geometry');
+                // Force immediate geometry update for selection wireframes
+                meshSynchronizer.syncAllRelatedMeshes(pushedObject, 'geometry', true);
             }
+        }
 
-            // Also force selection visualizer refresh
+        // Also force selection visualizer refresh (only if object was selected)
+        if (pushedObject && this.selectionController.isSelected(pushedObject)) {
             if (this.selectionController.selectionVisualizer) {
                 this.selectionController.selectionVisualizer.updateObjectVisual(pushedObject, true);
             }
@@ -727,6 +839,14 @@ class PushTool {
         if (this.selectionController.updatePropertyPanelForCurrentSelection) {
             this.selectionController.updatePropertyPanelForCurrentSelection();
         }
+
+        // Clear any existing highlights and hover states to ensure clean state
+        this.visualEffects.clearHighlight();
+        this.faceToolBehavior.clearHover();
+
+        // Re-trigger face highlighting for current mouse position after tool operation ends
+        // This ensures the user can immediately see face highlights without moving the mouse
+        this.checkForFaceHighlightAfterOperation();
 
         // Force final container update with fill-aware calculations
         const finalContainerSize = this.calculateContainerSizeForFillObjects();
@@ -872,7 +992,8 @@ class PushTool {
             const containerManager = window.modlerComponents?.containerManager;
             if (containerManager) {
                 // Resize fill objects for new container size
-                containerManager.resizeContainerToFitChildren(objectData, newContainerSize, true);
+                // Parameters: containerData, newContainerSize, preservePosition, immediateUpdate
+                containerManager.resizeContainerToFitChildren(objectData, newContainerSize, false, true);
             }
         }
     }
@@ -886,6 +1007,89 @@ class PushTool {
             endCallback: () => this.endFacePush()
         });
         this.eventHandler.handleToolDeactivate(deactivationCallbacks);
+    }
+
+    /**
+     * Handle selection changes - clear highlights if selected object changes, show highlights on new selection
+     */
+    onSelectionChange(selectedObjects) {
+        const hoverState = this.faceToolBehavior.getHoverState();
+        // Clear highlights if the highlighted object is no longer selected
+        if (hoverState.object && !selectedObjects.includes(hoverState.object)) {
+            this.clearHover();
+        }
+
+        // If new objects are selected and we're the active tool, check for immediate face highlighting
+        if (selectedObjects.length > 0) {
+            this.checkForFaceHighlightOnSelection();
+        }
+    }
+
+    /**
+     * Clear hover state using shared behavior
+     */
+    clearHover() {
+        this.faceToolBehavior.clearHover();
+    }
+
+    /**
+     * Check for face highlighting when object is selected
+     * Shows face highlighting immediately if mouse is hovering over a selected object's face
+     */
+    checkForFaceHighlightOnSelection() {
+        // Use a small delay to ensure selection state is fully updated
+        setTimeout(() => {
+            const inputController = window.modlerComponents?.inputController;
+            if (!inputController) return;
+
+            // Perform raycast at current mouse position using inputController's raycast method
+            const hit = inputController.raycast();
+
+            if (hit) {
+                // Find the first hit that matches selected objects
+                const selectedObjects = this.selectionController.getSelectedObjects();
+
+                // Handle collision meshes properly using shared behavior
+                const targetObject = this.faceToolBehavior.getTargetObject(hit);
+
+                if (selectedObjects.includes(hit.object) ||
+                    selectedObjects.includes(targetObject) ||
+                    (hit.object.parent && selectedObjects.includes(hit.object.parent))) {
+                    // Trigger hover event to show face highlighting
+                    this.onHover(hit);
+                }
+            }
+        }, 50); // Small delay to ensure selection state is fully updated
+    }
+
+    /**
+     * Check for face highlighting after tool operation ends
+     * Re-triggers hover detection at current mouse position
+     */
+    checkForFaceHighlightAfterOperation() {
+        // Use a small delay to ensure all cleanup is complete
+        setTimeout(() => {
+            const inputController = window.modlerComponents?.inputController;
+            if (!inputController) return;
+
+            // Perform raycast at current mouse position using inputController's raycast method
+            const hit = inputController.raycast();
+
+            if (hit) {
+                // Find the first hit that matches selected objects
+                const selectedObjects = this.selectionController.getSelectedObjects();
+
+                // Handle collision meshes properly using shared behavior
+                const targetObject = this.faceToolBehavior.getTargetObject(hit);
+
+                if (selectedObjects.includes(hit.object) ||
+                    selectedObjects.includes(targetObject) ||
+                    (hit.object.parent && selectedObjects.includes(hit.object.parent))) {
+                    // Trigger hover event to show face highlighting
+                    this.onHover(hit);
+                }
+            }
+        }, 50); // Small delay to ensure tool state is fully reset
     }
 }
 

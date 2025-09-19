@@ -75,12 +75,15 @@
 - `updateContainerGeometry(containerMesh, newSize, newCenter, shouldReposition)` → boolean
 
 #### **5. ContainerContextManager**
-**File:** `/interaction/container-context-manager.js` (80 lines)
+**File:** `/interaction/container-context-manager.js` (290 lines)
 **Status:** ✅ **Active** (initialized in v2-main.js)
 **Responsibilities:**
-- Container step-in/step-out logic
-- Container context highlighting (faded selection frames)
-- Context state management
+- **Double-click step-into**: Child object → step into container, select child
+- **Container step-into**: Double-click container → step into, select container (enables face highlights)
+- **Interactive mesh resolution**: Handles legacy and new container architectures
+- **Container context highlighting**: Faded wireframe (25% opacity) shows active context
+- **Collision mesh management**: Disables other containers during step-into
+- **Context state management**: Position commitment and context-aware selection clearing
 
 ### **Legacy/Disabled Components**
 
@@ -133,25 +136,40 @@
 10. UnifiedContainerManager sets wireframe visibility, interactive mesh, etc.
 ```
 
-### **Layout Mode Activation Flow** *(CORRECTED - Property Panel Driven)*
+### **Container Step-Into Flow** ✅ *IMPLEMENTED*
 ```
-1. User changes container property in property panel (direction, gap, padding, etc.)
-2. PropertyUpdateHandler → detects container layout property change
-3. PropertyUpdateHandler → objectData.autoLayout.enabled = true
-4. PropertyUpdateHandler → objectData.autoLayout[property] = newValue
-5. PropertyUpdateHandler → sceneController.updateLayout(objectData.id)
-6. SceneController.updateLayout → LayoutEngine.calculateLayout()
-7. SceneController.updateLayout → applyLayoutPositionsAndSizes()
-8. SceneController.updateLayout → calculateLayoutBounds()
-9. SceneController.updateLayout → return {success: true, layoutBounds}
-10. PropertyUpdateHandler → containerManager.resizeContainerToLayoutBounds(layoutBounds)
-11. ContainerManager.resizeContainerToLayoutBounds → LayoutGeometry.updateContainerGeometry()
-12. LayoutGeometry.updateContainerGeometry → Updates wireframe geometry
-13. PropertyUpdateHandler → unifiedContainerManager.showContainer(containerId, true)
-14. Result: Container switches to LAYOUT mode with smart rule-based positioning
+1. User double-clicks on child object OR container
+2. BaseSelectionBehavior.handleDoubleClick(hit, event)
+3. Interactive mesh resolution: Handle both legacy and new architectures
+4. If child object: SelectionController.stepIntoContainer(parentContainer.mesh)
+5. If container: SelectionController.stepIntoContainer(targetObject)
+6. ContainerContextManager.stepIntoContainer(containerObject)
+7. ContainerContextManager.disableContainerCollisionMeshes() (disable others)
+8. ContainerContextManager.createContainerEdgeHighlight() (faded wireframe)
+9. SelectionController.clearSelection('step-into-container')
+10. SelectionController.select(targetObject) (child or container)
+11. Result: Container context established, face highlighting enabled
 ```
 
-**Key Correction**: Layout mode is **property-panel driven**, not tool-driven or button-driven.
+### **Layout Mode Activation Flow** *(CORRECTED - Property Panel Driven)* ✅ *IMPLEMENTED*
+```
+1. User changes container property in property panel (direction, gap, padding, etc.)
+2. PropertyUpdateHandler → detects container layout property change ✅ *IMPLEMENTED*
+3. PropertyUpdateHandler → objectData.autoLayout.enabled = true ✅ *IMPLEMENTED*
+4. PropertyUpdateHandler → objectData.autoLayout[property] = newValue ✅ *IMPLEMENTED*
+5. PropertyUpdateHandler → sceneController.updateLayout(objectData.id) ✅ *IMPLEMENTED*
+6. SceneController.updateLayout → LayoutEngine.calculateLayout() ✅ *IMPLEMENTED*
+7. SceneController.updateLayout → applyLayoutPositionsAndSizes() ✅ *IMPLEMENTED*
+8. SceneController.updateLayout → calculateLayoutBounds() ✅ *IMPLEMENTED*
+9. SceneController.updateLayout → return {success: true, layoutBounds} ✅ *IMPLEMENTED*
+10. PropertyUpdateHandler → containerManager.resizeContainerToLayoutBounds(layoutBounds) ✅ *IMPLEMENTED*
+11. ContainerManager.resizeContainerToLayoutBounds → LayoutGeometry.updateContainerGeometry() ✅ *IMPLEMENTED*
+12. LayoutGeometry.updateContainerGeometry → Updates wireframe geometry ✅ *IMPLEMENTED*
+13. PropertyUpdateHandler → unifiedContainerManager.showContainer(containerId, true) ✅ *IMPLEMENTED*
+14. Result: Container switches to LAYOUT mode with smart rule-based positioning ✅ *IMPLEMENTED*
+```
+
+**Key Correction**: Layout mode is **property-panel driven**, not tool-driven or button-driven. ✅ *IMPLEMENTED*
 
 ### **Hierarchical Layout System & Parametric Design** *(FUTURE ARCHITECTURE)*
 
@@ -172,17 +190,17 @@ Container A (Layout Mode)
 ```
 
 #### **Container Sizing Behaviors**
-**Shrink-to-Fit Containers (Default 'Hug' Mode):**
+**Shrink-to-Fit Containers (Default 'Hug' Mode):** ✅ *IMPLEMENTED*
 - Container automatically resizes to wrap all children
 - Child objects determine container bounds
 - Changes to children trigger container resize
-- **Default State**: All containers created in 'hug' mode with disabled dimension inputs
-- **UI Behavior**: Dimension properties are read-only in property panel
+- **Default State**: All containers created in 'hug' mode with disabled dimension inputs ✅ *IMPLEMENTED*
+- **UI Behavior**: Dimension properties are read-only in property panel *(pending UI integration)*
 
-**Fixed-Size Containers (Activated by Push Tool):**
+**Fixed-Size Containers (Activated by Push Tool):** ✅ *IMPLEMENTED*
 - Container maintains specified dimensions independent of children
-- **Push Tool Activation**: Using push tool on container switches it to fixed-size mode
-- **UI Behavior**: Dimension properties become editable in property panel
+- **Push Tool Activation**: Using push tool on container switches it to fixed-size mode ✅ *IMPLEMENTED*
+- **UI Behavior**: Dimension properties become editable in property panel *(pending UI integration)*
 - **Child Adaptation**: Objects inside adjust to accommodate container size changes:
   - **Default Mode**: All child objects stretch equally to fill new container space
   - **Layout Mode**: Objects behave according to individual sizing properties:
@@ -364,15 +382,17 @@ Direct Command Pattern (No Tool Dependency)
 2. ✅ **Debounce Bypass** - Layout-triggered visibility bypass implemented
 3. ✅ **Documentation Correction** - Architecture misunderstandings fixed
 
-### **Phase B: Core Architecture Fixes** *(Next Steps)*
-1. **Remove LayoutTool Dependency** - Move container creation directly to ToolController
-2. **Implement PropertyUpdateHandler** - Create property-panel driven layout system
-3. **Simplify Container Creation Flow** - Direct Cmd+F → ContainerManager call
+### **Phase B: Core Architecture Fixes** ✅ *COMPLETED*
+1. ✅ **Remove LayoutTool Dependency** - Removed from v2-main.js registration and HTML toolbar
+2. ✅ **Implement PropertyUpdateHandler** - Complete property-panel driven layout system implemented
+3. ✅ **Simplify Container Creation Flow** - Direct Cmd+F → ContainerManager call implemented
+4. ✅ **Complete Layout Engine Integration** - LayoutEngine loaded and SceneController.updateLayout() fully functional
+5. ✅ **Clean Up Duplicate Logic** - Removed redundant layout logic from index.html, all routing through PropertyUpdateHandler
 
-### **Phase C: Coordination Improvements** *(Future)*
-1. **Container Mode State Management** - Clear default/layout mode tracking
-2. **Property Panel Integration** - Seamless property → layout coordination
-3. **Documentation Updates** - Update all references to new architecture
+### **Phase C: Coordination Improvements** ✅ *COMPLETED*
+1. ✅ **Container Mode State Management** - Clear default/layout mode tracking (Default 'hug' mode + Push Tool → 'fixed' mode implemented)
+2. ✅ **Property Panel Integration** - Dynamic dimension input enable/disable based on container sizing mode
+3. ✅ **Documentation Updates** - All LayoutTool references updated to PropertyUpdateHandler approach
 
 ---
 
@@ -496,6 +516,15 @@ unifiedContainerManager.showContainer(objectData.id, true); // Bypass debounce
 ---
 
 ## 🎯 **Container System Health Checklist**
+
+### **Step-Into Functionality** ✅ *COMPLETED*
+- [x] **Double-click step-into**: Child object → step into container, select child
+- [x] **Container step-into**: Double-click container → step into, select container
+- [x] **Interactive mesh resolution**: Works for both legacy and new architectures
+- [x] **Container context visual feedback**: Faded wireframe (25% opacity)
+- [x] **Face highlighting integration**: Works immediately after step-into
+- [x] **Collision mesh management**: Disables other containers during context
+- [x] **Context exit behavior**: Empty space click exits container context
 
 ### **Immediate Issues** *(Session Priority)*
 - [ ] Fix global scope exposure: `window.modlerComponents.containerManager`

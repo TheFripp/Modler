@@ -60,9 +60,10 @@ class SelectTool {
     
     /**
      * Check if tool has an active highlight (for camera/tool coordination)
+     * Select tool should NOT block camera orbit - it only handles clicks, not drags
      */
     hasActiveHighlight() {
-        return this.hoveredObject !== null;
+        return false; // Select tool never blocks camera orbit
     }
     
     /**

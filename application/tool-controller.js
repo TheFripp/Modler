@@ -191,15 +191,15 @@ class ToolController {
             console.log(`Filtered out ${selectedObjects.length - selectableObjects.length} non-selectable objects from container creation`);
         }
         
-        // Get the layout tool
-        const layoutTool = this.tools.get('layout');
-        if (!layoutTool) {
-            console.error('Layout tool not available');
+        // Direct container creation - no tool dependency
+        const containerManager = window.modlerComponents?.containerManager;
+        if (!containerManager) {
+            console.error('ContainerManager not available');
             return false;
         }
-        
-        // Use the layout tool to create container from selection
-        const success = layoutTool.createContainerFromSelection(selectableObjects);
+
+        // Create container directly from ContainerManager
+        const success = containerManager.createContainerFromSelection(selectableObjects);
         
         if (success) {
             console.log(`Created auto layout container from ${selectableObjects.length} selected objects`);

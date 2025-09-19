@@ -34,12 +34,12 @@ Tools receive pre-coordinated events from InputHandler rather than direct DOM ev
 - **Real-time wireframe sync** during movement
 - **Gizmo coordination** for precise positioning
 
-### LayoutTool
-**Purpose**: Container creation and auto-layout management
-- **Container creation** from selection or empty space
-- **Layout configuration** with keyboard shortcuts (1-5 for directions)
-- **Gap adjustment** with G key (Shift+G to decrease)
-- **Visual layout guides** for spacing and alignment
+### Container Creation
+**Purpose**: Direct container creation through command shortcuts
+- **Container creation** via Cmd+F (handled by ToolController → ContainerManager)
+- **Property-driven layout** through PropertyUpdateHandler
+- **Layout configuration** via property panel changes
+- **No tool activation required** for container operations
 
 ## Shared Behaviors
 
@@ -97,4 +97,4 @@ Centralized event coordination through InputHandler prevents conflicts between t
 - `application/managers/tool-controller.js` - Tool registration and switching
 - `application/tools/base-selection-behavior.js` - Shared selection logic
 - `interaction/input-handler.js` - Event coordination
-- Individual tool files: `select-tool.js`, `move-tool.js`, `layout-tool.js`
+- Individual tool files: `select-tool.js`, `move-tool.js`, `push-tool.js`, `box-creation-tool.js`

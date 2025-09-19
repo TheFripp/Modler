@@ -25,6 +25,7 @@ class YourTool {
     }
     
     onDoubleClick(hit, event) {
+        // BaseSelectionBehavior handles container step-into functionality
         this.selectionBehavior.handleDoubleClick(hit, event);
     }
 }
@@ -50,20 +51,18 @@ class YourTool {
 ### SelectTool
 - **Purpose**: Object selection and highlighting
 - **Behavior**: Delegates all selection to BaseSelectionBehavior
+- **Container Step-Into**: Double-click support for container navigation
 - **Hover**: No hover highlights (clean selection experience)
 - **File**: `application/tools/select-tool.js`
 
-### MoveTool  
+### MoveTool
 - **Purpose**: Object movement and face-based dragging
 - **Behavior**: Selection + movement gizmo + face highlighting
+- **Container Context Integration**: Works immediately after step-into operations
+- **Interactive Mesh Support**: Highlights container faces when container selected in context
 - **Hover**: Shows face highlights on selected objects only
 - **File**: `application/tools/move-tool.js`
 
-### LayoutTool
-- **Purpose**: Container creation and layout operations
-- **Behavior**: Selection + container creation (Command+F)
-- **Hover**: No face highlights (object-level focus)
-- **File**: `application/tools/layout-tool.js`
 
 ## Selection Integration
 
@@ -82,6 +81,8 @@ if (this.isSelectable(object)) {
 
 ### Face Highlighting Rules
 - **Move Tool**: Show face highlights on selected objects (for face dragging)
+- **Container Context**: Face highlighting works immediately after step-into operations
+- **Interactive Mesh Resolution**: Handles both legacy and new container architectures for highlighting
 - **Select Tool**: No hover highlights (clean experience)  
 - **Layout Tool**: No face highlights (object-level operations)
 
@@ -94,8 +95,9 @@ Tools are registered with ToolController for keyboard switching:
 // In ToolController constructor
 this.tools = {
     select: new SelectTool(selectionController, visualEffects),
-    move: new MoveTool(selectionController, visualEffects, moveGizmo),  
-    layout: new LayoutTool(selectionController, visualEffects)
+    move: new MoveTool(selectionController, visualEffects),
+    push: new PushTool(selectionController, visualEffects),
+    'box-creation': new BoxCreationTool(selectionController, visualEffects)
 };
 
 // Keyboard shortcuts
@@ -172,4 +174,4 @@ this.visualEffects.clearHighlight();
 - `application/tools/base-selection-behavior.js` - Shared selection patterns
 - `application/managers/tool-controller.js` - Tool registration and switching
 - `interaction/input-handler.js` - Event coordination
-- Example tools: `select-tool.js`, `move-tool.js`, `layout-tool.js`
+- Example tools: `select-tool.js`, `move-tool.js`, `push-tool.js`, `box-creation-tool.js`
