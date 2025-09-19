@@ -138,7 +138,7 @@ class SceneController {
         // Emit event for UI updates
         this.emit('objectAdded', objectData);
         
-        console.log('Added object:', objectData.name, 'id:', id, 'category:', objectData.category);
+        // Object added successfully
         return objectData;
     }
     
@@ -172,7 +172,7 @@ class SceneController {
         // Emit event for UI updates
         this.emit('objectRemoved', objectData);
         
-        console.log('Removed object:', objectData.name, 'id:', id);
+        // Object removed successfully
         return true;
     }
     
@@ -276,7 +276,7 @@ class SceneController {
             Object.assign(objectData, metadataUpdates);
         }
         
-        console.log(`Updated object ${id}:`, updates);
+        // Object updated successfully
         return true;
     }
     
@@ -308,7 +308,7 @@ class SceneController {
     clear() {
         const ids = Array.from(this.objects.keys());
         ids.forEach(id => this.removeObject(id));
-        console.log('SceneController cleared all objects');
+        // Scene cleared successfully
     }
     
     // Get statistics
@@ -378,12 +378,12 @@ class SceneController {
         if (childObjects.length === 0) return;
 
 
-        // Reset each child to container-relative position near (0,0,0)
+        // Reset each child to container-relative position at (0,0,0)
         childObjects.forEach((childData, index) => {
             if (childData.mesh) {
-                // Position children in a simple line to avoid overlap before layout calculation
-                // Layout system will properly position them afterwards
-                childData.mesh.position.set(index * 0.1, 0, 0);
+                // Position all children at (0,0,0) - layout calculation will position them properly
+                // Removing the index * 0.1 offset that was causing layout positioning issues
+                childData.mesh.position.set(0, 0, 0);
                 childData.mesh.updateMatrixWorld();
             }
         });
@@ -408,31 +408,51 @@ class SceneController {
      * @returns {boolean} True if layout was successfully updated
      */
     updateLayout(containerId) {
+        console.log('🔧 SceneController.updateLayout called with:', containerId);
         const container = this.objects.get(containerId);
+        console.log('🔧 Container found:', !!container);
+        console.log('🔧 Container autoLayout:', container?.autoLayout);
+
         if (!container || !container.autoLayout || !container.autoLayout.enabled) {
-            return false;
+            console.log('🔧 Layout update failed - container/autoLayout not ready');
+            return { success: false, reason: 'container or autoLayout not ready' };
         }
-        
+
         // Get child objects of this container
         const children = this.getChildObjects(containerId);
-        if (children.length === 0) return true;
+        console.log('🔧 Children found:', children.length, children.map(c => c.name));
+        if (children.length === 0) {
+            console.log('🔧 No children to layout');
+            return { success: true, reason: 'no children' };
+        }
         
         // This will be implemented when we create the layout engine
         if (window.LayoutEngine) {
+            console.log('🔧 LayoutEngine available');
             // Get container size for fill calculations
             const containerSize = this.getContainerSize(container);
-            console.log('🏗️ LAYOUT UPDATE:', { containerId, containerSize, autoLayout: container.autoLayout, childCount: children.length });
+            console.log('🔧 Container size:', containerSize);
+            console.log('🔧 Layout config:', container.autoLayout);
+
+            // CENTERING FIX: Store original container center to preserve position
+            const originalContainerCenter = container.mesh.position.clone();
+            console.log('🔧 Original container center:', originalContainerCenter);
 
             const layoutResult = window.LayoutEngine.calculateLayout(children, container.autoLayout, containerSize);
+            console.log('🔧 Layout result:', layoutResult);
+
             this.applyLayoutPositionsAndSizes(children, layoutResult.positions, layoutResult.sizes, container);
 
-            // Calculate the bounds needed for container to wrap the layout
-            const layoutBounds = this.calculateLayoutBounds(layoutResult.positions, layoutResult.sizes);
+            // Calculate the bounds needed for container to wrap the layout, preserving original center
+            const layoutBounds = this.calculateLayoutBounds(layoutResult.positions, layoutResult.sizes, originalContainerCenter);
+            console.log('🔧 Layout bounds (with preserved center):', layoutBounds);
 
             return { success: true, layoutBounds };
+        } else {
+            console.log('🔧 LayoutEngine not available');
         }
 
-        return { success: false };
+        return { success: false, reason: 'LayoutEngine not available' };
     }
     
     /**
@@ -464,9 +484,10 @@ class SceneController {
      * Calculate layout bounds from positions and sizes
      * @param {Array} positions - Array of THREE.Vector3 positions
      * @param {Array} sizes - Array of THREE.Vector3 sizes
+     * @param {THREE.Vector3} originalCenter - Original container center to preserve (optional)
      * @returns {Object} Layout bounds with center and size
      */
-    calculateLayoutBounds(positions, sizes) {
+    calculateLayoutBounds(positions, sizes, originalCenter = null) {
         if (!positions || !sizes || positions.length === 0) {
             return { center: new THREE.Vector3(), size: new THREE.Vector3(1, 1, 1) };
         }
@@ -489,11 +510,14 @@ class SceneController {
             maxZ = Math.max(maxZ, pos.z + halfSize.z);
         }
 
-        const center = new THREE.Vector3(
-            (minX + maxX) / 2,
-            (minY + maxY) / 2,
-            (minZ + maxZ) / 2
-        );
+        // Use original center if provided, otherwise calculate from layout bounds
+        const center = originalCenter ?
+            originalCenter.clone() :
+            new THREE.Vector3(
+                (minX + maxX) / 2,
+                (minY + maxY) / 2,
+                (minZ + maxZ) / 2
+            );
 
         const size = new THREE.Vector3(
             maxX - minX,
@@ -505,7 +529,7 @@ class SceneController {
     }
 
     /**
-     * Get object data by ID (alias for getObject - used by LayoutTool)
+     * Get object data by ID (alias for getObject)
      * @param {number} id - Object ID
      * @returns {Object|null} Object data or null if not found
      */
@@ -536,6 +560,13 @@ class SceneController {
      * @param {Object} container - Container object data
      */
     applyLayoutPositionsAndSizes(objects, positions, sizes, container = null) {
+        console.log('🔧 Applying layout positions and sizes:', {
+            objectCount: objects.length,
+            positionCount: positions.length,
+            sizeCount: sizes.length,
+            containerName: container?.name
+        });
+
         if (objects.length !== positions.length || objects.length !== sizes.length) {
             console.warn('SceneController.applyLayoutPositionsAndSizes: Object/position/size count mismatch');
             return;
@@ -544,6 +575,11 @@ class SceneController {
         objects.forEach((obj, index) => {
             const layoutPosition = positions[index];
             const layoutSize = sizes[index];
+            console.log(`🔧 Positioning object ${obj.name}:`, {
+                oldPosition: obj.mesh?.position?.clone(),
+                newPosition: layoutPosition,
+                isChildOfContainer: container && obj.mesh?.parent === container.mesh
+            });
 
             // CRITICAL FIX: Use local positions when objects are children of container
             // Layout positions are already relative to container coordinate space
@@ -673,21 +709,12 @@ class SceneController {
     syncSelectionWireframes(objectId) {
         const obj = this.objects.get(objectId);
         if (!obj) {
-            console.log('SceneController.syncSelectionWireframes: object not found:', objectId);
+            // Skip wireframe sync - object not found
             return;
         }
-        
-        // Update selection wireframe through MeshSynchronizer
-        const meshSynchronizer = window.modlerComponents?.meshSynchronizer;
-        if (meshSynchronizer) {
-            meshSynchronizer.syncAllRelatedMeshes(obj.mesh, 'transform');
-        } else {
-            // Fallback to SelectionController
-            const selectionController = window.modlerComponents?.selectionController;
-            if (selectionController) {
-                selectionController.updateSelectionWireframe(obj.mesh);
-            }
-        }
+
+
+        // Selection wireframe sync is now handled by direct mesh sync from property panel
     }
     
     /**
@@ -698,35 +725,19 @@ class SceneController {
     notifyObjectTransformChanged(objectId) {
         const obj = this.objects.get(objectId);
         if (!obj) {
-            console.log('SceneController.notifyObjectTransformChanged: object not found:', objectId);
+            // Skip transform notification - object not found
             return;
         }
         
-        // Update selection wireframes for the changed object
-        this.syncSelectionWireframes(objectId);
-        
-        // If object has a parent container, resize the container to fit
-        if (obj.parentContainer) {
-            const parentContainer = this.objects.get(obj.parentContainer);
-            if (parentContainer && parentContainer.isContainer) {
-                
-                // Access layout tool the same way the object list system does
-                const layoutTool = window.modlerComponents?.toolController?.tools?.layout;
-                if (layoutTool && layoutTool.resizeContainerToFitChildren) {
-                    layoutTool.resizeContainerToFitChildren(parentContainer);
-                } else {
-                    console.warn('Layout tool or resizeContainerToFitChildren method not found');
-                }
-            }
-        } else {
-        }
+        // Visual updates and container operations are now handled by MovementUtils.completeObjectModification
+        // This ensures property panel uses the exact same proven pattern as push tool
     }
     
     // Memory cleanup
     destroy() {
         this.clear();
         this.objects.clear();
-        console.log('SceneController destroyed');
+        // SceneController destroyed
     }
 }
 

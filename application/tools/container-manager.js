@@ -1,22 +1,287 @@
-// Modler V2 - Layout Tool Container Management
+// Modler V2 - Container Management
 // Container creation, configuration, and lifecycle management
 // Target: ~200 lines - focused container operations
 
 class ContainerManager {
     constructor() {
         // ContainerManager initialized
+
+        // Unified cache system with consistent 50ms expiration
+        this.cache = new Map(); // containerId -> { type, data, timestamp }
+        this.cacheExpiration = 50; // milliseconds - consistent across all cache types
+        this.throttleDelay = 16; // milliseconds - 60 FPS unified with MovementUtils
+
+        // Periodic cache cleanup to prevent memory leaks
+        this.setupCacheCleanup();
     }
-    
+
+    /**
+     * Check if container visibility state has changed since cache
+     * @param {string} containerId - Container ID
+     * @param {boolean} currentVisibility - Current visibility state
+     * @param {boolean} currentHasSelectedChildren - Current selection state
+     * @param {boolean} forceUpdate - If true, bypass cache check
+     * @returns {boolean} True if state has changed
+     */
+    hasVisibilityStateChanged(containerId, currentVisibility, currentHasSelectedChildren, forceUpdate = false) {
+        if (forceUpdate) return true;
+
+        const cached = this.getFromCache(containerId, 'visibility');
+        if (!cached) return true;
+
+        return cached.isVisible !== currentVisibility || cached.hasSelectedChildren !== currentHasSelectedChildren;
+    }
+
+    /**
+     * Update visibility cache for container
+     * @param {string} containerId - Container ID
+     * @param {boolean} isVisible - Current visibility state
+     * @param {boolean} hasSelectedChildren - Current selection state
+     */
+    updateVisibilityCache(containerId, isVisible, hasSelectedChildren) {
+        this.setCache(containerId, 'visibility', {
+            isVisible,
+            hasSelectedChildren
+        });
+    }
+
+    /**
+     * Get item from unified cache
+     * @param {string} containerId - Container ID
+     * @param {string} type - Cache type ('visibility', 'throttle')
+     * @returns {*} Cached data or null if expired/missing
+     */
+    getFromCache(containerId, type) {
+        const cacheKey = `${containerId}_${type}`;
+        const cached = this.cache.get(cacheKey);
+
+        if (!cached) return null;
+
+        // Check if cache is still valid
+        const now = Date.now();
+        if (now - cached.timestamp > this.cacheExpiration) {
+            this.cache.delete(cacheKey);
+            return null;
+        }
+
+        return cached.data;
+    }
+
+    /**
+     * Set item in unified cache
+     * @param {string} containerId - Container ID
+     * @param {string} type - Cache type ('visibility', 'throttle')
+     * @param {*} data - Data to cache
+     */
+    setCache(containerId, type, data) {
+        const cacheKey = `${containerId}_${type}`;
+        this.cache.set(cacheKey, {
+            type,
+            data,
+            timestamp: Date.now()
+        });
+    }
+
+    /**
+     * Standardized input validation helper
+     * @param {Object} params - Validation parameters
+     * @param {boolean} params.requireSceneController - Whether SceneController is required
+     * @param {Object} params.containerData - Container data to validate
+     * @param {Object} params.objectData - Object data to validate
+     * @param {Array} params.selectedObjects - Selected objects array to validate
+     * @param {THREE.Vector3} params.vector3 - Vector3 to validate
+     * @param {string} params.methodName - Method name for error logging
+     * @returns {Object} Validation result with success flag and sceneController if needed
+     */
+    validateInputs(params = {}) {
+        const {
+            requireSceneController = true,
+            containerData = null,
+            objectData = null,
+            selectedObjects = null,
+            vector3 = null,
+            methodName = 'ContainerManager method'
+        } = params;
+
+        // Get sceneController if required
+        let sceneController = null;
+        if (requireSceneController) {
+            sceneController = window.modlerComponents?.sceneController;
+            if (!sceneController) {
+                console.error(`${methodName}: SceneController not available`);
+                return { success: false };
+            }
+        }
+
+        // Validate containerData
+        if (containerData !== null) {
+            if (!containerData) {
+                console.error(`${methodName}: Container data is required`);
+                return { success: false };
+            }
+            if (!containerData.mesh) {
+                console.error(`${methodName}: Container mesh is missing`);
+                return { success: false };
+            }
+            if (containerData.isContainer !== true) {
+                console.error(`${methodName}: Object is not a container`);
+                return { success: false };
+            }
+        }
+
+        // Validate objectData
+        if (objectData !== null) {
+            if (!objectData) {
+                console.error(`${methodName}: Object data is required`);
+                return { success: false };
+            }
+            if (!objectData.mesh) {
+                console.error(`${methodName}: Object mesh is missing`);
+                return { success: false };
+            }
+        }
+
+        // Validate selectedObjects array
+        if (selectedObjects !== null) {
+            if (!Array.isArray(selectedObjects)) {
+                console.error(`${methodName}: Selected objects must be an array`);
+                return { success: false };
+            }
+            if (selectedObjects.length === 0) {
+                console.error(`${methodName}: At least one object must be selected`);
+                return { success: false };
+            }
+        }
+
+        // Validate Vector3
+        if (vector3 !== null) {
+            if (!vector3 || typeof vector3.x !== 'number' || typeof vector3.y !== 'number' || typeof vector3.z !== 'number') {
+                console.error(`${methodName}: Invalid Vector3 object`);
+                return { success: false };
+            }
+        }
+
+        return { success: true, sceneController };
+    }
+
+    /**
+     * Get child meshes suitable for bounds calculation
+     * Filters out edge geometry and uses collision meshes for container children
+     * @param {Array} childObjects - Array of child object data
+     * @returns {Array} Array of meshes suitable for bounds calculation
+     */
+    getChildMeshesForBounds(childObjects) {
+        return childObjects
+            .map(child => {
+                if (child.isContainer && child.mesh) {
+                    // For container children, use the collision mesh for bounds calculation
+                    const collisionMesh = child.mesh.children.find(grandchild =>
+                        grandchild.userData.isContainerCollision
+                    );
+                    if (collisionMesh) {
+                        return collisionMesh;
+                    }
+                }
+                return child.mesh;
+            })
+            .filter(mesh => mesh && this.isValidGeometryForBounds(mesh));
+    }
+
+    /**
+     * Check if mesh has valid geometry for bounds calculation
+     * @param {THREE.Mesh} mesh - Mesh to validate
+     * @returns {boolean} True if mesh has valid geometry for bounds calculation
+     */
+    isValidGeometryForBounds(mesh) {
+        return mesh &&
+               mesh.geometry &&
+               mesh.geometry.type !== 'EdgesGeometry';
+    }
+
+    /**
+     * Calculate bounds from child objects with optional fill object resizing
+     * @param {Object} containerData - Container object data
+     * @param {Array} childObjects - Child objects array
+     * @param {THREE.Vector3} newContainerSize - Optional new container size for fill calculations
+     * @param {boolean} immediateUpdate - If true, bypass caching
+     * @returns {Object|null} Bounds object with size and center, or null if failed
+     */
+    calculateContainerBounds(containerData, childObjects, newContainerSize = null, immediateUpdate = false) {
+        // Handle fill object resizing if needed
+        const hasLayoutWithFill = this.checkContainerHasLayoutWithFill(containerData, childObjects);
+        if (hasLayoutWithFill && newContainerSize) {
+            this.resizeFillObjectsForNewContainerSize(containerData, childObjects, newContainerSize);
+        }
+
+        // Get suitable meshes for bounds calculation
+        const childMeshes = this.getChildMeshesForBounds(childObjects);
+        if (childMeshes.length === 0) return null;
+
+        // Calculate bounds using centralized utility
+        return PositionTransform.calculateObjectBounds(childMeshes, immediateUpdate);
+    }
+
+    /**
+     * Validate Vector3 components
+     * @param {THREE.Vector3} vector - Vector to validate
+     * @param {string} vectorName - Name for error logging
+     * @returns {boolean} True if vector is valid
+     */
+    validateVector3(vector, vectorName = 'Vector3') {
+        if (!vector ||
+            typeof vector.x !== 'number' ||
+            typeof vector.y !== 'number' ||
+            typeof vector.z !== 'number') {
+            console.error(`ContainerManager: Invalid ${vectorName} object`);
+            return false;
+        }
+        return true;
+    }
+
+    /**
+     * Setup periodic cache cleanup to prevent memory leaks
+     */
+    setupCacheCleanup() {
+        // Clean up caches every 5 seconds
+        setInterval(() => {
+            this.cleanupCaches();
+        }, 5000);
+    }
+
+    /**
+     * Clean up expired cache entries
+     */
+    cleanupCaches() {
+        const now = Date.now();
+
+        // Clean up all expired cache entries (unified cache with consistent expiration)
+        for (const [cacheKey, entry] of this.cache.entries()) {
+            if (now - entry.timestamp > this.cacheExpiration) {
+                this.cache.delete(cacheKey);
+            }
+        }
+
+        // Also clean up PositionTransform bounds cache
+        if (window.PositionTransform && window.PositionTransform.cleanupBoundsCache) {
+            window.PositionTransform.cleanupBoundsCache();
+        }
+    }
+
     /**
      * Create auto layout container from selected objects
      * @param {Array} selectedObjects - Array of selected mesh objects
      * @returns {boolean} True if container was successfully created
      */
     createContainerFromSelection(selectedObjects) {
-        const sceneController = window.modlerComponents?.sceneController;
-        if (!sceneController || !selectedObjects || selectedObjects.length === 0) {
-            return false;
-        }
+        // Standardized input validation
+        const validation = this.validateInputs({
+            requireSceneController: true,
+            selectedObjects,
+            methodName: 'createContainerFromSelection'
+        });
+        if (!validation.success) return false;
+
+        const sceneController = validation.sceneController;
         
         // CRITICAL FIX: Calculate bounds and position container correctly from the start
         // This prevents objects from moving when the container is repositioned later
@@ -28,22 +293,16 @@ class ContainerManager {
         
         // CRITICAL FIX: Position container at the bounds center from the start
         // This ensures objects don't move when we later call resizeContainerToFitChildren
+        // ARCHITECTURAL FIX: Wireframe should NOT be selectable - only interactive mesh should handle selection
         const containerObject = sceneController.addObject(edgeContainer, null, {
             name: sceneController.generateContainerName(),
             type: 'container',
             position: bounds.center.clone(), // Position at bounds center from the start
             isContainer: true,
-            selectable: true
+            selectable: false, // WIREFRAME IS NOT SELECTABLE - only interactive mesh should be selectable
+            sizingMode: 'hug' // Default container sizing mode - automatically resizes to fit children
         });
-        
-        console.log('📦 CREATED PARENT CONTAINER:', {
-            name: containerObject.name,
-            id: containerObject.id,
-            position: bounds.center.clone(),
-            boundsSize: bounds.size.clone(),
-            selectedObjectsCount: selectedObjects.length
-        });
-        
+
         if (!containerObject) {
             console.error('Failed to create container object');
             return false;
@@ -107,19 +366,16 @@ class ContainerManager {
         
         // CRITICAL FIX: Only resize geometry, don't reposition container during creation
         // Container is already positioned correctly at bounds.center
-        this.resizeContainerGeometry(containerObject, bounds.size);
+        this.resizeContainer(containerObject, {
+            mode: 'geometry-only',
+            size: bounds.size
+        });
         
         // Select the newly created container
         // CRITICAL FIX: Avoid triggering container hide operations during container creation
         // by directly updating selection state without visual updates for old containers
         const selectionController = window.modlerComponents?.selectionController;
         if (selectionController && containerObject.mesh) {
-            console.log('🎯 SELECTING NEW PARENT CONTAINER:', {
-                containerName: containerObject.name,
-                containerPosition: containerObject.mesh.position.clone(),
-                containerVisible: containerObject.mesh.visible,
-                hasChildren: containerObject.mesh.children.length
-            });
             // CRITICAL FIX: Clean up edge highlights from individual objects before container selection
             // Store currently selected objects to clean up their visual state
             const objectsToDeselect = Array.from(selectionController.selectedObjects);
@@ -183,7 +439,8 @@ class ContainerManager {
             type: 'container',
             position,
             isContainer: true,
-            selectable: true
+            selectable: false, // WIREFRAME IS NOT SELECTABLE - only interactive mesh should be selectable
+            sizingMode: 'hug' // Default container sizing mode - automatically resizes to fit children
         });
 
         // Register container with unified ContainerManager (new architecture)
@@ -218,6 +475,7 @@ class ContainerManager {
         } else {
             // Enable container
             objectData.isContainer = true;
+            objectData.sizingMode = 'hug'; // Default container sizing mode
             // Object converted to container
             return true;
         }
@@ -230,16 +488,18 @@ class ContainerManager {
      * @returns {boolean} Success status
      */
     addObjectToContainer(objectData, containerData) {
-        const sceneController = window.modlerComponents?.sceneController;
-        if (!sceneController) return false;
-        
+        // Standardized input validation
+        const validation = this.validateInputs({
+            requireSceneController: true,
+            objectData,
+            containerData,
+            methodName: 'addObjectToContainer'
+        });
+        if (!validation.success) return false;
+
+        const sceneController = validation.sceneController;
         const obj = objectData.mesh;
         const containerMesh = containerData.mesh;
-        
-        if (!obj || !containerMesh) {
-            console.error('Missing mesh objects for container addition');
-            return false;
-        }
         
         // ARCHITECTURAL FIX: Use centralized PositionTransform for coordinate handling
         // Eliminates matrix calculation errors and coordinate space confusion
@@ -259,7 +519,7 @@ class ContainerManager {
         // Object added to container successfully
         
         // Resize container to fit all children (including newly added one)
-        this.resizeContainerToFitChildren(containerData);
+        this.resizeContainer(containerData, { mode: 'fit-children' });
         
         // Update related meshes for moved object through MeshSynchronizer
         const meshSynchronizer = window.modlerComponents?.meshSynchronizer;
@@ -283,8 +543,20 @@ class ContainerManager {
      * @returns {boolean} Success status
      */
     removeObjectFromContainer(objectData) {
-        const sceneController = window.modlerComponents?.sceneController;
-        if (!sceneController || !objectData.parentContainer) return false;
+        // Standardized input validation
+        const validation = this.validateInputs({
+            requireSceneController: true,
+            objectData,
+            methodName: 'removeObjectFromContainer'
+        });
+        if (!validation.success) return false;
+
+        if (!objectData.parentContainer) {
+            console.error('removeObjectFromContainer: Object is not in a container');
+            return false;
+        }
+
+        const sceneController = validation.sceneController;
         
         const parentContainer = sceneController.getObject(objectData.parentContainer);
         const obj = objectData.mesh;
@@ -309,7 +581,7 @@ class ContainerManager {
         
         // Resize parent container if it still exists
         if (parentContainer) {
-            this.resizeContainerToFitChildren(parentContainer);
+            this.resizeContainer(parentContainer, { mode: 'fit-children' });
         }
         
         return true;
@@ -321,91 +593,237 @@ class ContainerManager {
      * @returns {boolean} Success status
      */
     updateContainerBounds(containerId) {
-        const sceneController = window.modlerComponents?.sceneController;
-        if (!sceneController || !containerId) {
+        // Standardized input validation
+        const validation = this.validateInputs({
+            requireSceneController: true,
+            methodName: 'updateContainerBounds'
+        });
+        if (!validation.success) return false;
+
+        if (!containerId) {
+            console.error('updateContainerBounds: Container ID is required');
             return false;
         }
-        
+
+        const sceneController = validation.sceneController;
         const containerData = sceneController.getObject(containerId);
+
         if (!containerData || !containerData.isContainer) {
+            console.error('updateContainerBounds: Invalid container ID or object is not a container');
             return false;
         }
         
         // Use the simplified resize method for real-time updates
-        return this.resizeContainerToFitChildren(containerData);
+        return this.resizeContainer(containerData, { mode: 'fit-children' });
     }
     
     /**
-     * Resize container to fit its child objects with fill-aware layout support
-     * ARCHITECTURAL FIX: Simplified single-path logic eliminates coordinate space confusion
-     * Enhanced for push tool integration with dynamic fill object resizing
+     * Unified container resize method - handles all resize scenarios
+     * Consolidates resizeContainerToFitChildren, resizeContainerToLayoutBounds, and resizeContainerGeometry
      * @param {Object} containerData - Container object data from SceneController
-     * @param {THREE.Vector3} newContainerSize - Optional new container size for fill calculations
-     * @param {boolean} preservePosition - If true, keep container position and only resize (for layout changes)
+     * @param {Object} options - Resize options object
+     * @param {string} options.mode - 'fit-children' | 'layout-bounds' | 'geometry-only'
+     * @param {THREE.Vector3} options.size - Target size (required for geometry-only mode)
+     * @param {Object} options.layoutBounds - Layout bounds {center, size} (required for layout-bounds mode)
+     * @param {THREE.Vector3} options.newContainerSize - New container size for fill calculations (fit-children mode)
+     * @param {boolean} options.preservePosition - If true, keep container position and only resize
+     * @param {boolean} options.immediateUpdate - If true, bypass throttling for immediate visual feedback
+     * @param {boolean} options.enableThrottling - If true, apply throttling (default: true for fit-children mode)
      * @returns {boolean} Success status
      */
-    resizeContainerToFitChildren(containerData, newContainerSize = null, preservePosition = false) {
-        const sceneController = window.modlerComponents?.sceneController;
-        if (!sceneController || !containerData || !containerData.isContainer) {
+    resizeContainer(containerData, options = {}) {
+        // Standardized input validation
+        const validation = this.validateInputs({
+            requireSceneController: true,
+            containerData,
+            methodName: 'resizeContainer'
+        });
+        if (!validation.success) return false;
+
+        const sceneController = validation.sceneController;
+
+        // Default options
+        const {
+            mode = 'fit-children',
+            size = null,
+            layoutBounds = null,
+            newContainerSize = null,
+            preservePosition = false,
+            immediateUpdate = false,
+            enableThrottling = mode === 'fit-children'
+        } = options;
+
+        // Mode-specific validation
+        if (mode === 'geometry-only' && !size) {
+            console.error('resizeContainer: size is required for geometry-only mode');
+            return false;
+        }
+        if (mode === 'layout-bounds' && (!layoutBounds || !layoutBounds.size)) {
+            console.error('resizeContainer: layoutBounds is required for layout-bounds mode');
             return false;
         }
 
-        // Get all child objects
-        const childObjects = sceneController.getChildObjects(containerData.id);
-        if (childObjects.length === 0) {
-            return false;
+        // Check sizing mode constraints (only for fit-children mode)
+        if (mode === 'fit-children') {
+            if (containerData.sizingMode === 'fixed' && !newContainerSize) {
+                console.log('📏 CONTAINER RESIZE: Skipping fixed-size container:', containerData.name);
+                return false;
+            }
+            // Ensure sizingMode is set for legacy containers
+            if (!containerData.sizingMode) {
+                containerData.sizingMode = 'hug';
+            }
         }
 
-        // Check if container has layout enabled with fill objects
-        const hasLayoutWithFill = this.checkContainerHasLayoutWithFill(containerData, childObjects);
-
-        if (hasLayoutWithFill && newContainerSize) {
-            // Apply fill object resizing before calculating bounds
-            this.resizeFillObjectsForNewContainerSize(containerData, childObjects, newContainerSize);
+        // Apply throttling if enabled
+        if (enableThrottling && !immediateUpdate) {
+            const lastResize = this.getFromCache(containerData.id, 'throttle');
+            if (lastResize && (Date.now() - lastResize) < this.throttleDelay) {
+                return false;
+            }
+            this.setCache(containerData.id, 'throttle', Date.now());
         }
 
-        // Get child meshes for bounds calculation
-        const childMeshes = childObjects
-            .map(child => {
-                if (child.isContainer && child.mesh) {
-                    // For container children, use the collision mesh for bounds calculation
-                    const collisionMesh = child.mesh.children.find(grandchild =>
-                        grandchild.userData.isContainerCollision
-                    );
-                    if (collisionMesh) {
-                        return collisionMesh;
-                    }
-                }
-                return child.mesh;
-            })
-            .filter(mesh => mesh && mesh.geometry && mesh.geometry.type !== 'EdgesGeometry');
+        let targetSize, targetPosition;
 
-        if (childMeshes.length === 0) {
-            return false;
+        // Mode-specific size and position calculation
+        switch (mode) {
+            case 'fit-children':
+                const result = this.calculateFitChildrenBounds(containerData, newContainerSize, immediateUpdate);
+                if (!result) return false;
+                targetSize = result.size;
+                targetPosition = preservePosition ? containerData.mesh.position : result.center;
+                break;
+
+            case 'layout-bounds':
+                targetSize = layoutBounds.size;
+                targetPosition = layoutBounds.center;
+                break;
+
+            case 'geometry-only':
+                targetSize = size;
+                targetPosition = containerData.mesh.position; // Keep current position
+                break;
+
+            default:
+                console.error('resizeContainer: Invalid mode:', mode);
+                return false;
         }
 
-        // ARCHITECTURAL FIX: Use centralized bounds calculation with proper matrix updates
-        const newBounds = PositionTransform.calculateObjectBounds(childMeshes);
-
-        // Determine position based on preservePosition flag
-        const targetPosition = preservePosition ? containerData.mesh.position : newBounds.center;
-
-        // Update container geometry to wrap children exactly
+        // Update container geometry
+        const shouldReposition = mode === 'layout-bounds' || (mode === 'fit-children' && !preservePosition);
         const success = LayoutGeometry.updateContainerGeometry(
             containerData.mesh,
-            newBounds.size,
+            targetSize,
             targetPosition,
-            !preservePosition // Only reposition if not preserving position
+            shouldReposition
         );
 
         if (success) {
-            // Update SceneController metadata
-            sceneController.updateObject(containerData.id, {
-                position: targetPosition
-            });
+            // Update SceneController metadata if position changed
+            if (shouldReposition) {
+                sceneController.updateObject(containerData.id, {
+                    position: targetPosition
+                });
+            }
+
+            // Handle visibility restoration (only for fit-children mode)
+            if (mode === 'fit-children') {
+                this.handleContainerVisibilityAfterResize(containerData, immediateUpdate);
+            }
         }
 
         return success;
+    }
+
+    /**
+     * Calculate bounds for fit-children mode
+     * @param {Object} containerData - Container object data
+     * @param {THREE.Vector3} newContainerSize - Optional new container size for fill calculations
+     * @param {boolean} immediateUpdate - If true, bypass caching
+     * @returns {Object|null} Bounds object with size and center, or null if failed
+     */
+    calculateFitChildrenBounds(containerData, newContainerSize, immediateUpdate) {
+        const sceneController = window.modlerComponents?.sceneController;
+        if (!sceneController) return null;
+
+        // Get all child objects
+        const childObjects = sceneController.getChildObjects(containerData.id);
+        if (childObjects.length === 0) return null;
+
+        // Use consolidated bounds calculation helper
+        return this.calculateContainerBounds(containerData, childObjects, newContainerSize, immediateUpdate);
+    }
+
+    /**
+     * Handle container visibility restoration after resize
+     * @param {Object} containerData - Container object data
+     * @param {boolean} immediateUpdate - If true, force update
+     */
+    handleContainerVisibilityAfterResize(containerData, immediateUpdate) {
+        const unifiedContainerManager = window.modlerComponents?.unifiedContainerManager;
+        if (!unifiedContainerManager) return;
+
+        const containerState = unifiedContainerManager.containerStates?.get(containerData.id);
+        const selectionController = window.modlerComponents?.selectionController;
+        const sceneController = window.modlerComponents?.sceneController;
+
+        // Check if any child objects are currently selected
+        let hasSelectedChildren = false;
+        if (selectionController && sceneController) {
+            const childObjects = sceneController.getChildObjects(containerData.id);
+            hasSelectedChildren = childObjects.some(childData =>
+                selectionController.isSelected(childData.mesh)
+            );
+        }
+
+        const shouldBeVisible = (containerState && containerState.isSelected) || hasSelectedChildren;
+
+        // Only update visibility if state has changed
+        if (this.hasVisibilityStateChanged(containerData.id, shouldBeVisible, hasSelectedChildren, immediateUpdate)) {
+            this.updateVisibilityCache(containerData.id, shouldBeVisible, hasSelectedChildren);
+
+            if (shouldBeVisible) {
+                // Check if we're in container context (drill-down mode)
+                const isInContainerContext = selectionController?.isInContainerContext() &&
+                                           selectionController?.getContainerContext() === containerData.mesh;
+
+                if (!isInContainerContext) {
+                    // Restore visibility
+                    containerData.mesh.visible = true;
+
+                    // Restore wireframe visibility
+                    containerData.mesh.traverse((child) => {
+                        const isContainerWireframe = (child === containerData.mesh ||
+                                                    (child.type === 'LineSegments' && child.name === containerData.name));
+                        if (isContainerWireframe) {
+                            child.visible = true;
+                            delete child.raycast;
+                        }
+                    });
+
+                    // Handle padding visualization
+                    if (containerData.autoLayout?.enabled && unifiedContainerManager.hasNonZeroPadding && unifiedContainerManager.hasNonZeroPadding(containerData)) {
+                        unifiedContainerManager.updatePaddingVisualization(containerData.id);
+                    } else {
+                        unifiedContainerManager.hidePaddingVisualization(containerData.id);
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * Legacy method: Resize container to fit its child objects
+     * @deprecated Use resizeContainer with mode: 'fit-children' instead
+     */
+    resizeContainerToFitChildren(containerData, newContainerSize = null, preservePosition = false, immediateUpdate = false) {
+        return this.resizeContainer(containerData, {
+            mode: 'fit-children',
+            newContainerSize,
+            preservePosition,
+            immediateUpdate
+        });
     }
     
     /**
@@ -521,59 +939,25 @@ class ContainerManager {
     }
 
     /**
-     * Resize container to match layout-calculated bounds
-     * Uses pre-calculated layout bounds instead of recalculating from children
-     * @param {Object} containerData - Container object data
-     * @param {Object} layoutBounds - Layout bounds with center and size
-     * @returns {boolean} Success status
+     * Legacy method: Resize container to match layout-calculated bounds
+     * @deprecated Use resizeContainer with mode: 'layout-bounds' instead
      */
     resizeContainerToLayoutBounds(containerData, layoutBounds) {
-        if (!containerData || !containerData.mesh || !layoutBounds || !layoutBounds.size) {
-            return false;
-        }
-
-        const sceneController = window.modlerComponents?.sceneController;
-        if (!sceneController) return false;
-
-        // Use layout-calculated bounds for container geometry
-        const success = LayoutGeometry.updateContainerGeometry(
-            containerData.mesh,
-            layoutBounds.size,
-            layoutBounds.center,
-            true // Reposition to layout-calculated center
-        );
-
-        if (success) {
-            // Update SceneController metadata with new position
-            sceneController.updateObject(containerData.id, {
-                position: layoutBounds.center
-            });
-        }
-
-        return success;
+        return this.resizeContainer(containerData, {
+            mode: 'layout-bounds',
+            layoutBounds
+        });
     }
 
     /**
-     * Resize container geometry without repositioning
-     * Used during container creation when position is already correct
-     * @param {Object} containerData - Container object data
-     * @param {THREE.Vector3} size - Container size
-     * @returns {boolean} Success status
+     * Legacy method: Resize container geometry without repositioning
+     * @deprecated Use resizeContainer with mode: 'geometry-only' instead
      */
     resizeContainerGeometry(containerData, size) {
-        if (!containerData || !containerData.mesh || !size) {
-            return false;
-        }
-
-        // Update container geometry without changing position
-        const success = LayoutGeometry.updateContainerGeometry(
-            containerData.mesh,
-            size,
-            containerData.mesh.position, // Keep current position
-            false // Don't reposition
-        );
-
-        return success;
+        return this.resizeContainer(containerData, {
+            mode: 'geometry-only',
+            size
+        });
     }
     
     // ARCHITECTURAL CLEANUP: Removed expandContainerToFitChildren() method
