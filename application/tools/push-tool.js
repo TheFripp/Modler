@@ -992,7 +992,6 @@ class PushTool {
             const containerManager = window.modlerComponents?.containerManager;
             if (containerManager) {
                 // Resize fill objects for new container size
-                // Parameters: containerData, newContainerSize, preservePosition, immediateUpdate
                 containerManager.resizeContainerToFitChildren(objectData, newContainerSize, false, true);
             }
         }
