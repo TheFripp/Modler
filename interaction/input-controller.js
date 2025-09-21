@@ -112,30 +112,6 @@ class InputController {
             time: Date.now()
         };
 
-        // CLICK TRACING: Log what object was hit on mouse down
-        const mouseCoords = { x: event.clientX, y: event.clientY };
-        if (hit && hit.object) {
-            console.log(`[CLICK TRACE] Mouse DOWN hit:`, {
-                objectName: hit.object.name || 'unnamed',
-                objectType: hit.object.type,
-                isContainerInteractive: hit.object.userData?.isContainerInteractive,
-                isContainerCollision: hit.object.userData?.isContainerCollision,
-                containerType: hit.object.userData?.containerType,
-                parentContainer: hit.object.userData?.parentContainer,
-                distance: hit.distance,
-                worldPosition: hit.point,
-                mouseCoords: mouseCoords,
-                objectPosition: hit.object.position,
-                objectScale: hit.object.scale,
-                // COORDINATE DEBUG: Add detailed geometry info
-                geometryBounds: hit.object.geometry?.boundingBox,
-                geometryParams: hit.object.geometry?.parameters
-            });
-        } else {
-            console.log(`[CLICK TRACE] Mouse DOWN hit: EMPTY SPACE`, {
-                mouseCoords: mouseCoords
-            });
-        }
 
         // Gizmo click handling removed - tools handle all object interactions directly
 
@@ -172,32 +148,6 @@ class InputController {
         this.mouseButtons.delete(event.button);
         this.updateMousePosition(event);
 
-        // CLICK TRACING: Log mouse up position and current hit
-        const currentHit = this.raycast();
-        const mouseUpCoords = { x: event.clientX, y: event.clientY };
-
-        if (currentHit && currentHit.object) {
-            console.log(`[CLICK TRACE] Mouse UP hit:`, {
-                objectName: currentHit.object.name || 'unnamed',
-                objectType: currentHit.object.type,
-                isContainerInteractive: currentHit.object.userData?.isContainerInteractive,
-                isContainerCollision: currentHit.object.userData?.isContainerCollision,
-                containerType: currentHit.object.userData?.containerType,
-                parentContainer: currentHit.object.userData?.parentContainer,
-                distance: currentHit.distance,
-                worldPosition: currentHit.point,
-                mouseCoords: mouseUpCoords,
-                objectPosition: currentHit.object.position,
-                objectScale: currentHit.object.scale,
-                // COORDINATE DEBUG: Add detailed geometry info
-                geometryBounds: currentHit.object.geometry?.boundingBox,
-                geometryParams: currentHit.object.geometry?.parameters
-            });
-        } else {
-            console.log(`[CLICK TRACE] Mouse UP hit: EMPTY SPACE`, {
-                mouseCoords: mouseUpCoords
-            });
-        }
 
         // Gizmo stop handling removed - tools manage their own drag states
 
@@ -232,17 +182,6 @@ class InputController {
             // Process as click if tool didn't handle
             const isDoubleClick = this.detectDoubleClick(event);
 
-            // CLICK TRACING: Log final click processing
-            console.log(`[CLICK TRACE] Processing ${isDoubleClick ? 'DOUBLE-CLICK' : 'CLICK'} for tool: ${this.currentTool}`);
-            if (this.lastMouseDownEvent.hit && this.lastMouseDownEvent.hit.object) {
-                console.log(`[CLICK TRACE] Click target:`, {
-                    objectName: this.lastMouseDownEvent.hit.object.name || 'unnamed',
-                    isContainerInteractive: this.lastMouseDownEvent.hit.object.userData?.isContainerInteractive,
-                    containerType: this.lastMouseDownEvent.hit.object.userData?.containerType
-                });
-            } else {
-                console.log(`[CLICK TRACE] Click target: EMPTY SPACE`);
-            }
 
             if (isDoubleClick && tool && tool.onDoubleClick) {
                 tool.onDoubleClick(this.lastMouseDownEvent.hit, this.lastMouseDownEvent.event);

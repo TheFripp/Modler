@@ -448,7 +448,6 @@ class ContainerManager {
 
         // Check sizing mode constraints
         if (containerData.sizingMode === 'fixed' && !newContainerSize) {
-            console.log('📏 CONTAINER RESIZE: Skipping fixed-size container:', containerData.name);
             return false;
         }
         if (!containerData.sizingMode) {

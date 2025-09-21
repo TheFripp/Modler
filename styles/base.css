@@ -1,0 +1,51 @@
+/* Base styles and layout */
+body {
+    margin: 0;
+    padding: 0;
+    background: #1a1a1a;
+    color: #e0e0e0;
+    font-family: Arial, sans-serif;
+    overflow: hidden; /* Prevent page scrolling */
+}
+
+html {
+    overflow: hidden; /* Prevent page scrolling */
+}
+
+.app-container {
+    width: 100vw;
+    height: 100vh;
+    position: relative;
+    overflow: hidden; /* Ensure no overflow from children */
+}
+
+.content-area {
+    width: 100%;
+    height: 100vh;
+    position: relative;
+    overflow: hidden;
+}
+
+.viewport-area {
+    position: absolute;
+    top: 0;
+    left: 280px; /* Account for left panel */
+    right: 320px; /* Account for right panel */
+    bottom: 0;
+    background: #1a1a1a;
+    overflow: hidden;
+}
+
+#canvas {
+    width: 100%;
+    height: 100%;
+    display: block;
+    border: none;
+    outline: none;
+}
+
+/* Legacy panel styles (now hidden by Svelte overlays) */
+.left-panel,
+.right-panel {
+    display: none;
+}

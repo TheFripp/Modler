@@ -14,10 +14,6 @@ class ContainerContextManager {
      * Step into a container - sets container context and shows faded selection frame
      */
     stepIntoContainer(containerObject) {
-        console.log(`[CLICK TRACE] STEPPING INTO container:`, {
-            containerName: containerObject?.name || 'unnamed',
-            containerType: containerObject?.userData?.containerType
-        });
 
         // Clear any previous container context
         this.stepOutOfContainer();
@@ -39,10 +35,6 @@ class ContainerContextManager {
      * Step out of current container context
      */
     stepOutOfContainer() {
-        console.log(`[CLICK TRACE] STEPPING OUT of container:`, {
-            containerName: this.containerContext?.name || 'none',
-            wasInContext: this.containerContext !== null
-        });
 
         // Commit any pending object position changes before stepping out
         this.commitObjectPositions();
@@ -222,20 +214,10 @@ class ContainerContextManager {
         const shouldStepOut = this.isInContainerContext() &&
             !containerPreservingReasons.includes(reason);
 
-        // CLICK TRACING: Log container context decision
-        console.log(`[CLICK TRACE] Container context decision:`, {
-            reason: reason,
-            isInContainerContext: this.isInContainerContext(),
-            containerContext: this.containerContext?.name || 'none',
-            shouldStepOut: shouldStepOut,
-            containerPreservingReasons: containerPreservingReasons
-        });
 
         if (shouldStepOut) {
-            console.log(`[CLICK TRACE] STEPPING OUT of container context due to reason: '${reason}'`);
             this.stepOutOfContainer();
         } else {
-            console.log(`[CLICK TRACE] STAYING IN container context (reason: '${reason}' is preserved)`);
         }
     }
 

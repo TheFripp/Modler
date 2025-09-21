@@ -32,7 +32,6 @@ class MeshSynchronizer {
      */
     registerRelatedMesh(mainMesh, relatedMesh, syncType, syncOptions = {}) {
         if (!mainMesh || !relatedMesh) {
-            console.warn('MeshSynchronizer.registerRelatedMesh: Invalid mesh provided');
             return false;
         }
         
@@ -49,7 +48,6 @@ class MeshSynchronizer {
         );
         
         if (existing) {
-            console.log(`MeshSynchronizer: Updating existing ${syncType} relationship`);
             existing.syncOptions = { ...existing.syncOptions, ...syncOptions };
             return true;
         }
@@ -186,7 +184,6 @@ class MeshSynchronizer {
             return;
         }
         
-        console.log(`MeshSynchronizer: Batch syncing ${mainMeshes.length} meshes`);
         
         mainMeshes.forEach(mainMesh => {
             this.syncAllRelatedMeshes(mainMesh, changeType);
@@ -239,7 +236,6 @@ class MeshSynchronizer {
                 return this.syncHighlight(mainMesh, relatedMesh, syncOptions);
             
             default:
-                console.warn(`MeshSynchronizer: Unknown sync type: ${syncType}`);
                 return false;
         }
     }
@@ -381,7 +377,6 @@ class MeshSynchronizer {
     dispose() {
         this.meshRegistry.clear();
         this.pendingSync.clear();
-        console.log('MeshSynchronizer disposed');
     }
 }
 

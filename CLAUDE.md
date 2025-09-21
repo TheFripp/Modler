@@ -11,6 +11,43 @@ CAD software featuring rule-based parametric design through intelligent 3D auto-
 
 **Current Architecture**: Clean 3-layer selection flow with direct container-first logic, render-order wireframes, and centralized mesh synchronization.
 
+## 🎨 UI Design System
+
+### **Design Language Principles**
+- **Minimal & Clean**: Focus on content, minimal visual noise
+- **Dark Theme**: Professional dark interface optimized for extended use
+- **Subtle Separators**: Horizontal lines instead of heavy borders/cards
+- **Functional Hierarchy**: Clear information architecture without excessive decoration
+
+### **Color Palette**
+- **Primary Action**: `#6b7280` (gray-500) - Subtle, professional accent
+- **Interactive Hover**: `#4b5563` (gray-600) - Slightly darker on interaction
+- **Active/Selected**: `#374151` (gray-700) - Clear but not overpowering
+- **Background**: `#1f2937` (gray-800) - Main panel background
+- **Surface**: `#111827` (gray-900) - Cards and elevated surfaces
+- **Border/Separator**: `#374151` (gray-700) - Subtle division lines
+- **Text Primary**: `#f9fafb` (gray-50) - Main readable text
+- **Text Secondary**: `#9ca3af` (gray-400) - Labels and meta information
+
+### **Layout Principles**
+- **No Card Borders**: Remove rectangular outlines around sections
+- **Horizontal Separators**: Use `border-b border-gray-700` between sections
+- **Consistent Spacing**: 16px (4 Tailwind units) between major sections
+- **Minimal Padding**: 12px (3 Tailwind units) for content areas
+- **Clean Typography**: Clear hierarchy without excessive styling
+
+### **Component Standards**
+- **Buttons**: `bg-gray-600 hover:bg-gray-500 text-white` for primary actions
+- **Inputs**: `bg-gray-900 border-gray-700 focus:border-gray-500`
+- **Panels**: `bg-gray-800` with `border-gray-700` separators
+- **Badges**: `bg-gray-700 text-gray-200` for labels and tags
+
+### **Implementation Notes**
+- **Replace all blue (`blue-*`) colors** with gray equivalents
+- **Remove `Card` component borders** - use content spacing instead
+- **Use horizontal lines** (`<hr>` or `border-b`) between sections
+- **Consistent with vanilla JS panels** for seamless integration
+
 ## 🤖 Agent-Based Development (CRITICAL)
 
 **MANDATORY**: All significant development must go through specialized agents to prevent complexity creep and maintain code quality.

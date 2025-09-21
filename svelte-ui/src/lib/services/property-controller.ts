@@ -186,7 +186,7 @@ class PropertyController {
 		}
 
 		// Apply the update immediately
-		updateThreeJSProperty(objectId, property, validation.value);
+		updateThreeJSProperty(objectId, property, validation.value, source);
 
 		// Emit property change event
 		this.propertyChanges.set({
@@ -233,7 +233,7 @@ class PropertyController {
 		const timeout = setTimeout(() => {
 			const pendingValue = this.pendingUpdates.get(key);
 			if (pendingValue !== undefined) {
-				updateThreeJSProperty(objectId, property, pendingValue);
+				updateThreeJSProperty(objectId, property, pendingValue, source);
 
 				// Emit property change event
 				this.propertyChanges.set({
@@ -276,7 +276,7 @@ class PropertyController {
 			const pendingValue = this.pendingUpdates.get(key);
 			if (pendingValue !== undefined) {
 				const [objectId, property] = key.split('.', 2) as [string, PropertyPath];
-				updateThreeJSProperty(objectId, property, pendingValue);
+				updateThreeJSProperty(objectId, property, pendingValue, 'flush');
 			}
 		}
 

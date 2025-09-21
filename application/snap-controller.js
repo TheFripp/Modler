@@ -46,7 +46,6 @@ class SnapController {
         if (systemRef && typeof systemRef.setEnabled === 'function') {
             this.registeredSnapSystems.set(systemName, systemRef);
         } else {
-            console.warn(`Invalid snap system registration: ${systemName}`, systemRef);
         }
     }
 
@@ -69,7 +68,6 @@ class SnapController {
             try {
                 system.setEnabled(enabled);
             } catch (error) {
-                console.warn(`Failed to set snap state for system: ${name}`, error);
             }
         });
 

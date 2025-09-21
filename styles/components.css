@@ -1,0 +1,208 @@
+/* Accordion components */
+.accordion-body {
+    padding: 16px 0;
+}
+
+.accordion-item.expanded .accordion-icon {
+    transform: rotate(90deg);
+}
+
+/* Form components */
+.form-group {
+    margin-bottom: 16px;
+}
+
+.form-label {
+    display: block;
+    font-size: 10px;
+    color: #b0b0b0;
+    margin-bottom: 6px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.xyz-inputs {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 12px;
+}
+
+.xyz-input {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    align-items: center;
+    gap: 6px;
+}
+
+.xyz-label {
+    font-size: 9px;
+    color: #888;
+    white-space: nowrap;
+    min-width: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+}
+
+/* Object Tree Styling */
+.object-tree {
+    margin-top: 8px;
+}
+
+.object-item {
+    display: flex;
+    align-items: center;
+    padding: 8px 12px;
+    margin: 2px 0;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background-color 0.15s ease;
+    border: 1px solid transparent;
+}
+
+.object-item:hover {
+    background: rgba(74, 158, 255, 0.1);
+    border-color: rgba(74, 158, 255, 0.3);
+}
+
+.object-item.active {
+    background: rgba(74, 158, 255, 0.15);
+    border-color: #4a9eff;
+}
+
+.object-icon {
+    margin-right: 8px;
+    font-size: 12px;
+    width: 16px;
+    text-align: center;
+}
+
+.object-name {
+    font-size: 11px;
+    color: #e0e0e0;
+    font-weight: 500;
+    flex: 1;
+}
+
+.object-item.active .object-name {
+    color: #4a9eff;
+    font-weight: 600;
+}
+
+/* Container hierarchy styling */
+.hierarchy-indent {
+    width: 16px;
+    height: 100%;
+}
+
+.expand-collapse {
+    width: 16px;
+    height: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    font-size: 10px;
+    color: #888;
+    margin-right: 4px;
+}
+
+.expand-collapse:hover {
+    color: #ccc;
+}
+
+.object-item.container {
+    font-weight: 600;
+}
+
+.object-item.child {
+    background: rgba(255,255,255,0.02);
+    border-left: 2px solid rgba(74, 158, 255, 0.2);
+}
+
+/* Opacity display styling */
+.opacity-value {
+    font-size: 10px;
+    color: #888;
+    text-align: center;
+    margin-top: 4px;
+    font-weight: 600;
+}
+
+/* Drag and Drop Styling */
+.object-item[draggable="true"] {
+    cursor: grab;
+}
+
+.object-item.dragging {
+    opacity: 0.5;
+    cursor: grabbing;
+    transform: rotate(2deg);
+    background: rgba(74, 158, 255, 0.2);
+}
+
+.object-item.drag-over {
+    background: rgba(255, 165, 0, 0.2);
+    border-color: #ffa500;
+    transform: scale(1.02);
+}
+
+.object-item.container.drag-over {
+    background: rgba(0, 255, 0, 0.15);
+    border-color: #00ff00;
+    box-shadow: 0 0 8px rgba(0, 255, 0, 0.3);
+}
+
+.drop-indicator {
+    height: 3px;
+    background: #4a9eff;
+    margin: 2px 0;
+    border-radius: 2px;
+    opacity: 0.8;
+    transition: all 0.2s ease;
+    box-shadow: 0 0 4px rgba(74, 158, 255, 0.5);
+}
+
+.drop-indicator.active {
+    height: 4px;
+    background: #6bb6ff;
+    box-shadow: 0 0 8px rgba(74, 158, 255, 0.8);
+}
+
+.object-item.drop-target {
+    border: 2px dashed #4a9eff;
+    background: rgba(74, 158, 255, 0.1);
+}
+
+/* Root Drop Zone Styling */
+.root-drop-zone {
+    height: 24px;
+    margin: 4px 8px;
+    border: 2px dashed transparent;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    color: #666;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    transition: all 0.2s ease;
+    position: relative;
+}
+
+.root-drop-zone::before {
+    content: "";
+    opacity: 0;
+    transition: opacity 0.2s ease;
+}
+
+.root-drop-zone.drag-over {
+    border-color: #ff6600;
+    background: rgba(255, 102, 0, 0.1);
+    color: #ff6600;
+}
+
+.root-drop-zone.drag-over::before {
+    opacity: 1;
+}

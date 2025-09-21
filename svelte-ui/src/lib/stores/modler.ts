@@ -93,12 +93,13 @@ export const displayObject = derived([selectedObject, multiSelection], ([$select
 );
 
 // Utility function to check if a property has mixed values across selected objects
-export function getPropertyMixedState(property: string): { isMixed: boolean; value: any } {
-	const objects = get(selectedObjects);
-	if (objects.length <= 1) return { isMixed: false, value: getNestedPropertyValue(objects[0], property) };
+export function getPropertyMixedState(property: string, objects?: ObjectData[]): { isMixed: boolean; value: any } {
+	// Use provided objects (reactive) or fallback to get() for backward compatibility
+	const objectsToCheck = objects || get(selectedObjects);
+	if (objectsToCheck.length <= 1) return { isMixed: false, value: getNestedPropertyValue(objectsToCheck[0], property) };
 
-	const firstValue = getNestedPropertyValue(objects[0], property);
-	const allSameValue = objects.every(obj => {
+	const firstValue = getNestedPropertyValue(objectsToCheck[0], property);
+	const allSameValue = objectsToCheck.every(obj => {
 		const objValue = getNestedPropertyValue(obj, property);
 		return JSON.stringify(objValue) === JSON.stringify(firstValue);
 	});
@@ -173,7 +174,7 @@ function convertThreeObjectToObjectData(threeObject: any): ObjectData {
 }
 
 // Update Three.js from Svelte store changes
-export function updateThreeJSProperty(objectId: string, property: string, value: any) {
+export function updateThreeJSProperty(objectId: string, property: string, value: any, source: string = 'input') {
 	const isDemo = !modlerComponentsBridge;
 	const isInIframe = window !== window.parent;
 
@@ -181,7 +182,7 @@ export function updateThreeJSProperty(objectId: string, property: string, value:
 		// Send property update to parent Three.js application
 		const message = {
 			type: 'property-update',
-			data: { objectId, property, value }
+			data: { objectId, property, value, source }
 		};
 		window.parent.postMessage(message, 'http://localhost:3000');
 	}
@@ -269,11 +270,8 @@ export function updateThreeJSProperty(objectId: string, property: string, value:
 
 // Sync Three.js selection changes to Svelte stores
 export function syncSelectionFromThreeJS(selectedThreeObjects: any[]) {
-	console.log('🔗 Store: syncSelectionFromThreeJS called with:', selectedThreeObjects.length, 'objects');
 	const objectDataArray = selectedThreeObjects.map(convertThreeObjectToObjectData);
-	console.log('🔗 Store: Converted to ObjectData:', objectDataArray);
 	selectedObjects.set(objectDataArray);
-	console.log('🔗 Store: Updated selectedObjects store');
 }
 
 // Sync object hierarchy from Three.js

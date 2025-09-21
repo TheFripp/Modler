@@ -159,6 +159,14 @@
 		}
 	}
 
+	function handleKeyDown(event: KeyboardEvent) {
+		// Blur input field when Enter is pressed (this will trigger handleBlur to submit value)
+		if (event.key === 'Enter') {
+			const target = event.target as HTMLInputElement;
+			target.blur();
+		}
+	}
+
 	// Arrow button interaction state
 	let isDragging = false;
 	let dragStartTimeout: NodeJS.Timeout | null = null;
@@ -231,14 +239,21 @@
 		const deltaY = startY - event.clientY; // Invert so dragging up increases value
 		const stepValue = typeof step === 'number' ? step : 0.1;
 		const sensitivity = 2; // Adjust sensitivity
-		const newValue = startValue + (deltaY / sensitivity) * stepValue;
+		const rawValue = startValue + (deltaY / sensitivity) * stepValue;
+
+		// Keep full precision for the actual value, but round display to 1 decimal
+		const actualValue = rawValue;
+		const displayValue = Math.round(rawValue * 10) / 10;
+
+		// Update input value immediately for visual feedback (1 decimal for display)
+		inputValue = displayValue;
 
 		if (objectId && property) {
-			// Use property controller for debounced updates during drag
-			propertyController.updatePropertyDebounced(objectId, property, newValue, 'drag', 50);
+			// Use property controller with system standard 16ms for 60fps real-time updates
+			propertyController.updatePropertyDebounced(objectId, property, actualValue, 'drag', 16);
 		} else {
-			// Fallback direct update
-			value = newValue;
+			// Fallback direct update with full precision
+			value = actualValue;
 		}
 	}
 </script>
@@ -263,6 +278,7 @@
 			onchange={handleInputChange}
 			onblur={handleBlur}
 			onfocus={handleInputFocus}
+			onkeydown={handleKeyDown}
 			class="flex-1 bg-transparent border-none outline-none text-xs text-foreground px-1 py-1 w-12 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
 			{...restProps}
 		/>
@@ -272,6 +288,7 @@
 			<div class="flex flex-col border-l border-[#242424]">
 				<button
 					type="button"
+					tabindex="-1"
 					onmousedown={(e) => startArrowInteraction(e, 'up')}
 					class="flex items-center justify-center w-5 h-3 text-xs text-gray-400 hover:text-gray-200 hover:bg-gray-800 transition-colors cursor-ns-resize"
 					disabled={disabled}
@@ -280,6 +297,7 @@
 				</button>
 				<button
 					type="button"
+					tabindex="-1"
 					onmousedown={(e) => startArrowInteraction(e, 'down')}
 					class="flex items-center justify-center w-5 h-3 text-xs text-gray-400 hover:text-gray-200 hover:bg-gray-800 transition-colors cursor-ns-resize"
 					disabled={disabled}

@@ -76,7 +76,6 @@ class SceneController {
             // Create Three.js mesh from geometry and material
             mesh = new THREE.Mesh(geometry, material);
         } else {
-            console.warn('SceneController.addObject: geometry and material required');
             return null;
         }
         
@@ -146,7 +145,6 @@ class SceneController {
     removeObject(id) {
         const objectData = this.objects.get(id);
         if (!objectData) {
-            console.warn('SceneController.removeObject: object not found:', id);
             return false;
         }
         
@@ -208,7 +206,6 @@ class SceneController {
     setObjectVisible(id, visible) {
         const objectData = this.objects.get(id);
         if (!objectData) {
-            console.warn('SceneController.setObjectVisible: object not found:', id);
             return false;
         }
         
@@ -221,13 +218,11 @@ class SceneController {
     updateObject(id, updates) {
         const objectData = this.objects.get(id);
         if (!objectData) {
-            console.warn('SceneController.updateObject: object not found:', id);
             return false;
         }
         
         const mesh = objectData.mesh;
         if (!mesh) {
-            console.warn('SceneController.updateObject: mesh not found for object:', id);
             return false;
         }
         
@@ -347,7 +342,6 @@ class SceneController {
     enableAutoLayout(containerId, layoutConfig) {
         const container = this.objects.get(containerId);
         if (!container || !container.isContainer) {
-            console.warn('SceneController.enableAutoLayout: Object is not a valid container');
             return false;
         }
 
@@ -408,48 +402,35 @@ class SceneController {
      * @returns {boolean} True if layout was successfully updated
      */
     updateLayout(containerId) {
-        console.log('🔧 SceneController.updateLayout called with:', containerId);
         const container = this.objects.get(containerId);
-        console.log('🔧 Container found:', !!container);
-        console.log('🔧 Container autoLayout:', container?.autoLayout);
 
         if (!container || !container.autoLayout || !container.autoLayout.enabled) {
-            console.log('🔧 Layout update failed - container/autoLayout not ready');
             return { success: false, reason: 'container or autoLayout not ready' };
         }
 
         // Get child objects of this container
         const children = this.getChildObjects(containerId);
-        console.log('🔧 Children found:', children.length, children.map(c => c.name));
         if (children.length === 0) {
-            console.log('🔧 No children to layout');
             return { success: true, reason: 'no children' };
         }
         
         // This will be implemented when we create the layout engine
         if (window.LayoutEngine) {
-            console.log('🔧 LayoutEngine available');
             // Get container size for fill calculations
             const containerSize = this.getContainerSize(container);
-            console.log('🔧 Container size:', containerSize);
-            console.log('🔧 Layout config:', container.autoLayout);
 
             // CENTERING FIX: Store original container center to preserve position
             const originalContainerCenter = container.mesh.position.clone();
-            console.log('🔧 Original container center:', originalContainerCenter);
 
             const layoutResult = window.LayoutEngine.calculateLayout(children, container.autoLayout, containerSize);
-            console.log('🔧 Layout result:', layoutResult);
 
             this.applyLayoutPositionsAndSizes(children, layoutResult.positions, layoutResult.sizes, container);
 
             // Calculate the bounds needed for container to wrap the layout, preserving original center
             const layoutBounds = this.calculateLayoutBounds(layoutResult.positions, layoutResult.sizes, originalContainerCenter);
-            console.log('🔧 Layout bounds (with preserved center):', layoutBounds);
 
             return { success: true, layoutBounds };
         } else {
-            console.log('🔧 LayoutEngine not available');
         }
 
         return { success: false, reason: 'LayoutEngine not available' };
@@ -560,26 +541,14 @@ class SceneController {
      * @param {Object} container - Container object data
      */
     applyLayoutPositionsAndSizes(objects, positions, sizes, container = null) {
-        console.log('🔧 Applying layout positions and sizes:', {
-            objectCount: objects.length,
-            positionCount: positions.length,
-            sizeCount: sizes.length,
-            containerName: container?.name
-        });
 
         if (objects.length !== positions.length || objects.length !== sizes.length) {
-            console.warn('SceneController.applyLayoutPositionsAndSizes: Object/position/size count mismatch');
             return;
         }
 
         objects.forEach((obj, index) => {
             const layoutPosition = positions[index];
             const layoutSize = sizes[index];
-            console.log(`🔧 Positioning object ${obj.name}:`, {
-                oldPosition: obj.mesh?.position?.clone(),
-                newPosition: layoutPosition,
-                isChildOfContainer: container && obj.mesh?.parent === container.mesh
-            });
 
             // CRITICAL FIX: Use local positions when objects are children of container
             // Layout positions are already relative to container coordinate space
@@ -637,7 +606,6 @@ class SceneController {
         if (!obj) return false;
         
         if (parentId && !this.objects.get(parentId)?.isContainer) {
-            console.warn('SceneController.setParentContainer: Parent is not a container');
             return false;
         }
         

@@ -32,7 +32,7 @@
 
 	// Mixed value helpers for individual inputs
 	function getMixedValue(property: string): { value: any; isMixed: boolean; displayValue: string; class: string } {
-		const mixedState = getPropertyMixedState(property);
+		const mixedState = getPropertyMixedState(property, $selectedObjects);
 		return {
 			value: mixedState.value,
 			isMixed: mixedState.isMixed,
@@ -72,27 +72,36 @@
 		<!-- Transform Section -->
 		<PropertyGroup title="Transform">
 			<div class="space-y-4">
-				<XyzInput
-					label="Position"
-					values={$displayObject.position}
-					objectId={$displayObject.id}
-					propertyBase="position"
-				/>
+				<!-- Position Sub-group -->
+				<div class="space-y-2">
+					<h4 class="text-xs font-medium text-foreground/80 uppercase tracking-wide">Position</h4>
+					<XyzInput
+						values={$displayObject.position}
+						objectId={$displayObject.id}
+						propertyBase="position"
+					/>
+				</div>
 
-				<XyzInput
-					label="Rotation"
-					values={$displayObject.rotation}
-					objectId={$displayObject.id}
-					propertyBase="rotation"
-				/>
+				<!-- Rotation Sub-group -->
+				<div class="space-y-2">
+					<h4 class="text-xs font-medium text-foreground/80 uppercase tracking-wide">Rotation</h4>
+					<XyzInput
+						values={$displayObject.rotation}
+						objectId={$displayObject.id}
+						propertyBase="rotation"
+					/>
+				</div>
 
-				<XyzInput
-					label="Dimensions"
-					values={$displayObject.dimensions}
-					objectId={$displayObject.id}
-					propertyBase="dimensions"
-					labels={{ x: 'W', y: 'H', z: 'D' }}
-				/>
+				<!-- Dimensions Sub-group -->
+				<div class="space-y-2">
+					<h4 class="text-xs font-medium text-foreground/80 uppercase tracking-wide">Dimensions</h4>
+					<XyzInput
+						values={$displayObject.dimensions}
+						objectId={$displayObject.id}
+						propertyBase="dimensions"
+						labels={{ x: 'W', y: 'H', z: 'D' }}
+					/>
+				</div>
 			</div>
 		</PropertyGroup>
 

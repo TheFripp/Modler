@@ -22,7 +22,6 @@ class ToolController {
      */
     registerTool(name, toolClass) {
         if (this.tools.has(name)) {
-            console.warn(`Tool '${name}' already registered, replacing`);
         }
         
         let tool;
@@ -58,7 +57,6 @@ class ToolController {
      */
     switchToTool(toolName) {
         if (!this.tools.has(toolName)) {
-            console.error(`Tool '${toolName}' not found`);
             return false;
         }
         
@@ -170,7 +168,6 @@ class ToolController {
         const selectedObjects = this.selectionController.getSelectedObjects();
         
         if (selectedObjects.length === 0) {
-            console.log('No objects selected for container creation');
             return false;
         }
         
@@ -183,12 +180,10 @@ class ToolController {
         });
         
         if (selectableObjects.length === 0) {
-            console.log('No selectable objects in selection for container creation');
             return false;
         }
         
         if (selectableObjects.length !== selectedObjects.length) {
-            console.log(`Filtered out ${selectedObjects.length - selectableObjects.length} non-selectable objects from container creation`);
         }
         
         // Direct container creation - no tool dependency
@@ -202,7 +197,6 @@ class ToolController {
         const success = containerManager.createContainerFromSelection(selectableObjects);
         
         if (success) {
-            console.log(`Created auto layout container from ${selectableObjects.length} selected objects`);
             
             // REMOVED: Automatic tool switching - user controls tool selection
             // Only the user should switch tools, not automatic behavior

@@ -141,8 +141,8 @@ export function initializeBridge() {
 
 		// Listen for messages from parent window
 		window.addEventListener('message', (event) => {
-			// Verify origin for security
-			if (event.origin !== 'http://localhost:3000') {
+			// Verify origin for security (allow any localhost port for development)
+			if (!event.origin.startsWith('http://localhost:')) {
 				return;
 			}
 
@@ -152,8 +152,6 @@ export function initializeBridge() {
 		});
 
 	} else {
-		// Fallback to original method if not in iframe
-
 		const checkComponents = () => {
 			if (typeof window !== 'undefined' && (window as any).modlerComponents) {
 				bridge.initialize((window as any).modlerComponents);
@@ -177,9 +175,6 @@ export function initializeBridge() {
 		// Stop polling after 10 seconds
 		setTimeout(() => {
 			clearInterval(pollInterval);
-			if (!bridge.isInitialized()) {
-				console.warn('Failed to initialize ThreeJS bridge - modlerComponents not found');
-			}
 		}, 10000);
 	}
 }
@@ -188,9 +183,19 @@ export function initializeBridge() {
  * Handle data received from the main application
  */
 function handleModlerData(data: any) {
-	if (data.type === 'selection-change' || data.type === 'initial-state') {
-		// Directly set the selectedObjects store with pre-serialized data
-		syncSelectionFromIframe(data.selectedObjects || []);
+	if (data.type === 'selection-change' || data.type === 'initial-state' || data.type === 'object-modified' || data.type === 'data-update') {
+		// Handle selection updates
+		if (data.selectedObjects) {
+			syncSelectionFromIframe(data.selectedObjects);
+		}
+
+		// Handle hierarchy updates (now included in unified data)
+		if (data.objectHierarchy) {
+			syncHierarchyFromIframe(data.objectHierarchy);
+		}
+	} else if (data.type === 'hierarchy-changed') {
+		// Handle standalone hierarchy updates
+		syncHierarchyFromIframe(data.objectHierarchy || []);
 	}
 }
 
@@ -202,6 +207,18 @@ function syncSelectionFromIframe(serializedObjects: any[]) {
 	import('$lib/stores/modler').then(({ selectedObjects }) => {
 		selectedObjects.set(serializedObjects);
 	}).catch(error => {
-		console.error('Bridge: Failed to import store:', error);
+		// Store import failed
+	});
+}
+
+/**
+ * Sync object hierarchy data for the left panel
+ */
+function syncHierarchyFromIframe(hierarchyObjects: any[]) {
+	// Import and update the object hierarchy store
+	import('$lib/stores/modler').then(({ objectHierarchy }) => {
+		objectHierarchy.set(hierarchyObjects);
+	}).catch(error => {
+		// Hierarchy store import failed
 	});
 }

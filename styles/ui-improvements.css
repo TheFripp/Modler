@@ -1,0 +1,326 @@
+/* UI Improvements for panels and object list */
+
+/* Hide right panel when no object is selected */
+.right-panel.hidden {
+    display: none;
+}
+
+/* Object list styling */
+.object-tree {
+    padding: 0;
+}
+
+.object-item {
+    display: flex;
+    align-items: center;
+    padding: 8px 12px;
+    margin: 2px 0;
+    background: #2a2a2a;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+}
+
+.object-item:hover {
+    background: #333333;
+}
+
+.object-item.active {
+    background: #4a9eff;
+    color: white;
+}
+
+.object-icon {
+    margin-right: 8px;
+    font-size: 16px;
+    min-width: 20px;
+}
+
+.object-name {
+    flex: 1;
+    font-weight: 500;
+    margin-right: 8px;
+}
+
+.object-type {
+    font-size: 12px;
+    color: #999;
+    font-style: italic;
+}
+
+.object-item.active .object-type {
+    color: #ddd;
+}
+
+.object-list-empty {
+    text-align: center;
+    color: #666;
+    padding: 20px;
+    font-style: italic;
+}
+
+/* Tab improvements */
+.tab-header {
+    margin-bottom: 12px;
+}
+
+.tab-content {
+    height: calc(100% - 50px);
+    overflow-y: auto;
+}
+
+/* Selected object info improvements */
+.selected-object-header {
+    margin-bottom: 16px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid #404040;
+}
+
+.object-name-display {
+    font-weight: 600;
+    font-size: 16px;
+    margin-bottom: 4px;
+}
+
+.object-type-display {
+    font-size: 12px;
+    color: #999;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+/* Better resizing indication - only change border color on hover */
+.left-panel {
+    position: relative;
+}
+
+.right-panel {
+    position: relative;
+}
+
+.left-panel:hover {
+    border-right-color: #4a9eff;
+}
+
+.right-panel:hover {
+    border-left-color: #4a9eff;
+}
+
+/* Improve the built-in resize handle */
+.left-panel::-webkit-resizer,
+.right-panel::-webkit-resizer {
+    background: #404040;
+    border-radius: 2px;
+    background-image:
+        linear-gradient(45deg, transparent 40%, #666 40%, #666 60%, transparent 60%),
+        linear-gradient(-45deg, transparent 40%, #666 40%, #666 60%, transparent 60%);
+    background-size: 6px 6px;
+    background-position: 0 0, 3px 3px;
+}
+
+.left-panel::-webkit-resizer:hover,
+.right-panel::-webkit-resizer:hover {
+    background-color: #4a9eff;
+}
+
+/* Add visual resize indication */
+.left-panel::after {
+    content: '';
+    position: absolute;
+    right: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 3px;
+    height: 30px;
+    background: #404040;
+    border-radius: 2px;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+    pointer-events: none;
+}
+
+.right-panel::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 3px;
+    height: 30px;
+    background: #404040;
+    border-radius: 2px;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+    pointer-events: none;
+}
+
+.left-panel:hover::after,
+.right-panel:hover::before {
+    opacity: 1;
+    background: #4a9eff;
+}
+
+/* Form improvements */
+.xyz-inputs {
+    display: flex;
+    gap: 8px;
+}
+
+.xyz-input {
+    flex: 1;
+}
+
+.xyz-label {
+    display: block;
+    font-size: 12px;
+    color: #999;
+    margin-bottom: 4px;
+}
+
+.simple-input {
+    width: 100%;
+    padding: 6px 8px;
+    background: #1a1a1a;
+    border: 1px solid #404040;
+    border-radius: 4px;
+    color: #e0e0e0;
+    font-size: 14px;
+}
+
+.simple-input:focus {
+    outline: none;
+    border-color: #4a9eff;
+}
+
+.form-group {
+    margin-bottom: 16px;
+}
+
+.form-label {
+    display: block;
+    font-weight: 500;
+    margin-bottom: 8px;
+    font-size: 14px;
+}
+
+.material-inputs {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.material-input {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.material-label {
+    min-width: 60px;
+    font-size: 12px;
+    color: #999;
+}
+
+#opacity-display {
+    min-width: 30px;
+    text-align: right;
+    font-size: 12px;
+    color: #999;
+}
+
+/* Container-specific controls */
+.axis-buttons, .fill-buttons, .sizing-mode-buttons {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.axis-button, .fill-button, .sizing-mode-button {
+    flex: 1;
+    min-width: 80px;
+    padding: 8px 12px;
+    background: #2a2a2a;
+    border: 1px solid #404040;
+    border-radius: 4px;
+    color: #e0e0e0;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.axis-button:hover, .fill-button:hover, .sizing-mode-button:hover {
+    background: #333333;
+    border-color: #4a9eff;
+}
+
+.axis-button.active, .fill-button.active, .sizing-mode-button.active {
+    background: #4a9eff;
+    border-color: #4a9eff;
+    color: white;
+}
+
+.padding-inputs {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+}
+
+.padding-input {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.padding-label {
+    font-size: 11px;
+    color: #999;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.sizing-description {
+    margin-top: 8px;
+    font-size: 11px;
+    color: #999;
+    font-style: italic;
+    line-height: 1.4;
+}
+
+/* Accordion improvements */
+.accordion-header {
+    width: 100%;
+    background: #2a2a2a;
+    border: none;
+    color: #e0e0e0;
+    padding: 12px 16px;
+    text-align: left;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+    border-radius: 4px;
+    margin-bottom: 8px;
+    transition: background-color 0.2s ease;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.accordion-header:hover {
+    background: #333333;
+}
+
+.accordion-icon {
+    transition: transform 0.2s ease;
+}
+
+.accordion-item.expanded .accordion-icon {
+    transform: rotate(90deg);
+}
+
+.accordion-content {
+    margin-bottom: 16px;
+}
+
+.accordion-body {
+    padding: 0 4px;
+}

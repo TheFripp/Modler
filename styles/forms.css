@@ -1,0 +1,176 @@
+/* Property panel and form inputs */
+.selected-object-header {
+    background: #2a2a2a;
+    padding: 12px 16px;
+    margin: -16px -16px 16px -16px;
+    border-bottom: 1px solid #404040;
+}
+
+.object-name-display {
+    font-size: 16px;
+    font-weight: 600;
+    color: #4a9eff;
+    margin-bottom: 4px;
+}
+
+.object-type-display {
+    font-size: 12px;
+    color: #999;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.simple-input {
+    width: 50%;
+    padding: 8px 12px;
+    margin: 6px 0;
+    background: #1a1a1a;
+    border: 1px solid #404040;
+    color: #e0e0e0;
+    border-radius: 4px;
+    font-size: 12px;
+    transition: border-color 0.15s ease;
+}
+
+.simple-input:focus {
+    outline: none;
+    border-color: #4a9eff;
+    background: #222;
+}
+
+/* Hide native number input spinners to prevent conflicts with custom drag behavior */
+.simple-input[type="number"]::-webkit-outer-spin-button,
+.simple-input[type="number"]::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
+.simple-input[type="number"] {
+    -moz-appearance: textfield; /* Firefox */
+    appearance: textfield; /* Standard property */
+}
+
+/* Custom number input wrapper with external arrows */
+.number-input-wrapper {
+    position: relative;
+    display: inline-block;
+    width: 100%;
+}
+
+.number-input-wrapper .simple-input {
+    width: 100%;
+    padding-right: 0; /* Remove internal padding for arrows */
+}
+
+.number-input-arrows {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    width: 18px;
+    margin-left: 2px;
+}
+
+.number-arrow {
+    width: 16px;
+    height: 12px;
+    background: #333;
+    border: 1px solid #555;
+    color: #aaa;
+    font-size: 10px;
+    line-height: 10px;
+    text-align: center;
+    cursor: pointer;
+    user-select: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.number-arrow:hover {
+    background: #444;
+    color: #ddd;
+}
+
+.number-arrow:active {
+    background: #555;
+}
+
+.number-arrow-up {
+    border-bottom: none;
+    border-radius: 2px 2px 0 0;
+}
+
+.number-arrow-down {
+    border-radius: 0 0 2px 2px;
+}
+
+/* Layout axis button group styling */
+.axis-button-group {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 8px;
+}
+
+.axis-button {
+    flex: 1;
+    background: #333;
+    border: 1px solid #555;
+    color: #ccc;
+    padding: 8px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    font-size: 14px;
+    font-weight: 500;
+}
+
+.axis-button:hover {
+    background: #404040;
+    border-color: #666;
+}
+
+.axis-button.active {
+    background: #4a9eff;
+    border-color: #4a9eff;
+    color: white;
+}
+
+.axis-button.active:hover {
+    background: #3a8eef;
+}
+
+/* Fill button styling for dimensions */
+.xyz-input {
+    position: relative;
+}
+
+.fill-button {
+    background: #333;
+    border: 1px solid #555;
+    color: #999;
+    padding: 2px 6px;
+    border-radius: 2px;
+    cursor: pointer;
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    transition: all 0.15s ease;
+    margin-left: 2px;
+}
+
+.fill-button:hover {
+    background: #444;
+    color: #ccc;
+}
+
+.fill-button.active {
+    background: #4a9eff;
+    border-color: #4a9eff;
+    color: white;
+}
+
+.fill-button.disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    color: #666;
+}

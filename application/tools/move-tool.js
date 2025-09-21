@@ -229,10 +229,10 @@ class MoveTool {
             // Fallback to legacy sync method
             window.CameraMathUtils.syncSelectionWireframes(this.dragObject);
         }
-        
-        // Update property panel in real-time during movement
-        if (window.updatePropertyPanelFromObject) {
-            window.updatePropertyPanelFromObject(this.dragObject);
+
+        // Notify centralized system for real-time property panel updates
+        if (window.notifyObjectModified) {
+            window.notifyObjectModified(this.dragObject, 'transform');
         }
         
         // Update container context highlight if we're in container mode
@@ -343,15 +343,6 @@ class MoveTool {
         // Trigger container resize calculation
         const containerManager = window.modlerComponents?.containerManager;
         if (containerManager) {
-            // CRITICAL FIX: Throttled logging to prevent browser crashes from excessive logging
-            if (!this.lastLogTime || Date.now() - this.lastLogTime > 500) { // Log max once per 500ms
-                console.log('📦 CONTAINER RESIZE: Moving object within container:', {
-                    object: objectData.name,
-                    container: container.name,
-                    newPosition: this.dragObject.position.clone()
-                });
-                this.lastLogTime = Date.now();
-            }
             
             // Use MovementUtils for consistent container update behavior with immediate visuals
             MovementUtils.updateParentContainer(this.dragObject, false, this.containerThrottleState, null, true);

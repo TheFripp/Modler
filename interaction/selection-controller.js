@@ -101,12 +101,6 @@ class SelectionController {
     clearSelection(reason = 'normal') {
         const objectsToDeselect = Array.from(this.selectedObjects);
 
-        // CLICK TRACING: Log selection clearing
-        console.log(`[CLICK TRACE] clearSelection called with reason: '${reason}'`, {
-            isInContainerContext: this.isInContainerContext(),
-            containerContext: this.getContainerContext()?.name || 'none',
-            selectedCount: objectsToDeselect.length
-        });
 
         // Delegate container context handling to ContainerContextManager
         if (this.containerContextManager) {
@@ -226,7 +220,6 @@ class SelectionController {
 
     notifySelectionChange() {
         const selectedObjects = this.getSelectedObjects();
-
         // Notify registered callback
         if (this.selectionChangeCallback) {
             this.selectionChangeCallback(selectedObjects);

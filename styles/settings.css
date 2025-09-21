@@ -1,0 +1,95 @@
+/* Configuration/Settings Forms */
+.config-category {
+    margin-bottom: 20px;
+    border-bottom: 1px solid #404040;
+    padding-bottom: 16px;
+}
+
+.config-category:last-child {
+    border-bottom: none;
+}
+
+.config-category h4 {
+    font-size: 11px;
+    font-weight: 600;
+    color: #999;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin: 0 0 12px 0;
+    border-bottom: 1px solid #333;
+    padding-bottom: 6px;
+}
+
+.config-group {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 8px;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.config-label {
+    font-size: 11px;
+    color: #e0e0e0;
+    margin: 0;
+    flex-shrink: 1;
+    min-width: 80px;
+    max-width: 120px;
+    word-wrap: break-word;
+}
+
+.config-input {
+    background: #333;
+    border: 1px solid #555;
+    color: #fff;
+    padding: 4px 6px;
+    border-radius: 3px;
+    font-size: 11px;
+    width: 50px;
+    height: 24px;
+}
+
+.config-input[type="color"] {
+    width: 40px;
+    height: 24px;
+    padding: 2px;
+    cursor: pointer;
+}
+
+.config-slider {
+    background: #333;
+    border: none;
+    height: 4px;
+    border-radius: 2px;
+    outline: none;
+    flex: 1;
+    margin: 0 8px;
+    cursor: pointer;
+}
+
+.config-slider::-webkit-slider-thumb {
+    appearance: none;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: #4a9eff;
+    cursor: pointer;
+}
+
+.config-slider::-moz-range-thumb {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: #4a9eff;
+    cursor: pointer;
+    border: none;
+}
+
+.config-value {
+    font-size: 10px;
+    color: #999;
+    min-width: 30px;
+    text-align: center;
+    font-family: 'Courier New', monospace;
+}

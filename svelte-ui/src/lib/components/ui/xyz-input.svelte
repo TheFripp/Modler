@@ -2,10 +2,10 @@
 	import { cn } from '$lib/utils';
 	import InlineInput from './inline-input.svelte';
 	import type { PropertyPath } from '$lib/services/property-controller';
-	import { getPropertyMixedState } from '$lib/stores/modler';
+	import { getPropertyMixedState, selectedObjects } from '$lib/stores/modler';
 
 	interface Props {
-		label: string;
+		label?: string;
 		values: { x: number; y: number; z: number };
 		// Property controller integration
 		objectId?: string;
@@ -57,7 +57,7 @@
 	<div class="flex gap-2">
 		{#each ['x', 'y', 'z'] as axis}
 			{@const property = objectId && propertyBase ? `${propertyBase}.${axis}` : undefined}
-			{@const mixedState = property ? getPropertyMixedState(property) : { isMixed: false, value: values[axis] }}
+			{@const mixedState = property ? getPropertyMixedState(property, $selectedObjects) : { isMixed: false, value: values[axis] }}
 			<div class="flex-1">
 				<InlineInput
 					label={labels[axis]}

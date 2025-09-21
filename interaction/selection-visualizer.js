@@ -23,26 +23,96 @@ class SelectionVisualizer {
     }
 
     /**
+     * Create multiple overlapping lines for visible line width effect
+     */
+    createThickLineGroup(edgeGeometry, lineWidth, material) {
+        const group = new THREE.Group();
+
+        // Create multiple offset lines for thickness effect
+        const offsets = this.generateLineOffsets(lineWidth);
+
+        offsets.forEach(offset => {
+            const offsetGeometry = this.offsetEdgeGeometry(edgeGeometry, offset);
+            const lineMesh = new THREE.LineSegments(offsetGeometry, material);
+            group.add(lineMesh);
+        });
+
+        return group;
+    }
+
+    /**
+     * Generate offset patterns for line thickness
+     */
+    generateLineOffsets(lineWidth) {
+        const offsets = [{ x: 0, y: 0, z: 0 }]; // Center line
+
+        if (lineWidth > 1) {
+            const step = 0.002; // Increased offset step for more visible thickness
+            const maxOffset = (lineWidth - 1) * step;
+
+            // Add offset lines in a cross pattern
+            for (let i = 1; i <= lineWidth - 1; i++) {
+                const offset = i * step;
+                offsets.push(
+                    { x: offset, y: 0, z: 0 },
+                    { x: -offset, y: 0, z: 0 },
+                    { x: 0, y: offset, z: 0 },
+                    { x: 0, y: -offset, z: 0 }
+                );
+            }
+        }
+
+        return offsets;
+    }
+
+    /**
+     * Create offset copy of edge geometry
+     */
+    offsetEdgeGeometry(edgeGeometry, offset) {
+        const geometry = edgeGeometry.clone();
+        const positions = geometry.getAttribute('position');
+        const array = positions.array;
+
+        for (let i = 0; i < array.length; i += 3) {
+            array[i] += offset.x;
+            array[i + 1] += offset.y;
+            array[i + 2] += offset.z;
+        }
+
+        positions.needsUpdate = true;
+        return geometry;
+    }
+
+    /**
      * Create edge materials with configuration values
      */
     createEdgeMaterials() {
-        const configManager = window.modlerComponents?.configurationManager;
+        // Access ConfigurationManager directly from modlerV2Components since window.modlerComponents
+        // might not be set yet during initialization
+        const configManager = (typeof modlerV2Components !== 'undefined') ?
+            modlerV2Components.configurationManager :
+            window.modlerComponents?.configurationManager;
         const selectionConfig = configManager ?
             configManager.get('visual.selection') :
             { color: '#ff6600', lineWidth: 2, opacity: 0.8, renderOrder: 999 };
+
 
         // Convert hex color to Three.js color
         const colorHex = parseInt(selectionConfig.color.replace('#', ''), 16);
 
         this.edgeMaterial = new THREE.LineBasicMaterial({
             color: colorHex,
-            linewidth: selectionConfig.lineWidth,
             transparent: true,
-            opacity: selectionConfig.opacity
+            opacity: selectionConfig.opacity,
+            linewidth: selectionConfig.lineWidth // Store for reference even if not used
         });
+
+        // Store line width separately for multiple line rendering
+        this.edgeMaterial.lineWidth = selectionConfig.lineWidth;
 
         // Ensure selection wireframes render on top
         this.edgeMaterial.renderOrder = selectionConfig.renderOrder || 999;
+
 
         // Create faded container material for step-in context using container color
         const containerConfig = configManager ?
@@ -53,10 +123,13 @@ class SelectionVisualizer {
 
         this.containerEdgeMaterial = new THREE.LineBasicMaterial({
             color: containerColorHex,
-            linewidth: containerConfig.lineWidth,
             transparent: true,
-            opacity: containerConfig.opacity * 0.25 // 25% opacity for container context
+            opacity: containerConfig.opacity * 0.25, // 25% opacity for container context
+            linewidth: containerConfig.lineWidth // Store for reference even if not used
         });
+
+        // Store line width separately for multiple line rendering
+        this.containerEdgeMaterial.lineWidth = containerConfig.lineWidth;
         this.containerEdgeMaterial.renderOrder = containerConfig.renderOrder || 998;
     }
 
@@ -64,8 +137,16 @@ class SelectionVisualizer {
      * Register for configuration change callbacks
      */
     registerConfigurationCallbacks() {
-        const configManager = window.modlerComponents?.configurationManager;
-        if (!configManager) return;
+        // Access ConfigurationManager directly from modlerV2Components since window.modlerComponents
+        // isn't set until after initializeApplication() completes
+        const configManager = (typeof modlerV2Components !== 'undefined') ?
+            modlerV2Components.configurationManager :
+            window.modlerComponents?.configurationManager;
+
+        if (!configManager) {
+            console.error('🔧 SelectionVisualizer: ConfigurationManager not available for subscription');
+            return;
+        }
 
         // Subscribe to selection configuration changes
         configManager.subscribe('visual.selection.color', (newValue) => {
@@ -92,22 +173,31 @@ class SelectionVisualizer {
         configManager.subscribe('visual.containers.opacity', (newValue) => {
             this.updateContainerMaterialProperty('opacity', newValue);
         });
+
     }
 
     /**
      * Update material property and refresh all edge highlights
      */
     updateMaterialProperty(property, value) {
+
         if (!this.edgeMaterial) return;
 
         if (property === 'color') {
             const colorHex = parseInt(value.replace('#', ''), 16);
             this.edgeMaterial.color.setHex(colorHex);
+        } else if (property === 'linewidth') {
+            this.edgeMaterial.lineWidth = value;
+            // Force refresh of all existing edge highlights to update line width
+            this.refreshAllEdgeHighlights();
         } else {
             this.edgeMaterial[property] = value;
         }
 
         this.edgeMaterial.needsUpdate = true;
+
+        // Force refresh of all existing edge highlights
+        this.refreshAllEdgeHighlights();
     }
 
     /**
@@ -121,11 +211,49 @@ class SelectionVisualizer {
             this.containerEdgeMaterial.color.setHex(colorHex);
         } else if (property === 'opacity') {
             this.containerEdgeMaterial.opacity = value * 0.25; // Keep 25% opacity for container context
+        } else if (property === 'linewidth') {
+            this.containerEdgeMaterial.lineWidth = value;
+            // Force refresh of container wireframes
+            this.refreshContainerWireframes();
         } else {
             this.containerEdgeMaterial[property] = value;
         }
 
         this.containerEdgeMaterial.needsUpdate = true;
+
+        // Force refresh of container wireframes if needed
+        this.refreshContainerWireframes();
+    }
+
+    /**
+     * Refresh all existing edge highlights with updated material properties
+     */
+    refreshAllEdgeHighlights() {
+
+        // Recreate all edge highlights to apply new line width
+        const objectsToRefresh = Array.from(this.edgeHighlights.keys());
+
+        // Remove existing highlights
+        objectsToRefresh.forEach(object => {
+            this.removeEdgeHighlight(object);
+        });
+
+        // Recreate with new settings
+        objectsToRefresh.forEach(object => {
+            this.createEdgeHighlight(object);
+        });
+    }
+
+    /**
+     * Refresh container wireframes with updated material properties
+     */
+    refreshContainerWireframes() {
+        // Container wireframes are handled by the UnifiedContainerManager
+        // This is a placeholder for future container material refresh functionality
+        const containerManager = window.modlerComponents?.unifiedContainerManager;
+        if (containerManager && containerManager.refreshMaterials) {
+            containerManager.refreshMaterials();
+        }
     }
 
     /**
@@ -163,10 +291,13 @@ class SelectionVisualizer {
                 object.geometry.computeBoundingBox();
             }
 
-            // Always use EdgesGeometry for consistency with updateWireframeGeometry
-            // This ensures initial creation matches the update mechanism
+            // Create multiple line effect for visible line width
             const edgeGeometry = new THREE.EdgesGeometry(object.geometry);
-            const edgeMesh = new THREE.LineSegments(edgeGeometry, this.edgeMaterial);
+            const edgeMesh = this.createThickLineGroup(edgeGeometry, this.edgeMaterial.lineWidth || 2, this.edgeMaterial);
+
+            // Clean up temporary geometry
+            edgeGeometry.dispose();
+
 
             // Make edge highlights non-raycastable to prevent interference with selection
             edgeMesh.raycast = () => {}; // Disable raycasting for edge highlights
@@ -220,8 +351,14 @@ class SelectionVisualizer {
                 edgeMesh.parent.remove(edgeMesh);
             }
 
-            // Clean up geometry
-            if (edgeMesh.geometry) {
+            // Clean up geometry - handle group-based highlights
+            if (edgeMesh.isGroup) {
+                while (edgeMesh.children.length > 0) {
+                    const child = edgeMesh.children[0];
+                    edgeMesh.remove(child);
+                    if (child.geometry) child.geometry.dispose();
+                }
+            } else if (edgeMesh.geometry) {
                 edgeMesh.geometry.dispose();
             }
 
@@ -333,7 +470,15 @@ class SelectionVisualizer {
             if (edgeMesh.parent) {
                 edgeMesh.parent.remove(edgeMesh);
             }
-            if (edgeMesh.geometry) {
+
+            // Handle group-based highlights
+            if (edgeMesh.isGroup) {
+                while (edgeMesh.children.length > 0) {
+                    const child = edgeMesh.children[0];
+                    edgeMesh.remove(child);
+                    if (child.geometry) child.geometry.dispose();
+                }
+            } else if (edgeMesh.geometry) {
                 edgeMesh.geometry.dispose();
             }
         }
@@ -352,16 +497,31 @@ class SelectionVisualizer {
                 return false;
             }
 
-            // Create new EdgesGeometry from updated main mesh geometry
-            const newEdgesGeometry = new THREE.EdgesGeometry(mainMesh.geometry);
+            // For group-based approach, recreate the entire group
+            if (relatedMesh.isGroup) {
+                // Clear existing children
+                while (relatedMesh.children.length > 0) {
+                    const child = relatedMesh.children[0];
+                    relatedMesh.remove(child);
+                    if (child.geometry) child.geometry.dispose();
+                }
 
-            // Dispose old geometry
-            if (relatedMesh.geometry) {
-                relatedMesh.geometry.dispose();
+                // Create new edge geometry and rebuild group
+                const edgeGeometry = new THREE.EdgesGeometry(mainMesh.geometry);
+                const lineWidth = relatedMesh.material?.lineWidth || this.edgeMaterial?.lineWidth || 2;
+
+                const offsets = this.generateLineOffsets(lineWidth);
+                offsets.forEach(offset => {
+                    const offsetGeometry = this.offsetEdgeGeometry(edgeGeometry, offset);
+                    const lineMesh = new THREE.LineSegments(offsetGeometry, this.edgeMaterial);
+                    relatedMesh.add(lineMesh);
+                });
+
+                edgeGeometry.dispose();
+            } else {
+                // Fallback for non-group meshes
+                return false;
             }
-
-            // Apply new geometry
-            relatedMesh.geometry = newEdgesGeometry;
 
             // Sync transform as well (position, rotation, scale)
             relatedMesh.position.copy(mainMesh.position);

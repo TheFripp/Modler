@@ -54,6 +54,51 @@ class ConfigurationManager {
                     proximityThreshold: 8,
                     opacity: 1.0,
                     renderOrder: 1001
+                },
+                effects: {
+                    materials: {
+                        face: {
+                            color: '#00ffff',
+                            opacity: 0.6,
+                            renderOrder: 1000
+                        },
+                        axis: {
+                            color: '#00ff88',
+                            opacity: 0.3
+                        },
+                        object: {
+                            color: '#ff6600',
+                            opacity: 0.9,
+                            linewidth: 2
+                        },
+                        preview: {
+                            defaultColor: '#00ff00',
+                            opacity: 0.8,
+                            linewidth: 1
+                        },
+                        layoutGuides: {
+                            color: '#ff0000',
+                            opacity: 0.8,
+                            linewidth: 2,
+                            dashSize: 0.2,
+                            gapSize: 0.1
+                        }
+                    },
+                    animation: {
+                        fadeStep: 0.03,
+                        maxOpacity: 0.1,
+                        timeout: 1000
+                    },
+                    geometry: {
+                        normalOffset: 0.001,
+                        boxDetectionThreshold: 0.9,
+                        duplicateThreshold: 0.1,
+                        minPreviewSize: 0.01
+                    },
+                    cache: {
+                        geometryPoolSize: 10,
+                        bboxCacheTime: 5000
+                    }
                 }
             },
             scene: {
@@ -116,8 +161,88 @@ class ConfigurationManager {
             }
         });
 
+        // Subscribe to VisualEffects configuration changes
+        this.setupVisualEffectsIntegrations();
+
     }
-    
+
+    /**
+     * Setup VisualEffects system integrations
+     */
+    setupVisualEffectsIntegrations() {
+        // Register VisualEffects with ConfigurationManager when available
+        if (window.VisualEffects) {
+            this.registerVisualEffects(window.VisualEffects);
+        } else {
+            // Wait for VisualEffects to be available
+            const checkVisualEffects = () => {
+                if (window.VisualEffects) {
+                    this.registerVisualEffects(window.VisualEffects);
+                } else {
+                    setTimeout(checkVisualEffects, 100);
+                }
+            };
+            checkVisualEffects();
+        }
+    }
+
+    /**
+     * Register VisualEffects class for configuration updates
+     */
+    registerVisualEffects(VisualEffectsClass) {
+        // Create bidirectional sync between ConfigurationManager and VisualEffects.Config
+        const syncConfigToVisualEffects = () => {
+            const effectsConfig = this.get('visual.effects');
+            if (effectsConfig && VisualEffectsClass.Config) {
+                // Update VisualEffects.Config with values from ConfigurationManager
+                this.deepMerge(VisualEffectsClass.Config, effectsConfig);
+
+                // Notify any VisualEffects instances of the change
+                if (window.modlerComponents?.visualEffects?.onConfigChanged) {
+                    window.modlerComponents.visualEffects.onConfigChanged();
+                }
+            }
+        };
+
+        // Subscribe to all visual effects configuration changes
+        const effectsPaths = [
+            'visual.selection.color',  // Face highlighting now uses selection color
+            'visual.effects.materials.face.opacity',
+            'visual.effects.materials.face.renderOrder',
+            'visual.effects.materials.axis.color',
+            'visual.effects.materials.axis.opacity',
+            'visual.effects.materials.object.color',
+            'visual.effects.materials.object.opacity',
+            'visual.effects.materials.object.linewidth',
+            'visual.effects.materials.preview.defaultColor',
+            'visual.effects.materials.preview.opacity',
+            'visual.effects.materials.preview.linewidth',
+            'visual.effects.materials.layoutGuides.color',
+            'visual.effects.materials.layoutGuides.opacity',
+            'visual.effects.materials.layoutGuides.linewidth',
+            'visual.effects.materials.layoutGuides.dashSize',
+            'visual.effects.materials.layoutGuides.gapSize',
+            'visual.effects.animation.fadeStep',
+            'visual.effects.animation.maxOpacity',
+            'visual.effects.animation.timeout',
+            'visual.effects.geometry.normalOffset',
+            'visual.effects.geometry.boxDetectionThreshold',
+            'visual.effects.geometry.duplicateThreshold',
+            'visual.effects.geometry.minPreviewSize',
+            'visual.effects.cache.geometryPoolSize',
+            'visual.effects.cache.bboxCacheTime'
+        ];
+
+        effectsPaths.forEach(path => {
+            this.subscribe(path, syncConfigToVisualEffects);
+        });
+
+        // Initial sync
+        syncConfigToVisualEffects();
+
+        console.log('VisualEffects configuration integration established');
+    }
+
     /**
      * Apply current configuration values to all integrated systems
      */
@@ -181,23 +306,25 @@ class ConfigurationManager {
      * Subscribe to configuration changes
      */
     subscribe(keyPath, callback) {
+
         if (typeof callback !== 'function') {
             console.error('ConfigurationManager.subscribe: callback must be a function');
             return false;
         }
-        
+
         if (!this.subscribers.has(keyPath)) {
             this.subscribers.set(keyPath, []);
         }
-        
+
         this.subscribers.get(keyPath).push(callback);
-        
+
         // Immediately call with current value
         const currentValue = this.get(keyPath);
+
         if (currentValue !== null) {
             callback(currentValue, null);
         }
-        
+
         return true;
     }
     
@@ -394,6 +521,22 @@ class ConfigurationManager {
     }
     
     /**
+     * Deep merge objects (updates target in place)
+     */
+    deepMerge(target, source) {
+        for (const key in source) {
+            if (source.hasOwnProperty(key)) {
+                if (typeof source[key] === 'object' && source[key] !== null &&
+                    typeof target[key] === 'object' && target[key] !== null) {
+                    this.deepMerge(target[key], source[key]);
+                } else {
+                    target[key] = source[key];
+                }
+            }
+        }
+    }
+
+    /**
      * Deep merge two configuration objects
      */
     mergeConfigs(defaultConfig, userConfig) {
@@ -420,15 +563,26 @@ class ConfigurationManager {
      * Notify subscribers of configuration changes
      */
     notifySubscribers(keyPath, newValue, oldValue) {
+        console.log('🔧 ConfigurationManager: notifySubscribers called', {
+            keyPath,
+            newValue,
+            oldValue,
+            hasSubscribers: this.subscribers.has(keyPath),
+            subscriberCount: this.subscribers.has(keyPath) ? this.subscribers.get(keyPath).length : 0
+        });
+
         if (this.subscribers.has(keyPath)) {
             const callbacks = this.subscribers.get(keyPath);
-            callbacks.forEach(callback => {
+            callbacks.forEach((callback, index) => {
                 try {
+                    console.log(`🔧 ConfigurationManager: calling subscriber ${index} for ${keyPath}`);
                     callback(newValue, oldValue);
                 } catch (error) {
                     console.error(`Error in config subscriber for ${keyPath}:`, error);
                 }
             });
+        } else {
+            console.log(`🔧 ConfigurationManager: No subscribers found for ${keyPath}`);
         }
     }
     
