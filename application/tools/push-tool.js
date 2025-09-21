@@ -273,7 +273,6 @@ class PushTool {
             const directionChanged = (this.lastPushDelta > 0) !== (pushDelta > 0);
             if (directionChanged && Math.abs(pushDelta) > 0.001) {
                 // Clear cache on direction change
-
                 if (window.PositionTransform && this.pushedObject?.uuid) {
                     window.PositionTransform.clearCacheForObject(this.pushedObject.uuid);
                 }
@@ -441,19 +440,14 @@ class PushTool {
         geometry.computeBoundingBox();
         geometry.computeBoundingSphere();
 
-        // Synchronize related meshes using shared utils with immediate feedback
-        MovementUtils.syncRelatedMeshes(this.pushedObject, 'geometry', true);
-
-        // Refresh visual feedback
+        // Refresh visual feedback - this will handle all mesh synchronization
         this.refreshVisualFeedback();
     }
 
     refreshVisualFeedback() {
-        // Sync geometry changes for wireframes and highlighting
+        // Sync geometry changes for wireframes and highlighting through centralized system
+        // MeshSynchronizer will automatically update face highlights via updateFaceHighlightGeometry callback
         MovementUtils.syncRelatedMeshes(this.pushedObject, 'geometry', true);
-
-        // Update face highlighting through centralized system
-        this.updateFaceHighlighting();
     }
 
     updateFaceHighlighting() {
@@ -509,7 +503,6 @@ class PushTool {
             };
 
         } catch (error) {
-            console.warn('Failed to update hit info for face highlighting:', error);
             return originalHit;
         }
     }
