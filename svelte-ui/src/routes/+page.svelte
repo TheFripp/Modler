@@ -13,7 +13,6 @@
 
 		// Set up demo data for development
 		if (demoMode) {
-			console.log('📦 Demo: Setting up demo data with container object');
 			selectedObjects.set([
 				{
 					id: 'demo-container-1',

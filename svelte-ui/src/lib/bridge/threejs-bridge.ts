@@ -260,7 +260,9 @@ function setupPostMessageFallback() {
  * Handle data received from the main application
  */
 function handleModlerData(data: any) {
-	if (data.type === 'selection-change' || data.type === 'initial-state' || data.type === 'object-modified' || data.type === 'data-update') {
+	// Process modler data silently
+
+	if (data.type === 'selection-change' || data.type === 'initial-state' || data.type === 'object-modified' || data.type === 'data-update' || data.type === 'periodic-update' || data.type === 'panel-ready') {
 		// Handle selection updates
 		if (data.selectedObjects) {
 			syncSelectionFromIframe(data.selectedObjects);

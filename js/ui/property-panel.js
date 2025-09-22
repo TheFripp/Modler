@@ -211,7 +211,6 @@ class PropertyPanel {
         }
 
         // Call the PropertyUpdateHandler with the container ID
-        console.log('🔧 Updating layout property:', propertyType, '=', value, 'for container:', objectData.name);
         propertyUpdateHandler.handleContainerLayoutPropertyChange(objectData.id, propertyType, value);
     }
 
@@ -222,14 +221,11 @@ class PropertyPanel {
 
     // Layout axis button group management
     selectLayoutAxis(axis, buttonElement) {
-        console.log('🔧 selectLayoutAxis called:', { axis, buttonActive: buttonElement.classList.contains('active') });
-
         // Check if this axis is already active (toggle off functionality)
         const isCurrentlyActive = buttonElement.classList.contains('active');
 
         if (isCurrentlyActive) {
             // Toggle OFF - disable layout
-            console.log('🔧 Disabling layout for axis:', axis);
             this.updateLayoutAxisButtons(null); // Clear all active states
             this.updateLayoutProperty('direction', null);
             this.clearLayoutAxisGuides();
@@ -237,7 +233,6 @@ class PropertyPanel {
             this.setDimensionInputsState(false); // Enable dimension inputs when layout disabled
         } else {
             // Toggle ON - enable layout
-            console.log('🔧 Enabling layout for axis:', axis);
             this.updateLayoutAxisButtons(axis);
             this.updateLayoutProperty('direction', axis);
             this.showLayoutAxisGuides(axis);
@@ -474,7 +469,6 @@ class PropertyPanel {
     }
 
     updateContainerSizingMode(mode) {
-        console.log('🔧 updateContainerSizingMode called:', mode);
 
         const selectedObjects = window.modlerComponents?.selectionController?.getSelectedObjects();
         const sceneController = window.modlerComponents?.sceneController;
@@ -488,7 +482,6 @@ class PropertyPanel {
         if (selectedObject.userData && selectedObject.userData.id) {
             const objectData = sceneController.getObject(selectedObject.userData.id);
             if (objectData && objectData.isContainer) {
-                console.log('🔧 Updating container sizing mode:', objectData.name, 'to', mode);
 
                 // Update the container's sizing mode
                 objectData.sizingMode = mode;
@@ -506,7 +499,6 @@ class PropertyPanel {
 
                 // If switching to fixed mode and layout was active, ensure layout still works
                 if (mode === 'fixed' && objectData.autoLayout && objectData.autoLayout.enabled) {
-                    console.log('🔧 Container switched to fixed mode, ensuring layout is maintained');
                     const propertyUpdateHandler = window.modlerComponents?.propertyUpdateHandler;
                     if (propertyUpdateHandler) {
                         propertyUpdateHandler.handleContainerLayoutPropertyChange(

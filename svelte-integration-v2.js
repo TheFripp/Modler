@@ -14,33 +14,81 @@
     let SVELTE_SYSTEM_TOOLBAR_URL = null;
     const INTEGRATION_ENABLED = window.location.hostname === 'localhost' || window.location.protocol === 'file:';
 
-    // Detect Svelte dev server port
+    // Detect Svelte dev server port with caching and parallel requests
     async function detectSveltePort() {
         const ports = [5173, 5174, 5175, 5176, 5177]; // Common Vite dev server ports
 
-        for (const port of ports) {
+        // Try cached port first for instant loading
+        const cachedPort = localStorage.getItem('svelte-dev-port');
+        if (cachedPort && ports.includes(parseInt(cachedPort))) {
             try {
-                // Test with a simple GET to a route we know exists
-                const response = await fetch(`http://localhost:${port}/main-toolbar`, {
-                    method: 'HEAD'
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 500);
+
+                const response = await fetch(`http://localhost:${cachedPort}/main-toolbar`, {
+                    method: 'HEAD',
+                    signal: controller.signal
                 });
 
-                // Check if response is actually OK (not just no error)
+                clearTimeout(timeoutId);
+
                 if (response.ok) {
-                    SVELTE_BASE_URL = `http://localhost:${port}`;
+                    SVELTE_BASE_URL = `http://localhost:${cachedPort}`;
                     SVELTE_PROPERTY_PANEL_URL = `${SVELTE_BASE_URL}/property-panel`;
                     SVELTE_LEFT_PANEL_URL = `${SVELTE_BASE_URL}/left-panel`;
                     SVELTE_MAIN_TOOLBAR_URL = `${SVELTE_BASE_URL}/main-toolbar`;
                     SVELTE_SYSTEM_TOOLBAR_URL = `${SVELTE_BASE_URL}/system-toolbar`;
-                    console.log(`✅ Found Svelte dev server at port ${port}`);
+                    console.log(`✅ Using cached Svelte dev server at port ${cachedPort}`);
                     return true;
-                } else {
-                    console.log(`⚠️ Server at port ${port} responded but not OK (status: ${response.status})`);
                 }
             } catch (error) {
-                // Port not available or connection failed, try next
-                console.log(`ℹ️ Port ${port} not available or connection failed`);
+                // Cached port failed, clear cache and continue with parallel detection
+                localStorage.removeItem('svelte-dev-port');
             }
+        }
+
+        // Parallel port detection for faster loading
+        const portPromises = ports.map(async (port) => {
+            try {
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 1000);
+
+                const response = await fetch(`http://localhost:${port}/main-toolbar`, {
+                    method: 'HEAD',
+                    signal: controller.signal
+                });
+
+                clearTimeout(timeoutId);
+
+                if (response.ok) {
+                    return port;
+                }
+            } catch (error) {
+                // Port not available or timeout
+            }
+            return null;
+        });
+
+        try {
+            const results = await Promise.allSettled(portPromises);
+            const successfulPort = results.find(result =>
+                result.status === 'fulfilled' && result.value !== null
+            )?.value;
+
+            if (successfulPort) {
+                // Cache the successful port for next time
+                localStorage.setItem('svelte-dev-port', successfulPort.toString());
+
+                SVELTE_BASE_URL = `http://localhost:${successfulPort}`;
+                SVELTE_PROPERTY_PANEL_URL = `${SVELTE_BASE_URL}/property-panel`;
+                SVELTE_LEFT_PANEL_URL = `${SVELTE_BASE_URL}/left-panel`;
+                SVELTE_MAIN_TOOLBAR_URL = `${SVELTE_BASE_URL}/main-toolbar`;
+                SVELTE_SYSTEM_TOOLBAR_URL = `${SVELTE_BASE_URL}/system-toolbar`;
+                console.log(`✅ Found Svelte dev server at port ${successfulPort}`);
+                return true;
+            }
+        } catch (error) {
+            console.error('❌ Error during parallel port detection:', error);
         }
 
         console.error('❌ Could not find Svelte dev server on any port');
@@ -81,12 +129,17 @@
     }
 
     /**
-     * Create the Svelte left panel overlay
+     * Create the Svelte left panel overlay (load content into existing container)
      */
     function createSvelteLeftOverlay() {
-        // Create LEFT overlay container (Object List & Settings)
-        svelteLeftOverlay = document.createElement('div');
-        svelteLeftOverlay.id = 'svelte-left-overlay';
+        // Clear loading state and set up for iframe
+        if (!svelteLeftOverlay) {
+            svelteLeftOverlay = document.createElement('div');
+            svelteLeftOverlay.id = 'svelte-left-overlay';
+            document.body.appendChild(svelteLeftOverlay);
+        }
+
+        // Update container styling for iframe content
         svelteLeftOverlay.style.cssText = `
             position: fixed;
             top: 0;
@@ -190,20 +243,29 @@
         };
 
         leftIframe.onload = () => {
-            // Left panel loaded successfully
+            // Send current data once the iframe is ready
+            if (window.modlerComponents) {
+                const currentSelection = window.modlerComponents.selectionController?.getSelectedObjects() || [];
+                sendFullDataUpdate(currentSelection, 'panel-ready');
+            }
         };
 
+        // Clear loading content and add iframe
+        svelteLeftOverlay.innerHTML = '';
         svelteLeftOverlay.appendChild(leftIframe);
         svelteLeftOverlay.appendChild(leftResizeHandle);
-        document.body.appendChild(svelteLeftOverlay);
     }
 
     /**
-     * Create the Svelte right panel overlay
+     * Create the Svelte right panel overlay (load content into existing container)
      */
     function createSvelteRightOverlay() {
-        // Create RIGHT overlay container (Property Panel)
-        svelteRightOverlay = document.createElement('div');
+        // Clear loading state and set up for iframe
+        if (!svelteRightOverlay) {
+            svelteRightOverlay = document.createElement('div');
+            svelteRightOverlay.id = 'svelte-right-overlay';
+            document.body.appendChild(svelteRightOverlay);
+        }
         svelteRightOverlay.id = 'svelte-right-overlay';
         svelteRightOverlay.style.cssText = `
             position: fixed;
@@ -308,12 +370,18 @@
         };
 
         rightIframe.onload = () => {
-            // Property panel loaded successfully
+            console.log('✅ Right panel iframe loaded, sending current data');
+            // Send current data once the iframe is ready
+            if (window.modlerComponents) {
+                const currentSelection = window.modlerComponents.selectionController?.getSelectedObjects() || [];
+                sendFullDataUpdate(currentSelection, 'panel-ready');
+            }
         };
 
+        // Clear loading content and add iframe
+        svelteRightOverlay.innerHTML = '';
         svelteRightOverlay.appendChild(rightIframe);
         svelteRightOverlay.appendChild(rightResizeHandle);
-        document.body.appendChild(svelteRightOverlay);
     }
 
     /**
@@ -427,11 +495,8 @@
         // INSTANT layout adjustment - no delay for immediate UI response
         updateViewportArea();
 
-        // Set up data synchronization when panels are shown with iframe verification
-        setTimeout(() => {
-            console.log('🔄 Setting up data synchronization...');
-            setupDataSync();
-        }, 250); // Slightly longer delay to ensure iframes are fully loaded
+        // Set up data synchronization immediately for instant UI
+        setupDataSync();
     }
 
     /**
@@ -642,21 +707,56 @@
                 data: serializedData
             };
 
+            // Only log non-periodic updates to reduce console spam
+            if (data.type !== 'periodic-update') {
+                console.log('📤 Sending data to panels:', {
+                    type: data.type,
+                    selectedCount: serializedData.selectedObjects.length,
+                    hierarchyCount: serializedData.objectHierarchy.length
+                });
+            }
+
             // Send to each iframe with connection verification
+            let messagesSent = 0;
+
             if (rightPanelIframe && rightPanelIframe.contentWindow) {
-                rightPanelIframe.contentWindow.postMessage(messageData, SVELTE_BASE_URL);
+                try {
+                    rightPanelIframe.contentWindow.postMessage(messageData, SVELTE_BASE_URL);
+                    messagesSent++;
+                } catch (error) {
+                    console.error('❌ Failed to send to right panel:', error);
+                }
             }
 
             if (leftPanelIframe && leftPanelIframe.contentWindow) {
-                leftPanelIframe.contentWindow.postMessage(messageData, SVELTE_BASE_URL);
+                try {
+                    leftPanelIframe.contentWindow.postMessage(messageData, SVELTE_BASE_URL);
+                    messagesSent++;
+                } catch (error) {
+                    console.error('❌ Failed to send to left panel:', error);
+                }
             }
 
             if (mainToolbarIframe && mainToolbarIframe.contentWindow) {
-                mainToolbarIframe.contentWindow.postMessage(messageData, SVELTE_BASE_URL);
+                try {
+                    mainToolbarIframe.contentWindow.postMessage(messageData, SVELTE_BASE_URL);
+                    messagesSent++;
+                } catch (error) {
+                    console.error('❌ Failed to send to main toolbar:', error);
+                }
             }
 
             if (systemToolbarIframe && systemToolbarIframe.contentWindow) {
-                systemToolbarIframe.contentWindow.postMessage(messageData, SVELTE_BASE_URL);
+                try {
+                    systemToolbarIframe.contentWindow.postMessage(messageData, SVELTE_BASE_URL);
+                    messagesSent++;
+                } catch (error) {
+                    console.error('❌ Failed to send to system toolbar:', error);
+                }
+            }
+
+            if (messagesSent === 0) {
+                console.warn('⚠️ No messages sent - iframes may not be ready yet');
             }
         } catch (error) {
             console.error('❌ Failed to send data to Svelte panels:', error);
@@ -984,57 +1084,91 @@
      * Set up data synchronization with main app
      */
     function setupDataSync() {
-        // Check if modlerComponents is available
-        if (typeof window !== 'undefined' && window.modlerComponents) {
-
-            // Set up postMessage listener for incoming property updates from Svelte
-            window.addEventListener('message', (event) => {
-                // Verify origin for security (allow detected Svelte dev server)
-                if (!SVELTE_BASE_URL || event.origin !== SVELTE_BASE_URL) {
-                    return;
-                }
-
-                if (event.data && event.data.type === 'property-update') {
-                    const { objectId, property, value, source } = event.data.data;
-                    handlePropertyUpdate(objectId, property, value, source);
-                } else if (event.data && event.data.type === 'object-select') {
-                    // Handle object selection from hierarchy
-                    const { objectId } = event.data.data;
-                    handleObjectSelection(objectId);
-                } else if (event.data && event.data.type === 'tool-activate') {
-                    // Handle tool activation from Svelte UI
-                    const { toolName } = event.data.data;
-                    handleToolActivation(toolName);
-                } else if (event.data && event.data.type === 'snap-toggle') {
-                    // Handle snap toggle from Svelte UI
-                    handleSnapToggle();
-                }
-            });
-
-            // Initialize the ThreeJSBridge by setting up the selection callback directly
-
-            const selectionController = window.modlerComponents.selectionController;
-            if (selectionController) {
-                // Set up the selection callback to send data to Svelte panels
-                selectionController.selectionChangeCallback = (selectedObjects) => {
-                    sendFullDataUpdate(selectedObjects, 'selection-change');
-                };
+        // Set up postMessage listener for incoming property updates from Svelte (always needed)
+        window.addEventListener('message', (event) => {
+            // Verify origin for security (allow detected Svelte dev server)
+            if (!SVELTE_BASE_URL || event.origin !== SVELTE_BASE_URL) {
+                return;
             }
 
-            // Set up toolbar state synchronization
-            setupToolbarStateSynchronization();
+            if (event.data && event.data.type === 'property-update') {
+                const { objectId, property, value, source } = event.data.data;
+                handlePropertyUpdate(objectId, property, value, source);
+            } else if (event.data && event.data.type === 'object-select') {
+                // Handle object selection from hierarchy
+                const { objectId } = event.data.data;
+                handleObjectSelection(objectId);
+            } else if (event.data && event.data.type === 'tool-activate') {
+                // Handle tool activation from Svelte UI
+                const { toolName } = event.data.data;
+                handleToolActivation(toolName);
+            } else if (event.data && event.data.type === 'snap-toggle') {
+                // Handle snap toggle from Svelte UI
+                handleSnapToggle();
+            }
+        });
 
-            // Send initial state
-            setTimeout(() => {
-                const initialSelection = window.modlerComponents.selectionController?.getSelectedObjects() || [];
-                sendFullDataUpdate(initialSelection, 'initial-state');
-            }, 1000);
-        } else {
-        }
+        // Wait for modlerComponents to be available and set up synchronization
+        waitForModlerComponents();
     }
 
     /**
-     * Initialize the integration
+     * Wait for modlerComponents to be available and set up synchronization
+     */
+    function waitForModlerComponents() {
+        const maxAttempts = 50; // 5 seconds maximum wait
+        let attempts = 0;
+
+        const checkComponents = () => {
+            attempts++;
+
+            if (window.modlerComponents) {
+                    initializeComponentSync();
+                return;
+            }
+
+            if (attempts < maxAttempts) {
+                setTimeout(checkComponents, 100);
+            } else {
+                console.warn('⚠️ modlerComponents not found after 5 seconds, will retry when panels load');
+            }
+        };
+
+        checkComponents();
+    }
+
+    /**
+     * Initialize component synchronization once modlerComponents is available
+     */
+    function initializeComponentSync() {
+        const selectionController = window.modlerComponents.selectionController;
+        if (selectionController) {
+            // Set up the selection callback to send data to Svelte panels
+            selectionController.selectionChangeCallback = (selectedObjects) => {
+                sendFullDataUpdate(selectedObjects, 'selection-change');
+            };
+        }
+
+        // Set up toolbar state synchronization
+        setupToolbarStateSynchronization();
+
+        // Send initial state immediately
+        setTimeout(() => {
+            const initialSelection = window.modlerComponents.selectionController?.getSelectedObjects() || [];
+            sendFullDataUpdate(initialSelection, 'initial-state');
+        }, 50);
+
+        // Send periodic updates less frequently to ensure panels stay in sync
+        setInterval(() => {
+            if (window.modlerComponents) {
+                const currentSelection = window.modlerComponents.selectionController?.getSelectedObjects() || [];
+                sendFullDataUpdate(currentSelection, 'periodic-update');
+            }
+        }, 10000); // Every 10 seconds
+    }
+
+    /**
+     * Initialize the integration with immediate UI display
      */
     async function initialize() {
         // Wait for DOM to be ready
@@ -1043,15 +1177,120 @@
             return;
         }
 
-        // Detect Svelte dev server port first
+        // Show UI panels immediately with loading state
+        showSvelteOverlaysImmediate();
+
+        // Detect Svelte dev server port asynchronously
         const portDetected = await detectSveltePort();
         if (!portDetected) {
             console.error('❌ Cannot initialize without Svelte dev server');
+            showSvelteError();
             return;
         }
 
-        // Automatically show Svelte panels (permanent)
-        showSvelteOverlays();
+        // Load Svelte content into existing panels
+        loadSvelteContent();
+    }
+
+    /**
+     * Show panel containers immediately with loading state
+     */
+    function showSvelteOverlaysImmediate() {
+        // Create panel containers immediately
+        createPanelContainers();
+        isOverlayVisible = true;
+        updateViewportArea();
+    }
+
+    /**
+     * Create empty panel containers for instant display
+     */
+    function createPanelContainers() {
+        // Create left panel container
+        if (!svelteLeftOverlay) {
+            svelteLeftOverlay = document.createElement('div');
+            svelteLeftOverlay.id = 'svelte-left-overlay';
+            svelteLeftOverlay.style.cssText = `
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 280px;
+                height: 100vh;
+                background: #252525;
+                border-right: 1px solid #404040;
+                z-index: 99999;
+                overflow: hidden;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                color: #888;
+                font-size: 14px;
+            `;
+            svelteLeftOverlay.innerHTML = '<div>Loading...</div>';
+            document.body.appendChild(svelteLeftOverlay);
+        }
+
+        // Create right panel container
+        if (!svelteRightOverlay) {
+            svelteRightOverlay = document.createElement('div');
+            svelteRightOverlay.id = 'svelte-right-overlay';
+            svelteRightOverlay.style.cssText = `
+                position: fixed;
+                top: 0;
+                right: 0;
+                width: 320px;
+                height: 100vh;
+                background: #252525;
+                border-left: 1px solid #404040;
+                z-index: 99999;
+                overflow: hidden;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                color: #888;
+                font-size: 14px;
+            `;
+            svelteRightOverlay.innerHTML = '<div>Loading...</div>';
+            document.body.appendChild(svelteRightOverlay);
+        }
+    }
+
+    /**
+     * Load Svelte content into existing containers
+     */
+    function loadSvelteContent() {
+        // Load left panel content
+        if (svelteLeftOverlay && SVELTE_LEFT_PANEL_URL) {
+            createSvelteLeftOverlay();
+        }
+
+        // Load right panel content
+        if (svelteRightOverlay && SVELTE_PROPERTY_PANEL_URL) {
+            createSvelteRightOverlay();
+        }
+
+        // Load toolbars
+        if (!svelteMainToolbar) {
+            createSvelteMainToolbar();
+        }
+        if (!svelteSystemToolbar) {
+            createSvelteSystemToolbar();
+        }
+
+        // Set up data synchronization
+        setupDataSync();
+    }
+
+    /**
+     * Show error state in panels
+     */
+    function showSvelteError() {
+        if (svelteLeftOverlay) {
+            svelteLeftOverlay.innerHTML = '<div style="color: #ff6666;">Dev server not found</div>';
+        }
+        if (svelteRightOverlay) {
+            svelteRightOverlay.innerHTML = '<div style="color: #ff6666;">Dev server not found</div>';
+        }
     }
 
     // Start initialization

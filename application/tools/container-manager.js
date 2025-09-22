@@ -268,6 +268,11 @@ class ContainerManager {
             selectionController.clearSelection('container-creation');
             selectionController.select(containerObject.mesh);
         }
+
+        // Trigger hierarchy update to refresh the object list
+        if (window.notifyObjectHierarchyChanged) {
+            window.notifyObjectHierarchyChanged();
+        }
     }
     
     /**
@@ -357,6 +362,12 @@ class ContainerManager {
             meshSynchronizer.syncAllRelatedMeshes(obj, 'transform');
         }
 
+        // Trigger hierarchy update for new Svelte UI
+        if (window.notifyObjectHierarchyChanged) {
+            window.notifyObjectHierarchyChanged();
+        }
+
+        // Legacy support for old object list
         if (window.populateObjectList) {
             setTimeout(() => {
                 window.populateObjectList();
@@ -406,7 +417,12 @@ class ContainerManager {
         if (parentContainer) {
             this.resizeContainer(parentContainer, { mode: 'fit-children' });
         }
-        
+
+        // Trigger hierarchy update for new Svelte UI
+        if (window.notifyObjectHierarchyChanged) {
+            window.notifyObjectHierarchyChanged();
+        }
+
         return true;
     }
     

@@ -2,7 +2,6 @@
 	import { onMount } from 'svelte';
 	import { initializeBridge } from '$lib/bridge/threejs-bridge';
 	import { selectedObjects, objectHierarchy, toolState } from '$lib/stores/modler';
-	import Toolbar from '$lib/components/Toolbar.svelte';
 
 	// Tab state
 	let activeTab: 'objects' | 'settings' = 'objects';
@@ -226,21 +225,115 @@
 		{:else if activeTab === 'settings'}
 			<!-- Settings Tab Content -->
 			<div class="space-y-4">
-				<h3 class="text-sm font-medium text-foreground">Application Settings</h3>
+				<h3 class="text-sm font-medium text-foreground mb-4">Application Settings</h3>
 
-				<!-- Toolbar Component -->
-				<div class="pb-4 border-b border-border">
-					<h4 class="text-xs font-medium mb-2 text-foreground">Toolbar</h4>
-					<Toolbar />
+				<!-- Visual Settings -->
+				<div class="space-y-3">
+					<h4 class="text-xs font-medium text-foreground border-b border-border pb-2">Visual</h4>
+
+					<!-- Selection Settings -->
+					<div class="space-y-2">
+						<h5 class="text-xs font-medium text-muted-foreground">Selection</h5>
+						<div class="space-y-2 pl-2">
+							<div class="flex items-center justify-between">
+								<label class="text-xs text-foreground">Color</label>
+								<input type="color" class="w-8 h-6 rounded border border-border" value="#ff6600" />
+							</div>
+							<div class="flex items-center justify-between">
+								<label class="text-xs text-foreground">Line Width</label>
+								<div class="flex items-center gap-2">
+									<input type="range" min="1" max="5" step="1" value="2" class="w-16 h-1" />
+									<span class="text-xs text-muted-foreground w-6">2</span>
+								</div>
+							</div>
+							<div class="flex items-center justify-between">
+								<label class="text-xs text-foreground">Opacity</label>
+								<div class="flex items-center gap-2">
+									<input type="range" min="0.1" max="1.0" step="0.1" value="0.8" class="w-16 h-1" />
+									<span class="text-xs text-muted-foreground w-6">0.8</span>
+								</div>
+							</div>
+						</div>
+					</div>
+
+					<!-- Container Settings -->
+					<div class="space-y-2">
+						<h5 class="text-xs font-medium text-muted-foreground">Containers</h5>
+						<div class="space-y-2 pl-2">
+							<div class="flex items-center justify-between">
+								<label class="text-xs text-foreground">Color</label>
+								<input type="color" class="w-8 h-6 rounded border border-border" value="#00ff00" />
+							</div>
+							<div class="flex items-center justify-between">
+								<label class="text-xs text-foreground">Line Width</label>
+								<div class="flex items-center gap-2">
+									<input type="range" min="1" max="5" step="1" value="1" class="w-16 h-1" />
+									<span class="text-xs text-muted-foreground w-6">1</span>
+								</div>
+							</div>
+							<div class="flex items-center justify-between">
+								<label class="text-xs text-foreground">Opacity</label>
+								<div class="flex items-center gap-2">
+									<input type="range" min="0.1" max="1.0" step="0.1" value="0.8" class="w-16 h-1" />
+									<span class="text-xs text-muted-foreground w-6">0.8</span>
+								</div>
+							</div>
+						</div>
+					</div>
+
+					<!-- Snapping Settings -->
+					<div class="space-y-2">
+						<h5 class="text-xs font-medium text-muted-foreground">Snapping</h5>
+						<div class="space-y-2 pl-2">
+							<div class="flex items-center justify-between">
+								<label class="text-xs text-foreground">Color</label>
+								<input type="color" class="w-8 h-6 rounded border border-border" value="#ffffff" />
+							</div>
+							<div class="flex items-center justify-between">
+								<label class="text-xs text-foreground">Corner Size</label>
+								<div class="flex items-center gap-2">
+									<input type="range" min="0.05" max="0.3" step="0.05" value="0.1" class="w-16 h-1" />
+									<span class="text-xs text-muted-foreground w-6">0.1</span>
+								</div>
+							</div>
+						</div>
+					</div>
 				</div>
 
-				<!-- Integration Info -->
-				<div>
-					<h4 class="text-xs font-medium mb-2 text-foreground">Integration</h4>
-					<div class="text-xs text-muted-foreground space-y-1">
-						<p>Svelte-based object list and settings panel.</p>
-						<p>Real-time synchronization with Three.js Modler application.</p>
-						<p>Bidirectional toolbar communication active.</p>
+				<!-- Scene Settings -->
+				<div class="space-y-3">
+					<h4 class="text-xs font-medium text-foreground border-b border-border pb-2">Scene</h4>
+					<div class="space-y-2 pl-2">
+						<div class="flex items-center justify-between">
+							<label class="text-xs text-foreground">Background</label>
+							<input type="color" class="w-8 h-6 rounded border border-border" value="#1a1a1a" />
+						</div>
+						<div class="flex items-center justify-between">
+							<label class="text-xs text-foreground">Grid Main</label>
+							<input type="color" class="w-8 h-6 rounded border border-border" value="#444444" />
+						</div>
+						<div class="flex items-center justify-between">
+							<label class="text-xs text-foreground">Grid Sub</label>
+							<input type="color" class="w-8 h-6 rounded border border-border" value="#222222" />
+						</div>
+					</div>
+				</div>
+
+				<!-- Interface Settings -->
+				<div class="space-y-3">
+					<h4 class="text-xs font-medium text-foreground border-b border-border pb-2">Interface</h4>
+					<div class="space-y-2 pl-2">
+						<div class="flex items-center justify-between">
+							<label class="text-xs text-foreground">Accent Color</label>
+							<input type="color" class="w-8 h-6 rounded border border-border" value="#4a9eff" />
+						</div>
+						<div class="flex items-center justify-between">
+							<label class="text-xs text-foreground">Toolbar Opacity</label>
+							<div class="flex items-center gap-2">
+								<input type="range" min="0.5" max="1.0" step="0.05" value="0.95" class="w-16 h-1" />
+								<span class="text-xs text-muted-foreground w-8">0.95</span>
+							</div>
+						</div>
 					</div>
 				</div>
 			</div>

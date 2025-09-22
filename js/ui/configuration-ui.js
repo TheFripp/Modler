@@ -299,14 +299,13 @@ class ConfigurationUI {
     setupDebugSubscriptions() {
         if (!this.configManager) return;
 
-        // Subscribe to selection color changes for debugging
+        // Subscribe to configuration changes
         this.configManager.subscribe('visual.selection.color', (newValue, oldValue) => {
-            console.log('🎨 ConfigurationUI: Selection color changed', { newValue, oldValue });
+            // Selection color updated
         });
 
-        // Subscribe to container color changes for debugging
         this.configManager.subscribe('visual.containers.wireframeColor', (newValue, oldValue) => {
-            console.log('🎨 ConfigurationUI: Container color changed', { newValue, oldValue });
+            // Container color updated
         });
     }
 }
