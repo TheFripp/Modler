@@ -448,6 +448,16 @@ class PushTool {
         // Sync geometry changes for wireframes and highlighting through centralized system
         // MeshSynchronizer will automatically update face highlights via updateFaceHighlightGeometry callback
         MovementUtils.syncRelatedMeshes(this.pushedObject, 'geometry', true);
+
+        // Update SceneController object data dimensions from modified geometry
+        if (this.pushedObject?.userData?.id) {
+            this.updateObjectDataDimensions(this.pushedObject.userData.id, this.pushedObject);
+        }
+
+        // Notify centralized system for real-time property panel updates
+        if (window.notifyObjectModified) {
+            window.notifyObjectModified(this.pushedObject, 'geometry');
+        }
     }
 
     updateFaceHighlighting() {
@@ -564,6 +574,16 @@ class PushTool {
                 // Force immediate geometry update for selection wireframes
                 meshSynchronizer.syncAllRelatedMeshes(pushedObject, 'geometry', true);
             }
+
+            // Update SceneController object data dimensions for final state
+            if (pushedObject?.userData?.id) {
+                this.updateObjectDataDimensions(pushedObject.userData.id, pushedObject);
+            }
+
+            // Notify centralized system of final geometry state for property panel updates
+            if (window.notifyObjectModified) {
+                window.notifyObjectModified(pushedObject, 'geometry');
+            }
         }
 
         // Also force selection visualizer refresh (only if object was selected)
@@ -590,6 +610,44 @@ class PushTool {
     calculateContainerSizeForFillObjects() {
         // Simple container size calculation - let MovementUtils handle the complexity
         return null;
+    }
+
+    /**
+     * Update SceneController object data dimensions from current geometry
+     * Ensures property panel sync after geometry modifications
+     */
+    updateObjectDataDimensions(objectId, mesh) {
+        if (!mesh || !mesh.geometry) return;
+
+        const sceneController = window.modlerComponents?.sceneController;
+        if (!sceneController) return;
+
+        const objectData = sceneController.getObject(objectId);
+        if (!objectData) return;
+
+        // Force geometry bounds recalculation
+        mesh.geometry.computeBoundingBox();
+        const box = mesh.geometry.boundingBox;
+
+        if (box) {
+            // Calculate actual dimensions from bounding box
+            const dimensions = {
+                x: Math.abs(box.max.x - box.min.x),
+                y: Math.abs(box.max.y - box.min.y),
+                z: Math.abs(box.max.z - box.min.z)
+            };
+
+            // Update SceneController object data
+            objectData.dimensions = dimensions;
+
+            // Also update mesh userData for consistency
+            if (!mesh.userData.dimensions) {
+                mesh.userData.dimensions = {};
+            }
+            mesh.userData.dimensions.x = dimensions.x;
+            mesh.userData.dimensions.y = dimensions.y;
+            mesh.userData.dimensions.z = dimensions.z;
+        }
     }
 
     clearHover() {

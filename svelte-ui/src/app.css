@@ -32,25 +32,45 @@
   }
 
   .dark {
-    --background: 0 0% 8%; /* #141414 */
-    --foreground: 0 0% 95%;
-    --card: 0 0% 8%; /* #141414 */
-    --card-foreground: 0 0% 95%;
-    --popover: 0 0% 10%; /* #1A1A1A */
-    --popover-foreground: 0 0% 95%;
-    --primary: 346.8 77.2% 49.8%;
-    --primary-foreground: 355.7 100% 97.3%;
-    --secondary: 0 0% 14%; /* #242424 */
-    --secondary-foreground: 0 0% 98%;
-    --muted: 0 0% 15%;
-    --muted-foreground: 240 5% 64.9%;
-    --accent: 0 0% 10%; /* #1A1A1A */
-    --accent-foreground: 0 0% 98%;
+    /* Modler V2 Professional Dark Theme */
+    --background: 220 13% 11%; /* #1f2937 (gray-800) - Main panel background */
+    --foreground: 210 20% 98%; /* #f9fafb (gray-50) - Main readable text */
+    --card: 220 13% 7%; /* #111827 (gray-900) - Cards and elevated surfaces */
+    --card-foreground: 210 20% 98%;
+    --popover: 220 13% 7%; /* #111827 */
+    --popover-foreground: 210 20% 98%;
+
+    /* Professional gray accent instead of pink */
+    --primary: 220 9% 42%; /* #6b7280 (gray-500) - Subtle, professional accent */
+    --primary-foreground: 210 20% 98%;
+
+    --secondary: 220 13% 22%; /* #374151 (gray-700) - Active/Selected states */
+    --secondary-foreground: 210 20% 98%;
+
+    --muted: 220 9% 46%; /* #9ca3af (gray-400) - Labels and meta information */
+    --muted-foreground: 220 9% 46%;
+
+    --accent: 220 9% 29%; /* #4b5563 (gray-600) - Interactive hover */
+    --accent-foreground: 210 20% 98%;
+
     --destructive: 0 62.8% 30.6%;
     --destructive-foreground: 0 85.7% 97.3%;
-    --border: 0 0% 14%; /* #242424 */
-    --input: 0 0% 10%; /* #1A1A1A */
-    --ring: 346.8 77.2% 49.8%;
+
+    --border: 220 13% 22%; /* #374151 (gray-700) - Subtle division lines */
+    --input: 220 13% 7%; /* #111827 (gray-900) - Input backgrounds */
+    --ring: 220 9% 42%; /* #6b7280 - Focus rings */
+
+    /* Modler-specific custom properties for easy theming */
+    --modler-panel-bg: 220 13% 11%; /* #1f2937 */
+    --modler-surface-bg: 220 13% 7%; /* #111827 */
+    --modler-separator: 220 13% 22%; /* #374151 */
+    --modler-text-primary: 210 20% 98%; /* #f9fafb */
+    --modler-text-secondary: 220 9% 46%; /* #9ca3af */
+    --modler-interactive: 220 9% 42%; /* #6b7280 */
+    --modler-interactive-hover: 220 9% 29%; /* #4b5563 */
+    --modler-active: 220 13% 22%; /* #374151 */
+
+    /* Chart colors for any data visualization */
     --chart-1: 220 70% 50%;
     --chart-2: 160 60% 45%;
     --chart-3: 30 80% 55%;
@@ -63,10 +83,44 @@
   }
 
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground dark;
     font-family: Arial, sans-serif;
     margin: 0;
     padding: 0;
     overflow: hidden;
+  }
+
+  /* Modler-specific utility classes */
+  .modler-panel {
+    background: hsl(var(--modler-panel-bg));
+    color: hsl(var(--modler-text-primary));
+  }
+
+  .modler-surface {
+    background: hsl(var(--modler-surface-bg));
+    border: 1px solid hsl(var(--modler-separator));
+  }
+
+  .modler-separator {
+    border-color: hsl(var(--modler-separator));
+  }
+
+  .modler-interactive {
+    background: hsl(var(--modler-interactive));
+    color: hsl(var(--modler-text-primary));
+    transition: background-color 0.2s ease;
+  }
+
+  .modler-interactive:hover {
+    background: hsl(var(--modler-interactive-hover));
+  }
+
+  .modler-active {
+    background: hsl(var(--modler-active));
+    color: hsl(var(--modler-text-primary));
+  }
+
+  .modler-text-secondary {
+    color: hsl(var(--modler-text-secondary));
   }
 }

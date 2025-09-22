@@ -14,6 +14,10 @@
 	// Handle layout axis selection
 	function selectLayoutAxis(axis: string) {
 		if (!$displayObject?.isContainer) return;
+		if (!axis || !['x', 'y', 'z'].includes(axis)) {
+			console.error('❌ Invalid layout axis:', axis);
+			return;
+		}
 
 		// Update the autoLayout direction property
 		updateThreeJSProperty($displayObject.id, 'autoLayout.direction', axis);
@@ -31,12 +35,14 @@
 	}
 
 	// Mixed value helpers for individual inputs
-	function getMixedValue(property: string): { value: any; isMixed: boolean; displayValue: string; class: string } {
+	function getMixedValue(property: string): { value: any; isMixed: boolean; displayValue: string; placeholder: string; class: string } {
 		const mixedState = getPropertyMixedState(property, $selectedObjects);
+		const numericValue = typeof mixedState.value === 'number' ? Math.round(mixedState.value * 10) / 10 : (mixedState.value || 0);
 		return {
 			value: mixedState.value,
 			isMixed: mixedState.isMixed,
-			displayValue: mixedState.isMixed ? 'Mix' : String(mixedState.value || 0),
+			displayValue: mixedState.isMixed ? '' : String(numericValue),
+			placeholder: mixedState.isMixed ? 'Mixed' : '',
 			class: mixedState.isMixed ? 'text-muted-foreground/60' : ''
 		};
 	}
@@ -185,8 +191,8 @@
 							<input
 								type="number"
 								value={gapMixed.displayValue}
-								placeholder={gapMixed.isMixed ? 'Mix' : ''}
-								oninput={(e) => updateThreeJSProperty($displayObject.id, 'autoLayout.gap', parseFloat(e.target.value) || 0)}
+								placeholder={gapMixed.placeholder}
+								onblur={(e) => updateThreeJSProperty($displayObject.id, 'autoLayout.gap', parseFloat(e.target.value) || 0)}
 								class="w-full px-2 py-1 text-xs bg-gray-800 border border-gray-600 rounded {gapMixed.class}"
 								step="0.1"
 								min="0"
@@ -204,8 +210,8 @@
 										<input
 											type="number"
 											value={paddingMixed.displayValue}
-											placeholder={paddingMixed.isMixed ? 'Mix' : ''}
-											oninput={(e) => updateThreeJSProperty($displayObject.id, `autoLayout.padding.${side}`, parseFloat(e.target.value) || 0)}
+											placeholder={paddingMixed.placeholder}
+											onblur={(e) => updateThreeJSProperty($displayObject.id, `autoLayout.padding.${side}`, parseFloat(e.target.value) || 0)}
 											class="w-full px-2 py-1 text-xs bg-gray-800 border border-gray-600 rounded {paddingMixed.class}"
 											step="0.1"
 											min="0"

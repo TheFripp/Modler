@@ -65,7 +65,17 @@ class PropertyUpdateHandler {
             objectData.autoLayout.enabled = true;
 
             // Step 4: PropertyUpdateHandler → objectData.autoLayout[property] = newValue
-            if (property.startsWith('padding.')) {
+            if (property.startsWith('autoLayout.')) {
+                // Handle nested autoLayout properties (e.g., 'autoLayout.direction' -> 'direction')
+                const nestedProperty = property.split('.')[1];
+                if (nestedProperty === 'padding') {
+                    // Handle padding sub-properties
+                    const paddingDirection = property.split('.')[2];
+                    objectData.autoLayout.padding[paddingDirection] = newValue;
+                } else {
+                    objectData.autoLayout[nestedProperty] = newValue;
+                }
+            } else if (property.startsWith('padding.')) {
                 const paddingDirection = property.split('.')[1];
                 objectData.autoLayout.padding[paddingDirection] = newValue;
             } else {

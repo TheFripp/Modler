@@ -106,42 +106,26 @@
 	function handleInput(event: Event) {
 		const target = event.target as HTMLInputElement;
 
-		// Clear "Mix" placeholder when user starts typing
-		if (target.value !== '' && value === 'Mix') {
-			// User is replacing mixed value - clear the field first
-			inputValue = '';
-		}
-
+		// Update internal state for real-time display feedback
 		inputValue = type === 'number' ? parseFloat(target.value) : target.value;
 
-		// Real-time PropertyController updates for immediate feedback
-		if (objectId && property && !oninput) {
-			const newValue = type === 'number' ? parseFloat(target.value) : target.value;
-
-			// Skip NaN values for number inputs during typing
-			if (type === 'number' && !isNaN(newValue)) {
-				propertyController.updatePropertyDebounced(objectId, property, newValue, 'input', 100);
-			} else if (type !== 'number') {
-				propertyController.updatePropertyDebounced(objectId, property, newValue, 'input', 100);
-			}
-		}
-
+		// Only call legacy handler if provided (no PropertyController updates on input)
 		if (oninput) {
-			// Legacy handler
 			oninput(event);
 		}
 	}
 
 	function handleBlur(event: FocusEvent) {
-		// Ensure property controller gets the final value on blur
-		if (objectId && property && inputValue !== value) {
+		// Ensure property controller gets the final value on blur (only place where updates happen)
+		if (objectId && property) {
 			const newValue = type === 'number' ? parseFloat(String(inputValue)) : inputValue;
 
 			// Skip NaN values for number inputs
 			if (type === 'number' && isNaN(newValue)) {
 				// Reset to original value or 0 for mixed values
-				inputValue = value === 'Mix' ? 0 : value;
+				inputValue = (value === '' || value === undefined) ? 0 : value;
 			} else {
+				// Always update on blur regardless of whether value changed (handles mixed→single transitions)
 				propertyController.updateProperty(objectId, property, newValue, 'input');
 			}
 		}
@@ -150,8 +134,8 @@
 	function handleInputFocus(event: FocusEvent) {
 		const target = event.target as HTMLInputElement;
 
-		// For mixed values, clear the field when focused to allow easy input
-		if (value === 'Mix') {
+		// For mixed values (empty value with "Mixed" placeholder), clear field when focused
+		if (value === '' && target.placeholder === 'Mixed') {
 			target.value = '';
 			inputValue = '';
 		} else {
@@ -176,7 +160,7 @@
 
 	function getNumericValue(): number {
 		if (typeof value === 'number') return value;
-		if (typeof value === 'string' && value === 'Mix') return 0; // Default for mixed values
+		if (typeof value === 'string' && value === '') return 0; // Default for mixed values (now empty string)
 		const parsed = parseFloat(String(value));
 		return isNaN(parsed) ? 0 : parsed;
 	}
@@ -222,9 +206,10 @@
 			isDragging = false;
 			document.removeEventListener('mousemove', handleDrag);
 
-			// Flush any pending updates immediately when drag stops
+			// Apply final validated update when drag stops for accuracy
 			if (objectId && property) {
-				propertyController.flushPendingUpdates();
+				const finalValue = getNumericValue();
+				propertyController.updateProperty(objectId, property, finalValue, 'input');
 			}
 		}
 
@@ -249,8 +234,8 @@
 		inputValue = displayValue;
 
 		if (objectId && property) {
-			// Use property controller with system standard 16ms for 60fps real-time updates
-			propertyController.updatePropertyDebounced(objectId, property, actualValue, 'drag', 16);
+			// Use immediate update for real-time 60fps drag operations (bypasses debouncing)
+			propertyController.updatePropertyImmediate(objectId, property, actualValue, 'drag');
 		} else {
 			// Fallback direct update with full precision
 			value = actualValue;

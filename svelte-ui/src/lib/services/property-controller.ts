@@ -41,6 +41,15 @@ class PropertyController {
 	private updateTimeouts = new Map<string, NodeJS.Timeout>();
 	private constraints = new Map<PropertyPath, PropertyConstraints>();
 
+	// Batching for performance optimization
+	private batchedUpdates = new Map<string, Map<string, any>>();
+	private batchTimeout: NodeJS.Timeout | null = null;
+	private readonly BATCH_DELAY = 16; // ~60fps for real-time updates
+
+	// Performance tracking
+	private updateCounts = new Map<string, number>();
+	private readonly MAX_UPDATES_PER_SECOND = 60;
+
 	// Event store for property changes
 	public propertyChanges: Writable<PropertyChangeEvent | null> = writable(null);
 
@@ -122,7 +131,7 @@ class PropertyController {
 	/**
 	 * Validate a property value against constraints
 	 */
-	private validateValue(property: PropertyPath, value: any): { valid: boolean; value: any; error?: string } {
+	private validateValue(property: PropertyPath, value: any, skipStepRounding: boolean = false): { valid: boolean; value: any; error?: string } {
 		const constraints = this.constraints.get(property);
 		if (!constraints) return { valid: true, value };
 
@@ -144,11 +153,14 @@ class PropertyController {
 				value = constraints.max;
 			}
 
-			// Step rounding
-			if (constraints.step) {
+			// Step rounding - skip for drag operations to enable smooth movement
+			if (constraints.step && !skipStepRounding) {
 				value = Math.round(value / constraints.step) * constraints.step;
 				// Round to avoid floating point precision issues
 				value = Math.round(value * 1000) / 1000;
+			} else if (typeof value === 'number') {
+				// Still round to reasonable precision for non-stepped values
+				value = Math.round(value * 10000) / 10000;
 			}
 		}
 
@@ -169,6 +181,12 @@ class PropertyController {
 		value: any,
 		source: PropertyChangeEvent['source'] = 'input'
 	): boolean {
+		// For multi-selection, delegate directly to updateThreeJSProperty which handles the multi-selection logic
+		if (objectId === 'multi-selection') {
+			updateThreeJSProperty(objectId, property, value, source);
+			return true;
+		}
+
 		const oldValue = this.getCurrentValue(objectId, property);
 		const validation = this.validateValue(property, value);
 
@@ -210,8 +228,16 @@ class PropertyController {
 		source: PropertyChangeEvent['source'] = 'drag',
 		delay: number = 150
 	): boolean {
+		// For multi-selection, delegate directly to updateThreeJSProperty which handles the multi-selection logic
+		if (objectId === 'multi-selection') {
+			updateThreeJSProperty(objectId, property, value, source);
+			return true;
+		}
+
 		const oldValue = this.getCurrentValue(objectId, property);
-		const validation = this.validateValue(property, value);
+		// Skip step rounding for drag operations to enable smooth movement
+		const skipStepRounding = source === 'drag';
+		const validation = this.validateValue(property, value, skipStepRounding);
 
 		if (!validation.valid) {
 			console.warn(`Property validation failed for ${property}:`, validation.error);
@@ -285,11 +311,187 @@ class PropertyController {
 	}
 
 	/**
+	 * Update multiple properties in a batch for performance
+	 * Useful for simultaneous property changes (e.g., position.x and position.y)
+	 */
+	updatePropertiesBatched(
+		objectId: string,
+		properties: Array<{ property: PropertyPath; value: any }>,
+		source: PropertyChangeEvent['source'] = 'input'
+	): boolean {
+		// Validate all properties first
+		const validatedProperties = [];
+		for (const { property, value } of properties) {
+			const validation = this.validateValue(property, value);
+			if (!validation.valid) {
+				console.warn(`Property validation failed for ${property}:`, validation.error);
+				return false;
+			}
+			validatedProperties.push({ property, value: validation.value });
+		}
+
+		// Check rate limiting
+		if (!this.checkRateLimit(objectId)) {
+			return false;
+		}
+
+		// Add to batch
+		let objectBatch = this.batchedUpdates.get(objectId);
+		if (!objectBatch) {
+			objectBatch = new Map();
+			this.batchedUpdates.set(objectId, objectBatch);
+		}
+
+		// Add all properties to the batch
+		for (const { property, value } of validatedProperties) {
+			objectBatch.set(property, { value, source });
+		}
+
+		// Schedule batch processing
+		this.scheduleBatchUpdate();
+		return true;
+	}
+
+	/**
+	 * Update property immediately during drag for real-time feedback
+	 * Bypasses debouncing for smooth 60fps arrow drag operations
+	 */
+	updatePropertyImmediate(
+		objectId: string,
+		property: PropertyPath,
+		value: any,
+		source: PropertyChangeEvent['source'] = 'drag'
+	): boolean {
+		// Skip validation during drag for performance (will validate on drag end)
+		const oldValue = this.getCurrentValue(objectId, property);
+
+		// For multi-selection, delegate directly to updateThreeJSProperty
+		if (objectId === 'multi-selection') {
+			updateThreeJSProperty(objectId, property, value, source);
+			return true;
+		}
+
+		// Apply immediate update without debouncing or validation delays
+		updateThreeJSProperty(objectId, property, value, source);
+
+		// Emit property change event for immediate UI feedback
+		this.propertyChanges.set({
+			objectId,
+			property,
+			value,
+			oldValue,
+			source
+		});
+
+		return true;
+	}
+
+	/**
+	 * Update property with smart performance optimization
+	 * Automatically chooses between immediate, debounced, or batched updates
+	 */
+	updatePropertySmart(
+		objectId: string,
+		property: PropertyPath,
+		value: any,
+		source: PropertyChangeEvent['source'] = 'input'
+	): boolean {
+		// Immediate updates for discrete actions
+		if (source === 'input' || source === 'arrow') {
+			return this.updateProperty(objectId, property, value, source);
+		}
+
+		// Real-time updates for continuous actions
+		if (source === 'drag' || source === 'scene') {
+			// Use batching for transform properties that often change together
+			if (property.startsWith('position.') || property.startsWith('rotation.')) {
+				return this.updatePropertiesBatched(objectId, [{ property, value }], source);
+			}
+
+			// Use debouncing for expensive operations
+			if (property.startsWith('dimensions.') || property.startsWith('autoLayout.')) {
+				return this.updatePropertyDebounced(objectId, property, value, source, 100);
+			}
+		}
+
+		return this.updateProperty(objectId, property, value, source);
+	}
+
+	/**
+	 * Check rate limiting to prevent performance issues
+	 */
+	private checkRateLimit(objectId: string): boolean {
+		const now = Date.now();
+		const key = `${objectId}_rate`;
+		const lastCount = this.updateCounts.get(key) || 0;
+
+		// Reset counter every second
+		if (now % 1000 < 16) {
+			this.updateCounts.set(key, 0);
+			return true;
+		}
+
+		if (lastCount >= this.MAX_UPDATES_PER_SECOND) {
+			console.warn(`Rate limit exceeded for object ${objectId}`);
+			return false;
+		}
+
+		this.updateCounts.set(key, lastCount + 1);
+		return true;
+	}
+
+	/**
+	 * Schedule batch update processing
+	 */
+	private scheduleBatchUpdate(): void {
+		if (this.batchTimeout) {
+			return; // Already scheduled
+		}
+
+		this.batchTimeout = setTimeout(() => {
+			this.processBatchedUpdates();
+			this.batchTimeout = null;
+		}, this.BATCH_DELAY);
+	}
+
+	/**
+	 * Process all batched updates at once
+	 */
+	private processBatchedUpdates(): void {
+		for (const [objectId, properties] of this.batchedUpdates) {
+			for (const [property, { value, source }] of properties) {
+				updateThreeJSProperty(objectId, property, value, source);
+
+				// Emit property change event
+				this.propertyChanges.set({
+					objectId,
+					property: property as PropertyPath,
+					value,
+					oldValue: this.getCurrentValue(objectId, property as PropertyPath),
+					source
+				});
+			}
+		}
+
+		// Clear the batch
+		this.batchedUpdates.clear();
+	}
+
+	/**
 	 * Clean up resources
 	 */
 	destroy(): void {
 		this.flushPendingUpdates();
+
+		// Clean up batching
+		if (this.batchTimeout) {
+			clearTimeout(this.batchTimeout);
+			this.processBatchedUpdates(); // Process any pending batches
+		}
+
 		this.propertyChanges.set(null);
+		this.updateCounts.clear();
+		this.batchedUpdates.clear();
 	}
 }
 

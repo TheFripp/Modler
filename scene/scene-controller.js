@@ -129,7 +129,20 @@ class SceneController {
         if (options.scale) {
             mesh.scale.copy(options.scale);
         }
-        
+
+        // Calculate dimensions from geometry for property panel consistency
+        if (mesh.geometry && mesh.geometry.computeBoundingBox) {
+            mesh.geometry.computeBoundingBox();
+            const box = mesh.geometry.boundingBox;
+            if (box) {
+                objectData.dimensions = {
+                    x: Math.abs(box.max.x - box.min.x),
+                    y: Math.abs(box.max.y - box.min.y),
+                    z: Math.abs(box.max.z - box.min.z)
+                };
+            }
+        }
+
         // Add to scene and registry
         this.scene.add(mesh);
         this.objects.set(id, objectData);

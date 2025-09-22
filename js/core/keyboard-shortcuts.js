@@ -71,6 +71,11 @@ class KeyboardShortcuts {
         // Update toolbar visual state
         document.querySelectorAll('.toolbar-button').forEach(btn => btn.classList.remove('active'));
         document.getElementById(`${toolName}-tool`)?.classList.add('active');
+
+        // Notify Svelte toolbar of tool change
+        if (window.notifyToolStateChanged) {
+            window.notifyToolStateChanged();
+        }
     }
 
     frameSelectedObject() {

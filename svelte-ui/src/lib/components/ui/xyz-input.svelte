@@ -58,12 +58,13 @@
 		{#each ['x', 'y', 'z'] as axis}
 			{@const property = objectId && propertyBase ? `${propertyBase}.${axis}` : undefined}
 			{@const mixedState = property ? getPropertyMixedState(property, $selectedObjects) : { isMixed: false, value: values[axis] }}
+			{@const displayValue = mixedState.isMixed ? '' : (typeof mixedState.value === 'number' ? Math.round(mixedState.value * 10) / 10 : mixedState.value)}
 			<div class="flex-1">
 				<InlineInput
 					label={labels[axis]}
 					type="number"
-					value={mixedState.isMixed ? 'Mix' : mixedState.value}
-					placeholder={mixedState.isMixed ? 'Mix' : ''}
+					value={displayValue}
+					placeholder={mixedState.isMixed ? 'Mixed' : ''}
 					class={mixedState.isMixed ? 'text-muted-foreground/60' : ''}
 					{objectId}
 					property={property}

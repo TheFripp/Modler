@@ -2,6 +2,7 @@
 	import { onMount } from 'svelte';
 	import { initializeBridge } from '$lib/bridge/threejs-bridge';
 	import { selectedObjects, objectHierarchy, toolState } from '$lib/stores/modler';
+	import Toolbar from '$lib/components/Toolbar.svelte';
 
 	// Tab state
 	let activeTab: 'objects' | 'settings' = 'objects';
@@ -60,7 +61,16 @@
 
 	// Function to select object in the scene when clicked in hierarchy
 	function selectObjectInScene(objectId: string) {
-		// Send message to parent window to select object
+		// Check if we're in iframe context
+		const isInIframe = window !== window.parent;
+
+		if (!isInIframe && (window as any).selectObjectInSceneDirectly) {
+			// Direct context: use direct communication
+			const success = (window as any).selectObjectInSceneDirectly(objectId);
+			if (success) return;
+		}
+
+		// Iframe context or fallback: use PostMessage
 		window.parent.postMessage({
 			type: 'object-select',
 			data: { objectId }
@@ -218,19 +228,10 @@
 			<div class="space-y-4">
 				<h3 class="text-sm font-medium text-foreground">Application Settings</h3>
 
-				<!-- Tool Settings -->
+				<!-- Toolbar Component -->
 				<div class="pb-4 border-b border-border">
-					<h4 class="text-xs font-medium mb-2 text-foreground">Tools</h4>
-					<div class="space-y-2">
-						<div class="flex items-center justify-between">
-							<span class="text-xs text-muted-foreground">Snap Enabled:</span>
-							<span class="text-xs text-muted-foreground">{$toolState.snapEnabled ? 'Yes' : 'No'}</span>
-						</div>
-						<div class="flex items-center justify-between">
-							<span class="text-xs text-muted-foreground">Active Tool:</span>
-							<span class="text-xs text-muted-foreground">{$toolState.activeTool}</span>
-						</div>
-					</div>
+					<h4 class="text-xs font-medium mb-2 text-foreground">Toolbar</h4>
+					<Toolbar />
 				</div>
 
 				<!-- Integration Info -->
@@ -239,6 +240,7 @@
 					<div class="text-xs text-muted-foreground space-y-1">
 						<p>Svelte-based object list and settings panel.</p>
 						<p>Real-time synchronization with Three.js Modler application.</p>
+						<p>Bidirectional toolbar communication active.</p>
 					</div>
 				</div>
 			</div>

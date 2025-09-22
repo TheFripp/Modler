@@ -175,30 +175,41 @@ function convertThreeObjectToObjectData(threeObject: any): ObjectData {
 
 // Update Three.js from Svelte store changes
 export function updateThreeJSProperty(objectId: string, property: string, value: any, source: string = 'input') {
-	const isDemo = !modlerComponentsBridge;
+	// Check if we're in an iframe - use PostMessage for cross-origin communication
 	const isInIframe = window !== window.parent;
 
-	if (isDemo && isInIframe) {
-		// Send property update to parent Three.js application
-		const message = {
-			type: 'property-update',
-			data: { objectId, property, value, source }
-		};
-		window.parent.postMessage(message, 'http://localhost:3000');
+	if (isInIframe) {
+		// Use PostMessage for iframe communication (secure)
+		try {
+			window.parent.postMessage({
+				type: 'property-update',
+				data: { objectId, property, value, source }
+			}, '*');
+			return;
+		} catch (error) {
+			console.error('❌ PostMessage property update failed:', error);
+			return;
+		}
 	}
 
-	const { sceneController, propertyUpdateHandler } = modlerComponentsBridge || {};
+	// Direct access for non-iframe context
+	const components = (window as any)?.modlerComponents || modlerComponentsBridge;
+
+	if (!components) {
+		console.warn('⚠️ No Three.js components available for property update:', { objectId, property, value });
+		return;
+	}
+
+	const { sceneController, propertyUpdateHandler } = components;
 
 	// Handle multi-selection updates
 	if (objectId === 'multi-selection') {
 		// Get current selected objects
 		const currentObjects = get(selectedObjects);
 
-		// Update all selected objects
+		// Update all selected objects directly
 		currentObjects.forEach(obj => {
-			if (propertyUpdateHandler) {
-				propertyUpdateHandler.handlePropertyChange(obj.id, property, value);
-			}
+			handleDirectPropertyUpdate(components, obj.id, property, value, source);
 		});
 
 		// Update the store for all objects
@@ -232,10 +243,8 @@ export function updateThreeJSProperty(objectId: string, property: string, value:
 		return;
 	}
 
-	// Single object update
-	if (propertyUpdateHandler) {
-		propertyUpdateHandler.handlePropertyChange(objectId, property, value);
-	}
+	// Single object update - handle directly with Three.js scene
+	handleDirectPropertyUpdate(components, objectId, property, value, source);
 
 	// Update the store to reflect the change with nested property support
 	selectedObjects.update(objects =>
@@ -277,4 +286,106 @@ export function syncSelectionFromThreeJS(selectedThreeObjects: any[]) {
 // Sync object hierarchy from Three.js
 export function syncHierarchyFromThreeJS(allObjects: ObjectData[]) {
 	objectHierarchy.set(allObjects);
+}
+
+/**
+ * Handle property updates directly with Three.js scene
+ * Replaces iframe PostMessage communication with direct function calls
+ */
+function handleDirectPropertyUpdate(components: any, objectId: string, property: string, value: any, source: string = 'input') {
+	if (!components?.sceneController) {
+		console.warn('⚠️ SceneController not available for property update');
+		return;
+	}
+
+	const { sceneController } = components;
+
+	// Get the object from SceneController
+	const objectData = sceneController.getObject(objectId);
+	if (!objectData) {
+		console.warn('⚠️ Object not found:', objectId);
+		return;
+	}
+
+	const mesh = objectData.mesh;
+	if (!mesh) {
+		console.warn('⚠️ Mesh not found for object:', objectId);
+		return;
+	}
+
+	// Handle different property types (same logic as svelte-integration-v2.js)
+	if (property.startsWith('position.')) {
+		const axis = property.split('.')[1] as 'x' | 'y' | 'z';
+		if (mesh.position && ['x', 'y', 'z'].includes(axis)) {
+			mesh.position[axis] = value;
+			completeObjectModification(components, mesh, 'transform', true);
+		}
+	} else if (property.startsWith('rotation.')) {
+		const axis = property.split('.')[1] as 'x' | 'y' | 'z';
+		if (mesh.rotation && ['x', 'y', 'z'].includes(axis)) {
+			// Convert degrees to radians
+			mesh.rotation[axis] = value * Math.PI / 180;
+			completeObjectModification(components, mesh, 'transform', true);
+		}
+	} else if (property.startsWith('dimensions.')) {
+		const axis = property.split('.')[1] as 'x' | 'y' | 'z';
+		if (['x', 'y', 'z'].includes(axis)) {
+			// Use SceneController for geometry modifications if available
+			if (sceneController.updateObjectDimensions) {
+				sceneController.updateObjectDimensions(objectId, axis, value);
+			} else {
+				// Fallback: Basic scaling approach
+				const currentScale = mesh.scale[axis];
+				const scaleFactor = value / currentScale;
+				mesh.scale[axis] = value;
+
+				// Update userData for dimension tracking
+				if (!mesh.userData.dimensions) mesh.userData.dimensions = { x: 1, y: 1, z: 1 };
+				mesh.userData.dimensions[axis] = value;
+			}
+			completeObjectModification(components, mesh, 'geometry', true);
+		}
+	} else if (property.startsWith('material.')) {
+		const materialProp = property.split('.')[1];
+		if (mesh.material) {
+			if (materialProp === 'color') {
+				// Handle color updates
+				const colorValue = typeof value === 'string' ? value.replace('#', '0x') : value;
+				mesh.material.color.setHex(colorValue);
+			} else if (materialProp === 'opacity') {
+				// Handle opacity updates
+				mesh.material.opacity = value;
+				mesh.material.transparent = value < 1;
+			}
+			mesh.material.needsUpdate = true;
+			completeObjectModification(components, mesh, 'material', true);
+		}
+	} else if (property.startsWith('autoLayout.') || property === 'sizingMode') {
+		// Handle container layout properties
+		const propertyUpdateHandler = components.propertyUpdateHandler;
+		if (propertyUpdateHandler?.handleContainerLayoutPropertyChange) {
+			propertyUpdateHandler.handleContainerLayoutPropertyChange(objectId, property, value);
+		}
+		completeObjectModification(components, mesh, 'layout', true);
+	}
+}
+
+/**
+ * Complete object modification using the same pattern as move tool
+ * Ensures selection boxes stay synchronized during real-time updates
+ */
+function completeObjectModification(components: any, mesh: any, changeType: string = 'transform', immediateVisuals: boolean = false) {
+	const meshSynchronizer = components.meshSynchronizer;
+
+	if (meshSynchronizer) {
+		meshSynchronizer.syncAllRelatedMeshes(mesh, changeType, immediateVisuals);
+	} else if ((window as any).CameraMathUtils) {
+		// Fallback to legacy sync method
+		(window as any).CameraMathUtils.syncSelectionWireframes(mesh);
+	}
+
+	// Notify centralized system for bidirectional property panel synchronization
+	if ((window as any).notifyObjectModified) {
+		(window as any).notifyObjectModified(mesh, changeType);
+	}
 }

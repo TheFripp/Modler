@@ -113,7 +113,7 @@ class MeshSynchronizer {
      * Synchronize all related meshes for a main mesh with immediate vs deferred prioritization
      * @param {THREE.Object3D} mainMesh - Main mesh that changed
      * @param {string} changeType - Type of change (transform, geometry, visibility)
-     * @param {boolean} immediateOnly - If true, only sync immediate visual updates
+     * @param {boolean} immediateOnly - If true, only sync immediate visual updates OR process all immediately for drag
      */
     syncAllRelatedMeshes(mainMesh, changeType = 'transform', immediateOnly = false) {
         const relatedMeshes = this.meshRegistry.get(mainMesh);
@@ -136,6 +136,20 @@ class MeshSynchronizer {
 
             const isImmediate = this.isImmediateSync(syncType);
 
+            // Real-time mode for drag operations: process everything immediately
+            if (immediateOnly && changeType === 'transform') {
+                try {
+                    const success = this.performSync(mainMesh, relatedMesh, syncType, syncOptions);
+                    if (success) {
+                        syncCount++;
+                    }
+                } catch (error) {
+                    console.error(`MeshSynchronizer: Error syncing ${syncType} mesh:`, error);
+                }
+                return; // Process immediately, no deferring
+            }
+
+            // Original logic for non-drag operations
             // If immediate only mode, skip non-immediate syncs
             if (immediateOnly && !isImmediate) {
                 deferredSyncs.push({ relatedMesh, syncType, syncOptions });
@@ -158,7 +172,7 @@ class MeshSynchronizer {
             }
         });
 
-        // Schedule deferred syncs for next frame
+        // Schedule deferred syncs for next frame (skip for real-time drag operations)
         if (deferredSyncs.length > 0 && !immediateOnly) {
             requestAnimationFrame(() => {
                 deferredSyncs.forEach(({ relatedMesh, syncType, syncOptions }) => {
