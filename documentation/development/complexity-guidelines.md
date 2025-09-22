@@ -42,7 +42,7 @@ These guidelines prioritize **good architecture** and **maintainability** over a
 
 ## Examples
 
-- ✅ `modler-v2.css` (400 lines) - Complete theme system, easier to maintain colors/spacing
+- ✅ Modular CSS system (7 files, ~18KB total) - Organized theme system with base, components, forms, etc.
 - ✅ `scene-controller.js` (350 lines) - Cohesive 3D scene management
 - ❌ Splitting CSS into base/panels/forms just to meet 300-line limit
 - ❌ Breaking apart tightly coupled class methods across files

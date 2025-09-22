@@ -62,18 +62,8 @@ function initializeScene() {
  * Initialize Interaction Layer components
  */
 function initializeInteraction() {
-    // LEGACY MANAGERS DISABLED: Only UnifiedContainerManager is active
-    // modlerV2Components.containerVisibilityManager = new ContainerVisibilityManager();
-    // modlerV2Components.containerSupportManager = new ContainerSupportManager();
-    modlerV2Components.unifiedContainerManager = new UnifiedContainerManager();
-
-    // Migrate existing containers to new interactive mesh architecture
-    // This ensures backward compatibility for containers created before the architectural update
-    setTimeout(() => {
-        if (modlerV2Components.unifiedContainerManager) {
-            modlerV2Components.unifiedContainerManager.migrateAllContainers();
-        }
-    }, 1000); // Delay to ensure all components are initialized
+    // CONTAINER MANAGER: Active container management system
+    modlerV2Components.containerManager = new ContainerManager();
     modlerV2Components.meshSynchronizer = new MeshSynchronizer();
     modlerV2Components.fieldNavigationManager = new FieldNavigationManager();
 

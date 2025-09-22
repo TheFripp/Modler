@@ -16,9 +16,9 @@ class PropertyUpdateHandler {
         return window.modlerComponents?.containerManager;
     }
 
-    get unifiedContainerManager() {
-        return window.modlerComponents?.unifiedContainerManager;
-    }
+    // get unifiedContainerManager() {
+    //     return window.modlerComponents?.unifiedContainerManager;
+    // }
 
     /**
      * Handle container layout property changes from property panel
@@ -26,7 +26,7 @@ class PropertyUpdateHandler {
      */
     handleContainerLayoutPropertyChange(containerId, property, newValue) {
 
-        if (!this.sceneController || !this.containerManager || !this.unifiedContainerManager) {
+        if (!this.sceneController || !this.containerManager) {
             console.error('Required components not available for PropertyUpdateHandler');
             return false;
         }

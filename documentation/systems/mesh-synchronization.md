@@ -11,7 +11,7 @@ Every 3D object in Modler typically has multiple related meshes that must stay s
 - **Selection wireframe** - orange edge highlight when selected  
 - **Container collision** - invisible raycast target for containers
 - **Face highlights** - temporary cyan overlays for tool interaction
-- **Gizmos** - transformation handles for selected objects
+- **Tool overlays** - temporary visual feedback for interactions
 
 ### The Old Problem
 Before centralized synchronization, manual sync calls were scattered across multiple files:
@@ -77,7 +77,7 @@ Face highlights and other temporary overlays coordinate through mesh synchronize
 Container collision meshes stay synchronized with visual container boundaries through automatic transform sync.
 
 ### Tool System
-Gizmos and tool-specific overlays register with their target objects for automatic coordination.
+Tool-specific overlays register with their target objects for automatic coordination.
 
 ## File Reference
 - `interaction/mesh-synchronizer.js` - Core implementation and API

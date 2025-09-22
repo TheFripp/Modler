@@ -217,14 +217,20 @@ sceneController.notifyObjectTransformChanged(objectId);
 - **Do NOT open new browser windows** - user manages their own session and will refresh manually
 - **Respect existing browser sessions** - user has control over when to refresh
 
-### 4. Documentation Approach
-- **Document concepts, not code** - patterns and architectural decisions over implementation details
-- **Build on existing documentation** - always review `/documentation/` before creating new files
-- **Consolidate overlapping content** - eliminate redundant documentation streams
-- **Only document validated features** - wait for user confirmation that features work correctly
+### 4. Documentation Approach - Solo Development Focus
+- **Minimal documentation** - only essential patterns and quick references
+- **No developer onboarding** - you are the solo developer
+- **Practical focus** - method signatures, file paths, common patterns only
+- **No process documentation** - focus on technical implementation patterns
 - **Reference source files** for actual code examples
-- **Focus on "why" and "when"**, not "how"
-- **Keep examples conceptual**, not syntactic
+- **Build on existing docs** - always check `/documentation/` before creating new files
+
+#### Solo Development Documentation Structure
+- **`documentation/development/api-quick-reference.md`** - Method signatures and file paths
+- **`documentation/development/svelte-ui-integration.md`** - UI development patterns only
+- **`documentation/development/tool-guide.md`** - Tool development patterns
+- **`documentation/development/complexity-guidelines.md`** - File size limits and architecture rules
+- **`documentation/development/cad-geometry-principles.md`** - CAD-accurate geometry manipulation
 
 ### 3. Current Architecture Patterns
 - **Container-First Selection**: Single click on child objects selects their parent container
@@ -249,6 +255,7 @@ sceneController.notifyObjectTransformChanged(objectId);
 
 ### 🔧 Development Guides
 - **Tool Development**: [`/development/tool-guide.md`](documentation/development/tool-guide.md) - Tool development patterns
+- **Svelte UI Integration**: [`/development/svelte-ui-integration.md`](documentation/development/svelte-ui-integration.md) - Svelte UI development patterns and communication
 - **API Reference**: [`/development/api-reference.md`](documentation/development/api-reference.md) - Method signatures and file references
 - **API Quick Reference**: [`/development/api-quick-reference.md`](documentation/development/api-quick-reference.md) - Essential method signatures
 - **Complexity Guidelines**: [`/development/complexity-guidelines.md`](documentation/development/complexity-guidelines.md) - Complexity management rules
@@ -261,15 +268,7 @@ sceneController.notifyObjectTransformChanged(objectId);
 - **Input & Events**: [`/systems/input-events.md`](documentation/systems/input-events.md) - Event coordination and camera controls
 - **Mesh Synchronization**: [`/systems/mesh-synchronization.md`](documentation/systems/mesh-synchronization.md) - Centralized mesh coordination
 - **Performance Guide**: [`/systems/performance-guide.md`](documentation/systems/performance-guide.md) - Optimization and debugging
-- **Face Highlighting**: [`/systems/face-highlighting.md`](documentation/systems/face-highlighting.md) - Face-based interaction
 - **Camera & Raycasting**: [`/systems/camera-raycasting.md`](documentation/systems/camera-raycasting.md) - Camera integration patterns
-
-### 🔬 Parametric Design System
-- **Dependency Graph System**: [`/systems/dependency-graph-system.md`](documentation/systems/dependency-graph-system.md) - Change propagation and relationship tracking
-- **Layout Propagation Engine**: [`/systems/layout-propagation-engine.md`](documentation/systems/layout-propagation-engine.md) - Efficient hierarchy updates and cascade management
-- **Property Update Handler**: [`/systems/property-update-handler.md`](documentation/systems/property-update-handler.md) - Property-panel driven updates with dependency awareness
-- **Formula Engine**: [`/systems/formula-engine.md`](documentation/systems/formula-engine.md) - Parametric expressions and variable management
-- **Component Template Manager**: [`/systems/component-template-manager.md`](documentation/systems/component-template-manager.md) - Master-instance relationships and design system workflows
 
 ### 🐛 Debugging & Analysis
 - **Debugging Selection**: [`/development/debugging-selection.md`](documentation/development/debugging-selection.md) - Selection troubleshooting
@@ -319,16 +318,12 @@ sceneController.notifyObjectTransformChanged(objectId);
 ### Container Issues ⚠️ **CRITICAL ARCHITECTURE AREA**
 **FIRST**: Read [`/systems/container-architecture-master.md`](documentation/systems/container-architecture-master.md) to understand correct architecture patterns
 
-**Implementation Status** (Phase B: Core Architecture Fixes):
+**Implementation Status** (Current Working Features):
 - ✅ Direct Container Creation - Cmd+F → ContainerManager call
 - ✅ Container Sizing Mode - Default 'hug' mode with Push Tool → 'fixed' mode switching
-- ⚠️ PropertyUpdateHandler - Property-panel driven layout system (pending)
-
-**Container Todo List:**
-1. ✅ Fix container creation flow (no tool dependency)
-2. ✅ Add container sizing modes (hug/fixed)
-3. ⚠️ Property panel integration for sizing mode UI
-4. ⚠️ PropertyUpdateHandler implementation
+- ✅ PropertyUpdateHandler - Property-panel driven layout system (175 lines, implemented)
+- ✅ Object hierarchy display with tree structure
+- ✅ Svelte UI integration with real-time synchronization
 
 **Common Architecture Mistakes:**
 - Assuming container creation requires tool activation ❌
@@ -358,7 +353,7 @@ sceneController.notifyObjectTransformChanged(objectId);
 **Activate System Health Monitor** → Reference [`/systems/performance-guide.md`](documentation/systems/performance-guide.md) for optimization strategies
 
 ### Face Highlighting Issues
-**Activate Implementation Specialist** → Reference [`/systems/face-highlighting.md`](documentation/systems/face-highlighting.md) for geometry detection patterns
+**Activate Implementation Specialist** → Reference tool system documentation for face-based interaction patterns
 
 ### Input/Event Conflicts
 **Activate Architecture Guardian** → Reference [`/systems/input-events.md`](documentation/systems/input-events.md) for event coordination principles

@@ -1,100 +1,79 @@
 # Tool System
 
-## Overview
-Modular tool architecture with centralized event coordination and shared selection behaviors. Supports face-based manipulation for CAD workflows.
-
-**See**: [`/core/ux-design.md`](../core/ux-design.md) for interaction patterns and mental models that guide tool design.
+Modular tool architecture with centralized event coordination and shared selection behaviors.
 
 ## Tool Coordination
 
 ### Single Event Entry Point
-All mouse events flow through InputHandler first, which coordinates between camera controls, gizmos, and tool operations to prevent conflicts.
+All mouse events flow through InputController, which coordinates between camera controls and tool operations to prevent conflicts.
 
 **Priority Order**:
-1. **Gizmo operations** (highest priority)
-2. **Camera controls** (Shift+drag for pan, default drag for orbit)
-3. **Tool behaviors** (selection, face highlighting, etc.)
-4. **Empty space fallback** (camera orbit)
+1. **Camera controls** (Shift+drag for pan, default drag for orbit)
+2. **Tool behaviors** (selection, face highlighting, etc.)
+3. **Empty space fallback** (camera orbit)
 
 ### Tool Event Pattern
-Tools receive pre-coordinated events from InputHandler rather than direct DOM events. This prevents race conditions and ensures predictable behavior.
+Tools receive pre-coordinated events from InputController rather than direct DOM events. This prevents race conditions and ensures predictable behavior.
 
-## Tool Types
+## Current Tools
 
 ### SelectTool
-**Purpose**: Clean object selection without visual distractions
-- **No hover highlights** - maintains clean visual experience
-- **Container-first selection** through BaseSelectionBehavior
-- **Multi-select support** with modifier keys
+**Purpose**: Container-first selection with double-click traversal
+- **Container-first logic** via BaseSelectionBehavior
+- **Double-click step-into** for direct object access
+- **Multi-selection** with Cmd+click
 
-### MoveTool  
+### MoveTool
 **Purpose**: Face-based object manipulation with visual feedback
 - **Face highlighting** on selected objects only
 - **Face-constrained dragging** using face normals
 - **Real-time wireframe sync** during movement
-- **Gizmo coordination** for precise positioning
+- **Face-based manipulation** for precise positioning
 
-### Container Creation
-**Purpose**: Direct container creation through command shortcuts
-- **Container creation** via Cmd+F (handled by ToolController → ContainerManager)
-- **Property-driven layout** through PropertyUpdateHandler
-- **Layout configuration** via property panel changes
-- **No tool activation required** for container operations
+### PushTool
+**Purpose**: Face extrusion and container resizing
+- **Face highlighting** for push targets
+- **Face normal-based extrusion** with real-time preview
+- **Container sizing mode** switching (hug → fixed)
+- **Geometry vertex manipulation** for CAD accuracy
+
+### BoxCreationTool
+**Purpose**: Interactive 2D → 3D box creation
+- **Two-phase creation** (2D rectangle → 3D height)
+- **Face-based positioning** on existing objects
+- **Keyboard controls** for orientation and snapping
 
 ## Shared Behaviors
 
 ### BaseSelectionBehavior
-**Universal selection logic** used by all tools:
-- `handleObjectClick()` - Container-first selection with modifier support
-- `handleDoubleClick()` - Direct object selection bypass
-- `handleEmptySpaceClick()` - Smart selection clearing
+**File**: `application/tools/base-selection-behavior.js`
+- **Container-first clicking** logic
+- **Double-click step-into** functionality
+- **Empty space selection clearing**
+- **Shared by all tools** for consistent selection
 
-### Tool Switching
-- **Keyboard shortcuts**: 1=select, 2=move, 3=layout
-- **State preservation**: Selection maintained across tool switches
-- **Clean transitions**: Tools properly deactivate/activate behaviors
+### BaseFaceToolBehavior
+**File**: `application/tools/base-face-tool-behavior.js`
+- **Face highlighting** coordination
+- **Face detection** and normal calculation
+- **Used by MoveTool and PushTool**
 
-## Face-Based Interaction
+## Tool Switching
 
-### Face Detection
-MoveTool detects faces on both regular objects and container collision meshes for consistent face-based manipulation across all object types.
+### ToolController
+**File**: `application/tool-controller.js`
+- **Keyboard shortcuts** (1=Select, 2=Move, etc.)
+- **Tool state management**
+- **Container creation** via Cmd+F → ContainerManager
 
-### Face Highlighting
-- **Cyan overlays** show which face will be used for dragging
-- **Geometry-aware** highlighting works with box geometries (full rectangular faces) and other geometry types (triangle faces)
-- **Tool-specific** - only shown in MoveTool context
+### Tool Integration
+- **Event delegation** from InputController
+- **Selection coordination** via SelectionController
+- **Visual feedback** via VisualEffects
+- **Property updates** via PropertyUpdateHandler
 
-### Face Constraints
-During face-based dragging, objects move along face normal directions, providing intuitive directional control for CAD-style manipulation.
-
-## Tool Development
-
-### Tool Interface
-Tools implement standard event handlers:
-- `activate()` / `deactivate()` - Tool lifecycle management
-- `onHover(hit)` - Mouse hover behavior (optional)  
-- `onClick(hit, event)` - Mouse click behavior
-- `onMouseDown(hit, event)` - Drag initiation (optional)
-
-### Selection Integration
-All tools use BaseSelectionBehavior for consistent selection patterns rather than implementing custom selection logic.
-
-### Visual Effects Integration
-Tools coordinate with VisualEffects system for highlights, wireframes, and temporary visual feedback.
-
-## Architecture Benefits
-
-### Consistency
-Shared BaseSelectionBehavior ensures all tools handle selection identically, eliminating user confusion between different interaction modes.
-
-### Modularity  
-Tools are self-contained with clear interfaces, making it easy to add new tools or modify existing behavior.
-
-### Conflict Prevention
-Centralized event coordination through InputHandler prevents conflicts between tools, camera controls, and other interactive elements.
-
-## File References
-- `application/managers/tool-controller.js` - Tool registration and switching
-- `application/tools/base-selection-behavior.js` - Shared selection logic
-- `interaction/input-handler.js` - Event coordination
-- Individual tool files: `select-tool.js`, `move-tool.js`, `push-tool.js`, `box-creation-tool.js`
+## Key Patterns
+- **Shared selection behavior** prevents inconsistencies
+- **Face-based interaction** for CAD workflows
+- **Event coordination** prevents conflicts
+- **Tool-agnostic container creation** via direct commands

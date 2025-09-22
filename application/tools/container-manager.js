@@ -208,10 +208,10 @@ class ContainerManager {
             return null;
         }
 
-        const unifiedContainerManager = window.modlerComponents?.unifiedContainerManager;
-        if (unifiedContainerManager) {
-            unifiedContainerManager.registerContainer(containerObject);
-        }
+        // const unifiedContainerManager = window.modlerComponents?.unifiedContainerManager;
+        // if (unifiedContainerManager) {
+        //     unifiedContainerManager.registerContainer(containerObject);
+        // }
 
         return containerObject;
     }
@@ -298,10 +298,10 @@ class ContainerManager {
         });
 
         // Register container with unified ContainerManager (new architecture)
-        const unifiedContainerManager = window.modlerComponents?.unifiedContainerManager;
-        if (unifiedContainerManager && containerObject) {
-            unifiedContainerManager.registerContainer(containerObject);
-        }
+        // const unifiedContainerManager = window.modlerComponents?.unifiedContainerManager;
+        // if (unifiedContainerManager && containerObject) {
+        //     unifiedContainerManager.registerContainer(containerObject);
+        // }
 
         // LEGACY MANAGERS REMOVED: Only UnifiedContainerManager handles containers now
         // Legacy containerSupportManager registration removed to prevent conflicts

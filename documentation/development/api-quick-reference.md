@@ -76,7 +76,7 @@
 - `'geometry'` - Synchronize geometry updates
 
 ## ToolController
-**File**: `application/managers/tool-controller.js`
+**File**: `application/tool-controller.js`
 
 ### Methods
 - `setCurrentTool(toolName)` → `void` - Switch to specific tool
@@ -87,14 +87,15 @@
 - `'select'` - Selection tool (keyboard: 1)
 - `'move'` - Movement tool (keyboard: 2)  
 
-## InputHandler
-**File**: `interaction/input-handler.js`
+## InputController
+**File**: `interaction/input-controller.js`
 
 ### Methods
-- `onMouseDown(event, hit)` → `void` - Handle mouse down events
-- `onMouseUp(event, hit)` → `void` - Handle mouse up events  
-- `onMouseMove(event, hit)` → `void` - Handle mouse move events
-- `onDoubleClick(event, hit)` → `void` - Handle double-click events
+- `onMouseDown(event)` → `void` - Handle mouse down events with raycasting
+- `onMouseUp(event)` → `void` - Handle mouse up events and tool delegation
+- `onMouseMove(event)` → `void` - Handle mouse move events for tool interactions
+- `onKeyDown(event)` → `void` - Handle keyboard input and shortcuts
+- `onKeyUp(event)` → `void` - Handle key release events
 
 ### Hit Object Structure
 ```javascript
@@ -124,10 +125,44 @@
 - **Position commitment**: Prevents coordinate jumps during context transitions
 
 ## ContainerVisibilityManager
-**File**: `interaction/container-visibility-manager.js` (❌ Disabled)
+**File**: `archived/components/container-visibility-manager.js` (❌ Disabled)
 
 ### Methods
 - `registerContainer(containerId)` → `void` - Register container for visibility tracking
 - `showContainer(containerId, containerMesh)` → `boolean` - Show container wireframe
 - `hideContainer(containerId, containerMesh)` → `boolean` - Hide container wireframe
 - `registerChildObject(objectId, isVisible)` → `void` - Register child object
+
+## PropertyUpdateHandler
+**File**: `application/handlers/property-update-handler.js`
+
+### Methods
+- `handleContainerLayoutPropertyChange(containerId, propertyType, value)` → `void` - Handle layout property changes
+- `handleObjectDimensionChange(objectId, dimension, value)` → `void` - Handle dimension updates
+- `handleObjectTransformChange(objectId, transformType, value)` → `void` - Handle transform updates
+- `getComponents()` → `Object` - Get modler component references
+
+### Property Types
+- `'direction'` - Layout direction (x, y, z, xy, xz, yz, xyz)
+- `'gap'` - Spacing between objects
+- `'padding.top'`, `'padding.bottom'`, etc. - Container padding
+- `'enabled'` - Enable/disable layout
+
+## ThreeJSBridge
+**File**: `svelte-ui/src/lib/bridge/threejs-bridge.ts`
+
+### Methods
+- `initialize(components)` → `void` - Initialize bridge with Three.js components
+- `isInitialized()` → `boolean` - Check initialization status
+- `getComponents()` → `Object` - Get Three.js component references
+
+### Functions
+- `initializeBridge()` → `void` - Initialize iframe or direct communication
+- `activateToolInScene(toolName)` → `void` - Activate tool in main application
+- `toggleSnapInScene()` → `void` - Toggle snapping in main application
+
+### Communication Types
+- PostMessage for iframe context
+- Direct function calls for same-window context
+- Real-time object hierarchy synchronization
+- Bidirectional property updates

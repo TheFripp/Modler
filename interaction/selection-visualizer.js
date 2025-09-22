@@ -250,7 +250,7 @@ class SelectionVisualizer {
     refreshContainerWireframes() {
         // Container wireframes are handled by the UnifiedContainerManager
         // This is a placeholder for future container material refresh functionality
-        const containerManager = window.modlerComponents?.unifiedContainerManager;
+        const containerManager = window.modlerComponents?.containerManager;
         if (containerManager && containerManager.refreshMaterials) {
             containerManager.refreshMaterials();
         }
@@ -376,7 +376,7 @@ class SelectionVisualizer {
 
         // Check if this is a container through SceneController
         const sceneController = window.modlerComponents?.sceneController;
-        const containerManager = window.modlerComponents?.unifiedContainerManager;
+        const containerManager = window.modlerComponents?.containerManager;
 
         if (sceneController && containerManager) {
             const objectData = sceneController.getObjectByMesh(object);
@@ -396,7 +396,7 @@ class SelectionVisualizer {
 
         // Check if this is a container through SceneController
         const sceneController = window.modlerComponents?.sceneController;
-        const containerManager = window.modlerComponents?.unifiedContainerManager;
+        const containerManager = window.modlerComponents?.containerManager;
 
         if (sceneController && containerManager) {
             const objectData = sceneController.getObjectByMesh(object);
@@ -429,7 +429,7 @@ class SelectionVisualizer {
         if (!object) return;
 
         const sceneController = window.modlerComponents?.sceneController;
-        const containerManager = window.modlerComponents?.unifiedContainerManager;
+        const containerManager = window.modlerComponents?.containerManager;
 
         if (sceneController && containerManager) {
             const objectData = sceneController.getObjectByMesh(object);
@@ -450,7 +450,7 @@ class SelectionVisualizer {
         if (!object) return;
 
         const sceneController = window.modlerComponents?.sceneController;
-        const containerManager = window.modlerComponents?.unifiedContainerManager;
+        const containerManager = window.modlerComponents?.containerManager;
 
         if (sceneController && containerManager) {
             const objectData = sceneController.getObjectByMesh(object);
