@@ -86,8 +86,19 @@ class BaseFaceToolBehavior {
             this.hoveredObject = targetObject;
             this.hoveredHit = hit;
 
-            // Face highlighting activated
-            this.visualEffects.showFaceHighlight(hit);
+            // Face highlighting activated - use support mesh if available
+            const supportMeshes = targetObject.userData.supportMeshes;
+            if (supportMeshes?.faceHighlight) {
+                // ARCHITECTURE COMPLIANCE: Position once per hover session, then show
+                const supportMeshFactory = window.SupportMeshFactory ? new SupportMeshFactory() : null;
+                if (supportMeshFactory) {
+                    supportMeshFactory.positionFaceHighlightForHit(supportMeshes.faceHighlight, hit);
+                }
+                supportMeshes.faceHighlight.visible = true;
+            } else {
+                // Fallback to Visual Effects for objects without support meshes
+                this.visualEffects.showFaceHighlight(hit);
+            }
             return true;
         } else {
             // Object not selected - clearing hover
@@ -190,7 +201,14 @@ class BaseFaceToolBehavior {
      */
     clearHover() {
         if (this.hoveredObject) {
-            this.visualEffects.clearHighlight();
+            // Hide support mesh face highlight if it exists
+            const supportMeshes = this.hoveredObject.userData.supportMeshes;
+            if (supportMeshes?.faceHighlight) {
+                supportMeshes.faceHighlight.visible = false;
+            } else {
+                // Fallback to Visual Effects for objects without support meshes
+                this.visualEffects.clearHighlight();
+            }
             this.hoveredObject = null;
             this.hoveredHit = null;
         }

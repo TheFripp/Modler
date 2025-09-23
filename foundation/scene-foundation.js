@@ -18,7 +18,7 @@ class SceneFoundation {
         if (height <= 0) height = 600;
         
         
-        this.camera = new THREE.PerspectiveCamera(75, width / height, 0.1, 1000);
+        this.camera = new THREE.PerspectiveCamera(75, width / height, 0.01, 2000);
         
         // Force a fresh WebGL context
         this.renderer = new THREE.WebGLRenderer({ 

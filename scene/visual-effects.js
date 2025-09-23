@@ -802,10 +802,11 @@ class VisualEffects {
         // CREATE ONCE ARCHITECTURE: Use pre-created face highlight from support meshes
         const supportMeshes = targetObject.userData.supportMeshes;
         if (supportMeshes && supportMeshes.faceHighlight) {
-            // Update face geometry for the specific hit face
-            this.updateFaceHighlightForHit(supportMeshes.faceHighlight, hit);
-
-            // Show the pre-created face highlight
+            // ARCHITECTURE COMPLIANCE: Position once per hover session, then show
+            const supportMeshFactory = window.SupportMeshFactory ? new SupportMeshFactory() : null;
+            if (supportMeshFactory) {
+                supportMeshFactory.positionFaceHighlightForHit(supportMeshes.faceHighlight, hit);
+            }
             supportMeshes.faceHighlight.visible = true;
 
             // Store reference to pre-created mesh
@@ -1585,33 +1586,6 @@ class VisualEffects {
         }
     }
 
-    /**
-     * Update face highlight geometry for a specific hit (used with pre-created support meshes)
-     * @param {THREE.Mesh} faceHighlightMesh - Pre-created face highlight mesh
-     * @param {Object} hit - Raycast hit data with face information
-     */
-    updateFaceHighlightForHit(faceHighlightMesh, hit) {
-        if (!faceHighlightMesh || !hit || !hit.face) return;
-
-        try {
-            // Create face geometry for the specific hit
-            const faceGeometry = this.createFaceGeometry(hit, 'auto');
-            if (!faceGeometry) return;
-
-            // Dispose old geometry and apply new one
-            if (faceHighlightMesh.geometry) {
-                faceHighlightMesh.geometry.dispose();
-            }
-            faceHighlightMesh.geometry = faceGeometry;
-
-            // Apply small normal offset to prevent z-fighting
-            const normalOffset = hit.face.normal.clone().multiplyScalar(VisualEffects.Config.geometry.normalOffset);
-            faceHighlightMesh.position.copy(normalOffset);
-
-        } catch (error) {
-            console.warn('Failed to update face highlight geometry:', error);
-        }
-    }
 }
 
 // Export for use in main application

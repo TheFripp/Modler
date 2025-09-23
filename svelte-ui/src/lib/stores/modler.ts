@@ -429,6 +429,12 @@ function handleDirectPropertyUpdate(components: any, objectId: string, property:
 						positions.needsUpdate = true;
 						geometry.computeBoundingBox();
 
+						// Update support mesh geometries to match new main geometry
+						const supportMeshFactory = (window as any).SupportMeshFactory ? new (window as any).SupportMeshFactory() : null;
+						if (supportMeshFactory) {
+							supportMeshFactory.updateSupportMeshGeometries(mesh);
+						}
+
 						// Update userData for dimension tracking
 						if (!mesh.userData.dimensions) mesh.userData.dimensions = { x: 1, y: 1, z: 1 };
 						mesh.userData.dimensions[axis] = value;

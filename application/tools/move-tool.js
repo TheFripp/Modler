@@ -143,7 +143,7 @@ class MoveTool {
         }
         
         // Clear the highlight since we're now dragging
-        this.visualEffects.clearHighlight();
+        this.faceToolBehavior.clearHover();
         
     }
     
@@ -225,9 +225,6 @@ class MoveTool {
         const meshSynchronizer = window.modlerComponents?.meshSynchronizer;
         if (meshSynchronizer) {
             meshSynchronizer.syncAllRelatedMeshes(this.dragObject, 'transform', true);
-        } else {
-            // Fallback to legacy sync method
-            window.CameraMathUtils.syncSelectionWireframes(this.dragObject);
         }
 
         // Notify centralized system for real-time property panel updates
@@ -328,7 +325,6 @@ class MoveTool {
         this.dragHitPoint = null;
 
         // Clear any existing highlights and hover states to ensure clean state
-        this.visualEffects.clearHighlight();
         this.faceToolBehavior.clearHover();
 
         // Re-trigger face highlighting for current mouse position after tool operation ends

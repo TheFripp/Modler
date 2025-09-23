@@ -340,16 +340,22 @@ class MeshSynchronizer {
      * Synchronize highlight effects
      */
     syncHighlight(mainMesh, relatedMesh, syncOptions) {
-        // Sync position and rotation
+        // ARCHITECTURE COMPLIANCE: Skip child meshes - they use relative positioning
+        if (relatedMesh.parent === mainMesh) {
+            // Child mesh - position is already relative, no sync needed
+            return true;
+        }
+
+        // External mesh - sync position and rotation
         relatedMesh.position.copy(mainMesh.position);
         relatedMesh.rotation.copy(mainMesh.rotation);
         relatedMesh.scale.copy(mainMesh.scale);
-        
+
         // Apply face normal offset if specified (for face highlights)
         if (syncOptions.faceNormalOffset) {
             relatedMesh.position.add(syncOptions.faceNormalOffset);
         }
-        
+
         return true;
     }
     

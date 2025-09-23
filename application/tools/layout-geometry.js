@@ -412,6 +412,12 @@ class LayoutGeometry {
         newGeometry.computeBoundingBox();
         newGeometry.computeBoundingSphere();
         
+        // Update support mesh geometries to match new container geometry
+        const supportMeshFactory = window.SupportMeshFactory ? new SupportMeshFactory() : null;
+        if (supportMeshFactory) {
+            supportMeshFactory.updateSupportMeshGeometries(containerMesh);
+        }
+
         // CRITICAL FIX: Force MeshSynchronizer to update all related meshes after geometry change
         // This ensures selection wireframes and other related meshes get updated geometry
         const meshSynchronizer = window.modlerComponents?.meshSynchronizer;

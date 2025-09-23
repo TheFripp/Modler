@@ -448,11 +448,14 @@ class PushTool {
         // Update support mesh geometries to match modified main geometry
         const supportMeshFactory = window.SupportMeshFactory ? new SupportMeshFactory() : null;
         if (supportMeshFactory && this.pushedObject) {
-            supportMeshFactory.updateSupportMeshGeometries(this.pushedObject);
+            // Real-time updates: Update face highlights during push operations for immediate feedback
+            supportMeshFactory.updateSupportMeshGeometries(this.pushedObject, true);
         }
 
+        // Update face highlighting to match new geometry
+        this.updateFaceHighlighting();
+
         // Sync geometry changes for wireframes and highlighting through centralized system
-        // MeshSynchronizer will automatically update face highlights via updateFaceHighlightGeometry callback
         MovementUtils.syncRelatedMeshes(this.pushedObject, 'geometry', true);
 
         // Update SceneController object data dimensions from modified geometry
@@ -471,57 +474,21 @@ class PushTool {
         if (hoverState.isActive) {
             const targetObject = this.faceToolBehavior.getTargetObject(hoverState.hit);
             if (targetObject === this.pushedObject) {
-                // Clear current highlight and create updated hit info
-                this.visualEffects.clearHighlight();
-
-                // Create updated hit info with current geometry
-                const updatedHit = this.createUpdatedHitInfo(hoverState.hit);
-                if (updatedHit) {
-                    this.visualEffects.showFaceHighlight(updatedHit);
+                // Use support mesh face highlight - show/hide only during push operations
+                const supportMeshes = this.pushedObject.userData.supportMeshes;
+                if (supportMeshes?.faceHighlight) {
+                    // ARCHITECTURE COMPLIANCE: During push operations, only show - NO repositioning
+                    // Face highlight was positioned when hover started, now it moves naturally with geometry
+                    supportMeshes.faceHighlight.visible = true;
+                } else {
+                    // Fallback to Visual Effects for objects without support meshes
+                    this.visualEffects.clearHighlight();
+                    this.visualEffects.showFaceHighlight(hoverState.hit);
                 }
             }
         }
     }
 
-    createUpdatedHitInfo(originalHit) {
-        if (!originalHit || !this.pushedObject) return null;
-
-        try {
-            // Get current geometry and face
-            const geometry = this.pushedObject.geometry;
-            const face = originalHit.face;
-            const positionAttribute = geometry.attributes.position;
-
-            if (!positionAttribute || !face) return null;
-
-            // Get the three vertices of the face using cached vectors
-            const a = this.cache.tempVector1.fromBufferAttribute(positionAttribute, face.a).applyMatrix4(this.pushedObject.matrixWorld);
-            const b = this.cache.tempVector2.fromBufferAttribute(positionAttribute, face.b).applyMatrix4(this.pushedObject.matrixWorld);
-            const c = this.cache.tempVector3.fromBufferAttribute(positionAttribute, face.c).applyMatrix4(this.pushedObject.matrixWorld);
-
-            // Calculate face center as the new hit point
-            const faceCenter = this.cache.tempVector4.addVectors(a, b).add(c).divideScalar(3);
-
-            // Recalculate face normal
-            const edge1 = this.cache.tempVector1.subVectors(b, a);
-            const edge2 = this.cache.tempVector2.subVectors(c, a);
-            const normal = edge1.cross(edge2).normalize();
-
-            // Create updated hit info with recalculated position and normal
-            return {
-                ...originalHit,
-                object: originalHit.object,
-                point: faceCenter.clone(),
-                face: {
-                    ...originalHit.face,
-                    normal: normal.clone()
-                }
-            };
-
-        } catch (error) {
-            return originalHit;
-        }
-    }
 
 
 
@@ -605,7 +572,6 @@ class PushTool {
         }
 
         // Clear any existing highlights and hover states to ensure clean state
-        this.visualEffects.clearHighlight();
         this.faceToolBehavior.clearHover();
 
         // Force final container update with fill-aware calculations
