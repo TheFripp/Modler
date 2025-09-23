@@ -1,7 +1,7 @@
 /**
  * Select Tool
- * Handles object selection using shared selection behavior
- * Target: ~50 lines - delegates to BaseSelectionBehavior
+ * Handles object selection using SelectionController directly
+ * Target: ~50 lines - clean architecture with direct controller access
  */
 
 class SelectTool {
@@ -9,8 +9,7 @@ class SelectTool {
         this.selectionController = selectionController;
         this.visualEffects = visualEffects;
         
-        // Use shared selection behavior for consistency
-        this.selectionBehavior = new BaseSelectionBehavior(selectionController);
+        // Use SelectionController directly for clean architecture
         
         this.hoveredObject = null;
     }
@@ -41,21 +40,21 @@ class SelectTool {
      * Handle mouse click events
      */
     onClick(hit, event) {
-        // Delegate to shared selection behavior
+        // Use SelectionController directly
         if (hit && hit.object) {
-            this.selectionBehavior.handleObjectClick(hit.object, event);
+            this.selectionController.handleObjectClick(hit.object, event, { toolType: 'SelectTool' });
         } else {
-            this.selectionBehavior.handleEmptySpaceClick(event);
+            this.selectionController.handleEmptySpaceClick(event);
         }
     }
     
     
     /**
-     * Handle double-click events - delegate to shared behavior
+     * Handle double-click events
      */
     onDoubleClick(hit, event) {
-        // Delegate to shared selection behavior
-        this.selectionBehavior.handleDoubleClick(hit, event);
+        // Use SelectionController directly
+        this.selectionController.handleDoubleClick(hit, event);
     }
     
     /**

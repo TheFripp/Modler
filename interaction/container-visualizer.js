@@ -227,14 +227,9 @@ class ContainerVisualizer extends ObjectVisualizer {
         // Re-enable container interactions
         this.enableAllContainers();
 
-        // Restore previous container state if it was selected
+        // Clear previous container visual state
         if (previousContainer) {
-            const selectionController = window.modlerComponents?.selectionController;
-            if (selectionController && selectionController.isSelected && selectionController.isSelected(previousContainer)) {
-                this.setState(previousContainer, 'selected');
-            } else {
-                this.setState(previousContainer, 'normal');
-            }
+            this.setState(previousContainer, 'normal');
         }
     }
 
@@ -408,15 +403,75 @@ class ContainerVisualizer extends ObjectVisualizer {
      * Disable collision detection for other containers during context
      */
     disableOtherContainers(activeContainer) {
-        // Implementation would disable collision meshes for containers other than activeContainer
-        // This prevents accidental selection of other containers while in context
+        const sceneController = window.modlerComponents?.sceneController;
+        if (!sceneController) return;
+
+        // Get all objects in the scene
+        const allObjects = sceneController.getAllObjects();
+
+        for (const objectData of allObjects) {
+            if (objectData.isContainer) {
+                const containerMesh = objectData.mesh;
+
+                // Disable interactive mesh for the active container (the one we stepped into)
+                // This prevents the container from interfering with selection of its children
+                if (containerMesh === activeContainer) {
+                    this.disableContainerInteractiveMesh(containerMesh);
+                }
+            }
+        }
     }
 
     /**
      * Re-enable collision detection for all containers
      */
     enableAllContainers() {
-        // Implementation would re-enable all container collision meshes
+        const sceneController = window.modlerComponents?.sceneController;
+        if (!sceneController) return;
+
+        // Get all objects in the scene
+        const allObjects = sceneController.getAllObjects();
+
+        for (const objectData of allObjects) {
+            if (objectData.isContainer) {
+                const containerMesh = objectData.mesh;
+                this.enableContainerInteractiveMesh(containerMesh);
+            }
+        }
+    }
+
+    /**
+     * Disable container interactive mesh to prevent interference with child selection
+     */
+    disableContainerInteractiveMesh(containerMesh) {
+        if (!containerMesh) return;
+
+        // Find the interactive mesh child
+        const interactiveMesh = containerMesh.children.find(child =>
+            child.userData && child.userData.isContainerInteractive
+        );
+
+        if (interactiveMesh) {
+            interactiveMesh.raycast = () => {}; // Disable raycasting
+            interactiveMesh.userData.wasRaycastable = true; // Mark that it was previously raycastable
+        }
+    }
+
+    /**
+     * Re-enable container interactive mesh
+     */
+    enableContainerInteractiveMesh(containerMesh) {
+        if (!containerMesh) return;
+
+        // Find the interactive mesh child
+        const interactiveMesh = containerMesh.children.find(child =>
+            child.userData && child.userData.isContainerInteractive
+        );
+
+        if (interactiveMesh && interactiveMesh.userData.wasRaycastable) {
+            delete interactiveMesh.raycast; // Re-enable raycasting by removing override
+            delete interactiveMesh.userData.wasRaycastable;
+        }
     }
 
     /**

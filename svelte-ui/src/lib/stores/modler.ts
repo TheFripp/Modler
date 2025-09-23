@@ -28,9 +28,16 @@ export interface ToolState {
 	snapEnabled: boolean;
 }
 
+export interface ContainerContext {
+	containerId: string;
+	containerName: string;
+	steppedIntoAt: number;
+}
+
 // Core Svelte stores
 export const selectedObjects: Writable<ObjectData[]> = writable([]);
 export const objectHierarchy: Writable<ObjectData[]> = writable([]);
+export const containerContext: Writable<ContainerContext | null> = writable(null);
 export const toolState: Writable<ToolState> = writable({
 	activeTool: 'select',
 	snapEnabled: true
@@ -337,6 +344,11 @@ export function syncSelectionFromThreeJS(selectedThreeObjects: any[]) {
 // Sync object hierarchy from Three.js
 export function syncHierarchyFromThreeJS(allObjects: ObjectData[]) {
 	objectHierarchy.set(allObjects);
+}
+
+// Sync container context from Three.js
+export function syncContainerContextFromThreeJS(context: ContainerContext | null) {
+	containerContext.set(context);
 }
 
 /**

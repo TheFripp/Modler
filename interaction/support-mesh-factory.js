@@ -135,8 +135,7 @@ class SupportMeshFactory {
      * Create selection wireframe for regular objects
      */
     createSelectionWireframe(mainMesh) {
-        if (!mainMesh.geometry) {
-            console.warn('Cannot create selection wireframe: mesh has no geometry', mainMesh);
+        if (!mainMesh.geometry || mainMesh.type === 'Group') {
             return null;
         }
 

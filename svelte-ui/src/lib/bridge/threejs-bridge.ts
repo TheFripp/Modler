@@ -2,6 +2,7 @@ import {
 	initializeModlerBridge,
 	syncSelectionFromThreeJS,
 	syncHierarchyFromThreeJS,
+	syncContainerContextFromThreeJS,
 	toolState
 } from '$lib/stores/modler';
 
@@ -277,6 +278,11 @@ function handleModlerData(data: any) {
 		if (data.toolState) {
 			syncToolStateFromIframe(data.toolState);
 		}
+
+		// Handle container context updates (included in unified data)
+		if (data.hasOwnProperty('containerContext')) {
+			syncContainerContextFromIframe(data.containerContext);
+		}
 	} else if (data.type === 'hierarchy-changed') {
 		// Handle standalone hierarchy updates
 		syncHierarchyFromIframe(data.objectHierarchy || []);
@@ -319,5 +325,17 @@ function syncToolStateFromIframe(toolStateData: any) {
 		toolState.set(toolStateData);
 	}).catch(error => {
 		console.error('❌ Failed to update tool state store:', error);
+	});
+}
+
+/**
+ * Sync container context from main application to Svelte store
+ */
+function syncContainerContextFromIframe(containerContextData: any) {
+	// Import and update the container context store
+	import('$lib/stores/modler').then(({ containerContext }) => {
+		containerContext.set(containerContextData);
+	}).catch(error => {
+		console.error('❌ Failed to update container context store:', error);
 	});
 }

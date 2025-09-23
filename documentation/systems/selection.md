@@ -39,9 +39,9 @@ Container-first selection with direct object access through double-click.
 
 ### Basic Selection
 1. User clicks object
-2. BaseSelectionBehavior determines if container or direct selection
+2. SelectionController determines if container or direct selection
 3. SelectionController updates selection state
-4. SelectionVisualizer creates edge highlights
+4. VisualizationManager creates edge highlights
 5. Property panel updates via bridge
 
 ### Container Step-Into
@@ -54,8 +54,8 @@ Container-first selection with direct object access through double-click.
 ## Integration Points
 
 ### Tool Integration
-- **BaseSelectionBehavior**: Shared selection logic for all tools
-- **Tool delegation**: Tools receive pre-selected objects from SelectionController
+- **SelectionController**: Centralized selection logic handling all tools
+- **Direct access**: Tools call SelectionController methods directly
 - **Face highlighting**: Only on selected objects
 
 ### UI Integration

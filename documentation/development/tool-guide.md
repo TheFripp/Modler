@@ -11,22 +11,19 @@ class YourTool {
     constructor(selectionController, visualEffects) {
         this.selectionController = selectionController;
         this.visualEffects = visualEffects;
-        
-        // Use shared selection behavior for consistency
-        this.selectionBehavior = new BaseSelectionBehavior(selectionController);
     }
-    
+
     onClick(hit, event) {
         if (hit && hit.object) {
-            this.selectionBehavior.handleObjectClick(hit.object, event);
+            this.selectionController.handleObjectClick(hit.object, event, { toolType: 'YourTool' });
         } else {
-            this.selectionBehavior.handleEmptySpaceClick(event);
+            this.selectionController.handleEmptySpaceClick(event);
         }
     }
-    
+
     onDoubleClick(hit, event) {
-        // BaseSelectionBehavior handles container step-into functionality
-        this.selectionBehavior.handleDoubleClick(hit, event);
+        // SelectionController handles all container step-into functionality
+        this.selectionController.handleDoubleClick(hit, event);
     }
 }
 ```
@@ -50,7 +47,7 @@ class YourTool {
 
 ### SelectTool
 - **Purpose**: Object selection and highlighting
-- **Behavior**: Delegates all selection to BaseSelectionBehavior
+- **Behavior**: Uses SelectionController directly for clean architecture
 - **Container Step-Into**: Double-click support for container navigation
 - **Hover**: No hover highlights (clean selection experience)
 - **File**: `application/tools/select-tool.js`
@@ -66,12 +63,12 @@ class YourTool {
 
 ## Selection Integration
 
-### Always Use BaseSelectionBehavior
-**DO NOT** implement custom selection logic in tools. Use shared behavior:
+### Always Use SelectionController Directly
+**DO NOT** implement custom selection logic in tools. Use SelectionController directly:
 
 ```javascript
 // Correct approach
-this.selectionBehavior.handleObjectClick(hit.object, event);
+this.selectionController.handleObjectClick(hit.object, event, { toolType: 'YourTool' });
 
 // Wrong approach - don't do custom selection
 if (this.isSelectable(object)) {
@@ -161,7 +158,7 @@ this.visualEffects.clearHighlight();
 3. Ensure InputHandler is delegating correctly
 
 ### Selection Not Working in Tool
-1. Verify using BaseSelectionBehavior instead of custom logic
+1. Verify using SelectionController.handleObjectClick() directly instead of custom logic
 2. Check if objects are marked as selectable
 3. Ensure proper event delegation pattern
 
@@ -171,7 +168,7 @@ this.visualEffects.clearHighlight();
 3. Ensure tool state is properly reset
 
 ## Files to Reference
-- `application/tools/base-selection-behavior.js` - Shared selection patterns
+- `interaction/selection-controller.js` - Centralized selection logic
 - `application/managers/tool-controller.js` - Tool registration and switching
 - `interaction/input-handler.js` - Event coordination
 - Example tools: `select-tool.js`, `move-tool.js`, `push-tool.js`, `box-creation-tool.js`

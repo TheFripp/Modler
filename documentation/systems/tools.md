@@ -19,7 +19,7 @@ Tools receive pre-coordinated events from InputController rather than direct DOM
 
 ### SelectTool
 **Purpose**: Container-first selection with double-click traversal
-- **Container-first logic** via BaseSelectionBehavior
+- **Container-first logic** via SelectionController
 - **Double-click step-into** for direct object access
 - **Multi-selection** with Cmd+click
 
@@ -43,12 +43,13 @@ Tools receive pre-coordinated events from InputController rather than direct DOM
 - **Face-based positioning** on existing objects
 - **Keyboard controls** for orientation and snapping
 
-## Shared Behaviors
+## Centralized Selection Logic
 
-### BaseSelectionBehavior
-**File**: `application/tools/base-selection-behavior.js`
-- **Container-first clicking** logic
-- **Double-click step-into** functionality
+### SelectionController
+**File**: `interaction/selection-controller.js`
+- **Centralized selection logic** handling all tools
+- **Container-first behavior** built into core selection methods
+- **Hierarchical navigation** with double-click step-into
 - **Empty space selection clearing**
 - **Shared by all tools** for consistent selection
 

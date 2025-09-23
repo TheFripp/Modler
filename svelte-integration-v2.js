@@ -23,7 +23,7 @@
         if (cachedPort && ports.includes(parseInt(cachedPort))) {
             try {
                 const controller = new AbortController();
-                const timeoutId = setTimeout(() => controller.abort(), 500);
+                const timeoutId = setTimeout(() => controller.abort(), 200);
 
                 const response = await fetch(`http://localhost:${cachedPort}/main-toolbar`, {
                     method: 'HEAD',
@@ -51,7 +51,7 @@
         const portPromises = ports.map(async (port) => {
             try {
                 const controller = new AbortController();
-                const timeoutId = setTimeout(() => controller.abort(), 1000);
+                const timeoutId = setTimeout(() => controller.abort(), 300);
 
                 const response = await fetch(`http://localhost:${port}/main-toolbar`, {
                     method: 'HEAD',
@@ -628,7 +628,8 @@
                 y: parseFloat(((mesh?.rotation?.y || 0) * 180 / Math.PI).toFixed(1)),
                 z: parseFloat(((mesh?.rotation?.z || 0) * 180 / Math.PI).toFixed(1))
             },
-            dimensions: objectData?.dimensions || mesh?.userData?.dimensions || { x: 1, y: 1, z: 1 }
+            dimensions: objectData?.dimensions || mesh?.userData?.dimensions || { x: 1, y: 1, z: 1 },
+            parentContainer: objectData?.parentContainer || null
         };
 
         // Add material if available
@@ -661,12 +662,13 @@
     }
 
     /**
-     * Send complete data update including selection, hierarchy, and tool state
+     * Send complete data update including selection, hierarchy, tool state, and container context
      */
     function sendFullDataUpdate(selectedObjects, updateType = 'data-update') {
         const sceneController = window.modlerComponents?.sceneController;
         const toolController = window.modlerComponents?.toolController;
         const snapController = window.modlerComponents?.snapController;
+        const selectionController = window.modlerComponents?.selectionController;
 
         const allObjects = sceneController?.getAllObjects() || [];
 
@@ -676,10 +678,27 @@
             snapEnabled: snapController?.getEnabled() || false
         };
 
+        // Get current container context
+        let containerContext = null;
+        if (selectionController?.isInContainerContext()) {
+            const contextMesh = selectionController.getContainerContext();
+            if (contextMesh && sceneController) {
+                const contextData = sceneController.getObjectByMesh(contextMesh);
+                if (contextData) {
+                    containerContext = {
+                        containerId: contextData.id,
+                        containerName: contextData.name,
+                        steppedIntoAt: Date.now()
+                    };
+                }
+            }
+        }
+
         sendDataToSveltePanels({
             selectedObjects: selectedObjects || [],
             objectHierarchy: allObjects,
             toolState: currentToolState,
+            containerContext: containerContext,
             type: updateType
         });
     }
@@ -689,9 +708,8 @@
      */
     function sendDataToSveltePanels(data) {
         try {
-            // Verify we have a base URL for secure origin checking
+            // If Svelte detection is still in progress, queue the message
             if (!SVELTE_BASE_URL) {
-                console.warn('⚠️ No Svelte base URL available for postMessage communication');
                 return;
             }
 
@@ -898,19 +916,58 @@
     const PANEL_UPDATE_THROTTLE_NORMAL = 16; // 60fps for non-drag operations
 
     /**
-     * Handle object selection from hierarchy panel
+     * Step into container by ID (for direct communication)
      */
-    function handleObjectSelection(objectId) {
+    window.stepIntoContainerById = function(containerId) {
         const selectionController = window.modlerComponents?.selectionController;
         const sceneController = window.modlerComponents?.sceneController;
 
         if (selectionController && sceneController) {
+            const containerData = sceneController.getObject(containerId);
+            if (containerData && containerData.mesh) {
+                selectionController.stepIntoContainer(containerData.mesh);
+                return true;
+            }
+        }
+        return false;
+    };
+
+    /**
+     * Handle object selection from hierarchy panel
+     */
+    function handleObjectSelection(objectId, parentContainer = null) {
+        const selectionController = window.modlerComponents?.selectionController;
+        const sceneController = window.modlerComponents?.sceneController;
+
+        if (selectionController && sceneController) {
+            // If object is a child of a container, step into the container first
+            if (parentContainer) {
+                const containerData = sceneController.getObject(parentContainer);
+                if (containerData && containerData.mesh) {
+                    // Step into the parent container
+                    selectionController.stepIntoContainer(containerData.mesh);
+                }
+            }
+
             // Get object data from SceneController
             const objectData = sceneController.getObject(objectId);
             if (objectData && objectData.mesh) {
-                // Clear current selection and select the new object
+                // Clear current selection
                 selectionController.clearSelection();
-                selectionController.select(objectData.mesh);
+
+                // If object has a parent container, select the container instead of the child
+                if (parentContainer) {
+                    const containerData = sceneController.getObject(parentContainer);
+                    if (containerData && containerData.mesh) {
+                        selectionController.select(containerData.mesh);
+                    } else {
+                        // Fallback: select the child object if container not found
+                        selectionController.select(objectData.mesh);
+                    }
+                } else {
+                    // No parent container, select the object directly
+                    selectionController.select(objectData.mesh);
+                }
             } else {
             }
         } else {
@@ -1089,8 +1146,8 @@
                 handlePropertyUpdate(objectId, property, value, source);
             } else if (event.data && event.data.type === 'object-select') {
                 // Handle object selection from hierarchy
-                const { objectId } = event.data.data;
-                handleObjectSelection(objectId);
+                const { objectId, parentContainer } = event.data.data;
+                handleObjectSelection(objectId, parentContainer);
             } else if (event.data && event.data.type === 'tool-activate') {
                 // Handle tool activation from Svelte UI
                 const { toolName } = event.data.data;

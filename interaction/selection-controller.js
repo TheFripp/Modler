@@ -13,6 +13,10 @@ class SelectionController {
         this.visualizationManager = null;
         this.containerContextManager = null;
 
+        // Double-click tracking for container step-in (moved from BaseSelectionBehavior)
+        this.lastClickedChildObject = null;
+        this.lastClickTime = 0;
+
     }
 
     /**
@@ -27,30 +31,75 @@ class SelectionController {
     select(object) {
         if (!object) return false;
 
-        // Check if selecting a container that's different from current container context
         const sceneController = window.modlerComponents?.sceneController;
-        if (sceneController && this.containerContextManager) {
-            const objectData = sceneController.getObjectByMesh(object);
-            if (objectData && objectData.isContainer) {
-                const currentContainerContext = this.getContainerContext();
-                // Only step out if we're in a different container context than the one being selected
-                if (this.isInContainerContext() && currentContainerContext !== object) {
-                    this.stepOutOfContainer();
+        if (!sceneController) return false;
+
+        // Get object data for container logic
+        const objectData = sceneController.getObjectByMesh(object);
+        const isInContainerContext = this.isInContainerContext();
+        const currentContainerContext = this.getContainerContext();
+
+        // CONTAINER CONTEXT SELECTION LOGIC
+        let targetObject = object;
+        let shouldStepIntoContainer = false;
+
+        // Check if we're in container context and clicking within same container
+        if (isInContainerContext && currentContainerContext && objectData) {
+            const isPartOfCurrentContainer = this.isObjectPartOfContainer(objectData, currentContainerContext);
+
+            if (isPartOfCurrentContainer) {
+                // CASE 1: In container context, clicking object in same container
+                // → Direct selection (bypass container-first logic)
+                targetObject = object;
+            } else {
+                // CASE 2: In container context, clicking object outside current container
+                // → Step out first, then apply normal selection logic
+                this.stepOutOfContainer();
+
+                // Apply container-first logic for the new object
+                if (objectData.parentContainer) {
+                    const parentContainer = sceneController.getObject(objectData.parentContainer);
+                    if (parentContainer?.mesh) {
+                        // Select container + step into it
+                        targetObject = parentContainer.mesh;
+                        shouldStepIntoContainer = true;
+                    }
+                } else if (objectData.isContainer) {
+                    // Clicking on a different container - direct selection
+                    targetObject = object;
                 }
             }
+        } else if (objectData && objectData.parentContainer) {
+            // CASE 3: NOT in container context, clicking child object
+            // → Apply container-first selection
+            const parentContainer = sceneController.getObject(objectData.parentContainer);
+            if (parentContainer?.mesh) {
+                targetObject = parentContainer.mesh;
+                shouldStepIntoContainer = true;
+            }
+        } else {
+            // CASE 4: NOT in container context, clicking top-level object/container
+            // → Direct selection
+            targetObject = object;
         }
 
-        this.selectedObjects.add(object);
-        this.addToHistory('select', object);
+        // Add to selection
+        this.selectedObjects.add(targetObject);
+        this.addToHistory('select', targetObject);
+
+        // Handle container step-in after selection
+        if (shouldStepIntoContainer) {
+            this.stepIntoContainer(targetObject);
+        }
 
         // Delegate visual updates to VisualizationManager
         if (this.visualizationManager) {
-            this.visualizationManager.setState(object, 'selected');
+            this.visualizationManager.setState(targetObject, 'selected');
         }
 
         // Update property panel with the selected object
         if (window.updatePropertyPanelFromObject) {
-            window.updatePropertyPanelFromObject(object);
+            window.updatePropertyPanelFromObject(targetObject);
         }
 
         // Update object list selection with all currently selected objects
@@ -168,6 +217,31 @@ class SelectionController {
         return this.containerContextManager ? this.containerContextManager.getContainerContext() : null;
     }
 
+    /**
+     * Check if an object is part of a specific container context
+     * @param {Object} objectData - Object data from scene controller
+     * @param {THREE.Object3D} containerMesh - Container mesh to check against
+     * @returns {boolean} Whether object is part of the container
+     */
+    isObjectPartOfContainer(objectData, containerMesh) {
+        if (!objectData || !containerMesh) return false;
+
+        // Check if object is the container itself
+        if (objectData.mesh === containerMesh) return true;
+
+        // Check if object is a child of the container
+        if (objectData.parentContainer) {
+            const sceneController = window.modlerComponents?.sceneController;
+            const parentContainer = sceneController?.getObject(objectData.parentContainer);
+            if (parentContainer?.mesh === containerMesh) return true;
+        }
+
+        // Check if object is a visual component of the container (wireframe, interactive mesh, etc.)
+        if (objectData.mesh && objectData.mesh.parent === containerMesh) return true;
+
+        return false;
+    }
+
     updateContainerEdgeHighlight() {
         if (this.containerContextManager) {
             this.containerContextManager.updateContainerEdgeHighlight();
@@ -271,6 +345,349 @@ class SelectionController {
             this.containerContextManager.destroy();
         }
 
+    }
+
+    // ====== OBJECT INTERACTION METHODS (moved from BaseSelectionBehavior) ======
+
+    /**
+     * Handle clicking on an object - main selection entry point for tools
+     * @param {THREE.Object3D} object - Clicked object
+     * @param {Event} event - Mouse event
+     * @param {Object} options - Tool-specific options
+     * @returns {boolean} True if selection was handled
+     */
+    handleObjectClick(object, event, options = {}) {
+        if (!object) {
+            return false;
+        }
+
+        // Only handle selectable objects
+        const isSelectable = this.isSelectableObject(object);
+        if (!isSelectable) {
+            // Treat non-selectable object clicks as empty space
+            this.handleEmptySpaceClick(event);
+            return false;
+        }
+
+        const sceneController = window.modlerComponents?.sceneController;
+        if (!sceneController) return false;
+
+        let objectData = sceneController.getObjectByMesh(object);
+        let targetObject = object;
+
+        // INTERACTIVE MESH HANDLING: Resolve interactive mesh to container
+        if (!objectData && object.userData && object.userData.isContainerInteractive) {
+            // Legacy logic for old interactive mesh architecture
+            const containerId = object.userData.parentContainer;
+            if (containerId) {
+                const containerData = sceneController.getObject(containerId);
+                if (containerData?.mesh) {
+                    objectData = containerData;
+                    targetObject = containerData.mesh;
+                }
+            }
+        } else if (objectData && objectData.type === 'container-interactive') {
+            // NEW ARCHITECTURE: Interactive mesh is registered separately
+            // Resolve to the associated container mesh
+            const containerMesh = object.userData.containerMesh;
+            if (containerMesh) {
+                const containerData = sceneController.getObjectByMesh(containerMesh);
+                if (containerData?.mesh) {
+                    objectData = containerData;
+                    targetObject = containerData.mesh;
+                }
+            }
+        }
+
+        if (!objectData) return false;
+
+        // FACE-TOOL OVERRIDE: Skip container-first selection for face-based tools
+        const isFaceBasedTool = this.isCurrentToolFaceBased(options);
+
+        if (objectData.parentContainer && !isFaceBasedTool) {
+            const parentContainer = sceneController.getObject(objectData.parentContainer);
+
+            if (parentContainer?.mesh) {
+                // Check if we're already stepped into this parent container
+                const isInContainerContext = this.isInContainerContext();
+                const currentContainerContext = this.getContainerContext();
+
+                if (isInContainerContext && currentContainerContext === parentContainer.mesh) {
+                    // Already in this container's context - allow direct selection of child
+                    // ALWAYS track child object clicks for double-click detection
+                    this.lastClickedChildObject = object;
+                    this.lastClickTime = Date.now();
+                    // Don't change targetObject, let the child be selected directly
+                } else {
+                    // Not in container context - apply normal container-first logic
+                    this.lastClickedChildObject = object;
+                    this.lastClickTime = Date.now();
+                    // Let select() method handle all container logic
+                    targetObject = parentContainer.mesh;
+                }
+            }
+        } else if (objectData.parentContainer && isFaceBasedTool) {
+            // For face-based tools, always track clicks but don't change selection target
+            this.lastClickedChildObject = object;
+            this.lastClickTime = Date.now();
+            // targetObject remains the original clicked object for face manipulation
+        } else {
+            // Only clear child tracking for non-container objects (preserve tracking for containers)
+            if (!objectData.isContainer) {
+                this.lastClickedChildObject = null;
+            } else {
+                // Update lastClickTime for container clicks to enable proper double-click timing
+                this.lastClickTime = Date.now();
+            }
+        }
+
+        const isMultiSelect = event.ctrlKey || event.metaKey || event.shiftKey;
+
+        if (isMultiSelect) {
+            this.toggle(targetObject);
+        } else {
+            this.clearSelection('object-selection');
+            this.select(targetObject);
+        }
+
+        return true;
+    }
+
+    /**
+     * Handle double-click events - step into container functionality
+     * @param {Object} hit - Raycast hit result
+     * @param {Event} _event - Mouse event
+     * @returns {boolean} True if double-click was handled
+     */
+    handleDoubleClick(hit, _event) {
+        if (!hit || !hit.object) {
+            return false;
+        }
+
+        const sceneController = window.modlerComponents?.sceneController;
+        if (!sceneController) {
+            console.error('SelectionController: SceneController not available for double-click handling');
+            return false;
+        }
+
+        let objectData = sceneController.getObjectByMesh(hit.object);
+        let targetObject = hit.object;
+
+        // INTERACTIVE MESH HANDLING: Apply same resolution logic as handleObjectClick
+        if (!objectData && hit.object.userData && hit.object.userData.isContainerInteractive) {
+            // Legacy logic for old interactive mesh architecture
+            const containerId = hit.object.userData.parentContainer;
+            if (containerId) {
+                const containerData = sceneController.getObject(containerId);
+                if (containerData?.mesh) {
+                    objectData = containerData;
+                    targetObject = containerData.mesh;
+                }
+            }
+        } else if (objectData && objectData.type === 'container-interactive') {
+            // NEW ARCHITECTURE: Interactive mesh is registered separately
+            // Resolve to the associated container mesh
+            const containerMesh = hit.object.userData.containerMesh;
+            if (containerMesh) {
+                const containerData = sceneController.getObjectByMesh(containerMesh);
+                if (containerData?.mesh) {
+                    objectData = containerData;
+                    targetObject = containerData.mesh;
+                }
+            }
+        }
+
+        if (!objectData) {
+            return false;
+        }
+
+        // Check if we're double-clicking on an object inside a container
+        if (objectData.parentContainer) {
+            const parentContainer = sceneController.getObject(objectData.parentContainer);
+            if (parentContainer?.mesh) {
+                // STRICT HIERARCHY CHECK: Only step into containers that are direct children of current level
+                const isDirectChild = this.isDirectChildOfCurrentContainer(parentContainer);
+
+                if (!isDirectChild) {
+                    // Container is not a direct child of current level - just select the object
+                    this.clearSelection('double-click-selection');
+                    this.select(hit.object);
+                    return true;
+                }
+
+                // Container is valid for step-in - proceed
+                this.stepIntoContainer(parentContainer.mesh);
+                this.clearSelection('step-into-container');
+                this.select(hit.object);
+                return true;
+            }
+        } else if (objectData.isContainer) {
+            // STRICT HIERARCHY CHECK: Only step into containers that are direct children of current level
+            const isDirectChild = this.isDirectChildOfCurrentContainer(objectData);
+
+            if (!isDirectChild) {
+                // Container is not a direct child of current level - just select the container
+                this.clearSelection('double-click-selection');
+                this.select(targetObject);
+                return true;
+            }
+
+            // Container is valid for step-in - check for recent child click timing
+            const timeSinceLastClick = Date.now() - this.lastClickTime;
+
+            if (this.lastClickedChildObject && timeSinceLastClick < 1000) {
+                // Recent child object click - step into container and select the originally clicked child
+                this.stepIntoContainer(targetObject);
+                this.clearSelection('step-into-container');
+                this.select(this.lastClickedChildObject);
+                // Clear tracking
+                this.lastClickedChildObject = null;
+                return true;
+            } else {
+                // Direct double-click on container itself OR expired child timing - step into container
+                this.stepIntoContainer(targetObject);
+                this.clearSelection('step-into-container');
+                // Select the container so tools can show face highlights
+                this.select(targetObject);
+                // Clear any stale child tracking
+                this.lastClickedChildObject = null;
+                return true;
+            }
+        } else {
+            // Double-click on non-container object - direct selection
+            this.clearSelection('double-click-selection');
+            this.select(targetObject);
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
+     * Handle clicking on empty space or non-selectable objects
+     * @param {Event} event - Mouse event
+     */
+    handleEmptySpaceClick(event) {
+        const isMultiSelect = event.ctrlKey || event.metaKey;
+
+        if (!isMultiSelect) {
+            // Step out of container when clicking empty space and select the container
+            if (this.isInContainerContext()) {
+                // Store container before stepping out
+                const containerToSelect = this.getContainerContext();
+
+                this.stepOutOfContainer();
+
+                // Select the container we just stepped out of
+                if (containerToSelect) {
+                    this.clearSelection('step-out');
+                    this.select(containerToSelect);
+                    return; // Don't clear selection - we want container selected
+                }
+            }
+
+            // Only clear selection if not stepping out
+            this.clearSelection('empty-space');
+        }
+    }
+
+    /**
+     * Check if the current active tool is face-based (push/move)
+     * Face-based tools should not trigger automatic container selection
+     */
+    isCurrentToolFaceBased(options = {}) {
+        const toolController = window.modlerComponents?.toolController;
+        if (!toolController) return false;
+
+        const activeTool = toolController.getActiveTool();
+        if (!activeTool) return false;
+
+        // Check for face-based tools by their class names or properties
+        const toolName = activeTool.constructor.name;
+        return toolName === 'PushTool' || toolName === 'MoveTool' ||
+               (activeTool.faceToolBehavior !== undefined); // Has face tool behavior
+    }
+
+    /**
+     * Check if an object is a DIRECT child of the current container context
+     * Enforces strict hierarchy: only allows stepping one level down
+     * @param {Object} objectData - Object data from scene controller
+     * @returns {boolean} True if object is a direct child of current container context
+     */
+    isDirectChildOfCurrentContainer(objectData) {
+        if (!objectData) return false;
+
+        const isInContainerContext = this.isInContainerContext();
+        const currentContainerContext = this.getContainerContext();
+
+        // If we're not in any container context, all top-level objects/containers are valid
+        if (!isInContainerContext) {
+            return !objectData.parentContainer; // Top-level objects (no parent)
+        }
+
+        // If we're in a container context, only direct children are valid
+        if (currentContainerContext) {
+            const sceneController = window.modlerComponents?.sceneController;
+            const currentContainerData = sceneController?.getObjectByMesh(currentContainerContext);
+
+            if (currentContainerData) {
+                // Check if the object's parent is exactly the current container
+                return objectData.parentContainer === currentContainerData.id;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Check if object is selectable using SceneController data
+     * @param {THREE.Object3D} object - Object to check
+     * @returns {boolean} True if object is selectable
+     */
+    isSelectableObject(object) {
+        const sceneController = window.modlerComponents?.sceneController;
+        if (!sceneController) {
+            return false; // Fallback: no selection if SceneController unavailable
+        }
+
+        const objectData = sceneController.getObjectByMesh(object);
+
+        // CONTAINER SELECTION: Allow containers to be selectable
+        // Containers need to be selectable for face highlighting and tool operations
+        if (objectData && objectData.isContainer) {
+            return objectData.selectable === true;
+        }
+
+        if (!objectData) {
+            // INTERACTIVE MESH HANDLING: Check if this is a container interactive mesh (legacy)
+            if (object.userData && object.userData.isContainerInteractive) {
+                const containerId = object.userData.parentContainer;
+                if (containerId) {
+                    const containerData = sceneController.getObject(containerId);
+                    // Interactive mesh is selectable if its container is selectable
+                    return containerData && containerData.selectable === true;
+                }
+            }
+
+            // Check if a parent object is managed by SceneController
+            let currentObject = object.parent;
+            let depth = 0;
+            while (currentObject && depth < 5) {
+                const parentData = sceneController.getObjectByMesh(currentObject);
+                if (parentData) {
+                    // Use parent's selectability
+                    return parentData.selectable === true;
+                }
+
+                currentObject = currentObject.parent;
+                depth++;
+            }
+
+            return false; // Object not managed by SceneController
+        }
+
+        // Use the object's selectable property from SceneController
+        return objectData.selectable === true;
     }
 }
 

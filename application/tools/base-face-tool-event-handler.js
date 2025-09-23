@@ -20,12 +20,12 @@ class BaseFaceToolEventHandler {
      *
      * @param {Object} tool - The tool instance (MoveTool or PushTool)
      * @param {Object} faceToolBehavior - Shared face detection behavior
-     * @param {Object} selectionBehavior - Shared selection behavior
+     * @param {Object} selectionController - Selection controller for direct access
      */
-    constructor(tool, faceToolBehavior, selectionBehavior) {
+    constructor(tool, faceToolBehavior, selectionController) {
         this.tool = tool;
         this.faceToolBehavior = faceToolBehavior;
-        this.selectionBehavior = selectionBehavior;
+        this.selectionController = selectionController;
     }
 
     /**
@@ -94,9 +94,9 @@ class BaseFaceToolEventHandler {
         if (isOperationActive()) return;
 
         if (hit && hit.object) {
-            this.selectionBehavior.handleObjectClick(hit.object, event);
+            this.selectionController.handleObjectClick(hit.object, event, { toolType: this.tool.constructor.name });
         } else {
-            this.selectionBehavior.handleEmptySpaceClick(event);
+            this.selectionController.handleEmptySpaceClick(event);
         }
     }
 
@@ -113,7 +113,7 @@ class BaseFaceToolEventHandler {
         // Only handle double-clicks if no operation is active
         if (isOperationActive()) return;
 
-        this.selectionBehavior.handleDoubleClick(hit, event);
+        this.selectionController.handleDoubleClick(hit, event);
     }
 
     /**

@@ -1,31 +1,30 @@
 # API Quick Reference
 
-## BaseSelectionBehavior
-**File**: `application/tools/base-selection-behavior.js`
-
-### Methods
-- `handleObjectClick(object, event)` → `boolean` - Container-first selection logic
-- `handleDoubleClick(hit, event)` → `boolean` - Container step-into functionality
-- `handleEmptySpaceClick(event)` → `void` - Clear selection and exit container context
-- `isSelectableObject(object)` → `boolean` - Check if object can be selected
-- `isPartOfContainerContext(object, container)` → `boolean` - Check if object is part of container context
-
-## SelectionController  
+## SelectionController
 **File**: `interaction/selection-controller.js`
 
-### Methods
+### Core Selection Methods
 - `select(object)` → `boolean` - Add object to selection
 - `deselect(object)` → `boolean` - Remove object from selection
 - `toggle(object)` → `boolean` - Toggle object selection state
 - `clearSelection(reason)` → `void` - Clear all selected objects
 - `isSelected(object)` → `boolean` - Check if object is selected
+
+### Tool Interface Methods
+- `handleObjectClick(object, event, options)` → `boolean` - Container-first selection logic
+- `handleDoubleClick(hit, event)` → `boolean` - Container step-into functionality
+- `handleEmptySpaceClick(event)` → `void` - Clear selection and exit container context
+- `isSelectableObject(object)` → `boolean` - Check if object can be selected
+
+### Container Context Methods
 - `stepIntoContainer(containerObject)` → `void` - Establish container context
 - `stepOutOfContainer()` → `void` - Exit container context
 - `isInContainerContext()` → `boolean` - Check if in container context
+- `getContainerContext()` → `Object|null` - Get current container context
+- `isObjectPartOfContainer(objectData, containerMesh)` → `boolean` - Check if object is part of container context
 
 ### Properties
 - `selectedObjects` → `Set` - Currently selected objects
-- `edgeHighlights` → `Map` - Object to wireframe mappings
 
 ## ContainerCrudManager
 **File**: `application/tools/container-crud-manager.js`

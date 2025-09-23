@@ -10,9 +10,8 @@ class MoveTool {
         this.visualEffects = visualEffects;
 
         // Use shared behaviors for consistency
-        this.selectionBehavior = new BaseSelectionBehavior(selectionController);
         this.faceToolBehavior = new BaseFaceToolBehavior(selectionController, visualEffects);
-        this.eventHandler = new BaseFaceToolEventHandler(this, this.faceToolBehavior, this.selectionBehavior);
+        this.eventHandler = new BaseFaceToolEventHandler(this, this.faceToolBehavior, selectionController);
         
         // Simplified drag state
         this.isDragging = false;
@@ -81,7 +80,7 @@ class MoveTool {
             this.pendingSelection = { hit, event };
         } else {
             // Empty space clicks can be handled immediately
-            this.selectionBehavior.handleEmptySpaceClick(event);
+            this.selectionController.handleEmptySpaceClick(event);
         }
     }
     
@@ -389,7 +388,7 @@ class MoveTool {
 
         // Handle deferred selection - now that drag operation is complete, apply selection
         if (this.pendingSelection) {
-            this.selectionBehavior.handleObjectClick(this.pendingSelection.hit.object, this.pendingSelection.event);
+            this.selectionController.handleObjectClick(this.pendingSelection.hit.object, this.pendingSelection.event, { toolType: 'MoveTool' });
             this.pendingSelection = null;
         }
 

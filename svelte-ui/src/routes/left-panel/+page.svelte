@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { initializeBridge } from '$lib/bridge/threejs-bridge';
-	import { selectedObjects, objectHierarchy, toolState } from '$lib/stores/modler';
+	import { selectedObjects, objectHierarchy, toolState, containerContext } from '$lib/stores/modler';
 
 	// Tab state
 	let activeTab: 'objects' | 'settings' = 'objects';
@@ -39,12 +39,19 @@
 			}
 		});
 
-		// Assign children to their parent containers
+		// Assign children to their parent containers and auto-expand containers with children
 		rootObjects.forEach(rootObj => {
 			if (rootObj.isContainer && childObjectsMap.has(rootObj.id)) {
 				rootObj.children = childObjectsMap.get(rootObj.id);
+				// Auto-expand containers that have children
+				if (rootObj.children.length > 0) {
+					expandedContainers.add(rootObj.id);
+				}
 			}
 		});
+
+		// Trigger reactivity for expanded containers
+		expandedContainers = new Set(expandedContainers);
 
 		return rootObjects;
 	}
@@ -58,22 +65,51 @@
 		expandedContainers = new Set(expandedContainers); // Trigger reactivity
 	}
 
+	// Helper function to check if an object should be highlighted
+	function isObjectHighlighted(object) {
+		// 1. SELECTION: Direct selection highlighting
+		const isSelected = $selectedObjects.some(sel => sel.id === object.id);
+
+		// 2. CONTAINER CONTEXT: Container context highlighting
+		const isInContext = $containerContext && $containerContext.containerId === object.id;
+
+		// Highlight if either selected OR in container context
+		return isSelected || isInContext;
+	}
+
 	// Function to select object in the scene when clicked in hierarchy
 	function selectObjectInScene(objectId: string) {
+		// Find the object in the hierarchy to check if it has a parent container
+		const selectedObject = filteredHierarchy.find(obj => obj.id === objectId);
+
 		// Check if we're in iframe context
 		const isInIframe = window !== window.parent;
 
 		if (!isInIframe && (window as any).selectObjectInSceneDirectly) {
 			// Direct context: use direct communication
+
+			// If object is a child of a container, step into the container first
+			if (selectedObject?.parentContainer) {
+				// Step into the parent container
+				if ((window as any).stepIntoContainerById) {
+					(window as any).stepIntoContainerById(selectedObject.parentContainer);
+				}
+			}
+
 			const success = (window as any).selectObjectInSceneDirectly(objectId);
 			if (success) return;
 		}
 
 		// Iframe context or fallback: use PostMessage
-		window.parent.postMessage({
+		const messageData = {
 			type: 'object-select',
-			data: { objectId }
-		}, '*');
+			data: {
+				objectId,
+				parentContainer: selectedObject?.parentContainer || null
+			}
+		};
+
+		window.parent.postMessage(messageData, '*');
 	}
 
 	onMount(() => {
@@ -127,9 +163,9 @@
 								<!-- Root object -->
 								<div class="object-tree-item">
 									<div
-										class="group flex items-center gap-2 px-2 py-1.5 text-sm rounded-md hover:bg-accent hover:text-accent-foreground cursor-pointer transition-colors"
-										class:bg-accent={$selectedObjects.some(sel => sel.id === object.id)}
-										class:text-accent-foreground={$selectedObjects.some(sel => sel.id === object.id)}
+										class="group flex items-center gap-2 px-2 py-1.5 text-sm rounded-md hover:bg-gray-700/50 cursor-pointer transition-colors"
+										class:bg-accent={isObjectHighlighted(object)}
+										class:text-accent-foreground={isObjectHighlighted(object)}
 										on:click={() => selectObjectInScene(object.id)}
 										role="button"
 										tabindex="0">
@@ -183,9 +219,9 @@
 										<div class="ml-4 space-y-1 mt-1">
 											{#each object.children as childObject}
 												<div
-													class="group flex items-center gap-2 px-2 py-1.5 text-sm rounded-md hover:bg-accent hover:text-accent-foreground cursor-pointer transition-colors"
-													class:bg-accent={$selectedObjects.some(sel => sel.id === childObject.id)}
-													class:text-accent-foreground={$selectedObjects.some(sel => sel.id === childObject.id)}
+													class="group flex items-center gap-2 px-2 py-1.5 text-sm rounded-md hover:bg-gray-700/50 cursor-pointer transition-colors"
+													class:bg-accent={isObjectHighlighted(childObject)}
+													class:text-accent-foreground={isObjectHighlighted(childObject)}
 													on:click={() => selectObjectInScene(childObject.id)}
 													role="button"
 													tabindex="0">

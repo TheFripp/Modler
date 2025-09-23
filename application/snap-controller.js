@@ -304,7 +304,7 @@ class SnapController {
      * Get objects that should be checked for snap points
      */
     getObjectsForSnapping(selectedObjects) {
-        // For now, check all scene objects except selected ones and floor
+        // Check all scene objects except selected ones, ALL containers, and floor
         const objectsToCheck = [];
 
         this.scene.traverse((child) => {
@@ -312,11 +312,14 @@ class SnapController {
                 // Check if it's a floor object
                 const isFloor = this.isFloorObject(child);
                 const isSelected = selectedObjects.includes(child);
+                const isContainerRelated = this.isContainerRelatedMesh(child);
 
                 if (isFloor) {
                     // Floor object excluded from snapping
                 } else if (isSelected) {
                     // Selected/manipulated object excluded from snapping to prevent self-snapping
+                } else if (isContainerRelated) {
+                    // ALL container-related meshes excluded from snapping
                 } else {
                     objectsToCheck.push(child);
                 }
@@ -324,7 +327,140 @@ class SnapController {
         });
         return objectsToCheck;
     }
-    
+
+    /**
+     * Check if a mesh is container-related (container, interactive mesh, collision mesh, wireframe, etc.)
+     * @param {THREE.Object3D} mesh - Mesh to check
+     * @returns {boolean} True if the mesh is related to any container
+     */
+    isContainerRelatedMesh(mesh) {
+        const sceneController = window.modlerComponents?.sceneController;
+        if (!sceneController || !mesh) return false;
+
+        // Check if it's a registered container
+        const objectData = sceneController.getObjectByMesh(mesh);
+        if (objectData && objectData.isContainer) {
+            return true; // This is a container mesh
+        }
+
+        // Check userData flags for container-related meshes
+        if (mesh.userData) {
+            // Interactive/collision meshes
+            if (mesh.userData.isContainerInteractive ||
+                mesh.userData.isContainerCollision ||
+                mesh.userData.parentContainerId) {
+                return true;
+            }
+
+            // Support meshes (wireframes, visual effects, etc.)
+            if (mesh.userData.isSupportMesh ||
+                mesh.userData.isWireframe ||
+                mesh.userData.isContainerWireframe ||
+                mesh.userData.isSelectionWireframe) {
+                return true;
+            }
+
+            // Visual effect meshes
+            if (mesh.userData.isVisualEffect ||
+                mesh.userData.isHighlight ||
+                mesh.userData.isEdgeHighlight) {
+                return true;
+            }
+        }
+
+        // Check object names for container-related patterns
+        const meshName = mesh.name ? mesh.name.toLowerCase() : '';
+        if (meshName.includes('container') ||
+            meshName.includes('wireframe') ||
+            meshName.includes('interactive') ||
+            meshName.includes('collision') ||
+            meshName.includes('support')) {
+            return true;
+        }
+
+        // Check if object is registered as container-related type
+        if (objectData &&
+            (objectData.type === 'container-interactive' ||
+             objectData.type === 'container-collision' ||
+             objectData.type === 'container-wireframe' ||
+             objectData.type === 'support-mesh')) {
+            return true;
+        }
+
+        return false; // Not container-related
+    }
+
+    /**
+     * Check if a given object is a parent container of any selected object
+     * @param {THREE.Object3D} potentialContainer - Object to check
+     * @param {Array} selectedObjects - Array of selected objects
+     * @returns {boolean} True if the object is a parent container of any selected object
+     */
+    isParentContainerOfSelected(potentialContainer, selectedObjects) {
+        const sceneController = window.modlerComponents?.sceneController;
+        if (!sceneController || !potentialContainer) return false;
+
+        // Check if this is a container interactive/collision mesh
+        if (potentialContainer.userData &&
+            (potentialContainer.userData.isContainerInteractive || potentialContainer.userData.isContainerCollision)) {
+
+            // Get the parent container ID from the interactive/collision mesh
+            const parentContainerId = potentialContainer.userData.parentContainerId;
+            if (parentContainerId) {
+                // Check if any selected object is inside this container
+                for (const selectedObject of selectedObjects) {
+                    const selectedObjectData = sceneController.getObjectByMesh(selectedObject);
+                    if (selectedObjectData && this.isObjectInContainer(selectedObjectData, parentContainerId, sceneController)) {
+                        return true; // This interactive/collision mesh belongs to a parent container
+                    }
+                }
+            }
+            return false; // Interactive/collision mesh but not a parent container
+        }
+
+        // Get the container data for the potential container
+        const containerData = sceneController.getObjectByMesh(potentialContainer);
+        if (!containerData || !containerData.isContainer) {
+            return false; // Not a container, so can't be a parent container
+        }
+
+        // Check if any selected object has this container as a parent
+        for (const selectedObject of selectedObjects) {
+            const selectedObjectData = sceneController.getObjectByMesh(selectedObject);
+            if (selectedObjectData && this.isObjectInContainer(selectedObjectData, containerData.id, sceneController)) {
+                return true; // This container is a parent of at least one selected object
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Check if an object is inside a specific container (directly or indirectly)
+     * @param {Object} objectData - Object data from SceneController
+     * @param {string} containerId - Container ID to check against
+     * @param {Object} sceneController - SceneController instance
+     * @returns {boolean} True if object is inside the container
+     */
+    isObjectInContainer(objectData, containerId, sceneController) {
+        if (!objectData || !containerId) return false;
+
+        let currentParentId = objectData.parentContainer;
+
+        // Traverse up the container hierarchy to check for containment
+        while (currentParentId) {
+            if (currentParentId === containerId) {
+                return true; // Found the container in the parent chain
+            }
+
+            // Move up to the next parent container
+            const parentData = sceneController.getObject(currentParentId);
+            currentParentId = parentData?.parentContainer;
+        }
+
+        return false; // Object is not inside this container
+    }
+
     /**
      * Check if currently hovering over an object (for box creation tool)
      */
@@ -512,24 +648,50 @@ class SnapController {
     }
     
     /**
-     * Get visible edge lines of an object using actual geometry edges (not just bounding box)
-     * This includes ALL edges in the mesh geometry - both external and internal edges
+     * Get visible edge lines of an object using logical bounding box edges for clean snapping
+     * Avoids triangulated edges that cause triangle structure artifacts
      */
     getVisibleObjectEdges(object, travelAxis = null) {
         if (!object.geometry) return [];
 
+        // Check if this is a box-like geometry (most CAD objects)
+        if (this.isBoxLikeGeometry(object.geometry)) {
+            // Use logical bounding box edges for clean snapping
+            return this.getBoundingBoxEdges(object, travelAxis);
+        }
+
+        // For complex geometries, fall back to triangulated edges with filtering
+        return this.getTriangulatedEdges(object, travelAxis);
+    }
+
+    /**
+     * Check if geometry is box-like (cube, rectangular prism)
+     */
+    isBoxLikeGeometry(geometry) {
+        if (!geometry || !geometry.index) return false;
+
+        // Check if geometry has a reasonable number of vertices for a box
+        const vertexCount = geometry.getAttribute('position')?.count || 0;
+        const triangleCount = geometry.index.array.length / 3;
+
+        // Box geometry typically has 8 vertices and 12 triangles (6 faces * 2 triangles each)
+        // Allow some tolerance for variations in box creation
+        return vertexCount <= 24 && triangleCount <= 36; // Allow for duplicated vertices and subdivisions
+    }
+
+    /**
+     * Get triangulated edges for complex geometries (fallback method)
+     */
+    getTriangulatedEdges(object, travelAxis = null) {
         const edges = [];
 
         try {
-            // For internal edges (between faces), use angle-based edge detection
-            // This filters out boundary edges and keeps only fold lines between faces
-            const edgesGeometry = new THREE.EdgesGeometry(object.geometry, 15); // 15 degree threshold for internal edges
+            // For complex geometries, use angle-based edge detection
+            const edgesGeometry = new THREE.EdgesGeometry(object.geometry, 15); // 15 degree threshold
             const positionAttribute = edgesGeometry.getAttribute('position');
-
 
             // Process edge pairs (every 2 vertices form an edge)
             for (let i = 0; i < positionAttribute.count; i += 2) {
-                // Get edge start and end points from the geometry
                 const start = new THREE.Vector3();
                 const end = new THREE.Vector3();
 
@@ -546,7 +708,6 @@ class SnapController {
                 if (edgeLength < 0.01) continue;
 
                 // VISIBILITY CHECK: Check if edge has at least one visible adjacent face
-                // This properly handles internal edges while excluding truly hidden edges
                 const camera = this.inputController.camera;
                 const hasVisibleFace = this.edgeHasVisibleFace(object, start, end, camera);
                 if (!hasVisibleFace) continue;
@@ -556,7 +717,7 @@ class SnapController {
                 const endScreen = this.worldToPixel(worldEnd);
                 const screenPos = this.worldToPixel(worldMidpoint);
 
-                // Check if edge is on screen or near screen
+                // Check if edge is on screen
                 const canvas = this.inputController.canvas;
                 const isOnScreen = (startScreen.x >= -100 && startScreen.x <= canvas.width + 100 &&
                                    startScreen.y >= -100 && startScreen.y <= canvas.height + 100) ||
@@ -568,13 +729,9 @@ class SnapController {
                     let includeEdge = true;
 
                     if (travelAxis) {
-                        // Only include edges that are perpendicular to travel direction
                         const edgeDirection = worldEnd.clone().sub(worldStart).normalize();
                         const dotProduct = Math.abs(edgeDirection.dot(travelAxis));
-
-                        // Include edge only if it's mostly perpendicular to travel axis
-                        // (dot product close to 0 means perpendicular)
-                        includeEdge = dotProduct < 0.3; // Allow 30 degrees tolerance
+                        includeEdge = dotProduct < 0.3; // Only perpendicular edges
                     }
 
                     if (includeEdge) {

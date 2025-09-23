@@ -6,7 +6,6 @@ class PushTool {
         this.selectionController = selectionController;
         this.visualEffects = visualEffects;
 
-        this.selectionBehavior = new BaseSelectionBehavior(selectionController);
         this.faceToolBehavior = new BaseFaceToolBehavior(selectionController, visualEffects);
 
         // Core push state - simplified
@@ -131,7 +130,7 @@ class PushTool {
             this.pendingSelection = { hit, event };
         } else {
             // Empty space clicks can be handled immediately
-            this.selectionBehavior.handleEmptySpaceClick(event);
+            this.selectionController.handleEmptySpaceClick(event);
         }
     }
 
@@ -603,7 +602,7 @@ class PushTool {
 
         // Handle deferred selection - now that push operation is complete, apply selection
         if (this.pendingSelection) {
-            this.selectionBehavior.handleObjectClick(this.pendingSelection.hit.object, this.pendingSelection.event);
+            this.selectionController.handleObjectClick(this.pendingSelection.hit.object, this.pendingSelection.event, { toolType: 'PushTool' });
             this.pendingSelection = null;
         }
 
