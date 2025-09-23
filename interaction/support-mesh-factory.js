@@ -72,9 +72,50 @@ class SupportMeshFactory {
     }
 
     /**
-     * Create all support meshes for a regular object
+     * Create all support meshes for any object (unified for regular objects and containers)
      */
     createObjectSupportMeshes(mainMesh) {
+        console.log('SupportMeshFactory.createObjectSupportMeshes - Unified support mesh creation');
+
+        // Check if this is a container
+        const isContainer = mainMesh.userData.isContainer;
+
+        // NEW ARCHITECTURE: Containers already have wireframe children from LayoutGeometry
+        // Skip support mesh creation for containers to prevent conflicts
+        if (isContainer) {
+            console.log('SupportMeshFactory.createObjectSupportMeshes - Skipping support meshes for container (using new architecture)');
+
+            // CLEANUP: Remove any legacy support meshes from existing containers
+            if (mainMesh.userData.supportMeshes) {
+                console.log('SupportMeshFactory.createObjectSupportMeshes - Cleaning up legacy support meshes from container');
+                this.cleanupSupportMeshes(mainMesh.userData.supportMeshes, mainMesh);
+            }
+
+            // Create minimal support meshes - only faceHighlight for containers
+            const supportMeshes = {
+                faceHighlight: this.createFaceHighlight(mainMesh) // Use existing method with orange selection color
+            };
+
+            // Add only the face highlight as child (no wireframes or interactive meshes for containers)
+            if (supportMeshes.faceHighlight) {
+                mainMesh.add(supportMeshes.faceHighlight);
+                supportMeshes.faceHighlight.visible = false; // Hidden by default
+            }
+
+            // Store support meshes with only face highlight
+            mainMesh.userData.supportMeshes = supportMeshes;
+
+            console.log('SupportMeshFactory.createObjectSupportMeshes - Container support meshes created:', {
+                selectionWireframe: false,
+                faceHighlight: !!supportMeshes.faceHighlight,
+                interactiveMesh: false,
+                isContainer: isContainer
+            });
+
+            return supportMeshes;
+        }
+
+        // Regular objects: Create support meshes as normal
         const supportMeshes = {
             selectionWireframe: this.createSelectionWireframe(mainMesh),
             faceHighlight: this.createFaceHighlight(mainMesh)
@@ -92,6 +133,13 @@ class SupportMeshFactory {
 
         // Store references for easy access
         mainMesh.userData.supportMeshes = supportMeshes;
+
+        console.log('SupportMeshFactory.createObjectSupportMeshes - Support meshes created for regular object:', {
+            selectionWireframe: !!supportMeshes.selectionWireframe,
+            faceHighlight: !!supportMeshes.faceHighlight,
+            interactiveMesh: false, // Regular objects don't get interactive meshes
+            isContainer: false
+        });
 
         return supportMeshes;
     }
@@ -117,8 +165,44 @@ class SupportMeshFactory {
             supportMeshes.faceHighlight.visible = false;
         }
         if (supportMeshes.interactiveMesh) {
+            // DEBUG: Log before adding interactive mesh as child
+            console.log('SupportMeshFactory.createContainerSupportMeshes - Before adding interactive mesh:', {
+                mainMeshPosition: mainMesh.position.clone(),
+                mainMeshWorldPosition: mainMesh.getWorldPosition(new THREE.Vector3()),
+                interactiveMeshPosition: supportMeshes.interactiveMesh.position.clone(),
+                interactiveMeshHasParent: !!supportMeshes.interactiveMesh.parent
+            });
+
             mainMesh.add(supportMeshes.interactiveMesh);
-            supportMeshes.interactiveMesh.visible = true; // Always visible for interaction
+            supportMeshes.interactiveMesh.visible = false; // Hidden by default, shown only during tool operations
+
+            // POTENTIAL FIX: Force matrix update to ensure proper transform inheritance
+            mainMesh.updateMatrixWorld(true);
+            supportMeshes.interactiveMesh.updateMatrixWorld(true);
+
+            // DEBUG: Log after adding interactive mesh as child + Three.js object state
+            console.log('SupportMeshFactory.createContainerSupportMeshes - After adding interactive mesh:', {
+                mainMeshPosition: mainMesh.position.clone(),
+                mainMeshWorldPosition: mainMesh.getWorldPosition(new THREE.Vector3()),
+                interactiveMeshPosition: supportMeshes.interactiveMesh.position.clone(),
+                interactiveMeshWorldPosition: supportMeshes.interactiveMesh.getWorldPosition(new THREE.Vector3()),
+                interactiveMeshParent: supportMeshes.interactiveMesh.parent === mainMesh ? 'CORRECT' : 'WRONG',
+                parentChildCheck: supportMeshes.interactiveMesh.parent,
+                // Three.js object state debugging
+                interactiveMeshState: {
+                    matrixAutoUpdate: supportMeshes.interactiveMesh.matrixAutoUpdate,
+                    matrixWorldNeedsUpdate: supportMeshes.interactiveMesh.matrixWorldNeedsUpdate,
+                    visible: supportMeshes.interactiveMesh.visible,
+                    userData: Object.keys(supportMeshes.interactiveMesh.userData),
+                    geometryUuid: supportMeshes.interactiveMesh.geometry.uuid,
+                    materialUuid: supportMeshes.interactiveMesh.material.uuid
+                },
+                parentState: {
+                    matrixAutoUpdate: mainMesh.matrixAutoUpdate,
+                    matrixWorldNeedsUpdate: mainMesh.matrixWorldNeedsUpdate,
+                    childrenCount: mainMesh.children.length
+                }
+            });
         }
         if (supportMeshes.contextHighlight) {
             mainMesh.add(supportMeshes.contextHighlight);
@@ -183,14 +267,87 @@ class SupportMeshFactory {
     }
 
     /**
-     * Create container interactive mesh for tool interaction
+     * Create interactive mesh for containers (NEW UNIFIED ARCHITECTURE)
+     */
+    createInteractiveMesh(mainMesh) {
+        if (!mainMesh.geometry) return null;
+
+        console.log('SupportMeshFactory.createInteractiveMesh - Creating from solid geometry');
+
+        // Create interactive mesh from solid geometry (already available from main mesh)
+        const interactiveMesh = new THREE.Mesh(
+            mainMesh.geometry.clone(),
+            this.materials.containerInteractive
+        );
+
+        interactiveMesh.position.set(0, 0, 0); // Child position relative to parent
+        interactiveMesh.renderOrder = 1000; // High render order for raycasting priority
+        interactiveMesh.visible = false; // Hidden by default
+        interactiveMesh.userData.isContainerInteractive = true;
+        interactiveMesh.userData.isContainerCollision = true;
+        interactiveMesh.userData.containerMesh = mainMesh; // Reference to parent
+        interactiveMesh.userData.supportMeshType = 'interactiveMesh';
+
+        console.log('SupportMeshFactory.createInteractiveMesh - Created with solid BoxGeometry');
+
+        return interactiveMesh;
+    }
+
+    /**
+     * Create container interactive mesh for tool interaction (OLD COMPLEX VERSION)
      */
     createContainerInteractiveMesh(mainMesh) {
         if (!mainMesh.geometry) return null;
 
-        // Create face geometry for interaction
-        const faceGeometry = mainMesh.geometry.clone();
+        // IMPORTANT: Create solid BoxGeometry for reliable raycasting
+        // The main mesh uses EdgesGeometry (wireframe) which is not suitable for raycasting
+        // We need to reconstruct the original box dimensions for solid geometry
+
+        // Try to get original container dimensions from scene controller data
+        const sceneController = window.modlerComponents?.sceneController;
+        let size;
+
+        if (sceneController) {
+            const objectData = sceneController.getObjectByMesh(mainMesh);
+            if (objectData && objectData.originalBounds) {
+                // Use original container creation bounds
+                size = objectData.originalBounds.size.clone();
+                console.log('SupportMeshFactory.createContainerInteractiveMesh - Using original bounds:', size.clone());
+            }
+        }
+
+        let fallbackBounds = null;
+        if (!size) {
+            // Fallback: Extract from wireframe mesh bounds (less reliable)
+            fallbackBounds = new THREE.Box3().setFromObject(mainMesh);
+            size = fallbackBounds.getSize(new THREE.Vector3());
+            console.log('SupportMeshFactory.createContainerInteractiveMesh - Fallback to wireframe bounds:', size.clone());
+        }
+
+        // Create solid box geometry with the extracted dimensions
+        const faceGeometry = new THREE.BoxGeometry(size.x, size.y, size.z);
+
+        // Verify BoxGeometry centering
+        faceGeometry.computeBoundingBox();
+        const geometryCenter = faceGeometry.boundingBox.getCenter(new THREE.Vector3());
+
         const interactiveMesh = new THREE.Mesh(faceGeometry, this.materials.containerInteractive);
+
+        // DEBUG: Log geometry comparison and centering
+        console.log('SupportMeshFactory.createContainerInteractiveMesh - Geometry fix:', {
+            mainMeshGeometryType: mainMesh.geometry.constructor.name,
+            interactiveMeshGeometryType: faceGeometry.constructor.name,
+            extractedSize: size.clone(),
+            fallbackBounds: fallbackBounds ? {
+                min: fallbackBounds.min.clone(),
+                max: fallbackBounds.max.clone()
+            } : 'N/A (used original bounds)',
+            boxGeometryCenter: geometryCenter.clone(),
+            boxGeometryBounds: {
+                min: faceGeometry.boundingBox.min.clone(),
+                max: faceGeometry.boundingBox.max.clone()
+            }
+        });
 
         interactiveMesh.position.set(0, 0, 0);
         interactiveMesh.renderOrder = 1000; // High render order for raycasting priority

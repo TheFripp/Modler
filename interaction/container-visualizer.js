@@ -134,19 +134,12 @@ class ContainerVisualizer extends ObjectVisualizer {
         // Skip objects marked as hidden from selection
         if (object.userData && object.userData.hideFromSelection) return;
 
-        // Use ContainerCrudManager to show the main container wireframe
-        const sceneController = window.modlerComponents?.sceneController;
-        const containerCrudManager = window.modlerComponents?.containerCrudManager;
-
-        if (sceneController && containerCrudManager) {
-            const objectData = sceneController.getObjectByMesh(object);
-            if (objectData && objectData.isContainer) {
-                // Force show the wireframe
-                containerCrudManager.showContainer(objectData.id, true);
-
-                // Track that we've shown this container
-                this.edgeHighlights.set(object, object); // Store the object itself as reference
-            }
+        // NEW ARCHITECTURE: Show wireframe child directly
+        const wireframeChild = object.children.find(child => child.userData.supportMeshType === 'wireframe');
+        if (wireframeChild) {
+            wireframeChild.visible = true;
+            // Track that we've shown this container
+            this.edgeHighlights.set(object, wireframeChild);
         }
     }
 
@@ -171,16 +164,12 @@ class ContainerVisualizer extends ObjectVisualizer {
      * Hide container wireframe
      */
     hideContainerWireframe(object) {
-        const sceneController = window.modlerComponents?.sceneController;
-        const containerCrudManager = window.modlerComponents?.containerCrudManager;
-
-        if (sceneController && containerCrudManager) {
-            const objectData = sceneController.getObjectByMesh(object);
-            if (objectData && objectData.isContainer) {
-                // Only hide if not in container context
-                if (this.containerContext !== object) {
-                    containerCrudManager.hideContainer(objectData.id);
-                }
+        // NEW ARCHITECTURE: Hide wireframe child directly
+        const wireframeChild = this.edgeHighlights.get(object);
+        if (wireframeChild && wireframeChild.userData.supportMeshType === 'wireframe') {
+            // Only hide if not in container context
+            if (this.containerContext !== object) {
+                wireframeChild.visible = false;
             }
         }
 

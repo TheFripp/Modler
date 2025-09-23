@@ -19,10 +19,12 @@ class BaseFaceToolBehavior {
      *
      * @param {Object} selectionController - Handles object selection state
      * @param {Object} visualEffects - Manages face highlighting and visual feedback
+     * @param {string} toolType - Type of tool using this behavior ('move', 'push', etc.)
      */
-    constructor(selectionController, visualEffects) {
+    constructor(selectionController, visualEffects, toolType = 'unknown') {
         this.selectionController = selectionController;
         this.visualEffects = visualEffects;
+        this.toolType = toolType;
 
         // Shared hover state
         this.hoveredObject = null;
@@ -73,11 +75,33 @@ class BaseFaceToolBehavior {
 
         // Face detection completed
 
+        // Filter out child objects of selected containers - they should not show face highlighting
+        if (!this.selectionController.isSelected(targetObject)) {
+            const sceneController = window.modlerComponents?.sceneController;
+            const objectData = sceneController?.getObjectByMesh(hit.object);
+
+            if (objectData && objectData.parentContainer) {
+                const parentContainer = sceneController.getObject(objectData.parentContainer);
+                if (parentContainer && this.selectionController.isSelected(parentContainer.mesh)) {
+                    // Object is child of selected container - don't show any highlighting
+                    this.clearHover();
+                    return false;
+                }
+            }
+        }
+
         // Only highlight faces of selected objects (including interactive meshes of selected containers)
         if (this.selectionController.isSelected(targetObject)) {
+            // CAMERA-FACING CHECK: Only highlight faces oriented toward the camera
+            if (!this.isFaceTowardCamera(hit)) {
+                this.clearHover();
+                return false;
+            }
+
             // CONTAINER MODE CHECK: Only show face highlights for containers in layout mode, not hug mode
-            if (this.isContainerInHugMode(targetObject)) {
-                // Container is in hug mode - don't show face highlights
+            // This check only applies to push tool - move tool should work in hug mode
+            if (this.toolType === 'push' && this.isContainerInHugMode(targetObject)) {
+                // Container is in hug mode and push tool is active - don't show face highlights
                 this.clearHover();
                 return false;
             }
@@ -167,33 +191,24 @@ class BaseFaceToolBehavior {
         const isContainerInteractive = hit.object.userData.isContainerInteractive;
         const isContainerCollision = hit.object.userData.isContainerCollision;
 
-        // FACE-BASED TOOL PRIORITY: For face-based tools, prioritize direct object manipulation
-        // Only resolve to containers if the container itself is explicitly selected
+        // CONTAINER INTEGRITY: Always resolve interactive/collision meshes to their parent containers
+        // This ensures containers move as single units and maintains mesh hierarchy
 
         if (isContainerInteractive && hit.object.userData.containerMesh) {
             // NEW ARCHITECTURE: Interactive mesh with direct containerMesh reference
             const containerMesh = hit.object.userData.containerMesh;
 
-            // Check if the container is explicitly selected - if so, operate on container
-            if (this.selectionController.isSelected(containerMesh)) {
-                return containerMesh;
-            }
-
-            // If container not selected, return the interactive mesh for direct manipulation
-            // This allows pushing faces of objects inside containers
-            return hit.object;
+            // Always return the container mesh to maintain container integrity
+            // Interactive meshes should move with their parent containers
+            return containerMesh;
 
         } else if (isContainerCollision && hit.object.parent) {
             // OLD ARCHITECTURE: Collision mesh is child of container
             const containerMesh = hit.object.parent;
 
-            // Check if the container is explicitly selected
-            if (this.selectionController.isSelected(containerMesh)) {
-                return containerMesh;
-            }
-
-            // If container not selected, return the collision mesh for direct manipulation
-            return hit.object;
+            // Always return the container mesh to maintain container integrity
+            // Collision meshes should move with their parent containers
+            return containerMesh;
 
         } else if (isContainerInteractive) {
             // FALLBACK: Scene-level interactive mesh with parent container ID
@@ -284,6 +299,59 @@ class BaseFaceToolBehavior {
 
         // Check if container is in hug sizing mode
         return objectData.sizingMode === 'hug';
+    }
+
+    /**
+     * Get world-space face normal, handling all container architectures
+     * @param {Object} hit - Raycast hit result with face and object
+     * @returns {THREE.Vector3} Normalized face normal in world space
+     */
+    getWorldFaceNormal(hit) {
+        if (!hit || !hit.face) return new THREE.Vector3(0, 1, 0); // Default up
+
+        // Get face normal in local space
+        const worldNormal = hit.face.normal.clone();
+
+        // Transform normal based on the object that was hit - handle all container architectures
+        const isContainerCollision = hit.object.userData.isContainerCollision;
+        const isContainerInteractive = hit.object.userData.isContainerInteractive;
+
+        if (isContainerInteractive && hit.object.userData.containerMesh) {
+            // NEW ARCHITECTURE: Interactive mesh with containerMesh reference
+            worldNormal.transformDirection(hit.object.userData.containerMesh.matrixWorld);
+        } else if (isContainerCollision && hit.object.parent) {
+            // OLD ARCHITECTURE: Collision mesh is child of container
+            worldNormal.transformDirection(hit.object.matrixWorld);
+        } else {
+            // Regular objects or fallback
+            worldNormal.transformDirection(hit.object.matrixWorld);
+        }
+
+        worldNormal.normalize();
+        return worldNormal;
+    }
+
+    /**
+     * Check if a face is oriented toward the camera (front-facing)
+     * @param {Object} hit - Raycast hit result with face and object
+     * @returns {boolean} True if face is oriented toward camera, false if back-facing
+     */
+    isFaceTowardCamera(hit) {
+        const camera = window.modlerComponents?.sceneFoundation?.camera;
+        if (!camera || !hit.face || !hit.point) {
+            return true; // Fallback to allow highlighting if camera not available
+        }
+
+        // Get world-space face normal
+        const worldNormal = this.getWorldFaceNormal(hit);
+
+        // Calculate camera to hit point direction
+        const cameraDirection = new THREE.Vector3();
+        cameraDirection.subVectors(hit.point, camera.position).normalize();
+
+        // Face is toward camera if dot product is negative
+        // (normal points opposite to camera direction)
+        return worldNormal.dot(cameraDirection) < 0;
     }
 }
 

@@ -194,14 +194,30 @@ class ContainerCrudManager {
         const containerData = LayoutGeometry.createContainerGeometry(bounds.size);
         const edgeContainer = containerData.mesh;
 
+        // DEBUG: Log container creation positioning
+        console.log('ContainerCrudManager.createAndRegisterContainer - Creating container:', {
+            boundsCenter: bounds.center.clone(),
+            containerMeshPosition: edgeContainer.position.clone(),
+            boundsSizeInfo: bounds.size
+        });
+
         const containerObject = sceneController.addObject(edgeContainer, null, {
             name: sceneController.generateContainerName(),
             type: 'container',
             position: bounds.center.clone(),
             isContainer: true,
             selectable: false,
-            sizingMode: 'hug'
+            sizingMode: 'hug',
+            originalBounds: bounds // Store original bounds for interactive mesh creation
         });
+
+        // DEBUG: Log container after addObject
+        if (containerObject && containerObject.mesh) {
+            console.log('ContainerCrudManager.createAndRegisterContainer - After addObject:', {
+                containerMeshPosition: containerObject.mesh.position.clone(),
+                hasInteractiveMesh: !!containerObject.mesh.userData?.supportMeshes?.interactiveMesh
+            });
+        }
 
         if (!containerObject) {
             console.error('Failed to create container object');
@@ -621,18 +637,20 @@ class ContainerCrudManager {
             return false;
         }
 
-        // Show wireframe by restoring visibility and opacity
-        const wireframeMesh = objectData.mesh;
-        if (wireframeMesh) {
-            wireframeMesh.visible = true;
+        // NEW ARCHITECTURE: Show wireframe child instead of main mesh
+        const mainMesh = objectData.mesh;
+        const wireframeChild = mainMesh.children.find(child => child.userData.supportMeshType === 'wireframe');
+
+        if (wireframeChild) {
+            wireframeChild.visible = true;
 
             // Restore original opacity if it was hidden
-            if (wireframeMesh.material && wireframeMesh.userData.isHidden) {
-                const originalOpacity = wireframeMesh.userData.originalOpacity;
+            if (wireframeChild.material && wireframeChild.userData.isHidden) {
+                const originalOpacity = wireframeChild.userData.originalOpacity;
                 if (originalOpacity !== undefined) {
-                    wireframeMesh.material.opacity = originalOpacity;
+                    wireframeChild.material.opacity = originalOpacity;
                 }
-                wireframeMesh.userData.isHidden = false;
+                wireframeChild.userData.isHidden = false;
             }
 
             return true;
@@ -653,15 +671,19 @@ class ContainerCrudManager {
             return false;
         }
 
-        // CRITICAL FIX: Don't hide wireframe completely (would hide children)
-        // Instead, make it nearly transparent to maintain child visibility
-        const wireframeMesh = objectData.mesh;
-        if (wireframeMesh && wireframeMesh.material) {
-            // Make wireframe nearly invisible but keep it "visible" to preserve children
-            const originalOpacity = wireframeMesh.material.opacity;
-            wireframeMesh.material.opacity = 0.01; // Nearly invisible but not hidden
-            wireframeMesh.userData.originalOpacity = originalOpacity; // Store for restoration
-            wireframeMesh.userData.isHidden = true; // Mark as logically hidden
+        // NEW ARCHITECTURE: Hide wireframe child (main mesh stays invisible, children stay visible)
+        const mainMesh = objectData.mesh;
+        const wireframeChild = mainMesh.children.find(child => child.userData.supportMeshType === 'wireframe');
+
+        if (wireframeChild) {
+            // Store original opacity for restoration
+            if (wireframeChild.material && !wireframeChild.userData.isHidden) {
+                wireframeChild.userData.originalOpacity = wireframeChild.material.opacity;
+            }
+
+            // Hide wireframe child completely - child objects remain visible as they're separate meshes
+            wireframeChild.visible = false;
+            wireframeChild.userData.isHidden = true; // Mark as logically hidden
             return true;
         }
 

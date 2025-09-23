@@ -304,6 +304,59 @@ class CameraMathUtils {
     }
     
     /**
+     * Apply axis-constrained snapping with face offset
+     * Snaps the face point (not object center) to the snap point along the dominant movement axis
+     * @param {THREE.Vector3} currentPosition - Object's current position
+     * @param {THREE.Vector3} snapPoint - Target snap point in world space
+     * @param {THREE.Vector3} travelAxis - Movement axis (face normal)
+     * @param {THREE.Vector3} faceHitPoint - Point on face where drag started
+     * @param {THREE.Vector3} objectStartPosition - Object position when drag started
+     * @returns {THREE.Vector3} Object position so face point snaps to snap point
+     */
+    static applyAxisConstrainedSnapWithFaceOffset(currentPosition, snapPoint, travelAxis, faceHitPoint, objectStartPosition) {
+        // Calculate offset from object center to the hit point on the face at drag start
+        const faceOffset = faceHitPoint.clone().sub(objectStartPosition);
+
+        // Determine which axis the object is primarily moving along
+        const absAxis = {
+            x: Math.abs(travelAxis.x),
+            y: Math.abs(travelAxis.y),
+            z: Math.abs(travelAxis.z)
+        };
+
+        // Find the dominant axis (the one with highest absolute value)
+        let dominantAxis = 'x';
+        let maxValue = absAxis.x;
+
+        if (absAxis.y > maxValue) {
+            dominantAxis = 'y';
+            maxValue = absAxis.y;
+        }
+        if (absAxis.z > maxValue) {
+            dominantAxis = 'z';
+        }
+
+        // Calculate target object position so that the face point reaches the snap point
+        const targetObjectPosition = currentPosition.clone();
+        const snapPointWithOffset = snapPoint.clone().sub(faceOffset);
+
+        // Apply snap only along the dominant axis
+        switch (dominantAxis) {
+            case 'x':
+                targetObjectPosition.x = snapPointWithOffset.x;
+                break;
+            case 'y':
+                targetObjectPosition.y = snapPointWithOffset.y;
+                break;
+            case 'z':
+                targetObjectPosition.z = snapPointWithOffset.z;
+                break;
+        }
+
+        return targetObjectPosition;
+    }
+
+    /**
      * Debug helper: Log dragging calculations
      * @param {string} operation - Name of operation being debugged
      * @param {Object} data - Data to log

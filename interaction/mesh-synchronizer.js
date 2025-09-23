@@ -34,7 +34,16 @@ class MeshSynchronizer {
         if (!mainMesh || !relatedMesh) {
             return false;
         }
-        
+
+        // ARCHITECTURE COMPLIANCE: Prevent registering child meshes that should move with parent
+        if (relatedMesh.parent === mainMesh) {
+            // Child mesh should move automatically with parent - no sync registration needed
+            if (relatedMesh.userData?.isContainerInteractive) {
+                console.log('MeshSynchronizer.registerRelatedMesh - Prevented registering interactive child mesh (correct behavior)');
+            }
+            return false;
+        }
+
         // Get or create registry entry for main mesh
         let relatedMeshes = this.meshRegistry.get(mainMesh);
         if (!relatedMeshes) {
@@ -260,6 +269,16 @@ class MeshSynchronizer {
     syncPosition(mainMesh, relatedMesh, syncOptions) {
         const { offset = new THREE.Vector3(), relativeToParent = false } = syncOptions;
 
+        // ARCHITECTURE COMPLIANCE: Skip child meshes - they use relative positioning
+        if (relatedMesh.parent === mainMesh) {
+            // Child mesh - position is already relative, no sync needed
+            // DEBUG: Log when we skip a child mesh
+            if (relatedMesh.userData?.isContainerInteractive) {
+                console.log('MeshSynchronizer.syncPosition - Skipping interactive child mesh sync (correct behavior)');
+            }
+            return true;
+        }
+
         if (relativeToParent && relatedMesh.parent) {
             // Position relative to parent (for child meshes like collision boxes)
             relatedMesh.position.copy(offset);
@@ -277,11 +296,21 @@ class MeshSynchronizer {
      * Synchronize geometry updates
      */
     syncGeometry(mainMesh, relatedMesh, syncOptions) {
+        // ARCHITECTURE COMPLIANCE: Skip child meshes - they use relative positioning
+        if (relatedMesh.parent === mainMesh) {
+            // Child mesh - position is already relative, no sync needed
+            // DEBUG: Log when we skip a child mesh
+            if (relatedMesh.userData?.isContainerInteractive) {
+                console.log('MeshSynchronizer.syncGeometry - Skipping interactive child mesh sync (correct behavior)');
+            }
+            return true;
+        }
+
         // For geometry changes (like container resizing), related mesh may need new geometry
         if (syncOptions.geometryUpdater && typeof syncOptions.geometryUpdater === 'function') {
             return syncOptions.geometryUpdater(mainMesh, relatedMesh);
         }
-        
+
         // Default: just sync position
         return this.syncPosition(mainMesh, relatedMesh, syncOptions);
     }
@@ -298,6 +327,16 @@ class MeshSynchronizer {
      * Synchronize selection wireframes with special handling for temporary scene children
      */
     syncSelection(mainMesh, relatedMesh, syncOptions) {
+        // ARCHITECTURE COMPLIANCE: Skip child meshes - they use relative positioning
+        if (relatedMesh.parent === mainMesh) {
+            // Child mesh - position is already relative, no sync needed
+            // DEBUG: Log when we skip a child mesh
+            if (relatedMesh.userData?.isContainerInteractive) {
+                console.log('MeshSynchronizer.syncSelection - Skipping interactive child mesh sync (correct behavior)');
+            }
+            return true;
+        }
+
         // For geometry changes, use geometryUpdater if available
         if (syncOptions.geometryUpdater && typeof syncOptions.geometryUpdater === 'function') {
             return syncOptions.geometryUpdater(mainMesh, relatedMesh);

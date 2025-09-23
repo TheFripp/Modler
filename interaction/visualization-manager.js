@@ -82,7 +82,7 @@ class VisualizationManager {
     /**
      * Show face highlight for tools (unified API)
      */
-    showFaceHighlight(object, face, color = 0x00ff00) {
+    showFaceHighlight(object, face, color = null) {
         const visualizer = this.getVisualizerFor(object);
         return visualizer.showFaceHighlight(object, face, color);
     }

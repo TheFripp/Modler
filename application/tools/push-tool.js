@@ -6,7 +6,7 @@ class PushTool {
         this.selectionController = selectionController;
         this.visualEffects = visualEffects;
 
-        this.faceToolBehavior = new BaseFaceToolBehavior(selectionController, visualEffects);
+        this.faceToolBehavior = new BaseFaceToolBehavior(selectionController, visualEffects, 'push');
 
         // Core push state - simplified
         this.active = false;

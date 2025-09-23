@@ -48,11 +48,11 @@ class ObjectVisualizer {
         this.edgeMaterial.lineWidth = selectionConfig.lineWidth;
         this.edgeMaterial.renderOrder = selectionConfig.renderOrder || 999;
 
-        // Face highlight material for tool interactions
+        // Face highlight material for tool interactions - use selection color instead of hardcoded green
         this.faceHighlightMaterial = new THREE.MeshBasicMaterial({
-            color: 0x00ff00,
+            color: colorHex, // Use same color as selection edges
             transparent: true,
-            opacity: 0.3,
+            opacity: 0.1, // Lower opacity to match support mesh factory face highlights
             side: THREE.DoubleSide
         });
     }
@@ -289,7 +289,7 @@ class ObjectVisualizer {
     /**
      * Show face highlight for tools (push, move, etc.)
      */
-    showFaceHighlight(object, face, color = 0x00ff00) {
+    showFaceHighlight(object, face, color = null) {
         if (!object || !face) return;
 
         const key = `${object.id}_face_${face.a}_${face.b}_${face.c}`;
@@ -316,7 +316,10 @@ class ObjectVisualizer {
 
             // Create highlight mesh with consistent visual style
             const material = this.faceHighlightMaterial.clone();
-            material.color.setHex(color);
+            if (color !== null) {
+                material.color.setHex(color);
+            }
+            // If color is null, use the material's default color (selection color)
 
             const faceMesh = new THREE.Mesh(faceGeometry, material);
             faceMesh.raycast = () => {}; // Non-raycastable

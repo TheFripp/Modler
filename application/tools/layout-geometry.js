@@ -113,6 +113,67 @@ class LayoutGeometry {
      * @returns {Object} Object with visual mesh, collision mesh, and materials
      */
     static createContainerGeometry(size) {
+        console.log('LayoutGeometry.createContainerGeometry - NEW ARCHITECTURE: Creating solid-first container');
+
+        // NEW ARCHITECTURE: Create solid BoxGeometry as main mesh (like regular objects)
+        const containerGeometry = new THREE.BoxGeometry(size.x, size.y, size.z);
+
+        // Create invisible material for main solid mesh
+        const mainMaterial = new THREE.MeshBasicMaterial({
+            transparent: true,
+            opacity: 0.0,
+            colorWrite: false, // Don't write to color buffer - purely for raycasting
+            depthWrite: false, // Don't write to depth buffer - prevents visual artifacts
+            wireframe: false   // CRITICAL: Explicitly disable wireframe rendering to prevent triangle edges
+        });
+
+        // Create main solid mesh
+        const mainMesh = new THREE.Mesh(containerGeometry, mainMaterial);
+        // NOTE: Material-based invisibility (opacity: 0.0, colorWrite: false, depthWrite: false)
+        // makes the container invisible while keeping child objects visible
+        mainMesh.userData.isContainer = true;
+        mainMesh.userData.containerType = 'main';
+
+        // Get container configuration for wireframe child
+        const configManager = window.modlerComponents?.configurationManager;
+        const wireframeColor = configManager ?
+            configManager.get('visual.containers.wireframeColor', '#00ff00') : '#00ff00';
+        const opacity = configManager ?
+            configManager.get('visual.containers.opacity', 0.8) : 0.8;
+        const renderOrder = configManager ?
+            configManager.get('visual.containers.renderOrder', 998) : 998;
+
+        // Create wireframe as CHILD of main mesh (consistent with objects)
+        const edgeGeometry = new THREE.EdgesGeometry(containerGeometry);
+        const wireframeMaterial = new THREE.LineBasicMaterial({
+            color: new THREE.Color(wireframeColor).getHex(),
+            transparent: true,
+            opacity: opacity
+        });
+
+        const wireframeChild = new THREE.LineSegments(edgeGeometry, wireframeMaterial);
+        wireframeChild.position.set(0, 0.001, 0); // Small Y offset to prevent z-fighting
+        wireframeChild.renderOrder = renderOrder;
+        wireframeChild.raycast = () => {}; // Non-raycastable (like object wireframes)
+        wireframeChild.userData.supportMeshType = 'wireframe';
+        wireframeChild.visible = false; // Hidden by default - shown only when container is selected
+
+        // Add wireframe as child
+        mainMesh.add(wireframeChild);
+
+        console.log('LayoutGeometry.createContainerGeometry - Solid main mesh with wireframe child created');
+
+        return {
+            mesh: mainMesh, // Return solid mesh as main (consistent with objects)
+            geometry: containerGeometry, // Original solid geometry
+            material: mainMaterial,
+            wireframeChild: wireframeChild, // Reference to wireframe child
+            isInteractiveMeshSceneLevel: false // No longer needed - support meshes will be children
+        };
+    }
+
+    // REMOVED: Old complex createContainerGeometry method with scene-level interactive mesh
+    static createContainerGeometry_OLD(size) {
 
         // Create container box geometry for collision detection
         const containerGeometry = new THREE.BoxGeometry(size.x, size.y, size.z);
@@ -353,18 +414,38 @@ class LayoutGeometry {
             }
         }
 
-        // Dispose old geometry to prevent memory leaks
+        // NEW ARCHITECTURE: Update wireframe child, not main mesh
+        // Main mesh should always remain solid BoxGeometry with invisible material
+
+        // Update main mesh geometry (solid BoxGeometry for raycasting)
         if (containerMesh.geometry) {
             containerMesh.geometry.dispose();
         }
+        containerMesh.geometry = newGeometry; // Keep as solid BoxGeometry
+
+        // Find and update wireframe child
+        const wireframeChild = containerMesh.children.find(child =>
+            child.userData.supportMeshType === 'wireframe'
+        );
+
+        if (wireframeChild) {
+            // Dispose old wireframe geometry
+            if (wireframeChild.geometry) {
+                wireframeChild.geometry.dispose();
+            }
+
+            // Update wireframe child with new edge geometry and material
+            wireframeChild.geometry = newEdgeGeometry;
+            wireframeChild.material = newMaterial;
+            wireframeChild.renderOrder = renderOrder;
+        } else {
+            console.warn('updateContainerGeometry: wireframe child not found in container');
+        }
+
+        // Dispose old interactive mesh geometry
         if (interactiveMesh && interactiveMesh.geometry) {
             interactiveMesh.geometry.dispose();
         }
-
-        // Update the visual container mesh with new geometry and material
-        containerMesh.geometry = newEdgeGeometry;
-        containerMesh.material = newMaterial;
-        containerMesh.renderOrder = renderOrder;
 
         // UNIFIED POSITION MANAGEMENT: All container-related meshes must stay together
         const finalContainerPosition = shouldReposition ? newCenter : containerMesh.position;

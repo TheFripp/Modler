@@ -118,6 +118,15 @@ class SceneController {
         // Position if specified
         if (options.position) {
             mesh.position.copy(options.position);
+
+            // DEBUG: Log mesh positioning for containers
+            if (options.isContainer) {
+                console.log('SceneController.addObject - Container positioning:', {
+                    containerName: objectData.name,
+                    positionSet: options.position.clone(),
+                    meshPositionAfter: mesh.position.clone()
+                });
+            }
         }
         
         // Rotation if specified
@@ -143,18 +152,53 @@ class SceneController {
             }
         }
 
-        // CREATE ONCE ARCHITECTURE: Create all support meshes as children
+        // UNIFIED ARCHITECTURE: Create support meshes for regular objects only
+        // Containers use wireframe children from LayoutGeometry (new architecture)
         const supportMeshFactory = window.SupportMeshFactory ? new SupportMeshFactory() : null;
-        if (supportMeshFactory) {
-            if (objectData.isContainer) {
-                supportMeshFactory.createContainerSupportMeshes(mesh);
-            } else {
-                supportMeshFactory.createObjectSupportMeshes(mesh);
-            }
+        if (supportMeshFactory && !objectData.isContainer) {
+            console.log('SceneController.addObject - Creating support meshes for regular object:', {
+                objectName: objectData.name,
+                isContainer: objectData.isContainer,
+                meshPosition: mesh.position.clone(),
+                meshWorldPosition: mesh.getWorldPosition(new THREE.Vector3())
+            });
+
+            // Create support meshes for regular objects only
+            supportMeshFactory.createObjectSupportMeshes(mesh);
+        } else if (objectData.isContainer) {
+            console.log('SceneController.addObject - Skipping support meshes for container (uses new architecture):', objectData.name);
+        }
+
+        // DEBUG: Log support mesh creation results (regular objects only)
+        if (supportMeshFactory && !objectData.isContainer && mesh.userData.supportMeshes) {
+                const supportMeshes = mesh.userData.supportMeshes;
+                console.log('SceneController.addObject - Support meshes created:', {
+                    objectName: objectData.name,
+                    isContainer: objectData.isContainer,
+                    hasSelectionWireframe: !!supportMeshes.selectionWireframe,
+                    hasInteractiveMesh: !!supportMeshes.interactiveMesh,
+                    hasFaceHighlight: !!supportMeshes.faceHighlight,
+                    interactiveMeshParent: supportMeshes.interactiveMesh ?
+                        (supportMeshes.interactiveMesh.parent === mesh ? 'CORRECT' : 'WRONG') : 'N/A'
+                });
         }
 
         // Add to scene and registry
         this.scene.add(mesh);
+
+        // DEBUG: Log final positions after adding to scene for containers (new architecture)
+        if (objectData.isContainer) {
+            const wireframeChild = mesh.children.find(child => child.userData.supportMeshType === 'wireframe');
+            console.log('SceneController.addObject - Container added with new architecture:', {
+                containerName: objectData.name,
+                containerPosition: mesh.position.clone(),
+                containerWorldPosition: mesh.getWorldPosition(new THREE.Vector3()),
+                hasWireframeChild: !!wireframeChild,
+                wireframeChildVisible: wireframeChild ? wireframeChild.visible : 'N/A',
+                sceneChildrenCount: this.scene.children.length
+            });
+        }
+
         this.objects.set(id, objectData);
         
         // Emit event for UI updates
@@ -809,12 +853,14 @@ class SceneController {
             const mesh = objectData.mesh;
             if (mesh && !mesh.userData.supportMeshes) {
                 if (objectData.isContainer) {
-                    supportMeshFactory.createContainerSupportMeshes(mesh);
+                    // NEW ARCHITECTURE: Skip containers - they use wireframe children from LayoutGeometry
+                    console.log('Skipping migration for container (uses new architecture):', objectData.name);
+                    continue;
                 } else {
                     supportMeshFactory.createObjectSupportMeshes(mesh);
+                    migratedCount++;
+                    console.log('Migrated object to support mesh architecture:', objectData.name);
                 }
-                migratedCount++;
-                console.log('Migrated object to support mesh architecture:', objectData.name);
             }
         }
 

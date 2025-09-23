@@ -1,7 +1,7 @@
 /**
  * Move Tool
- * Handles object movement with face highlighting and drag operations using shared selection behavior
- * Target: ~150 lines - face highlighting + movement logic + shared selection
+ * Handles object movement with face highlighting and drag operations using centralized SelectionController
+ * Features: Face-constrained dragging, axis-constrained snapping, container-aware updates
  */
 
 class MoveTool {
@@ -10,7 +10,7 @@ class MoveTool {
         this.visualEffects = visualEffects;
 
         // Use shared behaviors for consistency
-        this.faceToolBehavior = new BaseFaceToolBehavior(selectionController, visualEffects);
+        this.faceToolBehavior = new BaseFaceToolBehavior(selectionController, visualEffects, 'move');
         this.eventHandler = new BaseFaceToolEventHandler(this, this.faceToolBehavior, selectionController);
         
         // Simplified drag state
@@ -20,8 +20,6 @@ class MoveTool {
         this.dragFaceNormal = null;
         this.lastMousePos = null;
 
-        // Deferred selection for face-based tools
-        this.pendingSelection = null;
 
         // Container update throttling using shared utils - use default 16ms for smooth updates
         this.containerThrottleState = MovementUtils.createThrottleState();
@@ -73,13 +71,10 @@ class MoveTool {
     onClick(hit, event) {
         if (this.isDragging) return;
 
-        // For face-based tools, defer selection until operation completes
-        // This prevents automatic container selection from interfering with face manipulation
+        // Handle selection immediately - SelectionController has proper container context logic
         if (hit && hit.object) {
-            // Store click info for deferred selection
-            this.pendingSelection = { hit, event };
+            this.selectionController.handleObjectClick(hit.object, event, { toolType: 'MoveTool' });
         } else {
-            // Empty space clicks can be handled immediately
             this.selectionController.handleEmptySpaceClick(event);
         }
     }
@@ -96,10 +91,10 @@ class MoveTool {
      * Start face-based dragging operation
      */
     startFaceDrag(hit) {
-        
+
         // Use shared behavior to get target object (handles both old and new container architectures)
         const targetObject = this.faceToolBehavior.getTargetObject(hit);
-        
+
         this.isDragging = true;
         this.dragObject = targetObject; // Use the actual container, not the collision mesh
         this.dragStartPosition = targetObject.position.clone();
@@ -116,26 +111,8 @@ class MoveTool {
             snapController.requestSnapDetection();
         }
 
-        // Get face normal in world space for movement direction
-        const worldNormal = hit.face.normal.clone();
-
-        // Transform normal based on the object that was hit - handle all container architectures
-        const isContainerCollision = hit.object.userData.isContainerCollision;
-        const isContainerInteractive = hit.object.userData.isContainerInteractive;
-
-        if (isContainerInteractive && hit.object.userData.containerMesh) {
-            // NEW ARCHITECTURE: Interactive mesh with containerMesh reference
-            worldNormal.transformDirection(hit.object.userData.containerMesh.matrixWorld);
-        } else if (isContainerCollision && hit.object.parent) {
-            // OLD ARCHITECTURE: Collision mesh is child of container
-            worldNormal.transformDirection(hit.object.matrixWorld);
-        } else {
-            // Regular objects or fallback
-            worldNormal.transformDirection(hit.object.matrixWorld);
-        }
-
-        worldNormal.normalize();
-        this.dragFaceNormal = worldNormal;
+        // Get face normal in world space using shared behavior (handles all container architectures)
+        this.dragFaceNormal = this.faceToolBehavior.getWorldFaceNormal(hit);
 
         // Store snap attachment point if snapping is enabled
         this.snapAttachmentPoint = null;
@@ -155,6 +132,11 @@ class MoveTool {
         
         // Clear the highlight since we're now dragging
         this.faceToolBehavior.clearHover();
+
+        // Enable interactive mesh visibility for face-based tool interaction (objects only, not containers)
+        if (targetObject?.userData?.supportMeshes?.interactiveMesh && !targetObject.userData.isContainer) {
+            targetObject.userData.supportMeshes.interactiveMesh.visible = true;
+        }
         
     }
     
@@ -204,7 +186,7 @@ class MoveTool {
 
         // Calculate potential new position
         const potentialPosition = this.dragObject.position.clone().add(worldMovement);
-        
+
         // Update snap detection with travel axis information for edge filtering
         const snapController = window.modlerComponents?.snapController;
         if (snapController && snapController.getEnabled()) {
@@ -212,8 +194,8 @@ class MoveTool {
             snapController.updateSnapDetection('move', [this.dragObject], this.dragFaceNormal);
             const currentSnapPoint = snapController.getCurrentSnapPoint();
             if (currentSnapPoint) {
-                // Apply axis-constrained snapping with face offset: face point snaps to snap point, not object center
-                const axisConstrainedPosition = this.applyAxisConstrainedSnapWithFaceOffset(
+                // Apply axis-constrained snapping with face offset using CameraMathUtils
+                const axisConstrainedPosition = window.CameraMathUtils.applyAxisConstrainedSnapWithFaceOffset(
                     potentialPosition,
                     currentSnapPoint.worldPos,
                     this.dragFaceNormal,
@@ -231,8 +213,11 @@ class MoveTool {
             // Snapping disabled, use regular movement
             this.dragObject.position.copy(potentialPosition);
         }
+
+        // Standard matrix update (automatic parent-child inheritance works)
+        this.dragObject.updateMatrixWorld(true);
         
-        // Update related meshes in real-time during drag through MeshSynchronizer with immediate feedback
+        // Update related meshes through MeshSynchronizer
         const meshSynchronizer = window.modlerComponents?.meshSynchronizer;
         if (meshSynchronizer) {
             meshSynchronizer.syncAllRelatedMeshes(this.dragObject, 'transform', true);
@@ -260,88 +245,7 @@ class MoveTool {
         // Update last mouse position for next frame
         this.lastMousePos = currentMouseNDC.clone();
     }
-    
-    /**
-     * Apply axis-constrained snapping with face offset: face point snaps to snap point, not object center
-     */
-    applyAxisConstrainedSnapWithFaceOffset(currentPosition, snapPoint, travelAxis, faceHitPoint, objectStartPosition) {
-        // Calculate offset from object center to the hit point on the face at drag start
-        const faceOffset = faceHitPoint.clone().sub(objectStartPosition);
 
-        // Determine which axis the object is primarily moving along
-        const absAxis = {
-            x: Math.abs(travelAxis.x),
-            y: Math.abs(travelAxis.y),
-            z: Math.abs(travelAxis.z)
-        };
-
-        // Find the dominant axis (the one with highest absolute value)
-        let dominantAxis = 'x';
-        let maxValue = absAxis.x;
-
-        if (absAxis.y > maxValue) {
-            dominantAxis = 'y';
-            maxValue = absAxis.y;
-        }
-        if (absAxis.z > maxValue) {
-            dominantAxis = 'z';
-        }
-
-        // Calculate target object position so that the face point reaches the snap point
-        const targetObjectPosition = currentPosition.clone();
-        const snapPointWithOffset = snapPoint.clone().sub(faceOffset);
-
-        // Apply snap only along the dominant axis
-        switch (dominantAxis) {
-            case 'x':
-                targetObjectPosition.x = snapPointWithOffset.x;
-                break;
-            case 'y':
-                targetObjectPosition.y = snapPointWithOffset.y;
-                break;
-            case 'z':
-                targetObjectPosition.z = snapPointWithOffset.z;
-                break;
-        }
-
-        return targetObjectPosition;
-    }
-    
-    /**
-     * End face drag operation
-     */
-    endFaceDrag() {
-        if (!this.isDragging) return;
-        
-        // Notify SceneController of final position change for container resizing
-        if (this.dragObject) {
-            const sceneController = window.modlerComponents?.sceneController;
-            if (sceneController) {
-                const objectData = sceneController.getObjectByMesh(this.dragObject);
-                if (objectData) {
-                    sceneController.notifyObjectTransformChanged(objectData.id);
-                }
-            }
-
-            // Container updates are handled automatically by SceneController.notifyObjectTransformChanged
-        }
-
-        // Clean up drag state - centralized system handles snap state
-        this.isDragging = false;
-        this.dragObject = null;
-        this.dragStartPosition = null;
-        this.dragFaceNormal = null;
-        this.lastMousePos = null;
-        this.snapAttachmentPoint = null;
-        this.dragHitPoint = null;
-
-        // Clear any existing highlights and hover states to ensure clean state
-        this.faceToolBehavior.clearHover();
-
-        // Re-trigger face highlighting for current mouse position after tool operation ends
-        this.checkForFaceHighlightAfterOperation();
-    }
-    
     /**
      * Update container during drag operation - triggers container resize
      */
@@ -359,10 +263,9 @@ class MoveTool {
         // Trigger container resize calculation
         const containerCrudManager = window.modlerComponents?.containerCrudManager;
         if (containerCrudManager) {
-            
             // Use MovementUtils for consistent container update behavior with immediate visuals
             MovementUtils.updateParentContainer(this.dragObject, false, this.containerThrottleState, null, true);
-            
+
             // Update the container selection highlight to reflect new size
             this.selectionController.updateContainerEdgeHighlight();
         }
@@ -382,18 +285,19 @@ class MoveTool {
         this.dragStartPosition = null;
         this.dragFaceNormal = null;
         this.lastMousePos = null;
+        this.snapAttachmentPoint = null;
+        this.dragHitPoint = null;
 
         // Clear face highlights
         this.faceToolBehavior.clearHover();
 
-        // Handle deferred selection - now that drag operation is complete, apply selection
-        if (this.pendingSelection) {
-            this.selectionController.handleObjectClick(this.pendingSelection.hit.object, this.pendingSelection.event, { toolType: 'MoveTool' });
-            this.pendingSelection = null;
-        }
-
         // Final updates for dragged object
         if (draggedObject) {
+            // Hide interactive mesh after drag (objects only, containers keep them hidden)
+            if (draggedObject.userData?.supportMeshes?.interactiveMesh && !draggedObject.userData.isContainer) {
+                draggedObject.userData.supportMeshes.interactiveMesh.visible = false;
+            }
+
             // Ensure final sync of all related meshes
             const meshSynchronizer = window.modlerComponents?.meshSynchronizer;
             if (meshSynchronizer) {
@@ -425,6 +329,9 @@ class MoveTool {
                 }
             }
         }
+
+        // Re-trigger face highlighting for current mouse position after tool operation ends
+        this.checkForFaceHighlight();
     }
 
 
@@ -470,7 +377,7 @@ class MoveTool {
 
         // If new objects are selected and we're the active tool, check for immediate face highlighting
         if (selectedObjects.length > 0) {
-            this.checkForFaceHighlightOnSelection();
+            this.checkForFaceHighlight();
         }
     }
 
@@ -489,11 +396,13 @@ class MoveTool {
     }
 
     /**
-     * Check for face highlighting after tool operation ends
-     * Re-triggers hover detection at current mouse position
+     * Check for face highlighting at current mouse position
+     * Re-triggers hover detection for proper face highlighting
      */
-    checkForFaceHighlightAfterOperation() {
-        // Use a small delay to ensure all cleanup is complete
+    checkForFaceHighlight() {
+        // Standard delay for state updates
+        const delay = 50;
+
         setTimeout(() => {
             const inputController = window.modlerComponents?.inputController;
             if (!inputController) return;
@@ -519,40 +428,7 @@ class MoveTool {
                     this.onHover(hit);
                 }
             }
-        }, 50); // Small delay to ensure tool state is fully reset
+        }, delay);
     }
 
-    /**
-     * Check for face highlighting when object is selected
-     * Shows face highlighting immediately if mouse is hovering over a selected object's face
-     */
-    checkForFaceHighlightOnSelection() {
-        // Use a small delay to ensure selection state is fully updated
-        setTimeout(() => {
-            const inputController = window.modlerComponents?.inputController;
-            if (!inputController) return;
-
-            // Get current mouse position in screen coordinates
-            const rect = inputController.canvas?.getBoundingClientRect();
-            if (!rect) return;
-
-            // Perform raycast at current mouse position using inputController's raycast method
-            const hit = inputController.raycast();
-
-            if (hit) {
-                // Find the first hit that matches selected objects
-                const selectedObjects = this.selectionController.getSelectedObjects();
-
-                // Handle collision meshes properly using shared behavior
-                const targetObject = this.faceToolBehavior.getTargetObject(hit);
-
-                if (selectedObjects.includes(hit.object) ||
-                    selectedObjects.includes(targetObject) ||
-                    (hit.object.parent && selectedObjects.includes(hit.object.parent))) {
-                    // Trigger hover event to show face highlighting
-                    this.onHover(hit);
-                }
-            }
-        }, 50); // Small delay to ensure selection state is fully updated
-    }
 }
