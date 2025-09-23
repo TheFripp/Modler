@@ -386,7 +386,8 @@ class SelectionVisualizer {
             if (objectData && objectData.isContainer) {
 
                 // Use unified ContainerManager for proper visibility handling
-                containerCrudManager.showContainer(objectData.id);
+                // Force show the wireframe even if in container context - selection should always be visible
+                containerCrudManager.showContainer(objectData.id, true);
             }
         }
     }
@@ -418,10 +419,47 @@ class SelectionVisualizer {
             this.createEdgeHighlight(object);
             this.showContainerWireframe(object);
             this.showContainerPaddingVisualization(object);
+
+            // Special handling for container selection in container context
+            this.handleContainerContextSelection(object, true);
         } else {
             this.removeEdgeHighlight(object);
             this.hideContainerWireframe(object);
             this.hideContainerPaddingVisualization(object);
+
+            // Special handling for container deselection in container context
+            this.handleContainerContextSelection(object, false);
+        }
+    }
+
+    /**
+     * Handle container selection visualization when in container context
+     */
+    handleContainerContextSelection(object, isSelected) {
+        const selectionController = window.modlerComponents?.selectionController;
+        const containerInteractionManager = window.modlerComponents?.containerInteractionManager;
+        const sceneController = window.modlerComponents?.sceneController;
+
+        if (!selectionController || !containerInteractionManager || !sceneController) return;
+
+        // Check if we're in container context and this is a container
+        const isInContainerContext = selectionController.isInContainerContext();
+        const currentContainerContext = selectionController.getContainerContext();
+        const objectData = sceneController.getObjectByMesh(object);
+
+        if (isInContainerContext && objectData && objectData.isContainer && currentContainerContext === object) {
+            // We're selecting the same container we're stepped into
+            if (isSelected) {
+                // Enhance the container context highlight to show selection (make it more opaque)
+                if (containerInteractionManager.containerEdgeHighlight && containerInteractionManager.containerEdgeHighlight.material) {
+                    containerInteractionManager.containerEdgeHighlight.material.opacity = 0.6; // More visible when selected
+                }
+            } else {
+                // Restore the container context highlight to normal faded state
+                if (containerInteractionManager.containerEdgeHighlight && containerInteractionManager.containerEdgeHighlight.material) {
+                    containerInteractionManager.containerEdgeHighlight.material.opacity = 0.25; // Back to faded
+                }
+            }
         }
     }
 

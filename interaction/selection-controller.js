@@ -27,6 +27,19 @@ class SelectionController {
     select(object) {
         if (!object) return false;
 
+        // Check if selecting a container that's different from current container context
+        const sceneController = window.modlerComponents?.sceneController;
+        if (sceneController && this.containerContextManager) {
+            const objectData = sceneController.getObjectByMesh(object);
+            if (objectData && objectData.isContainer) {
+                const currentContainerContext = this.getContainerContext();
+                // Only step out if we're in a different container context than the one being selected
+                if (this.isInContainerContext() && currentContainerContext !== object) {
+                    this.stepOutOfContainer();
+                }
+            }
+        }
+
         this.selectedObjects.add(object);
         this.addToHistory('select', object);
 

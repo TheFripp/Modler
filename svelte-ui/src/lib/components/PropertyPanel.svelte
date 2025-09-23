@@ -17,7 +17,7 @@
 		return $multiSelection ? 'multi-selection' : $displayObject?.id || '';
 	}
 
-	// Handle layout axis selection
+	// Handle layout axis selection with toggle behavior
 	function selectLayoutAxis(axis: string) {
 		if (!$displayObject?.isContainer) return;
 		if (!axis || !['x', 'y', 'z'].includes(axis)) {
@@ -26,21 +26,18 @@
 		}
 
 		const objectId = getObjectIdForUpdate();
+		const currentDirection = $displayObject.autoLayout?.direction;
+		const isCurrentlyEnabled = $displayObject.autoLayout?.enabled;
 
-		// Use PropertyController for centralized handling
-		propertyController.updateProperty(objectId, 'autoLayout.direction', axis);
-
-		// If auto layout is not enabled, enable it when direction is set
-		if (!$displayObject.autoLayout?.enabled) {
+		// If clicking the same direction that's already active, toggle off (disable layout)
+		if (currentDirection === axis && isCurrentlyEnabled) {
+			propertyController.updateProperty(objectId, 'autoLayout.enabled', false);
+			propertyController.updateProperty(objectId, 'autoLayout.direction', null);
+		} else {
+			// Enable layout and set new direction
 			propertyController.updateProperty(objectId, 'autoLayout.enabled', true);
+			propertyController.updateProperty(objectId, 'autoLayout.direction', axis);
 		}
-	}
-
-	// Handle sizing mode change
-	function setSizingMode(mode: 'hug' | 'fixed') {
-		if (!$displayObject?.isContainer) return;
-		const objectId = getObjectIdForUpdate();
-		propertyController.updateProperty(objectId, 'sizingMode', mode);
 	}
 
 	// Mixed value helpers for individual inputs
@@ -144,53 +141,27 @@
 							<button
 								type="button"
 								onclick={() => selectLayoutAxis('x')}
-								class="px-3 py-2 text-xs border border-gray-600 rounded-md hover:bg-gray-800 transition-colors {$displayObject.autoLayout?.direction === 'x' ? 'bg-blue-600 text-white border-blue-600' : ''}"
+								class="px-3 py-2 text-xs border border-gray-600 rounded-md hover:bg-gray-600 transition-colors {$displayObject.autoLayout?.enabled && $displayObject.autoLayout?.direction === 'x' ? 'bg-gray-600 text-white border-gray-500' : ''}"
 							>
 								Width (X)
 							</button>
 							<button
 								type="button"
 								onclick={() => selectLayoutAxis('y')}
-								class="px-3 py-2 text-xs border border-gray-600 rounded-md hover:bg-gray-800 transition-colors {$displayObject.autoLayout?.direction === 'y' ? 'bg-blue-600 text-white border-blue-600' : ''}"
+								class="px-3 py-2 text-xs border border-gray-600 rounded-md hover:bg-gray-600 transition-colors {$displayObject.autoLayout?.enabled && $displayObject.autoLayout?.direction === 'y' ? 'bg-gray-600 text-white border-gray-500' : ''}"
 							>
 								Height (Y)
 							</button>
 							<button
 								type="button"
 								onclick={() => selectLayoutAxis('z')}
-								class="px-3 py-2 text-xs border border-gray-600 rounded-md hover:bg-gray-800 transition-colors {$displayObject.autoLayout?.direction === 'z' ? 'bg-blue-600 text-white border-blue-600' : ''}"
+								class="px-3 py-2 text-xs border border-gray-600 rounded-md hover:bg-gray-600 transition-colors {$displayObject.autoLayout?.enabled && $displayObject.autoLayout?.direction === 'z' ? 'bg-gray-600 text-white border-gray-500' : ''}"
 							>
 								Depth (Z)
 							</button>
 						</div>
 					</div>
 
-					<ButtonGroup
-						label="Container Sizing"
-						options={[
-							{ value: 'hug', label: 'Hug Contents' },
-							{ value: 'fixed', label: 'Fixed Size' }
-						]}
-						value={$displayObject.sizingMode || 'fixed'}
-						onSelect={setSizingMode}
-						columns={2}
-					/>
-
-					<!-- Auto Layout Toggle -->
-					<div class="space-y-2">
-						<label class="text-xs font-medium text-foreground">Auto Layout</label>
-						<div class="flex items-center gap-2">
-							<input
-								type="checkbox"
-								checked={$displayObject.autoLayout?.enabled || false}
-								onchange={(e) => propertyController.updateProperty(getObjectIdForUpdate(), 'autoLayout.enabled', e.target.checked)}
-								class="rounded border border-gray-600 bg-gray-800"
-							/>
-							<span class="text-xs text-muted-foreground">
-								{$displayObject.autoLayout?.enabled ? 'Enabled' : 'Disabled'}
-							</span>
-						</div>
-					</div>
 
 					<!-- Gap Control -->
 					{#if $displayObject.autoLayout?.enabled}
@@ -232,9 +203,9 @@
 					{/if}
 
 					<div class="text-xs text-muted-foreground italic">
-						{$displayObject.sizingMode === 'hug'
-							? 'Container automatically resizes to fit its contents'
-							: 'Container maintains fixed dimensions'
+						{$displayObject.autoLayout?.enabled
+							? `Layout active: ${$displayObject.autoLayout.direction?.toUpperCase()} axis`
+							: 'No layout active - container in hug mode'
 						}
 					</div>
 				</div>
