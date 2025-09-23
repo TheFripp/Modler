@@ -1,8 +1,8 @@
-// Modler V2 - Container Context Management
-// Handles container step-in/out logic and context highlighting
-// Target: ~150 lines - extracted from SelectionController
+// Modler V2 - Container Interaction State Management
+// Handles container step-in/out logic, interaction context, and visual feedback
+// Target: ~200 lines - pure interaction state management
 
-class ContainerContextManager {
+class ContainerInteractionManager {
     constructor() {
         // Container context state
         this.containerContext = null; // Current container we're "stepped into"
@@ -311,4 +311,4 @@ class ContainerContextManager {
 }
 
 // Export for use in main application
-window.ContainerContextManager = ContainerContextManager;
+window.ContainerInteractionManager = ContainerInteractionManager;

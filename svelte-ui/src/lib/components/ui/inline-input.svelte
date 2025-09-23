@@ -226,9 +226,24 @@
 		const sensitivity = 2; // Adjust sensitivity
 		const rawValue = startValue + (deltaY / sensitivity) * stepValue;
 
+		// Apply constraints during drag, especially for dimensions
+		let constrainedValue = rawValue;
+		if (property && property.startsWith('dimensions.')) {
+			// Enforce minimum value for dimensions (cannot be 0 or negative)
+			constrainedValue = Math.max(rawValue, 0.1);
+		} else if (constraints) {
+			// Apply general constraints if available
+			if (constraints.min !== undefined) {
+				constrainedValue = Math.max(constrainedValue, constraints.min);
+			}
+			if (constraints.max !== undefined) {
+				constrainedValue = Math.min(constrainedValue, constraints.max);
+			}
+		}
+
 		// Keep full precision for the actual value, but round display to 1 decimal
-		const actualValue = rawValue;
-		const displayValue = Math.round(rawValue * 10) / 10;
+		const actualValue = constrainedValue;
+		const displayValue = Math.round(constrainedValue * 10) / 10;
 
 		// Update input value immediately for visual feedback (1 decimal for display)
 		inputValue = displayValue;

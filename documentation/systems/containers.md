@@ -2,6 +2,20 @@
 
 Dual geometry containers (visual wireframes + collision meshes) with Three.js hierarchy management.
 
+## Manager Separation
+
+**ContainerCrudManager**: Pure CRUD operations (Create, Read, Update, Delete)
+- Container lifecycle management
+- Object addition/removal
+- Geometry resizing operations
+- 615 lines focused on data operations
+
+**ContainerInteractionManager**: Pure interaction state management
+- Step-into/step-out context
+- Visual feedback and highlighting
+- Collision state management
+- 313 lines focused on user interaction
+
 ## Core Architecture
 
 ### Dual Geometry Components
@@ -16,16 +30,16 @@ Dual geometry containers (visual wireframes + collision meshes) with Three.js hi
 
 ## Key Operations
 
-### Container Creation
-- **From selection**: `containerManager.createContainerFromSelection(selectedObjects)`
-- **Empty container**: `containerManager.createEmptyContainer(position)`
+### Container Creation (ContainerCrudManager)
+- **From selection**: `containerCrudManager.createContainerFromSelection(selectedObjects)`
+- **Empty container**: `containerCrudManager.createEmptyContainer(position)`
 - **Command**: Cmd+F triggers creation via ToolController
 
-### Container Resizing
+### Container Resizing (ContainerCrudManager)
 - **Fit to children**: `resizeContainerToFitChildren(containerData, preservePosition)`
 - **Layout bounds**: `resizeContainerToLayoutBounds(containerData, layoutBounds)`
 
-### Object Management
+### Object Management (ContainerCrudManager)
 - **Add to container**: `addObjectToContainer(objectData, containerData)`
 - **Remove from container**: `removeObjectFromContainer(objectData)`
 
@@ -47,13 +61,14 @@ autoLayout: {
 
 ## Container Context Management
 
-### Step-Into Functionality
-- **Enter context**: `containerContextManager.stepIntoContainer(containerObject)`
-- **Exit context**: `containerContextManager.stepOutOfContainer()`
+### Step-Into Functionality (ContainerInteractionManager)
+- **Enter context**: `containerInteractionManager.stepIntoContainer(containerObject)`
+- **Exit context**: `containerInteractionManager.stepOutOfContainer()`
+- **Check context**: `containerInteractionManager.isInContainerContext()`
 - **Visual feedback**: 25% opacity wireframe during context
 - **Collision management**: Disables other containers during step-into
 
 ### Key Files
-- **ContainerManager**: `application/tools/container-manager.js`
-- **LayoutGeometry**: `application/tools/layout-geometry.js`
-- **ContainerContextManager**: `interaction/container-context-manager.js`
+- **ContainerCrudManager**: `application/tools/container-crud-manager.js` - Container CRUD operations only
+- **ContainerInteractionManager**: `interaction/container-interaction-manager.js` - Step-into/out interaction state
+- **LayoutGeometry**: `application/tools/layout-geometry.js` - Geometry creation and calculations

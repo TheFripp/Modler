@@ -128,6 +128,57 @@ function getNestedPropertyValue(obj: any, property: string): any {
 // Bridge reference - will be set when Three.js integration is initialized
 export let modlerComponentsBridge: any = null;
 
+// Field state management for UI disabling based on object state
+export interface FieldState {
+	disabled: boolean;
+	reason?: string;
+	tooltip?: string;
+}
+
+export interface FieldStates {
+	[fieldPath: string]: FieldState;
+}
+
+// Calculate field states based on object properties
+export function getFieldStates(object: ObjectData | null): FieldStates {
+	const states: FieldStates = {};
+
+	if (!object) return states;
+
+	// Container in hug mode - dimensions should be disabled
+	if (object.isContainer && object.sizingMode === 'hug') {
+		states['dimensions.x'] = {
+			disabled: true,
+			reason: 'hug-mode',
+			tooltip: 'Dimensions are automatically calculated in hug mode'
+		};
+		states['dimensions.y'] = {
+			disabled: true,
+			reason: 'hug-mode',
+			tooltip: 'Dimensions are automatically calculated in hug mode'
+		};
+		states['dimensions.z'] = {
+			disabled: true,
+			reason: 'hug-mode',
+			tooltip: 'Dimensions are automatically calculated in hug mode'
+		};
+	}
+
+	// Multi-selection - some fields might be disabled for mixed types
+	if (object.type === 'multi' || object.type === 'mixed') {
+		// Could add logic here for multi-selection field restrictions
+	}
+
+	// Add more state-based field disabling rules here as needed
+
+	return states;
+}
+
+// Derived store for field states based on current display object
+export const fieldStates = derived(displayObject, ($displayObject) =>
+	getFieldStates($displayObject)
+);
+
 // Initialize the bridge to Three.js components
 export function initializeModlerBridge(components: any) {
 	modlerComponentsBridge = components;
@@ -313,7 +364,23 @@ function handleDirectPropertyUpdate(components: any, objectId: string, property:
 		return;
 	}
 
-	// Handle different property types (same logic as svelte-integration-v2.js)
+	// Route property updates through centralized PropertyUpdateHandler
+	const { propertyUpdateHandler } = components;
+
+	if (propertyUpdateHandler) {
+		// Use centralized property handling for consistency
+		const success = propertyUpdateHandler.handlePropertyChange(objectId, property, value);
+
+		if (success) {
+			// PropertyUpdateHandler handled the update, including notifications
+			return;
+		}
+
+		// If PropertyUpdateHandler didn't handle it, fall back to direct handling
+		console.warn('PropertyUpdateHandler failed, falling back to direct handling:', { property, value });
+	}
+
+	// Fallback: Handle different property types directly (for properties not yet centralized)
 	if (property.startsWith('position.')) {
 		const axis = property.split('.')[1] as 'x' | 'y' | 'z';
 		if (mesh.position && ['x', 'y', 'z'].includes(axis)) {
@@ -334,39 +401,54 @@ function handleDirectPropertyUpdate(components: any, objectId: string, property:
 			if (sceneController.updateObjectDimensions) {
 				sceneController.updateObjectDimensions(objectId, axis, value);
 			} else {
-				// Fallback: Basic scaling approach
-				const currentScale = mesh.scale[axis];
-				const scaleFactor = value / currentScale;
-				mesh.scale[axis] = value;
+				// Fallback: Geometry-based dimension changes (CAD-style)
+				const geometry = mesh.geometry;
+				if (geometry) {
+					try {
+						// Force geometry bounds recalculation
+						geometry.computeBoundingBox();
+						const bbox = geometry.boundingBox;
 
-				// Update userData for dimension tracking
-				if (!mesh.userData.dimensions) mesh.userData.dimensions = { x: 1, y: 1, z: 1 };
-				mesh.userData.dimensions[axis] = value;
+						// Calculate current dimension and scale factor
+						const axisIndex = { x: 0, y: 1, z: 2 }[axis];
+						const currentDimension = bbox.max[axis] - bbox.min[axis];
+						const scaleFactor = value / currentDimension;
+						const center = (bbox.max[axis] + bbox.min[axis]) * 0.5;
+
+						// Modify vertices directly for true CAD behavior
+						const positions = geometry.getAttribute('position');
+						const vertices = positions.array;
+
+						for (let i = 0; i < vertices.length; i += 3) {
+							const vertexIndex = i + axisIndex;
+							const distanceFromCenter = vertices[vertexIndex] - center;
+							vertices[vertexIndex] = center + (distanceFromCenter * scaleFactor);
+						}
+
+						// Update geometry
+						positions.needsUpdate = true;
+						geometry.computeBoundingBox();
+
+						// Update userData for dimension tracking
+						if (!mesh.userData.dimensions) mesh.userData.dimensions = { x: 1, y: 1, z: 1 };
+						mesh.userData.dimensions[axis] = value;
+
+					} catch (error) {
+						console.error('Fallback dimension update failed:', error);
+						// Final fallback to simple scaling if geometry manipulation fails
+						mesh.scale[axis] = value;
+					}
+				} else {
+					// No geometry available, use simple scaling
+					mesh.scale[axis] = value;
+				}
 			}
 			completeObjectModification(components, mesh, 'geometry', true);
 		}
-	} else if (property.startsWith('material.')) {
-		const materialProp = property.split('.')[1];
-		if (mesh.material) {
-			if (materialProp === 'color') {
-				// Handle color updates
-				const colorValue = typeof value === 'string' ? value.replace('#', '0x') : value;
-				mesh.material.color.setHex(colorValue);
-			} else if (materialProp === 'opacity') {
-				// Handle opacity updates
-				mesh.material.opacity = value;
-				mesh.material.transparent = value < 1;
-			}
-			mesh.material.needsUpdate = true;
-			completeObjectModification(components, mesh, 'material', true);
-		}
-	} else if (property.startsWith('autoLayout.') || property === 'sizingMode') {
-		// Handle container layout properties
-		const propertyUpdateHandler = components.propertyUpdateHandler;
-		if (propertyUpdateHandler?.handleContainerLayoutPropertyChange) {
-			propertyUpdateHandler.handleContainerLayoutPropertyChange(objectId, property, value);
-		}
-		completeObjectModification(components, mesh, 'layout', true);
+	} else {
+		// All other properties should be handled by PropertyUpdateHandler
+		// This fallback should rarely be reached now that we have centralized handling
+		console.warn('Property not handled by PropertyUpdateHandler fallback:', { property, value });
 	}
 }
 

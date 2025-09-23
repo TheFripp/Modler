@@ -697,7 +697,64 @@ class SceneController {
 
         // Selection wireframe sync is now handled by direct mesh sync from property panel
     }
-    
+    /**
+     * Update object dimensions using CAD-style geometry modification
+     * Follows geometry-based manipulation principles from CLAUDE.md
+     * @param {string} objectId - ID of the object to update
+     * @param {string} axis - Axis to update ('x', 'y', or 'z')
+     * @param {number} newDimension - New dimension value
+     * @returns {boolean} - Success status
+     */
+    updateObjectDimensions(objectId, axis, newDimension) {
+        const objectData = this.getObject(objectId);
+        if (!objectData || !objectData.mesh || !objectData.mesh.geometry) {
+            console.warn('Cannot update dimensions: object or geometry not found', objectId);
+            return false;
+        }
+
+        const mesh = objectData.mesh;
+        const geometry = mesh.geometry;
+
+        try {
+            // Force geometry bounds recalculation
+            geometry.computeBoundingBox();
+            const bbox = geometry.boundingBox;
+
+            // Calculate current dimension and scale factor
+            const axisIndex = { x: 0, y: 1, z: 2 }[axis];
+            const currentDimension = bbox.max[axis] - bbox.min[axis];
+            const scaleFactor = newDimension / currentDimension;
+            const center = (bbox.max[axis] + bbox.min[axis]) * 0.5;
+
+            // Modify vertices directly for true CAD behavior
+            const positions = geometry.getAttribute('position');
+            const vertices = positions.array;
+
+            for (let i = 0; i < vertices.length; i += 3) {
+                const vertexIndex = i + axisIndex;
+                const distanceFromCenter = vertices[vertexIndex] - center;
+                vertices[vertexIndex] = center + (distanceFromCenter * scaleFactor);
+            }
+
+            // Update geometry and trigger proper updates
+            positions.needsUpdate = true;
+            geometry.computeBoundingBox();
+
+            // Update object metadata
+            if (!objectData.dimensions) objectData.dimensions = { x: 1, y: 1, z: 1 };
+            objectData.dimensions[axis] = newDimension;
+
+            // Trigger transform change notification for container updates
+            this.notifyObjectTransformChanged(objectId);
+
+            return true;
+
+        } catch (error) {
+            console.error('Failed to update object dimensions:', error);
+            return false;
+        }
+    }
+
     /**
      * Notify that an object's transform (position/rotation/scale) has changed
      * This triggers container resizing for parent containers AND selection wireframe updates

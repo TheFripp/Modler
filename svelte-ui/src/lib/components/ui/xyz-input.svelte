@@ -2,7 +2,7 @@
 	import { cn } from '$lib/utils';
 	import InlineInput from './inline-input.svelte';
 	import type { PropertyPath } from '$lib/services/property-controller';
-	import { getPropertyMixedState, selectedObjects } from '$lib/stores/modler';
+	import { getPropertyMixedState, selectedObjects, fieldStates } from '$lib/stores/modler';
 
 	interface Props {
 		label?: string;
@@ -59,13 +59,19 @@
 			{@const property = objectId && propertyBase ? `${propertyBase}.${axis}` : undefined}
 			{@const mixedState = property ? getPropertyMixedState(property, $selectedObjects) : { isMixed: false, value: values[axis] }}
 			{@const displayValue = mixedState.isMixed ? '' : (typeof mixedState.value === 'number' ? Math.round(mixedState.value * 10) / 10 : mixedState.value)}
+			{@const fieldState = property ? $fieldStates[property] : undefined}
+			{@const isDisabled = fieldState?.disabled || false}
 			<div class="flex-1">
 				<InlineInput
 					label={labels[axis]}
 					type="number"
 					value={displayValue}
-					placeholder={mixedState.isMixed ? 'Mixed' : ''}
-					class={mixedState.isMixed ? 'text-muted-foreground/60' : ''}
+					placeholder={mixedState.isMixed ? 'Mixed' : (isDisabled ? fieldState?.tooltip || 'Disabled' : '')}
+					class={cn(
+						mixedState.isMixed ? 'text-muted-foreground/60' : '',
+						isDisabled ? 'opacity-50' : ''
+					)}
+					disabled={isDisabled}
 					{objectId}
 					property={property}
 					oninput={onUpdate ? (e) => handleInput(axis, e) : undefined}

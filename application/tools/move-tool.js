@@ -341,8 +341,8 @@ class MoveTool {
         if (!container) return;
         
         // Trigger container resize calculation
-        const containerManager = window.modlerComponents?.containerManager;
-        if (containerManager) {
+        const containerCrudManager = window.modlerComponents?.containerCrudManager;
+        if (containerCrudManager) {
             
             // Use MovementUtils for consistent container update behavior with immediate visuals
             MovementUtils.updateParentContainer(this.dragObject, false, this.containerThrottleState, null, true);

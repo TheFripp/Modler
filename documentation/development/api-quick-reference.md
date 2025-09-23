@@ -27,15 +27,24 @@
 - `selectedObjects` → `Set` - Currently selected objects
 - `edgeHighlights` → `Map` - Object to wireframe mappings
 
-## ContainerManager
-**File**: `application/tools/container-manager.js`
+## ContainerCrudManager
+**File**: `application/tools/container-crud-manager.js`
 
-### Methods  
+### Methods
 - `createContainerFromSelection(selectedObjects)` → `Object` - Create container around objects
 - `createEmptyContainer(position)` → `Object|null` - Create empty container
 - `addObjectToContainer(objectData, containerData)` → `boolean` - Add object to container
-- `removeObjectFromContainer(objectData)` → `boolean` - Remove object from container  
+- `removeObjectFromContainer(objectData)` → `boolean` - Remove object from container
 - `resizeContainerToFitChildren(containerData, repositionContainer)` → `boolean` - Resize container
+
+## ContainerInteractionManager
+**File**: `interaction/container-interaction-manager.js`
+
+### Methods
+- `stepIntoContainer(containerObject)` → `void` - Establish container context
+- `stepOutOfContainer()` → `void` - Exit container context
+- `isInContainerContext()` → `boolean` - Check if in container context
+- `getContainerContext()` → `Object|null` - Get current container context
 
 ## LayoutGeometry
 **File**: `application/tools/layout-geometry.js`
@@ -107,16 +116,6 @@
 }
 ```
 
-## ContainerContextManager
-**File**: `interaction/container-context-manager.js`
-
-### Methods
-- `stepIntoContainer(containerObject)` → `void` - Establish container context with faded wireframe
-- `stepOutOfContainer()` → `void` - Exit container context and restore collision meshes
-- `isInContainerContext()` → `boolean` - Check if currently in container context
-- `getContainerContext()` → `Object|null` - Get current container context object
-- `handleSelectionClear(reason)` → `void` - Context-aware selection clearing
-- `updateContainerEdgeHighlight()` → `void` - Update container context highlight
 
 ### Container Context Features
 - **Interactive mesh resolution**: Handles both legacy and new container architectures

@@ -106,9 +106,9 @@ class MovementUtils {
         const startTime = performance.now();
 
         const sceneController = window.modlerComponents?.sceneController;
-        const containerManager = window.modlerComponents?.containerManager;
+        const containerCrudManager = window.modlerComponents?.containerCrudManager;
 
-        if (!sceneController || !containerManager || !object) return false;
+        if (!sceneController || !containerCrudManager || !object) return false;
 
         // Apply throttling for real-time updates (but allow immediate visual updates to bypass)
         if (!realTime && throttleState && !immediateVisuals) {
@@ -144,7 +144,7 @@ class MovementUtils {
 
             // For the immediate parent, pass the new container size for fill calculations
             const containerSizeToUse = (updatedContainers === 0) ? newContainerSize : null;
-            const resizeSuccess = containerManager.resizeContainerToFitChildren(containerData, containerSizeToUse, false, immediateVisuals);
+            const resizeSuccess = containerCrudManager.resizeContainerToFitChildren(containerData, containerSizeToUse, false, immediateVisuals);
 
             // Container visibility and padding are handled by selection visualizer - don't override here
 

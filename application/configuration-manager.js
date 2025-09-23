@@ -46,6 +46,9 @@ class ConfigurationManager {
                     lineWidth: 1,
                     renderOrder: 998
                 },
+                grid: {
+                    renderOrder: -100  // Render behind all wireframes to prevent z-fighting
+                },
                 snapping: {
                     indicatorColor: '#ffffff',
                     cornerSize: 0.1,

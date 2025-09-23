@@ -707,14 +707,7 @@
                 data: serializedData
             };
 
-            // Only log non-periodic updates to reduce console spam
-            if (data.type !== 'periodic-update') {
-                console.log('📤 Sending data to panels:', {
-                    type: data.type,
-                    selectedCount: serializedData.selectedObjects.length,
-                    hierarchyCount: serializedData.objectHierarchy.length
-                });
-            }
+            // Data sending is working correctly - no need for continuous logging
 
             // Send to each iframe with connection verification
             let messagesSent = 0;

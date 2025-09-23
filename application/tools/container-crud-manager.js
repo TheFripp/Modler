@@ -1,8 +1,8 @@
-// Modler V2 - Container Management
-// Container creation, configuration, and lifecycle management
-// Target: ~200 lines - focused container operations
+// Modler V2 - Container CRUD Operations
+// Container creation, configuration, and lifecycle management (Create, Read, Update, Delete)
+// Target: ~400 lines - focused container operations only
 
-class ContainerManager {
+class ContainerCrudManager {
     constructor() {
         // ContainerManager initialized
 
@@ -579,7 +579,7 @@ class ContainerManager {
         // Use UnifiedContainerManager's debouncing system instead of cache
         if (shouldBeVisible || immediateUpdate) {
             // Use UnifiedContainerManager's comprehensive visibility management
-            unifiedContainerManager.showContainer(containerData.id, true);
+            this.showContainer(containerData.id);
         }
     }
 
@@ -610,7 +610,164 @@ class ContainerManager {
 
         return true;
     }
+
+    /**
+     * Show container wireframe
+     */
+    showContainer(containerId, force = false) {
+        const sceneController = window.modlerComponents?.sceneController;
+        if (!sceneController) return false;
+
+        const objectData = sceneController.getObject(containerId);
+        if (!objectData || !objectData.isContainer || !objectData.mesh) {
+            return false;
+        }
+
+        // Show wireframe by restoring visibility and opacity
+        const wireframeMesh = objectData.mesh;
+        if (wireframeMesh) {
+            wireframeMesh.visible = true;
+
+            // Restore original opacity if it was hidden
+            if (wireframeMesh.material && wireframeMesh.userData.isHidden) {
+                const originalOpacity = wireframeMesh.userData.originalOpacity;
+                if (originalOpacity !== undefined) {
+                    wireframeMesh.material.opacity = originalOpacity;
+                }
+                wireframeMesh.userData.isHidden = false;
+            }
+
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
+     * Hide container wireframe (but keep contents visible)
+     */
+    hideContainer(containerId, force = false) {
+        const sceneController = window.modlerComponents?.sceneController;
+        if (!sceneController) return false;
+
+        const objectData = sceneController.getObject(containerId);
+        if (!objectData || !objectData.isContainer || !objectData.mesh) {
+            return false;
+        }
+
+        // CRITICAL FIX: Don't hide wireframe completely (would hide children)
+        // Instead, make it nearly transparent to maintain child visibility
+        const wireframeMesh = objectData.mesh;
+        if (wireframeMesh && wireframeMesh.material) {
+            // Make wireframe nearly invisible but keep it "visible" to preserve children
+            const originalOpacity = wireframeMesh.material.opacity;
+            wireframeMesh.material.opacity = 0.01; // Nearly invisible but not hidden
+            wireframeMesh.userData.originalOpacity = originalOpacity; // Store for restoration
+            wireframeMesh.userData.isHidden = true; // Mark as logically hidden
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
+     * Check if container has non-zero padding
+     */
+    hasNonZeroPadding(objectData) {
+        if (!objectData?.autoLayout?.padding) return false;
+
+        const padding = objectData.autoLayout.padding;
+        return padding.top > 0 || padding.bottom > 0 || padding.left > 0 ||
+               padding.right > 0 || padding.front > 0 || padding.back > 0;
+    }
+
+    /**
+     * Show padding visualization for container
+     */
+    showPaddingVisualization(containerId) {
+        const sceneController = window.modlerComponents?.sceneController;
+        if (!sceneController) return false;
+
+        const objectData = sceneController.getObject(containerId);
+        if (!objectData || !objectData.isContainer) {
+            return false;
+        }
+
+        // Use visual effects to show padding guides (if available)
+        const visualEffects = window.modlerComponents?.visualEffects;
+        if (visualEffects && objectData.mesh && objectData.autoLayout?.padding) {
+            if (typeof visualEffects.showPaddingVisualization === 'function') {
+                try {
+                    visualEffects.showPaddingVisualization(objectData.mesh, objectData.autoLayout.padding);
+                    return true;
+                } catch (error) {
+                    console.warn('Padding visualization failed:', error);
+                }
+            }
+        }
+
+        // Padding visualization is optional - return success even if not available
+        return true;
+    }
+
+    /**
+     * Hide padding visualization for container
+     */
+    hidePaddingVisualization(containerId) {
+        const sceneController = window.modlerComponents?.sceneController;
+        if (!sceneController) return false;
+
+        const objectData = sceneController.getObject(containerId);
+        if (!objectData || !objectData.isContainer) {
+            return false;
+        }
+
+        // Use visual effects to hide padding guides (if available)
+        const visualEffects = window.modlerComponents?.visualEffects;
+        if (visualEffects && objectData.mesh) {
+            if (typeof visualEffects.hidePaddingVisualization === 'function') {
+                try {
+                    visualEffects.hidePaddingVisualization(objectData.mesh);
+                    return true;
+                } catch (error) {
+                    console.warn('Padding visualization hide failed:', error);
+                }
+            }
+        }
+
+        // Padding visualization is optional - return success even if not available
+        return true;
+    }
+
+    /**
+     * Refresh container materials
+     */
+    refreshMaterials() {
+        const sceneController = window.modlerComponents?.sceneController;
+        if (!sceneController) return false;
+
+        try {
+            // Get all container objects and refresh their materials
+            const allObjects = sceneController.getAllObjects();
+            let refreshed = 0;
+
+            allObjects.forEach(objectData => {
+                if (objectData.isContainer && objectData.mesh?.material) {
+                    objectData.mesh.material.needsUpdate = true;
+                    refreshed++;
+                }
+            });
+
+            if (refreshed > 0) {
+                console.log(`✅ Refreshed materials for ${refreshed} containers`);
+            }
+            return true;
+        } catch (error) {
+            console.error('Failed to refresh container materials:', error);
+            return false;
+        }
+    }
 }
 
 // Export for use in main application
-window.ContainerManager = ContainerManager;
+window.ContainerCrudManager = ContainerCrudManager;

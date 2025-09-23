@@ -1,5 +1,6 @@
 <script lang="ts">
-	import { selectedObject, selectedObjects, multiSelection, displayObject, updateThreeJSProperty, getPropertyMixedState } from '$lib/stores/modler';
+	import { selectedObject, selectedObjects, multiSelection, displayObject, updateThreeJSProperty, getPropertyMixedState, fieldStates } from '$lib/stores/modler';
+	import { propertyController } from '$lib/services/property-controller';
 	import PropertyGroup from '$lib/components/ui/property-group.svelte';
 	import XyzInput from '$lib/components/ui/xyz-input.svelte';
 	import ButtonGroup from '$lib/components/ui/button-group.svelte';
@@ -11,6 +12,11 @@
 	// All property updates now handled by PropertyController
 	// Legacy handlers removed - components use PropertyController directly
 
+	// Get the appropriate object ID for property updates (multi-selection or single object)
+	function getObjectIdForUpdate(): string {
+		return $multiSelection ? 'multi-selection' : $displayObject?.id || '';
+	}
+
 	// Handle layout axis selection
 	function selectLayoutAxis(axis: string) {
 		if (!$displayObject?.isContainer) return;
@@ -19,19 +25,22 @@
 			return;
 		}
 
-		// Update the autoLayout direction property
-		updateThreeJSProperty($displayObject.id, 'autoLayout.direction', axis);
+		const objectId = getObjectIdForUpdate();
+
+		// Use PropertyController for centralized handling
+		propertyController.updateProperty(objectId, 'autoLayout.direction', axis);
 
 		// If auto layout is not enabled, enable it when direction is set
 		if (!$displayObject.autoLayout?.enabled) {
-			updateThreeJSProperty($displayObject.id, 'autoLayout.enabled', true);
+			propertyController.updateProperty(objectId, 'autoLayout.enabled', true);
 		}
 	}
 
 	// Handle sizing mode change
 	function setSizingMode(mode: 'hug' | 'fixed') {
 		if (!$displayObject?.isContainer) return;
-		updateThreeJSProperty($displayObject.id, 'sizingMode', mode);
+		const objectId = getObjectIdForUpdate();
+		propertyController.updateProperty(objectId, 'sizingMode', mode);
 	}
 
 	// Mixed value helpers for individual inputs
@@ -174,7 +183,7 @@
 							<input
 								type="checkbox"
 								checked={$displayObject.autoLayout?.enabled || false}
-								onchange={(e) => updateThreeJSProperty($displayObject.id, 'autoLayout.enabled', e.target.checked)}
+								onchange={(e) => propertyController.updateProperty(getObjectIdForUpdate(), 'autoLayout.enabled', e.target.checked)}
 								class="rounded border border-gray-600 bg-gray-800"
 							/>
 							<span class="text-xs text-muted-foreground">
@@ -192,7 +201,7 @@
 								type="number"
 								value={gapMixed.displayValue}
 								placeholder={gapMixed.placeholder}
-								onblur={(e) => updateThreeJSProperty($displayObject.id, 'autoLayout.gap', parseFloat(e.target.value) || 0)}
+								onblur={(e) => propertyController.updateProperty(getObjectIdForUpdate(), 'autoLayout.gap', parseFloat(e.target.value) || 0)}
 								class="w-full px-2 py-1 text-xs bg-gray-800 border border-gray-600 rounded {gapMixed.class}"
 								step="0.1"
 								min="0"
@@ -211,7 +220,7 @@
 											type="number"
 											value={paddingMixed.displayValue}
 											placeholder={paddingMixed.placeholder}
-											onblur={(e) => updateThreeJSProperty($displayObject.id, `autoLayout.padding.${side}`, parseFloat(e.target.value) || 0)}
+											onblur={(e) => propertyController.updateProperty(getObjectIdForUpdate(), `autoLayout.padding.${side}`, parseFloat(e.target.value) || 0)}
 											class="w-full px-2 py-1 text-xs bg-gray-800 border border-gray-600 rounded {paddingMixed.class}"
 											step="0.1"
 											min="0"

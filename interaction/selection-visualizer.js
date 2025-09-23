@@ -250,9 +250,9 @@ class SelectionVisualizer {
     refreshContainerWireframes() {
         // Container wireframes are handled by the UnifiedContainerManager
         // This is a placeholder for future container material refresh functionality
-        const containerManager = window.modlerComponents?.containerManager;
-        if (containerManager && containerManager.refreshMaterials) {
-            containerManager.refreshMaterials();
+        const containerCrudManager = window.modlerComponents?.containerCrudManager;
+        if (containerCrudManager && containerCrudManager.refreshMaterials) {
+            containerCrudManager.refreshMaterials();
         }
     }
 
@@ -306,6 +306,9 @@ class SelectionVisualizer {
             edgeMesh.position.copy(object.position);
             edgeMesh.rotation.copy(object.rotation);
             edgeMesh.scale.copy(object.scale);
+
+            // Add small Y-offset to prevent z-fighting with floor grid when objects are at ground level
+            edgeMesh.position.y += 0.001;
 
             // Add to scene - ensure wireframe is in same parent as object
             if (object.parent) {
@@ -376,14 +379,14 @@ class SelectionVisualizer {
 
         // Check if this is a container through SceneController
         const sceneController = window.modlerComponents?.sceneController;
-        const containerManager = window.modlerComponents?.containerManager;
+        const containerCrudManager = window.modlerComponents?.containerCrudManager;
 
-        if (sceneController && containerManager) {
+        if (sceneController && containerCrudManager) {
             const objectData = sceneController.getObjectByMesh(object);
             if (objectData && objectData.isContainer) {
 
                 // Use unified ContainerManager for proper visibility handling
-                containerManager.showContainer(objectData.id);
+                containerCrudManager.showContainer(objectData.id);
             }
         }
     }
@@ -396,13 +399,13 @@ class SelectionVisualizer {
 
         // Check if this is a container through SceneController
         const sceneController = window.modlerComponents?.sceneController;
-        const containerManager = window.modlerComponents?.containerManager;
+        const containerCrudManager = window.modlerComponents?.containerCrudManager;
 
-        if (sceneController && containerManager) {
+        if (sceneController && containerCrudManager) {
             const objectData = sceneController.getObjectByMesh(object);
             if (objectData && objectData.isContainer) {
                 // Use unified ContainerManager for proper visibility handling
-                containerManager.hideContainer(objectData.id);
+                containerCrudManager.hideContainer(objectData.id);
             }
         }
     }
@@ -429,15 +432,15 @@ class SelectionVisualizer {
         if (!object) return;
 
         const sceneController = window.modlerComponents?.sceneController;
-        const containerManager = window.modlerComponents?.containerManager;
+        const containerCrudManager = window.modlerComponents?.containerCrudManager;
 
-        if (sceneController && containerManager) {
+        if (sceneController && containerCrudManager) {
             const objectData = sceneController.getObjectByMesh(object);
             if (objectData && objectData.isContainer) {
                 // Show padding visualization only if container has layout enabled AND non-zero padding
                 if (objectData.autoLayout && objectData.autoLayout.enabled &&
-                    containerManager.hasNonZeroPadding && containerManager.hasNonZeroPadding(objectData)) {
-                    containerManager.showPaddingVisualization(objectData.id);
+                    containerCrudManager.hasNonZeroPadding && containerCrudManager.hasNonZeroPadding(objectData)) {
+                    containerCrudManager.showPaddingVisualization(objectData.id);
                 }
             }
         }
@@ -450,13 +453,13 @@ class SelectionVisualizer {
         if (!object) return;
 
         const sceneController = window.modlerComponents?.sceneController;
-        const containerManager = window.modlerComponents?.containerManager;
+        const containerCrudManager = window.modlerComponents?.containerCrudManager;
 
-        if (sceneController && containerManager) {
+        if (sceneController && containerCrudManager) {
             const objectData = sceneController.getObjectByMesh(object);
             if (objectData && objectData.isContainer) {
                 // Always hide padding when container is deselected
-                containerManager.hidePaddingVisualization(objectData.id);
+                containerCrudManager.hidePaddingVisualization(objectData.id);
             }
         }
     }

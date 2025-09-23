@@ -493,8 +493,8 @@ class PropertyPanel {
                 this.setDimensionInputsState(mode === 'hug');
 
                 // Trigger container layout update if needed
-                if (window.modlerComponents?.containerManager) {
-                    window.modlerComponents.containerManager.updateContainer(objectData);
+                if (window.modlerComponents?.containerCrudManager) {
+                    window.modlerComponents.containerCrudManager.updateContainer(objectData);
                 }
 
                 // If switching to fixed mode and layout was active, ensure layout still works

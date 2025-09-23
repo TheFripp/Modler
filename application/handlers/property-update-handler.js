@@ -12,8 +12,8 @@ class PropertyUpdateHandler {
         return window.modlerComponents?.sceneController;
     }
 
-    get containerManager() {
-        return window.modlerComponents?.containerManager;
+    get containerCrudManager() {
+        return window.modlerComponents?.containerCrudManager;
     }
 
     // get unifiedContainerManager() {
@@ -26,7 +26,7 @@ class PropertyUpdateHandler {
      */
     handleContainerLayoutPropertyChange(containerId, property, newValue) {
 
-        if (!this.sceneController || !this.containerManager) {
+        if (!this.sceneController || !this.containerCrudManager) {
             console.error('Required components not available for PropertyUpdateHandler');
             return false;
         }
@@ -96,13 +96,13 @@ class PropertyUpdateHandler {
             console.log('🔧 Layout result:', layoutResult);
 
             if (layoutResult && layoutResult.success) {
-                // Step 10: PropertyUpdateHandler → containerManager.resizeContainerToLayoutBounds(layoutBounds)
+                // Step 10: PropertyUpdateHandler → containerCrudManager.resizeContainerToLayoutBounds(layoutBounds)
                 if (layoutResult.layoutBounds) {
-                    this.containerManager.resizeContainerToLayoutBounds(objectData, layoutResult.layoutBounds);
+                    this.containerCrudManager.resizeContainerToLayoutBounds(objectData, layoutResult.layoutBounds);
                 }
 
-                // Step 13: PropertyUpdateHandler → unifiedContainerManager.showContainer(containerId, true)
-                this.unifiedContainerManager.showContainer(objectData.id, true);
+                // Step 13: PropertyUpdateHandler → containerCrudManager.showContainer(containerId, true)
+                this.containerCrudManager.showContainer(objectData.id, true);
 
                 // Show layout axis guides when layout is enabled
                 const visualEffects = window.modlerComponents?.visualEffects;
@@ -129,6 +129,14 @@ class PropertyUpdateHandler {
     isLayoutProperty(property) {
         const layoutProperties = ['direction', 'gap', 'padding.top', 'padding.bottom', 'padding.left', 'padding.right', 'padding.front', 'padding.back'];
         return layoutProperties.includes(property);
+    }
+
+    /**
+     * Check if a property is a container sizing property
+     */
+    isContainerSizingProperty(property) {
+        const sizingProperties = ['sizingMode'];
+        return sizingProperties.includes(property);
     }
 
     /**
@@ -160,13 +168,226 @@ class PropertyUpdateHandler {
             return this.handleContainerLayoutPropertyChange(objectId, property, value);
         }
 
+        // Handle dimension property changes through centralized system
+        if (property.startsWith('dimensions.')) {
+            console.log('🔧 Routing to handleObjectDimensionChange');
+            return this.handleObjectDimensionChange(objectId, property, value);
+        }
+
+        // Handle transform property changes (position, rotation)
+        if (property.startsWith('position.') || property.startsWith('rotation.')) {
+            console.log('🔧 Routing to handleObjectTransformChange');
+            return this.handleObjectTransformChange(objectId, property, value);
+        }
+
+        // Handle material property changes
+        if (property.startsWith('material.')) {
+            console.log('🔧 Routing to handleObjectMaterialChange');
+            return this.handleObjectMaterialChange(objectId, property, value);
+        }
+
+        // Handle container sizing property changes
+        if (objectData && objectData.isContainer && this.isContainerSizingProperty(property)) {
+            console.log('🔧 Routing to handleContainerSizingChange');
+            return this.handleContainerSizingChange(objectId, property, value);
+        }
+
         // Handle other property changes here in the future
-        console.log('🔧 Property change (non-layout):', { objectId, property, value, reason: {
+        console.log('🔧 Property change (unhandled):', { objectId, property, value, reason: {
             hasObjectData: !!objectData,
             isContainer: objectData?.isContainer,
-            isLayoutProperty: isLayoutProp
+            isLayoutProperty: isLayoutProp,
+            isMaterial: property.startsWith('material.'),
+            isSizing: this.isContainerSizingProperty(property)
         }});
         return true;
+    }
+
+    /**
+     * Handle object dimension changes using centralized system
+     */
+    handleObjectDimensionChange(objectId, property, value) {
+        if (!this.sceneController) {
+            console.error('SceneController not available for dimension change');
+            return false;
+        }
+
+        try {
+            const axis = property.split('.')[1];
+            if (!['x', 'y', 'z'].includes(axis)) {
+                console.error('Invalid dimension axis:', axis);
+                return false;
+            }
+
+            // Use SceneController's updateObjectDimensions for CAD-style updates
+            const success = this.sceneController.updateObjectDimensions(objectId, axis, value);
+
+            if (success) {
+                console.log('✅ Dimension updated through centralized system:', { objectId, axis, value });
+
+                // Trigger container updates if object is in a container
+                const objectData = this.sceneController.getObject(objectId);
+                if (objectData?.parentContainer) {
+                    // Use MovementUtils for consistent container update behavior
+                    const MovementUtils = window.MovementUtils;
+                    if (MovementUtils) {
+                        MovementUtils.updateParentContainer(objectData.mesh, false, null, null, true);
+                    }
+                }
+
+                return true;
+            } else {
+                console.error('Failed to update dimension:', { objectId, property, value });
+                return false;
+            }
+        } catch (error) {
+            console.error('PropertyUpdateHandler dimension error:', error);
+            return false;
+        }
+    }
+
+    /**
+     * Handle object transform changes (position, rotation)
+     */
+    handleObjectTransformChange(objectId, property, value) {
+        if (!this.sceneController) {
+            console.error('SceneController not available for transform change');
+            return false;
+        }
+
+        try {
+            const objectData = this.sceneController.getObject(objectId);
+            if (!objectData?.mesh) {
+                console.error('Object or mesh not found:', objectId);
+                return false;
+            }
+
+            const mesh = objectData.mesh;
+
+            // Handle position updates
+            if (property.startsWith('position.')) {
+                const axis = property.split('.')[1];
+                if (['x', 'y', 'z'].includes(axis)) {
+                    mesh.position[axis] = value;
+
+                    // Trigger transform notification for container updates
+                    this.sceneController.notifyObjectTransformChanged(objectId);
+                    console.log('✅ Position updated through centralized system:', { objectId, axis, value });
+                    return true;
+                }
+            }
+
+            // Handle rotation updates
+            if (property.startsWith('rotation.')) {
+                const axis = property.split('.')[1];
+                if (['x', 'y', 'z'].includes(axis)) {
+                    // Convert degrees to radians
+                    mesh.rotation[axis] = value * Math.PI / 180;
+
+                    // Trigger transform notification
+                    this.sceneController.notifyObjectTransformChanged(objectId);
+                    console.log('✅ Rotation updated through centralized system:', { objectId, axis, value });
+                    return true;
+                }
+            }
+
+            return false;
+        } catch (error) {
+            console.error('PropertyUpdateHandler transform error:', error);
+            return false;
+        }
+    }
+
+    /**
+     * Handle object material changes using centralized system
+     */
+    handleObjectMaterialChange(objectId, property, value) {
+        if (!this.sceneController) {
+            console.error('SceneController not available for material change');
+            return false;
+        }
+
+        try {
+            const objectData = this.sceneController.getObject(objectId);
+            if (!objectData?.mesh?.material) {
+                console.error('Object, mesh, or material not found:', objectId);
+                return false;
+            }
+
+            const mesh = objectData.mesh;
+            const materialProp = property.split('.')[1];
+
+            // Handle different material properties
+            if (materialProp === 'color') {
+                const colorValue = typeof value === 'string' ? value.replace('#', '0x') : value;
+                mesh.material.color.setHex(colorValue);
+                console.log('✅ Material color updated through centralized system:', { objectId, value });
+            } else if (materialProp === 'opacity') {
+                mesh.material.opacity = value;
+                mesh.material.transparent = value < 1;
+                console.log('✅ Material opacity updated through centralized system:', { objectId, value });
+            } else {
+                console.error('Unknown material property:', materialProp);
+                return false;
+            }
+
+            // Mark material for update and trigger visual completion
+            mesh.material.needsUpdate = true;
+
+            // Use completeObjectModification pattern for consistency
+            const MovementUtils = window.MovementUtils;
+            if (MovementUtils) {
+                MovementUtils.completeObjectModification(mesh, 'material', true);
+            }
+
+            return true;
+
+        } catch (error) {
+            console.error('PropertyUpdateHandler material error:', error);
+            return false;
+        }
+    }
+
+    /**
+     * Handle container sizing property changes using centralized system
+     */
+    handleContainerSizingChange(objectId, property, value) {
+        if (!this.sceneController || !this.containerCrudManager) {
+            console.error('Required components not available for sizing change');
+            return false;
+        }
+
+        try {
+            const objectData = this.sceneController.getObject(objectId);
+            if (!objectData?.isContainer) {
+                console.error('Object is not a container:', objectId);
+                return false;
+            }
+
+            // Handle sizing mode changes
+            if (property === 'sizingMode') {
+                // Update object data
+                objectData.sizingMode = value;
+
+                // Trigger container update with new sizing mode
+                if (objectData.mesh) {
+                    const success = this.containerCrudManager.resizeContainerToFitChildren(objectData, false, true);
+                    if (success) {
+                        console.log('✅ Container sizing mode updated through centralized system:', { objectId, value });
+                        return true;
+                    } else {
+                        console.error('Failed to update container sizing:', { objectId, property, value });
+                        return false;
+                    }
+                }
+            }
+
+            return false;
+
+        } catch (error) {
+            console.error('PropertyUpdateHandler sizing error:', error);
+            return false;
+        }
     }
 }
 

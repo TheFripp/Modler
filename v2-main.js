@@ -62,20 +62,20 @@ function initializeScene() {
  * Initialize Interaction Layer components
  */
 function initializeInteraction() {
-    // CONTAINER MANAGER: Active container management system
-    modlerV2Components.containerManager = new ContainerManager();
+    // CONTAINER CRUD MANAGER: Container creation, configuration, and lifecycle operations
+    modlerV2Components.containerCrudManager = new ContainerCrudManager();
     modlerV2Components.meshSynchronizer = new MeshSynchronizer();
     modlerV2Components.fieldNavigationManager = new FieldNavigationManager();
 
     // Initialize selection system components
     modlerV2Components.selectionVisualizer = new SelectionVisualizer();
-    modlerV2Components.containerContextManager = new ContainerContextManager();
+    modlerV2Components.containerInteractionManager = new ContainerInteractionManager();
     modlerV2Components.selectionController = new SelectionController();
 
     // Connect selection components
     modlerV2Components.selectionController.initialize(
         modlerV2Components.selectionVisualizer,
-        modlerV2Components.containerContextManager
+        modlerV2Components.containerInteractionManager
     );
 
     // Move gizmo removed - face-based movement system is cleaner and more intuitive
@@ -100,8 +100,6 @@ function initializeInteraction() {
 function initializeApplication() {
     modlerV2Components.configurationManager = new ConfigurationManager();
 
-    // Initialize ContainerManager globally to fix global scope references
-    modlerV2Components.containerManager = new ContainerManager();
 
     // Initialize PropertyUpdateHandler for property-panel driven layout system
     modlerV2Components.propertyUpdateHandler = new PropertyUpdateHandler();
@@ -234,10 +232,19 @@ function setupObjectSystemIntegration() {
  */
 function createFloorGrid() {
     const gridHelper = new THREE.GridHelper(20, 20, 0x444444, 0x222222);
+
+    // Get grid renderOrder from configuration to ensure it renders behind wireframes
+    const configManager = modlerV2Components?.configurationManager;
+    const gridRenderOrder = configManager ?
+        configManager.get('visual.grid.renderOrder', -100) : -100;
+
+    // Set renderOrder to prevent z-fighting with wireframes
+    gridHelper.renderOrder = gridRenderOrder;
+
     const floorPlane = new THREE.Mesh(
         new THREE.PlaneGeometry(20, 20),
-        new THREE.MeshBasicMaterial({ 
-            transparent: true, 
+        new THREE.MeshBasicMaterial({
+            transparent: true,
             opacity: 0.0,
             side: THREE.DoubleSide
         })
@@ -245,7 +252,7 @@ function createFloorGrid() {
     floorPlane.rotation.x = -Math.PI / 2;
     floorPlane.position.y = -1.0;
     floorPlane.name = 'Floor Plane';
-    
+
     const floorGroup = new THREE.Group();
     floorGroup.add(gridHelper);
     floorGroup.add(floorPlane);

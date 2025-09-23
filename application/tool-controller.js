@@ -187,14 +187,14 @@ class ToolController {
         }
         
         // Direct container creation - no tool dependency
-        const containerManager = window.modlerComponents?.containerManager;
-        if (!containerManager) {
-            console.error('ContainerManager not available');
+        const containerCrudManager = window.modlerComponents?.containerCrudManager;
+        if (!containerCrudManager) {
+            console.error('ContainerCrudManager not available');
             return false;
         }
 
-        // Create container directly from ContainerManager
-        const success = containerManager.createContainerFromSelection(selectableObjects);
+        // Create container directly from ContainerCrudManager
+        const success = containerCrudManager.createContainerFromSelection(selectableObjects);
         
         if (success) {
             

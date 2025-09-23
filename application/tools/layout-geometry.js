@@ -187,6 +187,10 @@ class LayoutGeometry {
         
         // Use configured renderOrder to ensure wireframes render after solid objects but remain visible during orbit
         edgeContainer.renderOrder = renderOrder;
+
+        // Add small Y-offset to prevent z-fighting with floor grid when objects are at y=0
+        // This ensures wireframes appear slightly above the grid level without going through geometry
+        edgeContainer.position.y += 0.001;
         
         // Create interactive face geometry from wireframe for reliable face detection
         // This eliminates the need for separate collision meshes and child object conflicts

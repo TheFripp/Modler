@@ -355,6 +355,7 @@ class PropertyController {
 	/**
 	 * Update property immediately during drag for real-time feedback
 	 * Bypasses debouncing for smooth 60fps arrow drag operations
+	 * Applies critical constraints (min/max) for safety
 	 */
 	updatePropertyImmediate(
 		objectId: string,
@@ -362,23 +363,37 @@ class PropertyController {
 		value: any,
 		source: PropertyChangeEvent['source'] = 'drag'
 	): boolean {
-		// Skip validation during drag for performance (will validate on drag end)
 		const oldValue = this.getCurrentValue(objectId, property);
+
+		// Apply critical constraints during immediate updates for safety
+		const constraints = this.constraints.get(property);
+		let constrainedValue = value;
+
+		if (constraints && typeof value === 'number') {
+			// Apply min/max constraints for safety (especially dimensions)
+			if (constraints.min !== undefined && value < constraints.min) {
+				constrainedValue = constraints.min;
+			}
+			if (constraints.max !== undefined && value > constraints.max) {
+				constrainedValue = constraints.max;
+			}
+			// Skip step rounding for smooth drag operations
+		}
 
 		// For multi-selection, delegate directly to updateThreeJSProperty
 		if (objectId === 'multi-selection') {
-			updateThreeJSProperty(objectId, property, value, source);
+			updateThreeJSProperty(objectId, property, constrainedValue, source);
 			return true;
 		}
 
-		// Apply immediate update without debouncing or validation delays
-		updateThreeJSProperty(objectId, property, value, source);
+		// Apply immediate update without debouncing
+		updateThreeJSProperty(objectId, property, constrainedValue, source);
 
 		// Emit property change event for immediate UI feedback
 		this.propertyChanges.set({
 			objectId,
 			property,
-			value,
+			value: constrainedValue,
 			oldValue,
 			source
 		});
