@@ -11,6 +11,23 @@ class BaseSelectionBehavior {
     }
     
     /**
+     * Check if the current active tool is face-based (push/move)
+     * Face-based tools should not trigger automatic container selection
+     */
+    isCurrentToolFaceBased() {
+        const toolController = window.modlerComponents?.toolController;
+        if (!toolController) return false;
+
+        const activeTool = toolController.getActiveTool();
+        if (!activeTool) return false;
+
+        // Check for face-based tools by their class names or properties
+        const toolName = activeTool.constructor.name;
+        return toolName === 'PushTool' || toolName === 'MoveTool' ||
+               (activeTool.faceToolBehavior !== undefined); // Has face tool behavior
+    }
+
+    /**
      * Handle clicking on an object - simple container-first logic
      * @param {THREE.Object3D} object - Clicked object
      * @param {Event} event - Mouse event
@@ -70,7 +87,10 @@ class BaseSelectionBehavior {
         const currentContainerContext = this.selectionController.getContainerContext();
 
 
-        if (objectData.parentContainer) {
+        // FACE-TOOL OVERRIDE: Skip container-first selection for face-based tools
+        const isFaceBasedTool = this.isCurrentToolFaceBased();
+
+        if (objectData.parentContainer && !isFaceBasedTool) {
             const parentContainer = sceneController.getObject(objectData.parentContainer);
 
             if (parentContainer?.mesh) {
@@ -86,6 +106,11 @@ class BaseSelectionBehavior {
                     targetObject = parentContainer.mesh; // Select the parent container
                 }
             }
+        } else if (objectData.parentContainer && isFaceBasedTool) {
+            // For face-based tools, always track clicks but don't change selection target
+            this.lastClickedChildObject = object;
+            this.lastClickTime = Date.now();
+            // targetObject remains the original clicked object for face manipulation
         } else {
             // Only clear child tracking for non-container objects (preserve tracking for containers)
             if (!objectData.isContainer) {

@@ -27,6 +27,9 @@ class PushTool {
         this.lastPushDelta = undefined;
         this.originalGeometry = null;
 
+        // Deferred selection for face-based tools
+        this.pendingSelection = null;
+
         // Cached objects for performance
         this.cache = {
             tempVector1: new THREE.Vector3(),
@@ -47,6 +50,8 @@ class PushTool {
         this.pushDirection = 1;
         this.isContainerPush = false;
         this.originalContainerSize = null;
+        this.actualPushedMesh = null;
+        this.pendingSelection = null;
     }
 
     resetMovementState() {
@@ -119,9 +124,13 @@ class PushTool {
     onClick(hit, event) {
         if (this.active) return;
 
+        // For face-based tools, defer selection until operation completes
+        // This prevents automatic container selection from interfering with face manipulation
         if (hit && hit.object) {
-            this.selectionBehavior.handleObjectClick(hit.object, event);
+            // Store click info for deferred selection
+            this.pendingSelection = { hit, event };
         } else {
+            // Empty space clicks can be handled immediately
             this.selectionBehavior.handleEmptySpaceClick(event);
         }
     }
@@ -178,7 +187,16 @@ class PushTool {
         if (isContainerPush) {
             this.originalContainerSize = this.getContainerSize(targetObject);
         } else {
-            this.originalGeometry = targetObject.geometry.clone();
+            // For non-container pushes, we need to find the actual geometry to modify
+            const actualMesh = this.resolveActualMeshForPush(hit, targetObject);
+            if (actualMesh && actualMesh.geometry) {
+                this.originalGeometry = actualMesh.geometry.clone();
+                // Store reference to the actual mesh for geometry modifications
+                this.actualPushedMesh = actualMesh;
+            } else {
+                this.originalGeometry = targetObject.geometry.clone();
+                this.actualPushedMesh = targetObject;
+            }
         }
 
         // Store initial mouse position for movement calculation
@@ -300,11 +318,12 @@ class PushTool {
 
 
     syncContainerUpdates() {
-        const newContainerSize = this.calculateContainerSizeForFillObjects();
-        MovementUtils.updateParentContainer(this.pushedObject, false, null, newContainerSize, true);
-
-        // Trigger layout recalculation if pushing a container in layout mode
         if (this.isContainerPush) {
+            // Container push: Full container repositioning and resizing
+            const newContainerSize = this.calculateContainerSizeForFillObjects();
+            MovementUtils.updateParentContainer(this.pushedObject, false, null, newContainerSize, true, false);
+
+            // Trigger layout recalculation if pushing a container in layout mode
             const sceneController = window.modlerComponents?.sceneController;
             if (sceneController && this.pushedObject.userData && this.pushedObject.userData.id) {
                 const objectData = sceneController.getObjectByMesh(this.pushedObject);
@@ -313,6 +332,9 @@ class PushTool {
                     sceneController.updateLayout(objectData.id);
                 }
             }
+        } else {
+            // Individual object push: Lightweight real-time updates
+            this.updateContainerForObjectPush(false, true); // false = not final, true = real-time
         }
     }
 
@@ -364,10 +386,12 @@ class PushTool {
      * @param {number} delta - Incremental movement amount in world units
      */
     modifyRegularGeometry(delta) {
-        if (!this.pushedObject || !this.pushedObject.geometry) return;
+        // Use actualPushedMesh for geometry modifications (handles interactive/collision meshes)
+        const meshToModify = this.actualPushedMesh || this.pushedObject;
+        if (!meshToModify || !meshToModify.geometry) return;
 
         // Work with current geometry (not original)
-        const geometry = this.pushedObject.geometry;
+        const geometry = meshToModify.geometry;
         geometry.computeBoundingBox();
         const bbox = geometry.boundingBox;
 
@@ -445,27 +469,30 @@ class PushTool {
     }
 
     refreshVisualFeedback() {
+        // Use actualPushedMesh for geometry updates (handles interactive/collision meshes)
+        const meshToUpdate = this.actualPushedMesh || this.pushedObject;
+
         // Update support mesh geometries to match modified main geometry
         const supportMeshFactory = window.SupportMeshFactory ? new SupportMeshFactory() : null;
-        if (supportMeshFactory && this.pushedObject) {
+        if (supportMeshFactory && meshToUpdate) {
             // Real-time updates: Update face highlights during push operations for immediate feedback
-            supportMeshFactory.updateSupportMeshGeometries(this.pushedObject, true);
+            supportMeshFactory.updateSupportMeshGeometries(meshToUpdate, true);
         }
 
         // Update face highlighting to match new geometry
         this.updateFaceHighlighting();
 
         // Sync geometry changes for wireframes and highlighting through centralized system
-        MovementUtils.syncRelatedMeshes(this.pushedObject, 'geometry', true);
+        MovementUtils.syncRelatedMeshes(meshToUpdate, 'geometry', true);
 
         // Update SceneController object data dimensions from modified geometry
-        if (this.pushedObject?.userData?.id) {
-            this.updateObjectDataDimensions(this.pushedObject.userData.id, this.pushedObject);
+        if (meshToUpdate?.userData?.id) {
+            this.updateObjectDataDimensions(meshToUpdate.userData.id, meshToUpdate);
         }
 
         // Notify centralized system for real-time property panel updates
         if (window.notifyObjectModified) {
-            window.notifyObjectModified(this.pushedObject, 'geometry');
+            window.notifyObjectModified(meshToUpdate, 'geometry');
         }
     }
 
@@ -574,9 +601,21 @@ class PushTool {
         // Clear any existing highlights and hover states to ensure clean state
         this.faceToolBehavior.clearHover();
 
-        // Force final container update with fill-aware calculations
-        const finalContainerSize = this.calculateContainerSizeForFillObjects();
-        MovementUtils.updateParentContainer(pushedObject, true, null, finalContainerSize);
+        // Handle deferred selection - now that push operation is complete, apply selection
+        if (this.pendingSelection) {
+            this.selectionBehavior.handleObjectClick(this.pendingSelection.hit.object, this.pendingSelection.event);
+            this.pendingSelection = null;
+        }
+
+        // Final container updates based on push type
+        if (this.isContainerPush) {
+            // Container push: Full container repositioning and resizing
+            const finalContainerSize = this.calculateContainerSizeForFillObjects();
+            MovementUtils.updateParentContainer(pushedObject, true, null, finalContainerSize, false, false);
+        } else {
+            // Individual object push: Final container update with directional adjustment
+            this.updateContainerForObjectPush(true);
+        }
     }
 
     calculateContainerSizeForFillObjects() {
@@ -634,13 +673,75 @@ class PushTool {
         // No special activation logic needed for push tool
     }
 
+    /**
+     * Resolve the actual mesh to modify for push operations
+     * Handles interactive/collision meshes by finding the real object geometry
+     */
+    resolveActualMeshForPush(hit, targetObject) {
+        const sceneController = window.modlerComponents?.sceneController;
+        if (!sceneController) return targetObject;
+
+        const isContainerInteractive = hit.object.userData.isContainerInteractive;
+        const isContainerCollision = hit.object.userData.isContainerCollision;
+
+        // If we're hitting an interactive or collision mesh, find the actual object
+        if (isContainerInteractive || isContainerCollision) {
+            // For interactive meshes, check if they have a reference to the actual object
+            if (hit.object.userData.actualObject) {
+                return hit.object.userData.actualObject;
+            }
+
+            // For collision meshes, the actual object might be a sibling or parent
+            if (hit.object.parent) {
+                // Look for siblings that are the actual object (not collision/interactive meshes)
+                const siblings = hit.object.parent.children;
+                for (const sibling of siblings) {
+                    if (!sibling.userData.isContainerInteractive &&
+                        !sibling.userData.isContainerCollision &&
+                        sibling.geometry) {
+                        return sibling;
+                    }
+                }
+            }
+
+            // Fallback: try to find object by ID from scene controller
+            const objectId = hit.object.userData.objectId || hit.object.userData.id;
+            if (objectId) {
+                const objectData = sceneController.getObject(objectId);
+                if (objectData && objectData.mesh) {
+                    return objectData.mesh;
+                }
+            }
+        }
+
+        // Default: return the target object
+        return targetObject;
+    }
+
     isContainerPushOperation(hit, targetObject) {
-        // Delegate container detection to centralized service
         const sceneController = window.modlerComponents?.sceneController;
         if (!sceneController || !targetObject) return false;
 
+        // Check if the target object itself is a container that's explicitly selected
         const objectData = sceneController.getObjectByMesh(targetObject);
-        return objectData && objectData.isContainer;
+        if (objectData && objectData.isContainer) {
+            // This is a container mesh - check if it's explicitly selected
+            if (this.selectionController.isSelected(targetObject)) {
+                return true; // Container push operation
+            }
+        }
+
+        // Check if we're hitting an interactive/collision mesh but the target resolved to a container
+        // This means getTargetObject() resolved to a container because it's selected
+        const isContainerInteractive = hit.object.userData.isContainerInteractive;
+        const isContainerCollision = hit.object.userData.isContainerCollision;
+
+        if ((isContainerInteractive || isContainerCollision) && objectData && objectData.isContainer) {
+            // We hit a container mesh and it resolved to a container - this is a container push
+            return true;
+        }
+
+        return false; // Regular object push operation
     }
 
     canPushContainer(targetObject) {
@@ -655,6 +756,133 @@ class PushTool {
         const isFixedMode = objectData.sizingMode === 'fixed';
 
         return isLayoutEnabled || isFixedMode;
+    }
+
+    /**
+     * Update container for individual object push with child position compensation
+     * Key insight: compensate for container movement by moving children back
+     */
+    updateContainerForObjectPush(isFinalUpdate = false, isRealTime = false) {
+        const sceneController = window.modlerComponents?.sceneController;
+        if (!sceneController || !this.pushedObject) return;
+
+        const objectData = sceneController.getObjectByMesh(this.pushedObject);
+        if (!objectData || !objectData.parentContainer) return;
+
+        const containerData = sceneController.getObject(objectData.parentContainer);
+        if (!containerData || !containerData.mesh) return;
+
+        if (isRealTime) {
+            // LIGHTWEIGHT REAL-TIME UPDATE: Just use cached calculations
+            this.updateContainerRealTime(containerData);
+        } else {
+            // FULL UPDATE: Complete recalculation for final positioning
+            this.updateContainerFull(containerData, isFinalUpdate);
+        }
+    }
+
+    updateContainerRealTime(containerData) {
+        if (!this.lastContainerCalculation) return;
+
+        const containerMesh = containerData.mesh;
+
+        // Calculate directional offset based on current push amount
+        const directionalOffset = this.cumulativeAmount * this.pushDirection * 0.5;
+        const newPosition = this.lastContainerCalculation.originalPosition.clone();
+
+        if (this.pushAxis === 'x') {
+            newPosition.x += directionalOffset;
+        } else if (this.pushAxis === 'y') {
+            newPosition.y += directionalOffset;
+        } else if (this.pushAxis === 'z') {
+            newPosition.z += directionalOffset;
+        }
+
+        // Just move the container - don't recalculate everything
+        containerMesh.position.copy(newPosition);
+    }
+
+    updateContainerFull(containerData, isFinalUpdate) {
+        const sceneController = window.modlerComponents?.sceneController;
+        const containerMesh = containerData.mesh;
+        const originalContainerPosition = containerMesh.position.clone();
+
+        // Cache this calculation for real-time updates
+        this.lastContainerCalculation = {
+            originalPosition: originalContainerPosition.clone()
+        };
+
+        // Calculate what the container bounds should be
+        const childObjects = sceneController.getChildObjects(containerData.id);
+        const childMeshes = childObjects
+            .map(child => child.mesh)
+            .filter(mesh => mesh && mesh.geometry && mesh.geometry.type !== 'EdgesGeometry');
+
+        if (childMeshes.length === 0) return;
+
+        // Calculate bounds of all children (includes the pushed object)
+        const bounds = PositionTransform.calculateObjectBounds(childMeshes, isFinalUpdate);
+        if (!bounds) return;
+
+        // Calculate directional position to keep fixed edge in place
+        const currentSize = this.getContainerSize(containerMesh);
+        const axisIndex = this.pushAxis === 'x' ? 0 : (this.pushAxis === 'y' ? 1 : 2);
+
+        // Calculate where the fixed edge should be (opposite to push direction)
+        const fixedEdgeOffset = (currentSize.getComponent(axisIndex) / 2) * -this.pushDirection;
+        const fixedEdgePosition = containerMesh.position.getComponent(axisIndex) + fixedEdgeOffset;
+
+        // Calculate new container center position to keep fixed edge in place
+        const newCenterPosition = containerMesh.position.clone();
+        const newFixedEdgeOffset = (bounds.size.getComponent(axisIndex) / 2) * -this.pushDirection;
+        const newCenterCoord = fixedEdgePosition - newFixedEdgeOffset;
+
+        if (this.pushAxis === 'x') {
+            newCenterPosition.x = newCenterCoord;
+        } else if (this.pushAxis === 'y') {
+            newCenterPosition.y = newCenterCoord;
+        } else if (this.pushAxis === 'z') {
+            newCenterPosition.z = newCenterCoord;
+        }
+
+        // Calculate container movement
+        const containerMovement = new THREE.Vector3().subVectors(newCenterPosition, originalContainerPosition);
+
+        // Move all child objects back to compensate for container movement
+        childObjects.forEach(childData => {
+            if (childData.mesh) {
+                childData.mesh.position.sub(containerMovement);
+                sceneController.updateObject(childData.id, { position: childData.mesh.position });
+            }
+        });
+
+        // Full update for final positioning
+        LayoutGeometry.updateContainerGeometry(
+            containerMesh,
+            bounds.size,
+            newCenterPosition,
+            true // shouldReposition = true
+        );
+
+        // Update SceneController with new container position
+        sceneController.updateObject(containerData.id, { position: newCenterPosition });
+    }
+
+    /**
+     * Update interactive mesh position to match container position
+     */
+    updateInteractiveMeshPosition(containerData) {
+        const scene = window.modlerComponents?.sceneFoundation?.scene;
+        if (!scene) return;
+
+        // Find interactive mesh linked to this container
+        scene.traverse((object) => {
+            if (object.userData.isContainerInteractive &&
+                object.userData.containerMesh === containerData.mesh) {
+                object.position.copy(containerData.mesh.position);
+                object.updateMatrixWorld(true);
+            }
+        });
     }
 
     /**

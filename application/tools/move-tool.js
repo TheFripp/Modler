@@ -21,6 +21,9 @@ class MoveTool {
         this.dragFaceNormal = null;
         this.lastMousePos = null;
 
+        // Deferred selection for face-based tools
+        this.pendingSelection = null;
+
         // Container update throttling using shared utils - use default 16ms for smooth updates
         this.containerThrottleState = MovementUtils.createThrottleState();
 
@@ -69,8 +72,17 @@ class MoveTool {
      * Handle click events using centralized event handler
      */
     onClick(hit, event) {
-        const operationCallbacks = { isOperationActive: () => this.isDragging };
-        this.eventHandler.handleClick(hit, event, operationCallbacks);
+        if (this.isDragging) return;
+
+        // For face-based tools, defer selection until operation completes
+        // This prevents automatic container selection from interfering with face manipulation
+        if (hit && hit.object) {
+            // Store click info for deferred selection
+            this.pendingSelection = { hit, event };
+        } else {
+            // Empty space clicks can be handled immediately
+            this.selectionBehavior.handleEmptySpaceClick(event);
+        }
     }
     
     /**
@@ -356,8 +368,67 @@ class MoveTool {
             this.selectionController.updateContainerEdgeHighlight();
         }
     }
-    
-    
+
+    /**
+     * End face-based dragging operation
+     */
+    endFaceDrag() {
+        if (!this.isDragging) return;
+
+        const draggedObject = this.dragObject; // Store reference before clearing
+
+        // Clear drag state
+        this.isDragging = false;
+        this.dragObject = null;
+        this.dragStartPosition = null;
+        this.dragFaceNormal = null;
+        this.lastMousePos = null;
+
+        // Clear face highlights
+        this.faceToolBehavior.clearHover();
+
+        // Handle deferred selection - now that drag operation is complete, apply selection
+        if (this.pendingSelection) {
+            this.selectionBehavior.handleObjectClick(this.pendingSelection.hit.object, this.pendingSelection.event);
+            this.pendingSelection = null;
+        }
+
+        // Final updates for dragged object
+        if (draggedObject) {
+            // Ensure final sync of all related meshes
+            const meshSynchronizer = window.modlerComponents?.meshSynchronizer;
+            if (meshSynchronizer) {
+                meshSynchronizer.syncAllRelatedMeshes(draggedObject, 'transform', true);
+            }
+
+            // Only trigger container repositioning when moving containers themselves
+            // For individual object moves, skip container updates to prevent unwanted container movement
+            const sceneController = window.modlerComponents?.sceneController;
+            if (sceneController) {
+                const objectData = sceneController.getObjectByMesh(draggedObject);
+
+                // Check if the dragged object itself is a container
+                const isDraggedObjectContainer = objectData && objectData.isContainer;
+
+                // Also check if we're dragging an interactive/collision mesh that represents a container
+                const isContainerInteractive = draggedObject.userData?.isContainerInteractive;
+                const isContainerCollision = draggedObject.userData?.isContainerCollision;
+                const representsContainer = (isContainerInteractive || isContainerCollision) &&
+                                          draggedObject.userData?.containerMesh;
+
+                if (isDraggedObjectContainer || representsContainer) {
+                    // Moving a container or its interactive mesh: Full container repositioning
+                    const containerToUpdate = representsContainer ? draggedObject.userData.containerMesh : draggedObject;
+                    MovementUtils.updateParentContainer(containerToUpdate, true, null, null, true, false);
+                } else {
+                    // Individual object move: Resize parent container to fit but preserve position
+                    MovementUtils.updateParentContainer(draggedObject, true, null, null, true, true);
+                }
+            }
+        }
+    }
+
+
     /**
      * Tool activation using centralized event handler
      */

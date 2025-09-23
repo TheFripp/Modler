@@ -179,17 +179,17 @@ class LayoutGeometry {
 
         const interactiveMaterial = new THREE.MeshBasicMaterial({
             transparent: true,
-            opacity: 0.2, // DEBUG: Temporarily visible to see collision area
-            visible: true,
+            opacity: 0.0, // Invisible but raycastable
             side: THREE.DoubleSide, // Ensure faces can be hit from both sides
             depthTest: false, // Ensure it doesn't get occluded by child objects
-            color: 0xff0000, // DEBUG: Red color for debugging collision area
+            color: 0x000000, // Doesn't matter since invisible
+            colorWrite: false, // Don't write to color buffer - purely for raycasting
             wireframe: false // Solid faces for raycasting
         });
 
 
         const interactiveMesh = new THREE.Mesh(faceGeometry, interactiveMaterial);
-        interactiveMesh.visible = true;
+        interactiveMesh.visible = false; // Hidden by default - only visible when needed for interaction
         interactiveMesh.renderOrder = 1000; // Higher than wireframe for raycasting priority
         interactiveMesh.userData.isContainerInteractive = true;
         interactiveMesh.userData.isContainerCollision = true;  // For tool compatibility

@@ -65,8 +65,9 @@ class SupportMeshFactory {
             transparent: true,
             opacity: 0.0, // Invisible but raycastable
             side: THREE.DoubleSide,
-            depthTest: false,
-            color: 0xff0000
+            depthTest: true, // Enable depth test for proper rendering
+            colorWrite: false, // Don't write to color buffer - purely for raycasting
+            color: 0x000000 // Doesn't matter since colorWrite is false
         });
     }
 
@@ -194,6 +195,7 @@ class SupportMeshFactory {
 
         interactiveMesh.position.set(0, 0, 0);
         interactiveMesh.renderOrder = 1000; // High render order for raycasting priority
+        interactiveMesh.visible = false; // Hidden by default - only visible when needed for interaction
         interactiveMesh.userData.isContainerInteractive = true;
         interactiveMesh.userData.isContainerCollision = true;
         interactiveMesh.userData.containerMesh = mainMesh; // Direct reference to parent
@@ -336,58 +338,67 @@ class SupportMeshFactory {
         if (!mainMesh || !faceHighlightMesh || !mainMesh.geometry) return;
 
         try {
-            // Determine which face the highlight is currently showing based on its orientation
-            const currentRotation = faceHighlightMesh.rotation;
-            const currentPosition = faceHighlightMesh.position;
+            // Use stored face information instead of trying to reverse-engineer from position
+            const storedFaceInfo = faceHighlightMesh.userData.faceInfo;
+            if (!storedFaceInfo) {
+                // No stored face info - face highlight was created without proper positioning
+                // Hide it since we don't know which face it should represent
+                faceHighlightMesh.visible = false;
+                return;
+            }
 
             // Calculate current geometry bounds
             mainMesh.geometry.computeBoundingBox();
             const bbox = mainMesh.geometry.boundingBox;
             const size = bbox.getSize(new THREE.Vector3());
 
-            // Determine face based on current highlight position and rotation
-            let faceType, localNormal, width, height, localCenter;
+            // Use stored face info to recalculate position for the same face
+            const { faceType, isPositive } = storedFaceInfo;
+            let width, height, localCenter, localNormal;
 
-            // Detect face type from current rotation (same logic as positioning)
-            const rotX = Math.abs(currentRotation.x);
-            const rotY = Math.abs(currentRotation.y);
-
-            if (rotY > Math.PI/4) {
-                // X face (left/right) - rotation around Y axis
-                const isPositiveX = currentPosition.x > 0;
-                faceType = 'x';
-                localNormal = new THREE.Vector3(isPositiveX ? 1 : -1, 0, 0);
+            if (faceType === 'x') {
+                // X face (left/right)
                 width = size.z;
                 height = size.y;
+                localNormal = new THREE.Vector3(isPositive ? 1 : -1, 0, 0);
                 localCenter = new THREE.Vector3(
-                    isPositiveX ? bbox.max.x : bbox.min.x,
+                    isPositive ? bbox.max.x : bbox.min.x,
                     (bbox.max.y + bbox.min.y) / 2,
                     (bbox.max.z + bbox.min.z) / 2
                 );
-            } else if (rotX > Math.PI/4) {
-                // Y face (top/bottom) - rotation around X axis
-                const isPositiveY = currentPosition.y > 0;
-                faceType = 'y';
-                localNormal = new THREE.Vector3(0, isPositiveY ? 1 : -1, 0);
+            } else if (faceType === 'y') {
+                // Y face (top/bottom)
                 width = size.x;
                 height = size.z;
+                localNormal = new THREE.Vector3(0, isPositive ? 1 : -1, 0);
                 localCenter = new THREE.Vector3(
                     (bbox.max.x + bbox.min.x) / 2,
-                    isPositiveY ? bbox.max.y : bbox.min.y,
+                    isPositive ? bbox.max.y : bbox.min.y,
                     (bbox.max.z + bbox.min.z) / 2
                 );
             } else {
-                // Z face (front/back) - minimal rotation
-                const isPositiveZ = currentPosition.z > 0;
-                faceType = 'z';
-                localNormal = new THREE.Vector3(0, 0, isPositiveZ ? 1 : -1);
+                // Z face (front/back)
                 width = size.x;
                 height = size.y;
+                localNormal = new THREE.Vector3(0, 0, isPositive ? 1 : -1);
                 localCenter = new THREE.Vector3(
                     (bbox.max.x + bbox.min.x) / 2,
                     (bbox.max.y + bbox.min.y) / 2,
-                    isPositiveZ ? bbox.max.z : bbox.min.z
+                    isPositive ? bbox.max.z : bbox.min.z
                 );
+            }
+
+            // Update rotation to match face orientation
+            faceHighlightMesh.rotation.set(0, 0, 0); // Reset rotation first
+            if (faceType === 'x') {
+                faceHighlightMesh.rotation.y = isPositive ? Math.PI/2 : -Math.PI/2;
+            } else if (faceType === 'y') {
+                faceHighlightMesh.rotation.x = isPositive ? -Math.PI/2 : Math.PI/2;
+            } else {
+                // Z face - default orientation
+                if (!isPositive) {
+                    faceHighlightMesh.rotation.y = Math.PI; // Flip for negative Z
+                }
             }
 
             // Update scale to match new face dimensions
@@ -495,6 +506,21 @@ class SupportMeshFactory {
             // Small offset to prevent z-fighting
             const offset = 0.001;
             faceHighlightMesh.position.add(localNormal.clone().multiplyScalar(offset));
+
+            // Store face information for future geometry updates
+            let faceType, isPositive;
+            if (absNormal.x > absNormal.y && absNormal.x > absNormal.z) {
+                faceType = 'x';
+                isPositive = localNormal.x > 0;
+            } else if (absNormal.y > absNormal.x && absNormal.y > absNormal.z) {
+                faceType = 'y';
+                isPositive = localNormal.y > 0;
+            } else {
+                faceType = 'z';
+                isPositive = localNormal.z > 0;
+            }
+
+            faceHighlightMesh.userData.faceInfo = { faceType, isPositive };
 
         } catch (error) {
             console.warn('Failed to position face highlight for hit:', error);

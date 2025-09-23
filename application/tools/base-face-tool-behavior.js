@@ -167,18 +167,34 @@ class BaseFaceToolBehavior {
         const isContainerInteractive = hit.object.userData.isContainerInteractive;
         const isContainerCollision = hit.object.userData.isContainerCollision;
 
-        // When in container context, return the actual hit object (child) instead of resolving to container
-        if (isInContainerContext) {
-            return hit.object;
-        }
+        // FACE-BASED TOOL PRIORITY: For face-based tools, prioritize direct object manipulation
+        // Only resolve to containers if the container itself is explicitly selected
 
-        // When NOT in container context, resolve to containers for moving containers as units
         if (isContainerInteractive && hit.object.userData.containerMesh) {
-            // NEW ARCHITECTURE: Interactive mesh has direct containerMesh reference
-            return hit.object.userData.containerMesh;
+            // NEW ARCHITECTURE: Interactive mesh with direct containerMesh reference
+            const containerMesh = hit.object.userData.containerMesh;
+
+            // Check if the container is explicitly selected - if so, operate on container
+            if (this.selectionController.isSelected(containerMesh)) {
+                return containerMesh;
+            }
+
+            // If container not selected, return the interactive mesh for direct manipulation
+            // This allows pushing faces of objects inside containers
+            return hit.object;
+
         } else if (isContainerCollision && hit.object.parent) {
             // OLD ARCHITECTURE: Collision mesh is child of container
-            return hit.object.parent;
+            const containerMesh = hit.object.parent;
+
+            // Check if the container is explicitly selected
+            if (this.selectionController.isSelected(containerMesh)) {
+                return containerMesh;
+            }
+
+            // If container not selected, return the collision mesh for direct manipulation
+            return hit.object;
+
         } else if (isContainerInteractive) {
             // FALLBACK: Scene-level interactive mesh with parent container ID
             const sceneController = window.modlerComponents?.sceneController;
@@ -186,12 +202,18 @@ class BaseFaceToolBehavior {
 
             if (sceneController && containerId) {
                 const containerData = sceneController.getObject(containerId);
-                return containerData?.mesh || hit.object;
-            } else {
-                return hit.object.parent || hit.object;
+                const containerMesh = containerData?.mesh;
+
+                // Check if the container is explicitly selected
+                if (containerMesh && this.selectionController.isSelected(containerMesh)) {
+                    return containerMesh;
+                }
             }
+
+            // Default to the hit object for direct manipulation
+            return hit.object;
         } else {
-            // Regular objects
+            // Regular objects - always return the hit object
             return hit.object;
         }
     }

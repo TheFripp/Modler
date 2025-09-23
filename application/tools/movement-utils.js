@@ -100,9 +100,10 @@ class MovementUtils {
      * @param {Object} throttleState - Throttling state object (lastUpdateTime, interval)
      * @param {THREE.Vector3} newContainerSize - Optional new container size for fill calculations
      * @param {boolean} immediateVisuals - If true, bypasses throttling for visual updates
+     * @param {boolean} preservePosition - If true, containers resize without repositioning
      * @returns {boolean} True if update was performed
      */
-    static updateParentContainer(object, realTime = false, throttleState = null, newContainerSize = null, immediateVisuals = false) {
+    static updateParentContainer(object, realTime = false, throttleState = null, newContainerSize = null, immediateVisuals = false, preservePosition = false) {
         const startTime = performance.now();
 
         const sceneController = window.modlerComponents?.sceneController;
@@ -144,7 +145,7 @@ class MovementUtils {
 
             // For the immediate parent, pass the new container size for fill calculations
             const containerSizeToUse = (updatedContainers === 0) ? newContainerSize : null;
-            const resizeSuccess = containerCrudManager.resizeContainerToFitChildren(containerData, containerSizeToUse, false, immediateVisuals);
+            const resizeSuccess = containerCrudManager.resizeContainerToFitChildren(containerData, containerSizeToUse, preservePosition, immediateVisuals);
 
             // Container visibility and padding are handled by selection visualizer - don't override here
 
