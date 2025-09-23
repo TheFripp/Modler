@@ -32,7 +32,7 @@
 		// If clicking the same direction that's already active, toggle off (disable layout)
 		if (currentDirection === axis && isCurrentlyEnabled) {
 			propertyController.updateProperty(objectId, 'autoLayout.enabled', false);
-			propertyController.updateProperty(objectId, 'autoLayout.direction', null);
+			propertyController.updateProperty(objectId, 'autoLayout.direction', '');
 		} else {
 			// Enable layout and set new direction
 			propertyController.updateProperty(objectId, 'autoLayout.enabled', true);

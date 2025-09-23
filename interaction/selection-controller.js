@@ -10,7 +10,7 @@ class SelectionController {
         this.maxHistorySize = 10;
 
         // Component references (set during initialization)
-        this.selectionVisualizer = null;
+        this.visualizationManager = null;
         this.containerContextManager = null;
 
     }
@@ -18,8 +18,8 @@ class SelectionController {
     /**
      * Initialize with dependent components
      */
-    initialize(selectionVisualizer, containerContextManager) {
-        this.selectionVisualizer = selectionVisualizer;
+    initialize(visualizationManager, containerContextManager) {
+        this.visualizationManager = visualizationManager;
         this.containerContextManager = containerContextManager;
     }
 
@@ -43,9 +43,9 @@ class SelectionController {
         this.selectedObjects.add(object);
         this.addToHistory('select', object);
 
-        // Delegate visual updates to SelectionVisualizer
-        if (this.selectionVisualizer) {
-            this.selectionVisualizer.updateObjectVisual(object, true);
+        // Delegate visual updates to VisualizationManager
+        if (this.visualizationManager) {
+            this.visualizationManager.setState(object, 'selected');
         }
 
         // Update property panel with the selected object
@@ -71,9 +71,9 @@ class SelectionController {
         this.selectedObjects.delete(object);
         this.addToHistory('deselect', object);
 
-        // Delegate visual updates to SelectionVisualizer
-        if (this.selectionVisualizer) {
-            this.selectionVisualizer.updateObjectVisual(object, false);
+        // Delegate visual updates to VisualizationManager
+        if (this.visualizationManager) {
+            this.visualizationManager.setState(object, 'normal');
         }
 
         return true;
@@ -122,9 +122,9 @@ class SelectionController {
 
         // Deselect all currently selected objects
         objectsToDeselect.forEach(object => {
-            // Delegate visual updates to SelectionVisualizer
-            if (this.selectionVisualizer) {
-                this.selectionVisualizer.updateObjectVisual(object, false);
+            // Delegate visual updates to VisualizationManager
+            if (this.visualizationManager) {
+                this.visualizationManager.setState(object, 'normal');
             }
         });
 
@@ -264,8 +264,8 @@ class SelectionController {
         this.selectionChangeCallback = null;
 
         // Clean up dependent components
-        if (this.selectionVisualizer) {
-            this.selectionVisualizer.destroy();
+        if (this.visualizationManager) {
+            this.visualizationManager.destroy();
         }
         if (this.containerContextManager) {
             this.containerContextManager.destroy();

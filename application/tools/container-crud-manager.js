@@ -516,16 +516,14 @@ class ContainerCrudManager {
         }
 
         const sceneController = validation.sceneController;
+        // SIMPLIFIED ARCHITECTURE: Container never moves during auto-layout, only resizes
+        // This eliminates coordinate system mismatches and prevents object positioning breakage
         const success = LayoutGeometry.updateContainerGeometry(
             containerData.mesh,
             layoutBounds.size,
-            layoutBounds.center,
-            true
+            containerData.mesh.position, // Keep current position
+            false // shouldReposition = false
         );
-
-        if (success) {
-            sceneController.updateObject(containerData.id, { position: layoutBounds.center });
-        }
 
         return success;
     }

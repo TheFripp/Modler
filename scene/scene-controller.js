@@ -432,15 +432,17 @@ class SceneController {
             // Get container size for fill calculations
             const containerSize = this.getContainerSize(container);
 
-            // CENTERING FIX: Store original container center to preserve position
-            const originalContainerCenter = container.mesh.position.clone();
 
             const layoutResult = window.LayoutEngine.calculateLayout(children, container.autoLayout, containerSize);
 
             this.applyLayoutPositionsAndSizes(children, layoutResult.positions, layoutResult.sizes, container);
 
-            // Calculate the bounds needed for container to wrap the layout, preserving original center
-            const layoutBounds = this.calculateLayoutBounds(layoutResult.positions, layoutResult.sizes, originalContainerCenter);
+            // Calculate actual object sizes (not layout engine modified sizes)
+            const actualSizes = children.map(child => window.LayoutEngine.getObjectSize(child));
+
+            // Calculate the container size needed to wrap the layout objects
+            // SIMPLIFIED: No coordinate conversion needed since container doesn't move
+            const layoutBounds = this.calculateLayoutBounds(layoutResult.positions, actualSizes);
 
             return { success: true, layoutBounds };
         } else {
@@ -475,15 +477,15 @@ class SceneController {
     }
 
     /**
-     * Calculate layout bounds from positions and sizes
-     * @param {Array} positions - Array of THREE.Vector3 positions
+     * Calculate container size needed to wrap layout objects
+     * SIMPLIFIED: Only calculates size, container position never changes
+     * @param {Array} positions - Array of THREE.Vector3 positions (local space)
      * @param {Array} sizes - Array of THREE.Vector3 sizes
-     * @param {THREE.Vector3} originalCenter - Original container center to preserve (optional)
-     * @returns {Object} Layout bounds with center and size
+     * @returns {THREE.Vector3} Container size needed to wrap all objects
      */
-    calculateLayoutBounds(positions, sizes, originalCenter = null) {
+    calculateLayoutBounds(positions, sizes) {
         if (!positions || !sizes || positions.length === 0) {
-            return { center: new THREE.Vector3(), size: new THREE.Vector3(1, 1, 1) };
+            return { size: new THREE.Vector3(1, 1, 1) };
         }
 
         let minX = Infinity, maxX = -Infinity;
@@ -504,22 +506,13 @@ class SceneController {
             maxZ = Math.max(maxZ, pos.z + halfSize.z);
         }
 
-        // Use original center if provided, otherwise calculate from layout bounds
-        const center = originalCenter ?
-            originalCenter.clone() :
-            new THREE.Vector3(
-                (minX + maxX) / 2,
-                (minY + maxY) / 2,
-                (minZ + maxZ) / 2
-            );
-
         const size = new THREE.Vector3(
             maxX - minX,
             maxY - minY,
             maxZ - minZ
         );
 
-        return { center, size };
+        return { size };
     }
 
     /**
@@ -584,27 +577,13 @@ class SceneController {
 
             }
 
-            // Apply size to object mesh if it's a box geometry
-            if (obj.mesh.geometry && obj.mesh.geometry.type === 'BoxGeometry') {
-                const newGeometry = new THREE.BoxGeometry(
-                    layoutSize.x,
-                    layoutSize.y,
-                    layoutSize.z
-                );
-
-                // Dispose old geometry
-                obj.mesh.geometry.dispose();
-                obj.mesh.geometry = newGeometry;
-
-                // Update object data dimensions
-                obj.width = layoutSize.x;
-                obj.height = layoutSize.y;
-                obj.depth = layoutSize.z;
-            }
+            // CAD PRINCIPLE: Never resize objects - maintain 1:1 scale
+            // Objects keep their original geometry - layout only positions them
 
             // Notify of transform change for selection wireframe updates
             this.syncSelectionWireframes(obj.id);
         });
+
     }
     
     /**
@@ -766,9 +745,31 @@ class SceneController {
             // Skip transform notification - object not found
             return;
         }
-        
-        // Visual updates and container operations are now handled by MovementUtils.completeObjectModification
-        // This ensures property panel uses the exact same proven pattern as push tool
+
+        // Update parent containers if this object is a child
+        if (obj.parentContainer) {
+            const MovementUtils = window.MovementUtils;
+            if (MovementUtils) {
+                // Use realTime = true to indicate this is a final update after drag completion
+                MovementUtils.updateParentContainer(obj.mesh, true, null, null, true);
+            }
+        }
+
+        // Update related meshes (selection wireframes, etc.) but suppress container wireframes during container context
+        const meshSynchronizer = window.modlerComponents?.meshSynchronizer;
+        const selectionController = window.modlerComponents?.selectionController;
+        if (meshSynchronizer) {
+            // Check if we're in container context and this is the container we're stepped into
+            const isInContainerContext = selectionController?.isInContainerContext();
+            const containerContext = selectionController?.getContainerContext();
+
+            if (isInContainerContext && obj.isContainer && obj.mesh === containerContext) {
+                // Skip wireframe updates for the container we're stepped into - ContainerInteractionManager handles its visualization
+                return;
+            }
+
+            meshSynchronizer.syncAllRelatedMeshes(obj.mesh, 'transform', true);
+        }
     }
     
     // Memory cleanup

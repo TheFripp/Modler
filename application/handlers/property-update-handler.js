@@ -81,21 +81,11 @@ class PropertyUpdateHandler {
             } else {
                 objectData.autoLayout[property] = newValue;
             }
-            console.log('🔧 Final autoLayout config:', objectData.autoLayout);
+            // Only proceed with layout if enabled and has valid direction
+            if (objectData.autoLayout.enabled && objectData.autoLayout.direction && objectData.autoLayout.direction !== '') {
+                const layoutResult = sceneController.updateLayout(objectData.id);
 
-            console.log('🔧 Layout mode activated for container:', objectData.name);
-
-            // Step 5: PropertyUpdateHandler → sceneController.updateLayout(objectData.id)
-            console.log('🔧 Calling sceneController.updateLayout with container:', {
-                containerId: objectData.id,
-                containerName: objectData.name,
-                autoLayout: objectData.autoLayout,
-                hasUpdateLayoutMethod: !!this.sceneController.updateLayout
-            });
-            const layoutResult = sceneController.updateLayout(objectData.id);
-            console.log('🔧 Layout result:', layoutResult);
-
-            if (layoutResult && layoutResult.success) {
+                if (layoutResult && layoutResult.success) {
                 // Step 10: PropertyUpdateHandler → containerCrudManager.resizeContainerToLayoutBounds(layoutBounds)
                 if (layoutResult.layoutBounds) {
                     this.containerCrudManager.resizeContainerToLayoutBounds(objectData, layoutResult.layoutBounds);
@@ -110,11 +100,13 @@ class PropertyUpdateHandler {
                     visualEffects.showLayoutAxisGuides(objectData.mesh, objectData.autoLayout.direction);
                 }
 
-                console.log('✅ Container switched to LAYOUT mode with smart rule-based positioning');
                 return true;
+                } else {
+                    console.error('Layout update failed for container:', containerId);
+                    return false;
+                }
             } else {
-                console.error('Layout update failed for container:', containerId);
-                return false;
+                return true;
             }
 
         } catch (error) {

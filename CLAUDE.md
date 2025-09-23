@@ -118,13 +118,18 @@ CAD software featuring rule-based parametric design through intelligent 3D auto-
 - 3-layer flow: `Click → Tool → SelectionController`
 - No over-engineering or premature optimization
 
-### 2. Current Architecture Patterns
+### 2. Unified Visualization Architecture
+- **Current Implementation**: Single VisualizationManager handles all object/container visualization
+- **Replaces**: Multiple competing visualization systems (SelectionVisualizer, ContainerCrudManager delegation)
+- **Key Benefit**: Solves container wireframe visibility issues after step-into/step-out operations
+
+### 3. Current Architecture Patterns
 - **Container-First Selection**: Click child → selects parent container
 - **Double-Click Direct Selection**: Bypasses container-first logic
 - **Render-Order Wireframes**: `renderOrder: 999` for visibility
 - **Centralized Mesh Sync**: All related meshes via MeshSynchronizer
 
-### 3. Container Architecture - CRITICAL RULES
+### 4. Container Architecture - CRITICAL RULES
 **NEVER assume tool dependency for container operations** - this leads to architectural confusion.
 
 #### **Container Creation Pattern**
@@ -142,7 +147,7 @@ CAD software featuring rule-based parametric design through intelligent 3D auto-
 - **Wrong**: Tool activation → layout mode through button clicks
 - **Key Principle**: Layout mode is a property state, not a tool state
 
-### 4. CAD Geometry Principles - CRITICAL FOR ACCURACY
+### 5. CAD Geometry Principles - CRITICAL FOR ACCURACY
 
 **ALWAYS use geometry-based manipulation, NEVER visual transforms**
 
@@ -185,7 +190,7 @@ sceneController.notifyObjectTransformChanged(objectId);
 - Push tool: Direct vertex manipulation in `modifyPushedFace()`
 - Move tool: Uses same coordinate transformation principles
 
-### 5. File Size Limits
+### 6. File Size Limits
 - **Tools**: 200 lines max
 - **Controllers**: 300 lines max
 - **Any file over limits**: Requires Architecture Guardian review

@@ -103,12 +103,6 @@ class LayoutGeometry {
             maxZ - minZ
         );
 
-        console.log(`[WIREFRAME DEBUG] Final calculated bounds:`, {
-            center: center,
-            size: size,
-            min: min,
-            max: max
-        });
 
         return { center, size, min, max };
     }
@@ -119,11 +113,6 @@ class LayoutGeometry {
      * @returns {Object} Object with visual mesh, collision mesh, and materials
      */
     static createContainerGeometry(size) {
-        console.log(`[WIREFRAME DEBUG] Creating container with size:`, {
-            x: size.x,
-            y: size.y,
-            z: size.z
-        });
 
         // Create container box geometry for collision detection
         const containerGeometry = new THREE.BoxGeometry(size.x, size.y, size.z);
@@ -147,11 +136,6 @@ class LayoutGeometry {
         let edgeContainer, edgeMaterial;
 
         if (visualEffects) {
-            console.log(`[WIREFRAME DEBUG] Using VisualEffects.createPreviewBox with size:`, {
-                x: size.x,
-                y: size.y,
-                z: size.z
-            });
 
             // Use centralized wireframe creation (prevents triangles)
             edgeContainer = visualEffects.createPreviewBox(
@@ -162,7 +146,6 @@ class LayoutGeometry {
             );
             edgeMaterial = edgeContainer.material;
 
-            console.log(`[WIREFRAME DEBUG] Created wireframe with geometry:`, edgeContainer.geometry?.parameters);
 
             // Update line width if supported
             if (edgeMaterial && edgeMaterial.linewidth !== undefined) {
@@ -171,7 +154,6 @@ class LayoutGeometry {
         } else {
             // Fallback to manual wireframe creation if VisualEffects not available
             console.warn('VisualEffects not available, using fallback wireframe creation');
-            console.log(`[WIREFRAME DEBUG] Fallback creation using containerGeometry:`, containerGeometry.parameters);
 
             const edgeGeometry = new THREE.EdgesGeometry(containerGeometry);
             edgeMaterial = new THREE.LineBasicMaterial({
@@ -182,7 +164,6 @@ class LayoutGeometry {
             });
             edgeContainer = new THREE.LineSegments(edgeGeometry, edgeMaterial);
 
-            console.log(`[WIREFRAME DEBUG] Created fallback wireframe with edge geometry`);
         }
         
         // Use configured renderOrder to ensure wireframes render after solid objects but remain visible during orbit
@@ -206,11 +187,6 @@ class LayoutGeometry {
             wireframe: false // Solid faces for raycasting
         });
 
-        console.log(`[WIREFRAME DEBUG] Interactive mesh material:`, {
-            opacity: interactiveMaterial.opacity,
-            color: interactiveMaterial.color,
-            visible: interactiveMaterial.visible
-        });
 
         const interactiveMesh = new THREE.Mesh(faceGeometry, interactiveMaterial);
         interactiveMesh.visible = true;
@@ -219,13 +195,6 @@ class LayoutGeometry {
         interactiveMesh.userData.isContainerCollision = true;  // For tool compatibility
         interactiveMesh.userData.containerType = 'interactive';
 
-        console.log(`[WIREFRAME DEBUG] Interactive mesh created:`, {
-            geometry: faceGeometry.parameters,
-            position: interactiveMesh.position,
-            scale: interactiveMesh.scale,
-            visible: interactiveMesh.visible,
-            renderOrder: interactiveMesh.renderOrder
-        });
 
         // CRITICAL FIX: Add interactive mesh to scene instead of container child
         // This ensures it remains visible and raycastable even when wireframe is hidden
@@ -253,7 +222,6 @@ class LayoutGeometry {
                     parentContainer: null // Will be linked to container via userData
                 });
 
-                console.log(`[WIREFRAME DEBUG] Interactive mesh registered as selectable object:`, interactiveMeshObject);
             }
 
         } else {
@@ -275,29 +243,17 @@ class LayoutGeometry {
         // The wireframe is purely visual - collision detection should go through interactive mesh only
         edgeContainer.raycast = () => {}; // Disable raycasting on wireframe
 
-        console.log(`[WIREFRAME DEBUG] Wireframe raycasting DISABLED - only interactive mesh should be hit`);
         
         // Mark the visual container with container metadata
         edgeContainer.userData.isContainer = true;
         edgeContainer.userData.containerType = 'visual';
 
-        console.log(`[WIREFRAME DEBUG] Final wireframe state:`, {
-            name: edgeContainer.name || 'unnamed',
-            position: edgeContainer.position,
-            scale: edgeContainer.scale,
-            boundingBox: edgeContainer.geometry?.boundingBox,
-            geometryParams: edgeContainer.geometry?.parameters
-        });
 
         // Optimize raycast for more precise clicking
         if (edgeContainer.geometry) {
             edgeContainer.geometry.computeBoundingBox();
             edgeContainer.geometry.computeBoundingSphere();
 
-            console.log(`[WIREFRAME DEBUG] After bounding calculations:`, {
-                boundingBox: edgeContainer.geometry.boundingBox,
-                boundingSphere: edgeContainer.geometry.boundingSphere
-            });
         }
         containerGeometry.computeBoundingBox();
         containerGeometry.computeBoundingSphere();
@@ -410,14 +366,17 @@ class LayoutGeometry {
         containerMesh.material = newMaterial;
         containerMesh.renderOrder = renderOrder;
 
-        // CRITICAL FIX: Only update position if explicitly requested
-        // This prevents moving containers during initial creation when repositionContainer=false
+        // UNIFIED POSITION MANAGEMENT: All container-related meshes must stay together
+        const finalContainerPosition = shouldReposition ? newCenter : containerMesh.position;
+
+        // Update container position if requested
         if (shouldReposition) {
             containerMesh.position.copy(newCenter);
         }
 
         // Update interactive mesh geometry if it exists
         if (interactiveMesh) {
+
             // Create new interactive face geometry
             const newInteractiveGeometry = this.createInteractiveFacesFromWireframe(newGeometry);
             interactiveMesh.geometry = newInteractiveGeometry;
@@ -429,14 +388,15 @@ class LayoutGeometry {
             }
             interactiveMesh.renderOrder = 1000;
 
-            // Update interactive mesh position based on its hierarchy
+            // UNIFIED POSITION MANAGEMENT: Interactive mesh ALWAYS matches container position
             if (interactiveMesh.parent === containerMesh) {
                 // Interactive mesh is child of container - keep at (0,0,0) relative position
                 interactiveMesh.position.set(0, 0, 0);
             } else {
-                // Interactive mesh is at scene level - copy container's world position
-                interactiveMesh.position.copy(containerMesh.position);
+                // Interactive mesh is at scene level - ALWAYS match container position
+                interactiveMesh.position.copy(finalContainerPosition);
             }
+
 
             // CRITICAL FIX: Force matrix world update after geometry change for proper raycasting
             interactiveMesh.updateMatrixWorld(true);

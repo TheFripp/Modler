@@ -77,14 +77,14 @@ class LayoutEngine {
             return this.applySizingBehavior(obj, baseSize, axis, availableSpace, fillCount, fullContainerSize, padding);
         });
 
-        // Position objects (start from 0, apply padding later)
+        // Position objects (start from first object's half-size)
         let currentPosition = 0;
 
         objects.forEach((obj, index) => {
             const position = new THREE.Vector3(0, 0, 0);
             const size = objectSizes[index];
 
-            // Position object at current location
+            // Position object center at current location plus half size
             if (axis === 'x') {
                 position.x = currentPosition + size.x / 2;
                 currentPosition += size.x + gap;
@@ -187,13 +187,14 @@ class LayoutEngine {
         if (obj.mesh && obj.mesh.geometry) {
             obj.mesh.geometry.computeBoundingBox();
             const box = obj.mesh.geometry.boundingBox;
-            
+
             if (box) {
-                return new THREE.Vector3(
+                const size = new THREE.Vector3(
                     box.max.x - box.min.x,
                     box.max.y - box.min.y,
                     box.max.z - box.min.z
                 );
+                return size;
             }
         }
         
@@ -213,10 +214,14 @@ class LayoutEngine {
      * @returns {THREE.Vector3} Adjusted size
      */
     static applySizingBehavior(obj, baseSize, layoutAxis, availableSpace = null, fillCount = 0, containerSize = null, padding = {}) {
-        if (!obj.layoutProperties) return baseSize;
+        if (!obj.layoutProperties) {
+            console.log('🔍 SIZE DEBUG - No layout properties:', { objName: obj.name, baseSize: { x: baseSize.x, y: baseSize.y, z: baseSize.z } });
+            return baseSize;
+        }
 
         const { sizeX, sizeY, sizeZ } = obj.layoutProperties;
         const adjustedSize = baseSize.clone();
+
 
         // Calculate fill size per object for layout axis
         const fillSizePerObject = (availableSpace && fillCount > 0) ? availableSpace / fillCount : baseSize[layoutAxis];
@@ -275,6 +280,7 @@ class LayoutEngine {
         } else if (sizeZ === 'hug') {
             adjustedSize.z = baseSize.z;
         }
+
 
         return adjustedSize;
     }
@@ -378,7 +384,7 @@ class LayoutEngine {
         });
         
         const center = (min + max) / 2;
-        
+
         // Adjust all positions to center the layout around origin
         return positions.map(pos => {
             const centeredPos = pos.clone();

@@ -586,10 +586,10 @@ class PushTool {
             }
         }
 
-        // Also force selection visualizer refresh (only if object was selected)
+        // Also force visualization refresh (only if object was selected)
         if (pushedObject && this.selectionController.isSelected(pushedObject)) {
-            if (this.selectionController.selectionVisualizer) {
-                this.selectionController.selectionVisualizer.updateObjectVisual(pushedObject, true);
+            if (this.selectionController.visualizationManager) {
+                this.selectionController.visualizationManager.updateGeometry(pushedObject);
             }
         }
 

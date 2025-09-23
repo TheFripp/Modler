@@ -116,9 +116,9 @@ class ContainerInteractionManager {
                 // Fallback to manual creation if VisualEffects not available
                 console.warn('VisualEffects not available, using fallback container edge creation');
 
-                // Get container material from SelectionVisualizer
-                const selectionVisualizer = window.modlerComponents?.selectionVisualizer;
-                const containerMaterial = selectionVisualizer?.containerEdgeMaterial ||
+                // Get container material from VisualizationManager
+                const visualizationManager = window.modlerComponents?.visualizationManager;
+                const containerMaterial = visualizationManager?.containerVisualizer?.containerMaterial ||
                     new THREE.LineBasicMaterial({
                         color: 0x00ff00,
                         transparent: true,
@@ -278,10 +278,10 @@ class ContainerInteractionManager {
      * Called before creating container context wireframe
      */
     clearSelectionWireframe() {
-        const selectionVisualizer = window.modlerComponents?.selectionVisualizer;
-        if (selectionVisualizer && this.containerContext) {
+        const visualizationManager = window.modlerComponents?.visualizationManager;
+        if (visualizationManager && this.containerContext) {
             // Temporarily hide the selection wireframe for the container
-            selectionVisualizer.updateObjectVisual(this.containerContext, false);
+            visualizationManager.setState(this.containerContext, 'normal');
         }
     }
 
@@ -293,12 +293,12 @@ class ContainerInteractionManager {
         if (!containerObject) return;
 
         const selectionController = window.modlerComponents?.selectionController;
-        const selectionVisualizer = window.modlerComponents?.selectionVisualizer;
+        const visualizationManager = window.modlerComponents?.visualizationManager;
 
         // Check if the container is still selected and restore its wireframe
-        if (selectionController && selectionVisualizer &&
+        if (selectionController && visualizationManager &&
             selectionController.isSelected(containerObject)) {
-            selectionVisualizer.updateObjectVisual(containerObject, true);
+            visualizationManager.setState(containerObject, 'selected');
         }
     }
 

@@ -620,9 +620,9 @@ class VisualEffects {
         // Create highlight mesh
         const highlightMesh = new THREE.Mesh(faceGeometry, this.highlightMaterial);
 
-        // Apply container-aware positioning with z-fighting offset
+        // Apply z-fighting offset only (position relative to parent)
         const normalOffset = hit.face.normal.clone().multiplyScalar(VisualEffects.Config.geometry.normalOffset);
-        this.applyContainerTransform(hit.object, highlightMesh, normalOffset);
+        highlightMesh.position.copy(normalOffset);
 
         // Make highlight non-interactive
         highlightMesh.raycast = () => {};
@@ -806,8 +806,13 @@ class VisualEffects {
         this.highlightMesh = this.createAndPositionHighlight(hit, faceGeometry);
         if (!this.highlightMesh) return false;
 
-        // Add to scene
-        this.scene.add(this.highlightMesh);
+        // Add to target object (inseparable architecture)
+        const targetObject = this.getContainerTarget(hit.object);
+        if (targetObject) {
+            targetObject.add(this.highlightMesh);
+        } else {
+            this.scene.add(this.highlightMesh);
+        }
 
         // Register with MeshSynchronizer for automatic position sync
         this.registerHighlightWithSynchronizer(hit, this.highlightMesh);

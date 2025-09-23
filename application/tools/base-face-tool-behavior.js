@@ -141,6 +141,7 @@ class BaseFaceToolBehavior {
 
     /**
      * Get the target object from a hit, resolving container collision meshes
+     * Container context aware: returns child objects when stepped into containers
      *
      * @param {Object} hit - Raycast hit result
      * @returns {Object|null} Target object (parent for collision meshes, object for direct hits)
@@ -148,10 +149,19 @@ class BaseFaceToolBehavior {
     getTargetObject(hit) {
         if (!hit || !hit.object) return null;
 
+        // Check if we're in container context (stepped into a container)
+        const isInContainerContext = this.selectionController.isInContainerContext();
+
         // Use same detection logic as handleFaceDetection
         const isContainerInteractive = hit.object.userData.isContainerInteractive;
         const isContainerCollision = hit.object.userData.isContainerCollision;
 
+        // When in container context, return the actual hit object (child) instead of resolving to container
+        if (isInContainerContext) {
+            return hit.object;
+        }
+
+        // When NOT in container context, resolve to containers for moving containers as units
         if (isContainerInteractive && hit.object.userData.containerMesh) {
             // NEW ARCHITECTURE: Interactive mesh has direct containerMesh reference
             return hit.object.userData.containerMesh;

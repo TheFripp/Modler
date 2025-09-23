@@ -67,14 +67,14 @@ function initializeInteraction() {
     modlerV2Components.meshSynchronizer = new MeshSynchronizer();
     modlerV2Components.fieldNavigationManager = new FieldNavigationManager();
 
-    // Initialize selection system components
-    modlerV2Components.selectionVisualizer = new SelectionVisualizer();
+    // Initialize unified visualization system components
+    modlerV2Components.visualizationManager = new VisualizationManager();
     modlerV2Components.containerInteractionManager = new ContainerInteractionManager();
     modlerV2Components.selectionController = new SelectionController();
 
     // Connect selection components
     modlerV2Components.selectionController.initialize(
-        modlerV2Components.selectionVisualizer,
+        modlerV2Components.visualizationManager,
         modlerV2Components.containerInteractionManager
     );
 
@@ -105,8 +105,8 @@ function initializeApplication() {
     modlerV2Components.propertyUpdateHandler = new PropertyUpdateHandler();
 
     // Initialize components that depend on ConfigurationManager
-    if (modlerV2Components.selectionVisualizer) {
-        modlerV2Components.selectionVisualizer.initializeWithConfigurationManager();
+    if (modlerV2Components.visualizationManager) {
+        modlerV2Components.visualizationManager.initializeWithConfigurationManager();
     }
 
     modlerV2Components.snapController = new SnapController(
