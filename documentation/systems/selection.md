@@ -5,9 +5,10 @@ Container-first selection with direct object access through double-click.
 ## Core Pattern
 
 ### Container-First Logic
-- **Single-click child object** → selects parent container
+- **Single-click child object** → selects parent container (when not in container context)
+- **Single-click child object** → selects child directly (when already stepped into parent container)
 - **Double-click child object** → steps into container, selects child directly
-- **Selection priority**: Container > Individual object
+- **Selection priority**: Context-aware container logic > Individual object
 
 ### Selection Operations
 - **Add to selection**: `selectionController.select(object)`
@@ -17,20 +18,22 @@ Container-first selection with direct object access through double-click.
 
 ## Components
 
-### SelectionController
+### SelectionController ⭐ **CENTRALIZED**
 **File**: `interaction/selection-controller.js`
-- Core selection state management
+- **Unified selection logic** - eliminates BaseSelectionBehavior duplication
+- **Container context awareness** - handles step-in/out state transitions
+- **Tool integration** - single entry point for all selection operations
+- **Container interactive mesh management** - disables interference during context
 - Property panel updates and tool notifications
-- Delegates visual effects to SelectionVisualizer
 
-### SelectionVisualizer
-**File**: `interaction/selection-visualizer.js`
-- Edge highlight creation/removal
+### VisualizationManager
+**File**: `interaction/visualization-manager.js`
+- Edge highlight creation/removal through ContainerVisualizer
 - Material management for wireframes
 - Visual feedback coordination
 
-### ContainerContextManager
-**File**: `interaction/container-context-manager.js`
+### ContainerInteractionManager
+**File**: `interaction/container-interaction-manager.js`
 - Step-into container functionality
 - Container context visual feedback
 - Collision mesh management during context
@@ -46,10 +49,18 @@ Container-first selection with direct object access through double-click.
 
 ### Container Step-Into
 1. User double-clicks child object
-2. ContainerContextManager establishes container context
-3. Child object selected directly
-4. Container shows faded wireframe
-5. Other containers disabled for interaction
+2. ContainerInteractionManager establishes container context
+3. **Container interactive mesh disabled** - prevents selection interference
+4. Child object selected directly
+5. Container shows faded wireframe
+6. **Context-aware selection** - subsequent clicks select children directly
+
+### Container Context Selection (NEW)
+1. User steps into container (double-click or selection from object list)
+2. SelectionController disables container's interactive mesh
+3. **Direct child selection** - clicking child objects selects them directly
+4. **Bypasses container-first logic** when already in correct context
+5. Step-out restores normal container-first behavior
 
 ## Integration Points
 
@@ -64,7 +75,21 @@ Container-first selection with direct object access through double-click.
 - **Multi-selection**: Property panel shows common properties
 
 ## Key Methods
-- `isSelected(object)` → boolean
-- `stepIntoContainer(containerObject)` → void
-- `stepOutOfContainer()` → void
-- `isInContainerContext()` → boolean
+
+### Core Selection
+- `select(object)` → boolean - Context-aware selection with container logic
+- `deselect(object)` → boolean - Remove from selection
+- `toggle(object)` → boolean - Toggle selection state
+- `isSelected(object)` → boolean - Check selection status
+
+### Tool Interface
+- `handleObjectClick(object, event, options)` → boolean - **Main entry point** with container context awareness
+- `handleDoubleClick(hit, event)` → boolean - Container step-into with child selection
+- `handleEmptySpaceClick(event)` → void - Clear selection and exit context
+
+### Container Context
+- `stepIntoContainer(containerObject)` → void - Establish container context
+- `stepOutOfContainer()` → void - Exit container context
+- `isInContainerContext()` → boolean - Check if in container context
+- `getContainerContext()` → Object|null - Get current container
+- `isObjectPartOfContainer(objectData, containerMesh)` → boolean - Context validation

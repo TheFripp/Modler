@@ -218,13 +218,17 @@ class ToolController {
 
 **See**: [`/systems/input-events.md`](../systems/input-events.md) for event coordination details
 
-### 2. Universal Selection Behavior Pattern
-**Problem Solved**: Tool-specific selection logic causing inconsistent behavior across tools.
-**Solution**: BaseSelectionBehavior class providing universal selection logic.
+### 2. Centralized Selection Architecture Pattern
+**Problem Solved**: Tool-specific selection logic and BaseSelectionBehavior duplication causing inconsistent behavior.
+**Solution**: Centralized SelectionController with container context awareness.
 
-**Pattern**: All tools use shared BaseSelectionBehavior instead of implementing custom selection logic.
+**Pattern**: All tools call SelectionController directly for unified, context-aware selection logic.
 
-**Benefits**: Consistent selection behavior across all tools, easier to maintain and debug.
+**Benefits**:
+- **Container context awareness** - direct child selection when stepped into containers
+- **Eliminates duplication** - no more BaseSelectionBehavior class
+- **Interactive mesh management** - prevents container interference during context
+- **Consistent behavior** across all tools with reduced complexity
 
 **See**: [`/systems/selection.md`](../systems/selection.md) for selection patterns, [`/systems/tools.md`](../systems/tools.md) for tool integration
 

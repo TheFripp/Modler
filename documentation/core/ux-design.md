@@ -117,7 +117,7 @@ User experience patterns and mental models for Modler V2's CAD-focused 3D interf
 ## Interaction Consistency Rules
 
 ### Universal Selection Behavior
-**BaseSelectionBehavior Pattern**: All tools use identical selection logic to eliminate user confusion between different interaction modes.
+**Centralized Selection Pattern**: All tools use SelectionController directly for identical, context-aware selection logic that eliminates user confusion between different interaction modes.
 
 **Modifier Key Consistency**:
 - **Ctrl/Cmd** → additive selection (add to current selection)
@@ -175,8 +175,8 @@ User experience patterns and mental models for Modler V2's CAD-focused 3D interf
 
 This UX design philosophy aligns with the technical architecture:
 - **Single event coordination** supports predictable interaction patterns
-- **Container-first selection** implemented through BaseSelectionBehavior
-- **Tool modularity** enables consistent behavior extensions
+- **Container-context selection** implemented through centralized SelectionController
+- **Tool modularity** enables consistent behavior extensions without duplication
 - **Visual feedback systems** provide the foundation for interaction clarity
 
 **See**: [`architecture-v2.md`](architecture-v2.md) for technical implementation, [`/systems/tools.md`](../systems/tools.md) for tool-specific patterns, [`/systems/selection.md`](../systems/selection.md) for selection behavior details.

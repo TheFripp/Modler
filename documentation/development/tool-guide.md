@@ -63,18 +63,29 @@ class YourTool {
 
 ## Selection Integration
 
-### Always Use SelectionController Directly
-**DO NOT** implement custom selection logic in tools. Use SelectionController directly:
+### Always Use SelectionController Directly ⭐ **CENTRALIZED ARCHITECTURE**
+**DO NOT** implement custom selection logic in tools. SelectionController provides unified selection logic:
 
 ```javascript
-// Correct approach
+// Correct approach - Container context-aware selection
 this.selectionController.handleObjectClick(hit.object, event, { toolType: 'YourTool' });
 
-// Wrong approach - don't do custom selection
+// Also correct - Direct selection calls
+this.selectionController.select(object);
+this.selectionController.toggle(object);
+
+// Wrong approach - Custom selection logic
 if (this.isSelectable(object)) {
-    this.selectionController.select(object);
+    // Don't implement custom selection logic
+    this.customSelect(object);
 }
 ```
+
+**Key Benefits**:
+- **Container context awareness** - automatic step-in/out handling
+- **Unified behavior** - identical selection across all tools
+- **Interactive mesh management** - prevents container interference
+- **Eliminates duplication** - no more BaseSelectionBehavior
 
 ### Face Highlighting Rules
 - **Move Tool**: Show face highlights on selected objects (for face dragging)

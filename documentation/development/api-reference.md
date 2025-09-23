@@ -84,16 +84,19 @@ Key method signatures and concepts for Modler V2 components. For implementation 
 
 ## Tool System
 
-### BaseSelectionBehavior
-**Purpose**: Universal selection logic shared across tools
+### SelectionController (Centralized)
+**Purpose**: Unified selection logic for all tools - eliminates BaseSelectionBehavior duplication
 
 **Key Methods**:
-- `handleObjectClick(object, event)` → boolean
-- `handleDoubleClick(hit, event)` → boolean  
-- `handleEmptySpaceClick(event)` → void
-- `isSelectableObject(object)` → boolean
+- `handleObjectClick(object, event, options)` → boolean - Container context-aware selection
+- `handleDoubleClick(hit, event)` → boolean - Container step-into functionality
+- `handleEmptySpaceClick(event)` → void - Clear selection and exit context
+- `isSelectableObject(object)` → boolean - Object selectability validation
+- `select(object)` → boolean - Context-aware selection with container logic
+- `stepIntoContainer(containerObject)` → void - Establish container context
+- `stepOutOfContainer()` → void - Exit container context
 
-**File**: `application/tools/base-selection-behavior.js`
+**File**: `interaction/selection-controller.js`
 
 ### ToolController
 **Purpose**: Tool registration and switching
