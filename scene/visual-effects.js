@@ -767,7 +767,7 @@ class VisualEffects {
         }
     }
 
-    // Show face highlight on a specific face
+    // Show face highlight on a specific face - uses pre-created support meshes (CREATE ONCE architecture)
     showFaceHighlight(hit) {
         // State validation
         if (!this.isOperationAllowed('highlight')) {
@@ -793,6 +793,41 @@ class VisualEffects {
             return false;
         }
 
+        // CREATE ONCE ARCHITECTURE: Get target object for support mesh access
+        const targetObject = this.getContainerTarget(hit.object);
+        if (!targetObject) {
+            return false;
+        }
+
+        // CREATE ONCE ARCHITECTURE: Use pre-created face highlight from support meshes
+        const supportMeshes = targetObject.userData.supportMeshes;
+        if (supportMeshes && supportMeshes.faceHighlight) {
+            // Update face geometry for the specific hit face
+            this.updateFaceHighlightForHit(supportMeshes.faceHighlight, hit);
+
+            // Show the pre-created face highlight
+            supportMeshes.faceHighlight.visible = true;
+
+            // Store reference to pre-created mesh
+            this.highlightMesh = supportMeshes.faceHighlight;
+
+            // Store current highlight info
+            this.currentHighlight = {
+                object: hit.object,
+                faceIndex: hit.faceIndex,
+                mesh: this.highlightMesh,
+                faceNormal: hit.face.normal.clone()
+            };
+
+            // Start fade in animation
+            this.startFadeAnimation(true);
+
+            return true;
+        }
+
+        // FALLBACK: Create legacy face highlight if no support meshes exist (backward compatibility)
+        console.warn('Object missing support meshes, creating legacy face highlight:', targetObject.name);
+
         // Create object-specific highlight material
         this.createContextualHighlightMaterial(hit.object);
 
@@ -807,7 +842,6 @@ class VisualEffects {
         if (!this.highlightMesh) return false;
 
         // Add to target object (inseparable architecture)
-        const targetObject = this.getContainerTarget(hit.object);
         if (targetObject) {
             targetObject.add(this.highlightMesh);
         } else {
@@ -1191,18 +1225,35 @@ class VisualEffects {
         }
 
         if (this.highlightMesh) {
-            // Clean up using unified helper with custom MeshSynchronizer unregistration
-            this.cleanupVisualResource(this.highlightMesh, {
-                excludeMaterial: this.highlightMaterial, // Don't dispose shared material
-                beforeRemove: (mesh) => {
-                    // Unregister from MeshSynchronizer first
-                    const meshSynchronizer = window.modlerComponents?.meshSynchronizer;
-                    if (meshSynchronizer && this.currentHighlight) {
-                        const targetObject = this.getContainerTarget(this.currentHighlight.object);
-                        meshSynchronizer.unregisterRelatedMesh(targetObject, mesh, 'highlight');
-                    }
+            // CREATE ONCE ARCHITECTURE: Check if this is a pre-created support mesh
+            let isPreCreatedMesh = false;
+            if (this.currentHighlight) {
+                const targetObject = this.getContainerTarget(this.currentHighlight.object);
+                const supportMeshes = targetObject?.userData.supportMeshes;
+                if (supportMeshes && supportMeshes.faceHighlight === this.highlightMesh) {
+                    // Hide the pre-created face highlight instead of destroying it
+                    supportMeshes.faceHighlight.visible = false;
+                    isPreCreatedMesh = true;
                 }
-            });
+            }
+
+            // FALLBACK: Clean up legacy highlight if not pre-created
+            if (!isPreCreatedMesh) {
+                console.warn('Cleaning up legacy face highlight');
+
+                // Clean up using unified helper with custom MeshSynchronizer unregistration
+                this.cleanupVisualResource(this.highlightMesh, {
+                    excludeMaterial: this.highlightMaterial, // Don't dispose shared material
+                    beforeRemove: (mesh) => {
+                        // Unregister from MeshSynchronizer first
+                        const meshSynchronizer = window.modlerComponents?.meshSynchronizer;
+                        if (meshSynchronizer && this.currentHighlight) {
+                            const targetObject = this.getContainerTarget(this.currentHighlight.object);
+                            meshSynchronizer.unregisterRelatedMesh(targetObject, mesh, 'highlight');
+                        }
+                    }
+                });
+            }
 
             this.highlightMesh = null;
         }
@@ -1531,6 +1582,34 @@ class VisualEffects {
         if (this.layoutAxisGuides) {
             this.cleanupVisualResource(this.layoutAxisGuides);
             this.layoutAxisGuides = null;
+        }
+    }
+
+    /**
+     * Update face highlight geometry for a specific hit (used with pre-created support meshes)
+     * @param {THREE.Mesh} faceHighlightMesh - Pre-created face highlight mesh
+     * @param {Object} hit - Raycast hit data with face information
+     */
+    updateFaceHighlightForHit(faceHighlightMesh, hit) {
+        if (!faceHighlightMesh || !hit || !hit.face) return;
+
+        try {
+            // Create face geometry for the specific hit
+            const faceGeometry = this.createFaceGeometry(hit, 'auto');
+            if (!faceGeometry) return;
+
+            // Dispose old geometry and apply new one
+            if (faceHighlightMesh.geometry) {
+                faceHighlightMesh.geometry.dispose();
+            }
+            faceHighlightMesh.geometry = faceGeometry;
+
+            // Apply small normal offset to prevent z-fighting
+            const normalOffset = hit.face.normal.clone().multiplyScalar(VisualEffects.Config.geometry.normalOffset);
+            faceHighlightMesh.position.copy(normalOffset);
+
+        } catch (error) {
+            console.warn('Failed to update face highlight geometry:', error);
         }
     }
 }

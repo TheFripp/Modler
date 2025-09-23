@@ -143,6 +143,16 @@ class SceneController {
             }
         }
 
+        // CREATE ONCE ARCHITECTURE: Create all support meshes as children
+        const supportMeshFactory = window.SupportMeshFactory ? new SupportMeshFactory() : null;
+        if (supportMeshFactory) {
+            if (objectData.isContainer) {
+                supportMeshFactory.createContainerSupportMeshes(mesh);
+            } else {
+                supportMeshFactory.createObjectSupportMeshes(mesh);
+            }
+        }
+
         // Add to scene and registry
         this.scene.add(mesh);
         this.objects.set(id, objectData);
@@ -161,14 +171,20 @@ class SceneController {
             return false;
         }
         
+        // Clean up support meshes first
+        const supportMeshFactory = window.SupportMeshFactory ? new SupportMeshFactory() : null;
+        if (supportMeshFactory) {
+            supportMeshFactory.cleanupSupportMeshes(objectData.mesh);
+        }
+
         // Remove from scene
         this.scene.remove(objectData.mesh);
-        
+
         // Clean up geometry and material
         if (objectData.mesh.geometry) {
             objectData.mesh.geometry.dispose();
         }
-        
+
         if (objectData.mesh.material) {
             if (Array.isArray(objectData.mesh.material)) {
                 objectData.mesh.material.forEach(material => material.dispose());
@@ -719,6 +735,12 @@ class SceneController {
             positions.needsUpdate = true;
             geometry.computeBoundingBox();
 
+            // Update support mesh geometries to match new main geometry
+            const supportMeshFactory = window.SupportMeshFactory ? new SupportMeshFactory() : null;
+            if (supportMeshFactory) {
+                supportMeshFactory.updateSupportMeshGeometries(mesh);
+            }
+
             // Update object metadata
             if (!objectData.dimensions) objectData.dimensions = { x: 1, y: 1, z: 1 };
             objectData.dimensions[axis] = newDimension;
@@ -771,7 +793,36 @@ class SceneController {
             meshSynchronizer.syncAllRelatedMeshes(obj.mesh, 'transform', true);
         }
     }
-    
+    /**
+     * Migrate existing objects to support mesh architecture
+     * Adds support meshes to objects that don't have them
+     */
+    migrateLegacyObjectsToSupportMeshes() {
+        const supportMeshFactory = window.SupportMeshFactory ? new SupportMeshFactory() : null;
+        if (!supportMeshFactory) {
+            console.warn('SupportMeshFactory not available for migration');
+            return;
+        }
+
+        let migratedCount = 0;
+        for (const [id, objectData] of this.objects) {
+            const mesh = objectData.mesh;
+            if (mesh && !mesh.userData.supportMeshes) {
+                if (objectData.isContainer) {
+                    supportMeshFactory.createContainerSupportMeshes(mesh);
+                } else {
+                    supportMeshFactory.createObjectSupportMeshes(mesh);
+                }
+                migratedCount++;
+                console.log('Migrated object to support mesh architecture:', objectData.name);
+            }
+        }
+
+        if (migratedCount > 0) {
+            console.log(`Successfully migrated ${migratedCount} objects to support mesh architecture`);
+        }
+    }
+
     // Memory cleanup
     destroy() {
         this.clear();

@@ -167,7 +167,7 @@ class ObjectVisualizer {
     }
 
     /**
-     * Create edge highlight for object (can be overridden by subclasses)
+     * Create edge highlight for object - uses pre-created support meshes (CREATE ONCE architecture)
      */
     createEdgeHighlight(object) {
         // Don't create duplicate highlights
@@ -180,6 +180,21 @@ class ObjectVisualizer {
         if (object.userData && object.userData.hideFromSelection) return;
 
         try {
+            // CREATE ONCE ARCHITECTURE: Use pre-created support mesh instead of creating new one
+            const supportMeshes = object.userData.supportMeshes;
+            if (supportMeshes && supportMeshes.selectionWireframe) {
+                // Show the pre-created wireframe
+                supportMeshes.selectionWireframe.visible = true;
+
+                // Store reference for tracking
+                this.edgeHighlights.set(object, supportMeshes.selectionWireframe);
+
+                return;
+            }
+
+            // FALLBACK: Create legacy wireframe if no support meshes exist (backward compatibility)
+            console.warn('Object missing support meshes, creating legacy wireframe:', object.name);
+
             // Force geometry bounds recalculation
             if (object.geometry) {
                 object.geometry.computeBoundingBox();
@@ -220,11 +235,26 @@ class ObjectVisualizer {
     }
 
     /**
-     * Remove edge highlight for object
+     * Remove edge highlight for object - uses pre-created support meshes (CREATE ONCE architecture)
      */
     removeEdgeHighlight(object) {
         const edgeMesh = this.edgeHighlights.get(object);
         if (edgeMesh) {
+            // CREATE ONCE ARCHITECTURE: Check if this is a pre-created support mesh
+            const supportMeshes = object.userData.supportMeshes;
+            if (supportMeshes && supportMeshes.selectionWireframe === edgeMesh) {
+                // Hide the pre-created wireframe instead of destroying it
+                supportMeshes.selectionWireframe.visible = false;
+
+                // Remove from tracking
+                this.edgeHighlights.delete(object);
+
+                return;
+            }
+
+            // FALLBACK: Clean up legacy wireframe (backward compatibility)
+            console.warn('Cleaning up legacy wireframe for object:', object.name);
+
             // Unregister from MeshSynchronizer
             this.unregisterFromMeshSync(object, edgeMesh);
 

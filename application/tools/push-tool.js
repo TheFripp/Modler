@@ -445,6 +445,12 @@ class PushTool {
     }
 
     refreshVisualFeedback() {
+        // Update support mesh geometries to match modified main geometry
+        const supportMeshFactory = window.SupportMeshFactory ? new SupportMeshFactory() : null;
+        if (supportMeshFactory && this.pushedObject) {
+            supportMeshFactory.updateSupportMeshGeometries(this.pushedObject);
+        }
+
         // Sync geometry changes for wireframes and highlighting through centralized system
         // MeshSynchronizer will automatically update face highlights via updateFaceHighlightGeometry callback
         MovementUtils.syncRelatedMeshes(this.pushedObject, 'geometry', true);
