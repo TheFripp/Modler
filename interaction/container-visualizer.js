@@ -8,9 +8,9 @@ class ContainerVisualizer extends ObjectVisualizer {
 
         // Container-specific state tracking
         this.containerContextStack = []; // Stack of container contexts for nested step-ins
-        this.contextHighlights = new Map(); // container -> highlight mesh for context
         this.paddingVisualizations = new Map(); // container -> padding mesh
         this.layoutGuides = new Map(); // container -> layout guide meshes
+        this.dimmedObjects = new Map(); // object -> { originalProperties, contextLevel } (for dimming in context)
 
         // Container-specific materials
         this.containerMaterial = null;
@@ -134,11 +134,12 @@ class ContainerVisualizer extends ObjectVisualizer {
         // Skip objects marked as hidden from selection
         if (object.userData && object.userData.hideFromSelection) return;
 
-        // NEW ARCHITECTURE: Show wireframe child directly
+        // Use unified wireframe system for selection state
+        this.setContainerSelectionState(object);
+
+        // Track wireframe for edge highlights map
         const wireframeChild = object.children.find(child => child.userData.supportMeshType === 'wireframe');
         if (wireframeChild) {
-            wireframeChild.visible = true;
-            // Track that we've shown this container
             this.edgeHighlights.set(object, wireframeChild);
         }
     }
@@ -164,9 +165,11 @@ class ContainerVisualizer extends ObjectVisualizer {
      * Hide container wireframe
      */
     hideContainerWireframe(object) {
-        // NEW ARCHITECTURE: Hide wireframe child directly
-        const wireframeChild = this.edgeHighlights.get(object);
-        if (wireframeChild && wireframeChild.userData.supportMeshType === 'wireframe') {
+        // Find wireframe child directly (consistent with setContainerSelectionState)
+        const wireframeChild = object.children.find(child =>
+            child.userData.supportMeshType === 'wireframe');
+
+        if (wireframeChild) {
             // Only hide if not in container context stack
             if (!this.containerContextStack.includes(object)) {
                 wireframeChild.visible = false;
@@ -184,17 +187,17 @@ class ContainerVisualizer extends ObjectVisualizer {
         // Add to context stack
         this.containerContextStack.push(containerObject);
 
-        // Set container to context state
-        this.setState(containerObject, 'context');
+        // Set container to context state using existing wireframe
+        this.setContainerContextState(containerObject);
 
-        // Create faded context highlight
-        this.createContextHighlight(containerObject);
-
-        // Ensure all parent containers in the stack maintain their context highlights
-        this.ensureContextHighlightsVisible();
+        // Ensure all parent containers in the stack maintain their context state
+        this.ensureParentContextStates();
 
         // Disable other container interactions
         this.disableOtherContainers(containerObject);
+
+        // Apply dimming to non-selected objects in the container context
+        this.dimNonSelectedObjectsInContext();
     }
 
     /**
@@ -205,63 +208,221 @@ class ContainerVisualizer extends ObjectVisualizer {
 
         // Remove the most recent container from stack
         const containerToRemove = this.containerContextStack.pop();
-
-        // Clean up context highlight for this container
-        const contextHighlight = this.contextHighlights.get(containerToRemove);
-        if (contextHighlight) {
-            if (contextHighlight.parent) {
-                contextHighlight.parent.remove(contextHighlight);
-            }
-            this.cleanupHighlightMesh(contextHighlight);
-            this.contextHighlights.delete(containerToRemove);
-        }
+        const newContextLevel = this.containerContextStack.length;
 
         // If this was the last container in the stack, re-enable all containers
-        if (this.containerContextStack.length === 0) {
+        if (newContextLevel === 0) {
             this.enableAllContainers();
+            // Restore all dimmed objects when exiting container context completely
+            this.restoreAllDimmedObjects();
+        } else {
+            // Still in a container context - selectively restore objects that are no longer in context
+            this.restoreDimmingForContextLevel(newContextLevel + 1);
+            // Re-apply dimming for the current context level
+            this.dimNonSelectedObjectsInContext();
         }
 
         // Set the container to normal state only if it's no longer in the context stack
         if (!this.containerContextStack.includes(containerToRemove)) {
-            this.setState(containerToRemove, 'normal');
+            this.hideContainerWireframe(containerToRemove);
         }
     }
 
     /**
-     * Create faded context highlight
+     * Set container to context state (faded wireframe)
      */
-    createContextHighlight(object) {
-        if (!object || !object.geometry) return;
+    setContainerContextState(containerObject) {
+        if (!containerObject) return;
 
-        try {
-            // Create faded edge highlight using container material
-            const edgeGeometry = new THREE.EdgesGeometry(object.geometry);
+        // Find the existing wireframe child
+        const wireframeChild = containerObject.children.find(child =>
+            child.userData.supportMeshType === 'wireframe');
 
-            // Create material with reduced opacity for context
-            const contextMaterial = this.containerMaterial.clone();
-            contextMaterial.opacity = this.containerMaterial.opacity * 0.3; // 30% of normal opacity
+        if (wireframeChild) {
+            // Make visible and set to faded opacity for context state
+            wireframeChild.visible = true;
+            if (wireframeChild.material) {
+                // Store original opacity if not already stored
+                if (wireframeChild.userData.originalOpacity === undefined) {
+                    wireframeChild.userData.originalOpacity = wireframeChild.material.opacity;
+                }
 
-            const edgeMesh = this.createThickLineGroup(edgeGeometry, this.containerMaterial.lineWidth || 1, contextMaterial);
+                // Set faded opacity for context state
+                wireframeChild.material.opacity = wireframeChild.userData.originalOpacity * 0.3; // 30% of original
+                wireframeChild.material.transparent = true;
 
-            // Clean up temporary geometry
-            edgeGeometry.dispose();
-
-            // Make non-raycastable
-            edgeMesh.raycast = () => {};
-
-            // Position the context highlight to match the container's world position
-            this.updateContextHighlightTransform(edgeMesh, object);
-
-            // Add to scene (not as child to avoid transform issues with manual matrix containers)
-            if (object.parent) {
-                object.parent.add(edgeMesh);
+                // Mark as in context state
+                wireframeChild.userData.wireframeState = 'context';
             }
-
-            this.contextHighlights.set(object, edgeMesh);
-
-        } catch (error) {
-            console.warn('Failed to create container context highlight:', error);
         }
+    }
+
+    /**
+     * Set container wireframe to selection state (full opacity)
+     */
+    setContainerSelectionState(containerObject) {
+        if (!containerObject) return;
+
+        const wireframeChild = containerObject.children.find(child =>
+            child.userData.supportMeshType === 'wireframe');
+
+        if (wireframeChild) {
+            wireframeChild.visible = true;
+            if (wireframeChild.material) {
+                // Restore original opacity
+                if (wireframeChild.userData.originalOpacity !== undefined) {
+                    wireframeChild.material.opacity = wireframeChild.userData.originalOpacity;
+                } else {
+                    wireframeChild.material.opacity = this.containerMaterial.opacity;
+                }
+                wireframeChild.material.transparent = true;
+
+                // Mark as in selection state
+                wireframeChild.userData.wireframeState = 'selected';
+            }
+        }
+    }
+
+    /**
+     * Dim non-selected objects in container context (50% opacity)
+     */
+    dimNonSelectedObjectsInContext() {
+        if (!this.isInContainerContext()) return;
+
+        const sceneController = window.modlerComponents?.sceneController;
+        const selectionController = window.modlerComponents?.selectionController;
+        if (!sceneController || !selectionController) return;
+
+        // Get the current container context
+        const currentContainer = this.getContainerContext();
+        if (!currentContainer) return;
+
+        // Find the container data to get its child objects
+        const containerData = sceneController.getObjectByMesh(currentContainer);
+        if (!containerData || !containerData.isContainer) return;
+
+        // Get child objects of the current container
+        const childObjects = sceneController.getChildObjects(containerData.id);
+
+        childObjects.forEach(childData => {
+            // Skip if this object is currently selected
+            if (selectionController.isSelected(childData.mesh)) return;
+
+            // Skip if already dimmed
+            if (this.dimmedObjects.has(childData.mesh)) return;
+
+            // Dim the object
+            this.dimObject(childData.mesh);
+        });
+    }
+
+    /**
+     * Restore all dimmed objects to normal opacity
+     */
+    restoreAllDimmedObjects() {
+        for (const [mesh, dimmingData] of this.dimmedObjects) {
+            this.restoreObject(mesh, dimmingData);
+        }
+        this.dimmedObjects.clear();
+    }
+
+    /**
+     * Restore dimming only for objects dimmed at a specific context level or higher
+     * Used when stepping out of nested containers to only restore relevant objects
+     */
+    restoreDimmingForContextLevel(contextLevel) {
+        const objectsToRestore = [];
+
+        for (const [mesh, dimmingData] of this.dimmedObjects) {
+            // Restore objects that were dimmed at the specified context level or deeper
+            if (dimmingData.contextLevel >= contextLevel) {
+                this.restoreObject(mesh, dimmingData);
+                objectsToRestore.push(mesh);
+            }
+        }
+
+        // Remove restored objects from the dimmed objects map
+        objectsToRestore.forEach(mesh => {
+            this.dimmedObjects.delete(mesh);
+        });
+    }
+
+    /**
+     * Dim a single object (50% opacity)
+     */
+    dimObject(mesh) {
+        if (!mesh || !mesh.material) return;
+        if (this.dimmedObjects.has(mesh)) return; // Already dimmed
+
+        // Store original properties and current context level
+        const dimmingData = {
+            originalProperties: {
+                opacity: mesh.material.opacity,
+                transparent: mesh.material.transparent
+            },
+            contextLevel: this.containerContextStack.length
+        };
+
+        this.dimmedObjects.set(mesh, dimmingData);
+
+        // Apply dimming
+        mesh.material.transparent = true;
+        mesh.material.opacity = dimmingData.originalProperties.opacity * 0.5; // 50% of original
+    }
+
+    /**
+     * Restore a single object to original opacity
+     */
+    restoreObject(mesh, dimmingData) {
+        if (!mesh || !mesh.material) return;
+
+        const originalProperties = dimmingData.originalProperties || dimmingData;
+        mesh.material.opacity = originalProperties.opacity;
+        mesh.material.transparent = originalProperties.transparent;
+    }
+
+    /**
+     * Update dimming when selection changes in container context
+     * More selective approach - only updates objects that need changes
+     */
+    updateContextDimming() {
+        if (!this.isInContainerContext()) {
+            this.restoreAllDimmedObjects();
+            return;
+        }
+
+        const sceneController = window.modlerComponents?.sceneController;
+        const selectionController = window.modlerComponents?.selectionController;
+        if (!sceneController || !selectionController) return;
+
+        // Get the current container context
+        const currentContainer = this.getContainerContext();
+        if (!currentContainer) return;
+
+        // Find the container data to get its child objects
+        const containerData = sceneController.getObjectByMesh(currentContainer);
+        if (!containerData || !containerData.isContainer) return;
+
+        // Get child objects of the current container
+        const childObjects = sceneController.getChildObjects(containerData.id);
+        const currentContextLevel = this.containerContextStack.length;
+
+        childObjects.forEach(childData => {
+            const isSelected = selectionController.isSelected(childData.mesh);
+            const isDimmed = this.dimmedObjects.has(childData.mesh);
+
+            if (!isSelected && !isDimmed) {
+                // Object should be dimmed but isn't - dim it
+                this.dimObject(childData.mesh);
+            } else if (isSelected && isDimmed) {
+                // Object is selected but dimmed - restore it only if dimmed at current level
+                const dimmingData = this.dimmedObjects.get(childData.mesh);
+                if (dimmingData && dimmingData.contextLevel === currentContextLevel) {
+                    this.restoreObject(childData.mesh, dimmingData);
+                    this.dimmedObjects.delete(childData.mesh);
+                }
+            }
+        });
     }
 
     /**
@@ -270,22 +431,30 @@ class ContainerVisualizer extends ObjectVisualizer {
     applyStateVisuals(object, newState, oldState) {
         // Handle container-specific states
         if (newState === 'context') {
-            // Context state handled by stepIntoContainer
+            // Set faded context state
+            this.setContainerContextState(object);
             return;
         } else if (newState === 'selected-in-context') {
-            // Show both context highlight and enhanced visibility
-            this.enhanceContextHighlight();
+            // Show enhanced visibility for selected context container
             this.showContainerWireframe(object);
             return;
         }
 
-        // Handle standard states
-        super.applyStateVisuals(object, newState, oldState);
-
-        // Add container-specific enhancements for selected state
+        // Handle standard states for containers
         if (newState === 'selected' || newState === 'multi-selected') {
+            // Use unified wireframe system for selection
+            this.setContainerSelectionState(object);
             this.showPaddingVisualization(object);
             this.showChildContainers(object);
+
+            // Update dimming in container context when container becomes selected
+            this.updateContextDimming();
+        } else {
+            // Fall back to parent for non-container specific states
+            super.applyStateVisuals(object, newState, oldState);
+
+            // Update dimming when any object becomes selected/deselected in container context
+            this.updateContextDimming();
         }
     }
 
@@ -294,22 +463,35 @@ class ContainerVisualizer extends ObjectVisualizer {
      */
     clearStateVisuals(object, state) {
         if (state === 'context') {
-            // Context cleanup handled by stepOutOfContainer
+            // Context cleanup - hide the wireframe unless it's still in context stack
+            if (!this.containerContextStack.includes(object)) {
+                this.hideContainerWireframe(object);
+            }
             return;
         } else if (state === 'selected-in-context') {
-            this.restoreContextHighlight();
-            this.hideContainerWireframe(object);
+            // Return to faded context state
+            this.setContainerContextState(object);
             return;
         }
 
-        // Handle standard states
+        // Handle container-specific selected states
+        if (state === 'selected' || state === 'multi-selected') {
+            // Hide container wireframe (don't delegate to parent since it returns early for containers)
+            this.hideContainerWireframe(object);
+            this.hidePaddingVisualization(object);
+            // Force hide all child containers to handle nested container clearing
+            this.hideChildContainers(object, true);
+
+            // Update dimming in container context when container selection changes
+            this.updateContextDimming();
+            return;
+        }
+
+        // Handle other standard states through parent
         super.clearStateVisuals(object, state);
 
-        // Remove container-specific visuals
-        if (state === 'selected' || state === 'multi-selected') {
-            this.hidePaddingVisualization(object);
-            this.hideChildContainers(object);
-        }
+        // Update dimming when any object selection changes in container context
+        this.updateContextDimming();
     }
 
     /**
@@ -327,31 +509,6 @@ class ContainerVisualizer extends ObjectVisualizer {
         }
     }
 
-    /**
-     * Enhance context highlight for selection state
-     */
-    enhanceContextHighlight() {
-        // Enhance highlights for all containers in context stack
-        this.containerContextStack.forEach(container => {
-            const contextHighlight = this.contextHighlights.get(container);
-            if (contextHighlight && contextHighlight.material) {
-                contextHighlight.material.opacity = this.containerMaterial.opacity * 0.6; // More visible
-            }
-        });
-    }
-
-    /**
-     * Restore context highlight to normal faded state
-     */
-    restoreContextHighlight() {
-        // Restore highlights for all containers in context stack
-        this.containerContextStack.forEach(container => {
-            const contextHighlight = this.contextHighlights.get(container);
-            if (contextHighlight && contextHighlight.material) {
-                contextHighlight.material.opacity = this.containerMaterial.opacity * 0.3; // Back to faded
-            }
-        });
-    }
 
     /**
      * Show padding visualization for selected container
@@ -424,7 +581,7 @@ class ContainerVisualizer extends ObjectVisualizer {
     /**
      * Hide child containers when parent container is deselected
      */
-    hideChildContainers(parentObject) {
+    hideChildContainers(parentObject, forceHideAll = false) {
         const sceneController = window.modlerComponents?.sceneController;
         const selectionController = window.modlerComponents?.selectionController;
         if (!sceneController || !selectionController) return;
@@ -432,15 +589,20 @@ class ContainerVisualizer extends ObjectVisualizer {
         const parentObjectData = sceneController.getObjectByMesh(parentObject);
         if (!parentObjectData || !parentObjectData.isContainer) return;
 
-        // Get child objects and hide containers among them (but only if they're not selected)
+        // Get child objects and hide containers among them
         const childObjects = sceneController.getChildObjects(parentObjectData.id);
         const containerCrudManager = window.modlerComponents?.containerCrudManager;
 
         childObjects.forEach(childData => {
             if (childData.isContainer && containerCrudManager) {
-                // Only hide if the child container itself is not selected
-                if (!selectionController.isSelected(childData.mesh)) {
+                // Hide child container if forced or if not currently selected
+                if (forceHideAll || !selectionController.isSelected(childData.mesh)) {
                     containerCrudManager.hideContainer(childData.id);
+
+                    // Recursively hide nested containers when forcing
+                    if (forceHideAll) {
+                        this.hideChildContainers(childData.mesh, true);
+                    }
                 }
             }
         });
@@ -554,55 +716,14 @@ class ContainerVisualizer extends ObjectVisualizer {
     }
 
     /**
-     * Ensure all parent containers in context stack have visible context highlights
+     * Ensure all parent containers in context stack have visible context states
      */
-    ensureContextHighlightsVisible() {
+    ensureParentContextStates() {
         this.containerContextStack.forEach(container => {
-            const contextHighlight = this.contextHighlights.get(container);
-            if (contextHighlight) {
-                contextHighlight.visible = true;
-
-                // Update the transform to match the container's current position
-                this.updateContextHighlightTransform(contextHighlight, container);
-
-                // Make sure the parent container is also visible and has its context state
-                this.setState(container, 'context');
-
-                // Ensure the container's wireframe is also visible
-                this.showContainerWireframe(container);
-            }
+            this.setContainerContextState(container);
         });
     }
 
-    /**
-     * Update context highlight transform to match its container
-     */
-    updateContextHighlightTransform(contextHighlight, container) {
-        if (!contextHighlight || !container) return;
-
-        // Get the container's world transform
-        const worldPosition = container.getWorldPosition(new THREE.Vector3());
-        const worldRotation = container.getWorldQuaternion(new THREE.Quaternion());
-        const worldScale = container.getWorldScale(new THREE.Vector3());
-
-        // Apply the transform to the context highlight
-        contextHighlight.position.copy(worldPosition);
-        contextHighlight.quaternion.copy(worldRotation);
-        contextHighlight.scale.copy(worldScale);
-
-        // Offset slightly higher to avoid z-fighting
-        contextHighlight.position.y += 0.002;
-    }
-
-    /**
-     * Update context highlight for a specific container (called after container moves)
-     */
-    updateContainerContextHighlight(containerMesh) {
-        const contextHighlight = this.contextHighlights.get(containerMesh);
-        if (contextHighlight) {
-            this.updateContextHighlightTransform(contextHighlight, containerMesh);
-        }
-    }
 
     /**
      * Override cleanup to handle container-specific resources
@@ -617,16 +738,6 @@ class ContainerVisualizer extends ObjectVisualizer {
         const index = this.containerContextStack.indexOf(object);
         if (index !== -1) {
             this.containerContextStack.splice(index, 1);
-
-            // Clean up its context highlight
-            const contextHighlight = this.contextHighlights.get(object);
-            if (contextHighlight) {
-                if (contextHighlight.parent) {
-                    contextHighlight.parent.remove(contextHighlight);
-                }
-                this.cleanupHighlightMesh(contextHighlight);
-                this.contextHighlights.delete(object);
-            }
         }
     }
 
@@ -642,7 +753,6 @@ class ContainerVisualizer extends ObjectVisualizer {
         }
 
         // Clean up container-specific maps
-        this.contextHighlights.clear();
         this.paddingVisualizations.clear();
         this.layoutGuides.clear();
     }

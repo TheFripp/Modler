@@ -457,55 +457,22 @@ class PositionTransform {
             return false;
         }
 
-        // Store world transform before hierarchy changes
+        // Store world position before hierarchy changes
         const worldPosition = containerMesh.getWorldPosition(new THREE.Vector3());
-        const worldRotation = containerMesh.getWorldQuaternion(new THREE.Quaternion());
-        const worldScale = containerMesh.getWorldScale(new THREE.Vector3());
 
-        // Add to new parent
+        // Add to new parent (Three.js will handle the transform automatically)
         targetParentMesh.add(containerMesh);
 
-        // Convert world transform to new parent's local space
-        const parentWorldMatrixInverse = targetParentMesh.matrixWorld.clone().invert();
-        const localMatrix = new THREE.Matrix4();
+        // Calculate the local position needed to maintain world position
+        const parentWorldPosition = targetParentMesh.getWorldPosition(new THREE.Vector3());
+        const localPosition = worldPosition.sub(parentWorldPosition);
 
-        // Build transform matrix from world transform
-        const worldMatrix = new THREE.Matrix4().compose(worldPosition, worldRotation, worldScale);
+        // Set the local position to maintain world position
+        containerMesh.position.copy(localPosition);
 
-        // Convert to parent's local space
-        localMatrix.multiplyMatrices(parentWorldMatrixInverse, worldMatrix);
-
-        // Apply the local transform
-        containerMesh.matrix.copy(localMatrix);
-        containerMesh.matrixAutoUpdate = false; // Use manual matrix
+        // Ensure normal Three.js transform management
+        containerMesh.matrixAutoUpdate = true;
         containerMesh.updateMatrixWorld();
-
-        // Force update all child meshes (including context highlights)
-        containerMesh.traverse(child => {
-            if (child !== containerMesh) {
-                child.updateMatrixWorld();
-            }
-        });
-
-        // Update context highlights for this container if it's in a step-in state
-        const visualizationManager = window.modlerComponents?.visualizationManager;
-        if (visualizationManager && visualizationManager.containerVisualizer) {
-            visualizationManager.containerVisualizer.updateContainerContextHighlight(containerMesh);
-        }
-
-        // Validate the transformation
-        const newWorldPosition = containerMesh.getWorldPosition(new THREE.Vector3());
-        const distance = newWorldPosition.distanceTo(worldPosition);
-
-        if (distance > 0.001) {
-            console.warn('⚠️ Nested container position validation failed:', {
-                container: containerMesh.name || 'unnamed',
-                expected: worldPosition.clone(),
-                actual: newWorldPosition.clone(),
-                distance: distance
-            });
-            return false;
-        }
 
         return true;
     }

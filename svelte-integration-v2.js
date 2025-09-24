@@ -14,16 +14,16 @@
     let SVELTE_SYSTEM_TOOLBAR_URL = null;
     const INTEGRATION_ENABLED = window.location.hostname === 'localhost' || window.location.protocol === 'file:';
 
-    // Detect Svelte dev server port with caching and parallel requests
+    // Detect Svelte dev server port with improved reliability and faster detection
     async function detectSveltePort() {
         const ports = [5173, 5174, 5175, 5176, 5177]; // Common Vite dev server ports
 
-        // Try cached port first for instant loading
+        // Try cached port first for instant loading (reduced timeout for faster fallback)
         const cachedPort = localStorage.getItem('svelte-dev-port');
         if (cachedPort && ports.includes(parseInt(cachedPort))) {
             try {
                 const controller = new AbortController();
-                const timeoutId = setTimeout(() => controller.abort(), 200);
+                const timeoutId = setTimeout(() => controller.abort(), 100); // Reduced from 200ms
 
                 const response = await fetch(`http://localhost:${cachedPort}/main-toolbar`, {
                     method: 'HEAD',
@@ -38,19 +38,21 @@
                     SVELTE_LEFT_PANEL_URL = `${SVELTE_BASE_URL}/left-panel`;
                     SVELTE_MAIN_TOOLBAR_URL = `${SVELTE_BASE_URL}/main-toolbar`;
                     SVELTE_SYSTEM_TOOLBAR_URL = `${SVELTE_BASE_URL}/system-toolbar`;
+                    console.log('🚀 Svelte server found (cached):', SVELTE_BASE_URL);
                     return true;
                 }
             } catch (error) {
                 // Cached port failed, clear cache and continue with parallel detection
+                console.log('⚠️ Cached port failed, detecting...', error.message);
                 localStorage.removeItem('svelte-dev-port');
             }
         }
 
-        // Parallel port detection for faster loading
+        // Improved parallel port detection with better error handling
         const portPromises = ports.map(async (port) => {
             try {
                 const controller = new AbortController();
-                const timeoutId = setTimeout(() => controller.abort(), 300);
+                const timeoutId = setTimeout(() => controller.abort(), 150); // Reduced from 300ms
 
                 const response = await fetch(`http://localhost:${port}/main-toolbar`, {
                     method: 'HEAD',
@@ -63,7 +65,7 @@
                     return port;
                 }
             } catch (error) {
-                // Port not available or timeout
+                // Port not available or timeout - this is normal, don't log
             }
             return null;
         });
@@ -83,13 +85,14 @@
                 SVELTE_LEFT_PANEL_URL = `${SVELTE_BASE_URL}/left-panel`;
                 SVELTE_MAIN_TOOLBAR_URL = `${SVELTE_BASE_URL}/main-toolbar`;
                 SVELTE_SYSTEM_TOOLBAR_URL = `${SVELTE_BASE_URL}/system-toolbar`;
+                console.log('🚀 Svelte server detected:', SVELTE_BASE_URL);
                 return true;
             }
         } catch (error) {
             console.error('❌ Error during parallel port detection:', error);
         }
 
-        console.error('❌ Could not find Svelte dev server on any port');
+        console.warn('⚠️ Svelte dev server not found - panels will show fallback content');
         return false;
     }
 
@@ -155,35 +158,54 @@
             max-width: 50vw;
         `;
 
-        // Create resize handle for left panel
+        // Create resize handle for left panel with much larger hit area
         const leftResizeHandle = document.createElement('div');
         leftResizeHandle.style.cssText = `
             position: absolute;
             top: 0;
-            right: -4px;
-            width: 8px;
+            right: -15px;
+            width: 30px;
             height: 100%;
             cursor: ew-resize;
             z-index: 100000;
             background: transparent;
         `;
 
-        leftResizeHandle.addEventListener('mousedown', (e) => {
+        // Add visual indicator in the center of the hit area
+        const leftResizeIndicator = document.createElement('div');
+        leftResizeIndicator.style.cssText = `
+            position: absolute;
+            top: 0;
+            right: 13px;
+            width: 4px;
+            height: 100%;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 2px;
+            pointer-events: none;
+        `;
+        leftResizeHandle.appendChild(leftResizeIndicator);
+
+        leftResizeHandle.addEventListener('mousedown', initResize);
+
+        function initResize(e) {
             e.preventDefault();
             e.stopPropagation();
 
-            document.body.style.cursor = 'ew-resize';
-            document.body.style.userSelect = 'none';
-
             const startX = e.clientX;
             const startWidth = parseInt(window.getComputedStyle(svelteLeftOverlay).width, 10);
-            let isDragging = true;
 
-            const handleMouseMove = (e) => {
-                if (!isDragging) return;
+            // Set resize cursor and disable text selection globally
+            document.documentElement.style.cursor = 'ew-resize';
+            document.documentElement.style.userSelect = 'none';
+            document.body.style.userSelect = 'none';
+
+            // Capture mouse to prevent loss during fast movement
+            if (leftResizeHandle.setPointerCapture) {
+                leftResizeHandle.setPointerCapture(e.pointerId);
+            }
+
+            function doResize(e) {
                 e.preventDefault();
-                e.stopPropagation();
-
                 const width = startWidth + (e.clientX - startX);
                 const minWidth = 200;
                 const maxWidth = window.innerWidth * 0.5;
@@ -191,50 +213,34 @@
 
                 svelteLeftOverlay.style.width = clampedWidth + 'px';
                 updateViewportArea();
-            };
+            }
 
-            const cleanup = (e) => {
-                if (!isDragging) return;
-                isDragging = false;
+            function stopResize(e) {
+                // Release pointer capture
+                if (leftResizeHandle.releasePointerCapture) {
+                    try {
+                        leftResizeHandle.releasePointerCapture(e.pointerId);
+                    } catch(ex) {} // Ignore if already released
+                }
 
-                document.body.style.cursor = '';
+                // Restore styles
+                document.documentElement.style.cursor = '';
+                document.documentElement.style.userSelect = '';
                 document.body.style.userSelect = '';
 
-                // Remove all event listeners from multiple elements for better coverage
-                document.removeEventListener('mousemove', handleMouseMove, true);
-                document.removeEventListener('mouseup', cleanup, true);
-                document.removeEventListener('keydown', handleEscape, true);
-                document.removeEventListener('mouseleave', cleanup, true);
-                document.documentElement.removeEventListener('mousemove', handleMouseMove, true);
-                document.documentElement.removeEventListener('mouseup', cleanup, true);
-                document.documentElement.removeEventListener('mouseleave', cleanup, true);
-                window.removeEventListener('blur', cleanup, true);
+                // Remove listeners
+                document.removeEventListener('mousemove', doResize, true);
+                document.removeEventListener('mouseup', stopResize, true);
+                leftResizeHandle.removeEventListener('pointermove', doResize, true);
+                leftResizeHandle.removeEventListener('pointerup', stopResize, true);
+            }
 
-                clearTimeout(timeoutId);
-            };
-
-            const handleEscape = (e) => {
-                if (e.key === 'Escape') {
-                    cleanup(e);
-                }
-            };
-
-            // Auto-cleanup after 10 seconds to prevent infinite drag
-            const timeoutId = setTimeout(() => cleanup(), 10000);
-
-            // Use capture phase and multiple elements to ensure events are caught even during fast dragging
-            document.addEventListener('mousemove', handleMouseMove, true);
-            document.addEventListener('mouseup', cleanup, true);
-            document.addEventListener('keydown', handleEscape, true);
-            document.addEventListener('mouseleave', cleanup, true);
-
-            // Also add to documentElement for better coverage
-            document.documentElement.addEventListener('mousemove', handleMouseMove, true);
-            document.documentElement.addEventListener('mouseup', cleanup, true);
-            document.documentElement.addEventListener('mouseleave', cleanup, true);
-
-            window.addEventListener('blur', cleanup, true); // Handle window losing focus
-        });
+            // Use both mouse and pointer events with capture for maximum reliability
+            document.addEventListener('mousemove', doResize, true);
+            document.addEventListener('mouseup', stopResize, true);
+            leftResizeHandle.addEventListener('pointermove', doResize, true);
+            leftResizeHandle.addEventListener('pointerup', stopResize, true);
+        }
 
         // Create iframe for Svelte left panel
         const leftIframe = document.createElement('iframe');
@@ -248,18 +254,45 @@
             background: #171717;
         `;
 
-        // Add error handling for iframe
-        leftIframe.onerror = () => {
-            console.error('❌ Failed to load Svelte Left Panel from:', SVELTE_LEFT_PANEL_URL);
+        // Enhanced error handling and retry logic for iframe
+        let retryCount = 0;
+        const maxRetries = 3;
+
+        const attemptLoad = () => {
+            leftIframe.onerror = () => {
+                retryCount++;
+                console.warn(`⚠️ Failed to load Svelte Left Panel (attempt ${retryCount}/${maxRetries})`);
+
+                if (retryCount < maxRetries) {
+                    // Retry with exponential backoff
+                    setTimeout(() => {
+                        leftIframe.src = SVELTE_LEFT_PANEL_URL + '?retry=' + retryCount;
+                    }, Math.pow(2, retryCount) * 1000);
+                } else {
+                    // Show fallback content after max retries
+                    svelteLeftOverlay.innerHTML = `
+                        <div style="color: #ff6666; text-align: center; padding: 20px;">
+                            <div>Svelte UI Server Not Available</div>
+                            <div style="font-size: 12px; margin-top: 10px; color: #999;">
+                                Make sure to run: npm run dev:svelte
+                            </div>
+                        </div>`;
+                }
+            };
+
+            leftIframe.onload = () => {
+                console.log('✅ Left panel loaded successfully');
+                retryCount = 0; // Reset retry count on success
+
+                // Send current data once the iframe is ready
+                if (window.modlerComponents) {
+                    const currentSelection = window.modlerComponents.selectionController?.getSelectedObjects() || [];
+                    sendFullDataUpdate(currentSelection, 'panel-ready');
+                }
+            };
         };
 
-        leftIframe.onload = () => {
-            // Send current data once the iframe is ready
-            if (window.modlerComponents) {
-                const currentSelection = window.modlerComponents.selectionController?.getSelectedObjects() || [];
-                sendFullDataUpdate(currentSelection, 'panel-ready');
-            }
-        };
+        attemptLoad();
 
         // Clear loading content and add iframe
         svelteLeftOverlay.innerHTML = '';
@@ -295,35 +328,54 @@
             max-width: 50vw;
         `;
 
-        // Create resize handle for right panel
+        // Create resize handle for right panel with much larger hit area
         const rightResizeHandle = document.createElement('div');
         rightResizeHandle.style.cssText = `
             position: absolute;
             top: 0;
-            left: -4px;
-            width: 8px;
+            left: -15px;
+            width: 30px;
             height: 100%;
             cursor: ew-resize;
             z-index: 100000;
             background: transparent;
         `;
 
-        rightResizeHandle.addEventListener('mousedown', (e) => {
+        // Add visual indicator in the center of the hit area
+        const rightResizeIndicator = document.createElement('div');
+        rightResizeIndicator.style.cssText = `
+            position: absolute;
+            top: 0;
+            left: 13px;
+            width: 4px;
+            height: 100%;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 2px;
+            pointer-events: none;
+        `;
+        rightResizeHandle.appendChild(rightResizeIndicator);
+
+        rightResizeHandle.addEventListener('mousedown', initRightResize);
+
+        function initRightResize(e) {
             e.preventDefault();
             e.stopPropagation();
 
-            document.body.style.cursor = 'ew-resize';
-            document.body.style.userSelect = 'none';
-
             const startX = e.clientX;
             const startWidth = parseInt(window.getComputedStyle(svelteRightOverlay).width, 10);
-            let isDragging = true;
 
-            const handleMouseMove = (e) => {
-                if (!isDragging) return;
+            // Set resize cursor and disable text selection globally
+            document.documentElement.style.cursor = 'ew-resize';
+            document.documentElement.style.userSelect = 'none';
+            document.body.style.userSelect = 'none';
+
+            // Capture mouse to prevent loss during fast movement
+            if (rightResizeHandle.setPointerCapture) {
+                rightResizeHandle.setPointerCapture(e.pointerId);
+            }
+
+            function doRightResize(e) {
                 e.preventDefault();
-                e.stopPropagation();
-
                 const width = startWidth - (e.clientX - startX); // Subtract for right panel
                 const minWidth = 250;
                 const maxWidth = window.innerWidth * 0.5;
@@ -331,50 +383,34 @@
 
                 svelteRightOverlay.style.width = clampedWidth + 'px';
                 updateViewportArea();
-            };
+            }
 
-            const cleanup = (e) => {
-                if (!isDragging) return;
-                isDragging = false;
+            function stopRightResize(e) {
+                // Release pointer capture
+                if (rightResizeHandle.releasePointerCapture) {
+                    try {
+                        rightResizeHandle.releasePointerCapture(e.pointerId);
+                    } catch(ex) {} // Ignore if already released
+                }
 
-                document.body.style.cursor = '';
+                // Restore styles
+                document.documentElement.style.cursor = '';
+                document.documentElement.style.userSelect = '';
                 document.body.style.userSelect = '';
 
-                // Remove all event listeners from multiple elements for better coverage
-                document.removeEventListener('mousemove', handleMouseMove, true);
-                document.removeEventListener('mouseup', cleanup, true);
-                document.removeEventListener('keydown', handleEscape, true);
-                document.removeEventListener('mouseleave', cleanup, true);
-                document.documentElement.removeEventListener('mousemove', handleMouseMove, true);
-                document.documentElement.removeEventListener('mouseup', cleanup, true);
-                document.documentElement.removeEventListener('mouseleave', cleanup, true);
-                window.removeEventListener('blur', cleanup, true);
+                // Remove listeners
+                document.removeEventListener('mousemove', doRightResize, true);
+                document.removeEventListener('mouseup', stopRightResize, true);
+                rightResizeHandle.removeEventListener('pointermove', doRightResize, true);
+                rightResizeHandle.removeEventListener('pointerup', stopRightResize, true);
+            }
 
-                clearTimeout(timeoutId);
-            };
-
-            const handleEscape = (e) => {
-                if (e.key === 'Escape') {
-                    cleanup(e);
-                }
-            };
-
-            // Auto-cleanup after 10 seconds to prevent infinite drag
-            const timeoutId = setTimeout(() => cleanup(), 10000);
-
-            // Use capture phase and multiple elements to ensure events are caught even during fast dragging
-            document.addEventListener('mousemove', handleMouseMove, true);
-            document.addEventListener('mouseup', cleanup, true);
-            document.addEventListener('keydown', handleEscape, true);
-            document.addEventListener('mouseleave', cleanup, true);
-
-            // Also add to documentElement for better coverage
-            document.documentElement.addEventListener('mousemove', handleMouseMove, true);
-            document.documentElement.addEventListener('mouseup', cleanup, true);
-            document.documentElement.addEventListener('mouseleave', cleanup, true);
-
-            window.addEventListener('blur', cleanup, true); // Handle window losing focus
-        });
+            // Use both mouse and pointer events with capture for maximum reliability
+            document.addEventListener('mousemove', doRightResize, true);
+            document.addEventListener('mouseup', stopRightResize, true);
+            rightResizeHandle.addEventListener('pointermove', doRightResize, true);
+            rightResizeHandle.addEventListener('pointerup', stopRightResize, true);
+        }
 
         // Create iframe for Svelte property panel (no header)
         const rightIframe = document.createElement('iframe');
@@ -388,18 +424,45 @@
             background: #171717;
         `;
 
-        // Add error handling for iframe
-        rightIframe.onerror = () => {
-            console.error('❌ Failed to load Svelte Property Panel from:', SVELTE_PROPERTY_PANEL_URL);
+        // Enhanced error handling and retry logic for iframe
+        let retryCount = 0;
+        const maxRetries = 3;
+
+        const attemptLoad = () => {
+            rightIframe.onerror = () => {
+                retryCount++;
+                console.warn(`⚠️ Failed to load Svelte Property Panel (attempt ${retryCount}/${maxRetries})`);
+
+                if (retryCount < maxRetries) {
+                    // Retry with exponential backoff
+                    setTimeout(() => {
+                        rightIframe.src = SVELTE_PROPERTY_PANEL_URL + '?retry=' + retryCount;
+                    }, Math.pow(2, retryCount) * 1000);
+                } else {
+                    // Show fallback content after max retries
+                    svelteRightOverlay.innerHTML = `
+                        <div style="color: #ff6666; text-align: center; padding: 20px;">
+                            <div>Svelte UI Server Not Available</div>
+                            <div style="font-size: 12px; margin-top: 10px; color: #999;">
+                                Make sure to run: npm run dev:svelte
+                            </div>
+                        </div>`;
+                }
+            };
+
+            rightIframe.onload = () => {
+                console.log('✅ Right panel loaded successfully');
+                retryCount = 0; // Reset retry count on success
+
+                // Send current data once the iframe is ready
+                if (window.modlerComponents) {
+                    const currentSelection = window.modlerComponents.selectionController?.getSelectedObjects() || [];
+                    sendFullDataUpdate(currentSelection, 'panel-ready');
+                }
+            };
         };
 
-        rightIframe.onload = () => {
-            // Send current data once the iframe is ready
-            if (window.modlerComponents) {
-                const currentSelection = window.modlerComponents.selectionController?.getSelectedObjects() || [];
-                sendFullDataUpdate(currentSelection, 'panel-ready');
-            }
-        };
+        attemptLoad();
 
         // Clear loading content and add iframe
         svelteRightOverlay.innerHTML = '';

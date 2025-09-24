@@ -149,6 +149,9 @@ class ObjectVisualizer {
                 // Nothing to add for normal state
                 break;
         }
+
+        // Notify container visualizer about state changes for dimming updates
+        this.notifyContainerVisualizerOfStateChange();
     }
 
     /**
@@ -164,6 +167,9 @@ class ObjectVisualizer {
                 this.removeHoverEffect(object);
                 break;
         }
+
+        // Notify container visualizer about state changes for dimming updates
+        this.notifyContainerVisualizerOfStateChange();
     }
 
     /**
@@ -180,7 +186,17 @@ class ObjectVisualizer {
         if (object.userData && object.userData.hideFromSelection) return;
 
         try {
-            // CREATE ONCE ARCHITECTURE: Use pre-created support mesh instead of creating new one
+            // Check if this is a container - delegate to ContainerVisualizer
+            const sceneController = window.modlerComponents?.sceneController;
+            if (sceneController) {
+                const objectData = sceneController.getObjectByMesh(object);
+                if (objectData && objectData.isContainer) {
+                    // Containers are handled by ContainerVisualizer unified system
+                    return;
+                }
+            }
+
+            // CREATE ONCE ARCHITECTURE: Use pre-created support mesh for regular objects
             const supportMeshes = object.userData.supportMeshes;
             if (supportMeshes && supportMeshes.selectionWireframe) {
                 // Show the pre-created wireframe
@@ -238,6 +254,16 @@ class ObjectVisualizer {
      * Remove edge highlight for object - uses pre-created support meshes (CREATE ONCE architecture)
      */
     removeEdgeHighlight(object) {
+        // Check if this is a container - delegate to ContainerVisualizer
+        const sceneController = window.modlerComponents?.sceneController;
+        if (sceneController) {
+            const objectData = sceneController.getObjectByMesh(object);
+            if (objectData && objectData.isContainer) {
+                // Containers are handled by ContainerVisualizer unified system
+                return;
+            }
+        }
+
         const edgeMesh = this.edgeHighlights.get(object);
         if (edgeMesh) {
             // CREATE ONCE ARCHITECTURE: Check if this is a pre-created support mesh
@@ -607,6 +633,17 @@ class ObjectVisualizer {
         this.faceHighlights.clear();
 
         this.objectStates.clear();
+    }
+
+    /**
+     * Notify container visualizer of state changes for dimming updates
+     */
+    notifyContainerVisualizerOfStateChange() {
+        // Get the visualization manager to access container visualizer
+        const visualizationManager = window.modlerComponents?.visualizationManager;
+        if (visualizationManager && visualizationManager.containerVisualizer) {
+            visualizationManager.containerVisualizer.updateContextDimming();
+        }
     }
 }
 

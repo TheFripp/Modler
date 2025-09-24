@@ -15,7 +15,7 @@
 		!obj.name?.toLowerCase().includes('interactive')
 	);
 
-	// Build tree structure from flat hierarchy
+	// Build tree structure from flat hierarchy with recursive nesting
 	$: treeStructure = buildTreeStructure(filteredHierarchy);
 
 	// Tree expansion state
@@ -30,62 +30,56 @@
 	let customObjectOrder = new Map(); // Maps parentId to array of ordered object IDs
 
 	function buildTreeStructure(objects) {
-		// First, separate root objects (no parent) and child objects
+		// Create a map of all objects for easy lookup
+		const objectMap = new Map();
+		objects.forEach(obj => {
+			objectMap.set(obj.id, { ...obj, children: [] });
+		});
+
+		// Build the tree structure recursively
 		const rootObjects = [];
-		const childObjectsMap = new Map();
 
 		objects.forEach(obj => {
+			const treeObj = objectMap.get(obj.id);
+
 			if (!obj.parentContainer) {
 				// This is a root object
-				rootObjects.push({ ...obj, children: [] });
+				rootObjects.push(treeObj);
 			} else {
-				// This is a child object
-				if (!childObjectsMap.has(obj.parentContainer)) {
-					childObjectsMap.set(obj.parentContainer, []);
+				// This is a child object - add to parent's children
+				const parentObj = objectMap.get(obj.parentContainer);
+				if (parentObj) {
+					parentObj.children.push(treeObj);
 				}
-				childObjectsMap.get(obj.parentContainer).push(obj);
 			}
 		});
 
-		// Apply custom ordering to root objects
-		const rootOrder = customObjectOrder.get('root');
-		if (rootOrder && rootOrder.length > 0) {
-			rootObjects.sort((a, b) => {
-				const aIndex = rootOrder.indexOf(a.id);
-				const bIndex = rootOrder.indexOf(b.id);
-				// If not in custom order, maintain original position
-				if (aIndex === -1 && bIndex === -1) return 0;
-				if (aIndex === -1) return 1;
-				if (bIndex === -1) return -1;
-				return aIndex - bIndex;
+		// Apply custom ordering recursively
+		function applyOrderingToLevel(objects, parentId) {
+			const order = customObjectOrder.get(parentId || 'root');
+			if (order && order.length > 0) {
+				objects.sort((a, b) => {
+					const aIndex = order.indexOf(a.id);
+					const bIndex = order.indexOf(b.id);
+					// If not in custom order, maintain original position
+					if (aIndex === -1 && bIndex === -1) return 0;
+					if (aIndex === -1) return 1;
+					if (bIndex === -1) return -1;
+					return aIndex - bIndex;
+				});
+			}
+
+			// Recursively apply ordering to children and auto-expand containers
+			objects.forEach(obj => {
+				if (obj.isContainer && obj.children.length > 0) {
+					applyOrderingToLevel(obj.children, obj.id);
+					// Auto-expand containers that have children
+					expandedContainers.add(obj.id);
+				}
 			});
 		}
 
-		// Assign children to their parent containers and apply custom ordering
-		rootObjects.forEach(rootObj => {
-			if (rootObj.isContainer && childObjectsMap.has(rootObj.id)) {
-				rootObj.children = childObjectsMap.get(rootObj.id);
-
-				// Apply custom ordering to children
-				const childOrder = customObjectOrder.get(rootObj.id);
-				if (childOrder && childOrder.length > 0) {
-					rootObj.children.sort((a, b) => {
-						const aIndex = childOrder.indexOf(a.id);
-						const bIndex = childOrder.indexOf(b.id);
-						// If not in custom order, maintain original position
-						if (aIndex === -1 && bIndex === -1) return 0;
-						if (aIndex === -1) return 1;
-						if (bIndex === -1) return -1;
-						return aIndex - bIndex;
-					});
-				}
-
-				// Auto-expand containers that have children
-				if (rootObj.children.length > 0) {
-					expandedContainers.add(rootObj.id);
-				}
-			}
-		});
+		applyOrderingToLevel(rootObjects, 'root');
 
 		// Trigger reactivity for expanded containers
 		expandedContainers = new Set(expandedContainers);
@@ -494,7 +488,86 @@
 		// Initialize the bridge with Three.js for real-time synchronization
 		initializeBridge();
 	});
+
 </script>
+
+<!-- Recursive Tree Item Snippet -->
+{#snippet TreeItem(object, depth)}
+	<div class="object-tree-item" style="margin-left: {depth * 16}px">
+		<div
+			class="group flex items-center gap-2 px-2 py-1.5 text-sm rounded-md hover:bg-gray-700/50 cursor-pointer transition-colors relative"
+			class:bg-accent={isObjectHighlighted(object)}
+			class:text-accent-foreground={isObjectHighlighted(object)}
+			draggable="true"
+			on:dragstart={(e) => handleDragStart(e, object)}
+			on:dragend={handleDragEnd}
+			on:dragover={(e) => handleDragOver(e, object)}
+			on:dragleave={handleDragLeave}
+			on:drop={(e) => handleDrop(e, object)}
+			on:click={() => selectObjectInScene(object.id)}
+			role="button"
+			tabindex="0">
+
+			<!-- Expand/collapse button for containers with children -->
+			{#if object.isContainer && object.children && object.children.length > 0}
+				<button
+					class="flex-shrink-0 w-4 h-4 flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
+					on:click|stopPropagation={() => toggleContainer(object.id)}
+					tabindex="-1">
+					{#if expandedContainers.has(object.id)}
+						<!-- Expanded chevron -->
+						<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+							<path stroke-linecap="round" stroke-linejoin="round" d="M6 9l6 6 6-6"/>
+						</svg>
+					{:else}
+						<!-- Collapsed chevron -->
+						<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+							<path stroke-linecap="round" stroke-linejoin="round" d="M9 6l6 6-6 6"/>
+						</svg>
+					{/if}
+				</button>
+			{:else}
+				<!-- Spacer for non-expandable items -->
+				<div class="w-4 h-4"></div>
+			{/if}
+
+			<!-- Icon based on type -->
+			<div class="flex-shrink-0 w-4 h-4 flex items-center justify-center">
+				{#if object.isContainer}
+					<!-- Container/Folder icon -->
+					<svg class="w-3 h-3 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+						<path stroke-linecap="round" stroke-linejoin="round" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/>
+					</svg>
+				{:else}
+					<!-- Object/Box icon -->
+					<svg class="w-3 h-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+						<path stroke-linecap="round" stroke-linejoin="round" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10"/>
+					</svg>
+				{/if}
+			</div>
+
+			<!-- Object name -->
+			<div class="flex-1 truncate font-medium select-none">
+				{object.name || object.id}
+			</div>
+		</div>
+
+		<!-- Drop indicator - always reserved space (shows for both before/after) -->
+		<div class="h-0.5 mt-1 mx-2 rounded-full transition-colors"
+			class:bg-primary={draggedObject && dragOverTarget?.id === object.id && (dropIndicatorPosition === 'before' || dropIndicatorPosition === 'after')}
+			class:opacity-100={draggedObject && dragOverTarget?.id === object.id && (dropIndicatorPosition === 'before' || dropIndicatorPosition === 'after')}
+			class:opacity-0={!(draggedObject && dragOverTarget?.id === object.id && (dropIndicatorPosition === 'before' || dropIndicatorPosition === 'after'))}></div>
+
+		<!-- Children (recursively rendered if expanded) -->
+		{#if object.isContainer && object.children && object.children.length > 0 && expandedContainers.has(object.id)}
+			<div class="space-y-1 mt-1">
+				{#each object.children as childObject}
+					{@render TreeItem(childObject, depth + 1)}
+				{/each}
+			</div>
+		{/if}
+	</div>
+{/snippet}
 
 <svelte:head>
 	<title>Object List & Settings</title>
@@ -545,125 +618,8 @@
 								 }
 							 }}>
 							{#each treeStructure as object}
-								<!-- Root object -->
-								<div class="object-tree-item">
-
-									<div
-										class="group flex items-center gap-2 px-2 py-1.5 text-sm rounded-md hover:bg-gray-700/50 cursor-pointer transition-colors relative"
-										class:bg-accent={isObjectHighlighted(object)}
-										class:text-accent-foreground={isObjectHighlighted(object)}
-										draggable="true"
-										on:dragstart={(e) => handleDragStart(e, object)}
-										on:dragend={handleDragEnd}
-										on:dragover={(e) => handleDragOver(e, object)}
-										on:dragleave={handleDragLeave}
-										on:drop={(e) => handleDrop(e, object)}
-										on:click={() => selectObjectInScene(object.id)}
-										role="button"
-										tabindex="0">
-
-										<!-- Expand/collapse button for containers with children -->
-										{#if object.isContainer && object.children && object.children.length > 0}
-											<button
-												class="flex-shrink-0 w-4 h-4 flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
-												on:click|stopPropagation={() => toggleContainer(object.id)}
-												tabindex="-1">
-												{#if expandedContainers.has(object.id)}
-													<!-- Expanded chevron -->
-													<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-														<path stroke-linecap="round" stroke-linejoin="round" d="M6 9l6 6 6-6"/>
-													</svg>
-												{:else}
-													<!-- Collapsed chevron -->
-													<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-														<path stroke-linecap="round" stroke-linejoin="round" d="M9 6l6 6-6 6"/>
-													</svg>
-												{/if}
-											</button>
-										{:else}
-											<!-- Spacer for non-expandable items -->
-											<div class="w-4 h-4"></div>
-										{/if}
-
-										<!-- Icon based on type -->
-										<div class="flex-shrink-0 w-4 h-4 flex items-center justify-center">
-											{#if object.isContainer}
-												<!-- Container/Folder icon -->
-												<svg class="w-3 h-3 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-													<path stroke-linecap="round" stroke-linejoin="round" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/>
-												</svg>
-											{:else}
-												<!-- Object/Box icon -->
-												<svg class="w-3 h-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-													<path stroke-linecap="round" stroke-linejoin="round" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10"/>
-												</svg>
-											{/if}
-										</div>
-
-										<!-- Object name -->
-										<div class="flex-1 truncate font-medium select-none">
-											{object.name || object.id}
-										</div>
-									</div>
-
-									<!-- Drop indicator - always reserved space (shows for both before/after) -->
-									<div class="h-0.5 mt-1 mx-2 rounded-full transition-colors"
-										class:bg-primary={draggedObject && dragOverTarget?.id === object.id && (dropIndicatorPosition === 'before' || dropIndicatorPosition === 'after')}
-										class:opacity-100={draggedObject && dragOverTarget?.id === object.id && (dropIndicatorPosition === 'before' || dropIndicatorPosition === 'after')}
-										class:opacity-0={!(draggedObject && dragOverTarget?.id === object.id && (dropIndicatorPosition === 'before' || dropIndicatorPosition === 'after'))}></div>
-
-									<!-- Child objects (indented) -->
-									{#if object.isContainer && object.children && object.children.length > 0 && expandedContainers.has(object.id)}
-										<div class="ml-4 space-y-1 mt-1">
-											{#each object.children as childObject}
-
-												<div
-													class="group flex items-center gap-2 px-2 py-1.5 text-sm rounded-md hover:bg-gray-700/50 cursor-pointer transition-colors"
-													class:bg-accent={isObjectHighlighted(childObject)}
-													class:text-accent-foreground={isObjectHighlighted(childObject)}
-													draggable="true"
-													on:dragstart={(e) => handleDragStart(e, childObject)}
-													on:dragend={handleDragEnd}
-													on:dragover={(e) => handleDragOver(e, childObject)}
-													on:dragleave={handleDragLeave}
-													on:drop={(e) => handleDrop(e, childObject)}
-													on:click={() => selectObjectInScene(childObject.id)}
-													role="button"
-													tabindex="0">
-
-													<!-- Spacer for child indentation -->
-													<div class="w-4 h-4"></div>
-
-													<!-- Icon based on type -->
-													<div class="flex-shrink-0 w-4 h-4 flex items-center justify-center">
-														{#if childObject.isContainer}
-															<!-- Child Container icon -->
-															<svg class="w-3 h-3 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-																<path stroke-linecap="round" stroke-linejoin="round" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/>
-															</svg>
-														{:else}
-															<!-- Child Object icon -->
-															<svg class="w-3 h-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-																<path stroke-linecap="round" stroke-linejoin="round" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10"/>
-															</svg>
-														{/if}
-													</div>
-
-													<!-- Child object name -->
-													<div class="flex-1 truncate font-medium select-none">
-														{childObject.name || childObject.id}
-													</div>
-												</div>
-
-												<!-- Child drop indicator - always reserved space (shows for both before/after) -->
-												<div class="h-0.5 mt-1 mx-2 rounded-full transition-colors"
-													class:bg-primary={draggedObject && dragOverTarget?.id === childObject.id && (dropIndicatorPosition === 'before' || dropIndicatorPosition === 'after')}
-													class:opacity-100={draggedObject && dragOverTarget?.id === childObject.id && (dropIndicatorPosition === 'before' || dropIndicatorPosition === 'after')}
-													class:opacity-0={!(draggedObject && dragOverTarget?.id === childObject.id && (dropIndicatorPosition === 'before' || dropIndicatorPosition === 'after'))}></div>
-											{/each}
-										</div>
-									{/if}
-								</div>
+								<!-- Recursive tree rendering -->
+								{@render TreeItem(object, 0)}
 							{/each}
 
 						</div>

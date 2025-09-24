@@ -292,7 +292,17 @@ class ContainerCrudManager {
         const selectionController = window.modlerComponents?.selectionController;
         if (selectionController) {
             selectionController.clearSelection('container-creation');
+
+            // Make container temporarily selectable for selection, then restore
+            const wasSelectable = containerObject.selectable;
+            containerObject.selectable = true;
             selectionController.select(containerObject.mesh);
+
+            // Force visualization update to show container highlight
+            const visualizationManager = window.modlerComponents?.visualizationManager;
+            if (visualizationManager) {
+                visualizationManager.setState(containerObject.mesh, 'selected');
+            }
         }
 
         // Trigger hierarchy update to refresh the object list

@@ -138,11 +138,14 @@ class SupportMeshFactory {
      * Create all support meshes for a container
      */
     createContainerSupportMeshes(mainMesh) {
+        // Create single wireframe mesh used for both selection and context states
+        const wireframeMesh = this.createContainerWireframe(mainMesh);
+
         const supportMeshes = {
-            selectionWireframe: this.createContainerWireframe(mainMesh),
+            selectionWireframe: wireframeMesh,  // For ObjectVisualizer compatibility
+            wireframeMesh: wireframeMesh,       // Single unified wireframe
             faceHighlight: this.createFaceHighlight(mainMesh),
-            interactiveMesh: this.createContainerInteractiveMesh(mainMesh),
-            contextHighlight: this.createContainerContextHighlight(mainMesh)
+            interactiveMesh: this.createContainerInteractiveMesh(mainMesh)
         };
 
         // Add as children of main mesh (only if they were created successfully)
@@ -164,10 +167,7 @@ class SupportMeshFactory {
             supportMeshes.interactiveMesh.updateMatrixWorld(true);
 
         }
-        if (supportMeshes.contextHighlight) {
-            mainMesh.add(supportMeshes.contextHighlight);
-            supportMeshes.contextHighlight.visible = false;
-        }
+        // contextHighlight removed - using single wireframeMesh for all states
 
         // Store references for easy access
         mainMesh.userData.supportMeshes = supportMeshes;
@@ -301,25 +301,6 @@ class SupportMeshFactory {
         return interactiveMesh;
     }
 
-    /**
-     * Create container context highlight (faded wireframe for step-in state)
-     */
-    createContainerContextHighlight(mainMesh) {
-        if (!mainMesh.geometry) return null;
-
-        // Create faded version of container wireframe
-        const contextMaterial = this.materials.containerWireframe.clone();
-        contextMaterial.opacity = contextMaterial.opacity * 0.25; // 25% opacity for context
-
-        const edgeGeometry = new THREE.EdgesGeometry(mainMesh.geometry);
-        const contextHighlight = new THREE.LineSegments(edgeGeometry, contextMaterial);
-
-        contextHighlight.position.set(0, 0.001, 0);
-        contextHighlight.raycast = () => {}; // Non-raycastable
-        contextHighlight.userData.supportMeshType = 'contextHighlight';
-
-        return contextHighlight;
-    }
 
     /**
      * Update support mesh geometries when main object geometry changes
@@ -343,11 +324,7 @@ class SupportMeshFactory {
             supportMeshes.containerWireframe.geometry = newEdgeGeometry;
         }
 
-        if (supportMeshes.contextHighlight) {
-            const newEdgeGeometry = new THREE.EdgesGeometry(mainMesh.geometry);
-            supportMeshes.contextHighlight.geometry.dispose();
-            supportMeshes.contextHighlight.geometry = newEdgeGeometry;
-        }
+        // contextHighlight removed - using single wireframeMesh managed above
 
         // Update interactive mesh for containers
         if (supportMeshes.interactiveMesh) {

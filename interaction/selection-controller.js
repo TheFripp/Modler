@@ -164,7 +164,8 @@ class SelectionController {
         const objectsToDeselect = Array.from(this.selectedObjects);
 
 
-        // Delegate container context handling to ContainerContextManager
+        // Delegate container context handling to unified visualization system
+        // Note: The VisualizationManager handles container context clearing through dimming updates
         if (this.containerContextManager) {
             this.containerContextManager.handleSelectionClear(reason);
         }
@@ -198,22 +199,46 @@ class SelectionController {
 
     // Container context delegation
     stepIntoContainer(containerObject) {
+        // Use unified visualization system for container context
+        if (this.visualizationManager) {
+            this.visualizationManager.stepIntoContainer(containerObject);
+        }
+
+        // Keep legacy support for ContainerInteractionManager if it exists
         if (this.containerContextManager) {
             this.containerContextManager.stepIntoContainer(containerObject);
         }
     }
 
     stepOutOfContainer() {
+        // Use unified visualization system for container context
+        if (this.visualizationManager) {
+            this.visualizationManager.stepOutOfContainer();
+        }
+
+        // Keep legacy support for ContainerInteractionManager if it exists
         if (this.containerContextManager) {
             this.containerContextManager.stepOutOfContainer();
         }
     }
 
     isInContainerContext() {
+        // Use unified visualization system first
+        if (this.visualizationManager) {
+            return this.visualizationManager.isInContainerContext();
+        }
+
+        // Fallback to legacy system
         return this.containerContextManager ? this.containerContextManager.isInContainerContext() : false;
     }
 
     getContainerContext() {
+        // Use unified visualization system first
+        if (this.visualizationManager) {
+            return this.visualizationManager.getContainerContext();
+        }
+
+        // Fallback to legacy system
         return this.containerContextManager ? this.containerContextManager.getContainerContext() : null;
     }
 

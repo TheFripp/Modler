@@ -1,0 +1,53 @@
+{
+  "name": "modler-v2",
+  "version": "2.0.0",
+  "description": "Modler V2 - CAD software with rule-based parametric design and intelligent 3D auto-layout",
+  "type": "commonjs",
+  "scripts": {
+    "dev": "concurrently \"npm run dev:main\" \"npm run dev:svelte\"",
+    "dev:main": "node server.js",
+    "dev:svelte": "cd svelte-ui && npm run dev",
+    "start": "node server.js",
+    "build": "cd svelte-ui && npm run build",
+    "preview": "npm run build && npm start",
+    "setup": "npm install && cd svelte-ui && npm install",
+    "clean": "rm -rf svelte-ui/.svelte-kit svelte-ui/build node_modules svelte-ui/node_modules",
+    "health-check": "node scripts/health-check.js"
+  },
+  "engines": {
+    "node": ">=16.0.0"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2",
+    "http-server": "^14.1.1"
+  },
+  "dependencies": {},
+  "keywords": [
+    "cad",
+    "3d",
+    "parametric",
+    "design",
+    "modeling",
+    "threejs",
+    "svelte"
+  ],
+  "author": "Modler Development Team",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "."
+  },
+  "main": "server.js",
+  "files": [
+    "*.html",
+    "*.js",
+    "styles/",
+    "js/",
+    "foundation/",
+    "scene/",
+    "interaction/",
+    "application/",
+    "layout/",
+    "svelte-ui/build/"
+  ]
+}
