@@ -196,7 +196,7 @@ class ContainerVisualizer extends ObjectVisualizer {
         // Disable other container interactions
         this.disableOtherContainers(containerObject);
 
-        // Apply dimming to non-selected objects in the container context
+        // Apply dimming to objects outside the container context
         this.dimNonSelectedObjectsInContext();
     }
 
@@ -284,7 +284,8 @@ class ContainerVisualizer extends ObjectVisualizer {
     }
 
     /**
-     * Dim non-selected objects in container context (50% opacity)
+     * Dim objects outside the current container context (50% opacity)
+     * This creates focus by dimming everything NOT in the current container branch
      */
     dimNonSelectedObjectsInContext() {
         if (!this.isInContainerContext()) return;
@@ -297,23 +298,66 @@ class ContainerVisualizer extends ObjectVisualizer {
         const currentContainer = this.getContainerContext();
         if (!currentContainer) return;
 
-        // Find the container data to get its child objects
+        // Find the container data
         const containerData = sceneController.getObjectByMesh(currentContainer);
         if (!containerData || !containerData.isContainer) return;
 
-        // Get child objects of the current container
-        const childObjects = sceneController.getChildObjects(containerData.id);
+        // Get ALL objects in the scene
+        const allObjects = sceneController.getAllObjects();
 
-        childObjects.forEach(childData => {
+        allObjects.forEach(objectData => {
             // Skip if this object is currently selected
-            if (selectionController.isSelected(childData.mesh)) return;
+            if (selectionController.isSelected(objectData.mesh)) return;
 
             // Skip if already dimmed
-            if (this.dimmedObjects.has(childData.mesh)) return;
+            if (this.dimmedObjects.has(objectData.mesh)) return;
 
-            // Dim the object
-            this.dimObject(childData.mesh);
+            // Skip containers in the context stack (they should stay visible)
+            if (this.containerContextStack.includes(objectData.mesh)) return;
+
+            // Skip if this object is INSIDE the current container context
+            if (this.isObjectInsideContainerBranch(objectData, containerData)) return;
+
+            // Dim objects that are OUTSIDE the container context
+            this.dimObject(objectData.mesh);
         });
+    }
+
+    /**
+     * Check if an object is inside the current container branch
+     * @param {Object} objectData - Object data from scene controller
+     * @param {Object} containerData - Container data we're checking against
+     * @returns {boolean} True if object is inside the container branch
+     */
+    isObjectInsideContainerBranch(objectData, containerData) {
+        // The object is inside the container branch if:
+        // 1. It's a direct child of the container
+        // 2. It's a child of any nested container within this container
+
+        if (!objectData || !containerData) return false;
+
+        // Check if object is the container itself
+        if (objectData.id === containerData.id) return true;
+
+        // Check if object is a direct child of the container
+        if (objectData.parentContainer === containerData.id) return true;
+
+        // Check if object is nested deeper in the container hierarchy
+        let currentParent = objectData.parentContainer;
+        const sceneController = window.modlerComponents?.sceneController;
+
+        while (currentParent && sceneController) {
+            const parentData = sceneController.getObject(currentParent);
+            if (!parentData) break;
+
+            // If we found our target container in the parent chain
+            if (parentData.id === containerData.id) return true;
+
+            // Move up the hierarchy
+            currentParent = parentData.parentContainer;
+        }
+
+        return false;
     }
 
     /**
@@ -352,7 +396,10 @@ class ContainerVisualizer extends ObjectVisualizer {
      */
     dimObject(mesh) {
         if (!mesh || !mesh.material) return;
-        if (this.dimmedObjects.has(mesh)) return; // Already dimmed
+        if (this.dimmedObjects.has(mesh)) {
+            // Object is already dimmed - don't dim it again
+            return;
+        }
 
         // Store original properties and current context level
         const dimmingData = {
@@ -399,27 +446,33 @@ class ContainerVisualizer extends ObjectVisualizer {
         const currentContainer = this.getContainerContext();
         if (!currentContainer) return;
 
-        // Find the container data to get its child objects
+        // Find the container data
         const containerData = sceneController.getObjectByMesh(currentContainer);
         if (!containerData || !containerData.isContainer) return;
 
-        // Get child objects of the current container
-        const childObjects = sceneController.getChildObjects(containerData.id);
+        // Get ALL objects in the scene to evaluate dimming
+        const allObjects = sceneController.getAllObjects();
         const currentContextLevel = this.containerContextStack.length;
 
-        childObjects.forEach(childData => {
-            const isSelected = selectionController.isSelected(childData.mesh);
-            const isDimmed = this.dimmedObjects.has(childData.mesh);
+        allObjects.forEach(objectData => {
+            const isSelected = selectionController.isSelected(objectData.mesh);
+            const isDimmed = this.dimmedObjects.has(objectData.mesh);
+            const isInsideContainer = this.isObjectInsideContainerBranch(objectData, containerData);
+            const isInContextStack = this.containerContextStack.includes(objectData.mesh);
 
-            if (!isSelected && !isDimmed) {
-                // Object should be dimmed but isn't - dim it
-                this.dimObject(childData.mesh);
-            } else if (isSelected && isDimmed) {
-                // Object is selected but dimmed - restore it only if dimmed at current level
-                const dimmingData = this.dimmedObjects.get(childData.mesh);
-                if (dimmingData && dimmingData.contextLevel === currentContextLevel) {
-                    this.restoreObject(childData.mesh, dimmingData);
-                    this.dimmedObjects.delete(childData.mesh);
+            if (isInsideContainer || isInContextStack || isSelected) {
+                // Objects inside container, in context stack, or selected should NOT be dimmed
+                if (isDimmed) {
+                    const dimmingData = this.dimmedObjects.get(objectData.mesh);
+                    if (dimmingData && dimmingData.contextLevel === currentContextLevel) {
+                        this.restoreObject(objectData.mesh, dimmingData);
+                        this.dimmedObjects.delete(objectData.mesh);
+                    }
+                }
+            } else {
+                // Objects outside container should be dimmed
+                if (!isDimmed) {
+                    this.dimObject(objectData.mesh);
                 }
             }
         });
@@ -448,13 +501,13 @@ class ContainerVisualizer extends ObjectVisualizer {
             this.showChildContainers(object);
 
             // Update dimming in container context when container becomes selected
-            this.updateContextDimming();
+            this.dimNonSelectedObjectsInContext();
         } else {
             // Fall back to parent for non-container specific states
             super.applyStateVisuals(object, newState, oldState);
 
             // Update dimming when any object becomes selected/deselected in container context
-            this.updateContextDimming();
+            this.dimNonSelectedObjectsInContext();
         }
     }
 
@@ -483,7 +536,7 @@ class ContainerVisualizer extends ObjectVisualizer {
             this.hideChildContainers(object, true);
 
             // Update dimming in container context when container selection changes
-            this.updateContextDimming();
+            this.dimNonSelectedObjectsInContext();
             return;
         }
 
@@ -491,7 +544,7 @@ class ContainerVisualizer extends ObjectVisualizer {
         super.clearStateVisuals(object, state);
 
         // Update dimming when any object selection changes in container context
-        this.updateContextDimming();
+        this.dimNonSelectedObjectsInContext();
     }
 
     /**

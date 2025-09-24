@@ -596,22 +596,12 @@ class SelectionController {
         const isMultiSelect = event.ctrlKey || event.metaKey;
 
         if (!isMultiSelect) {
-            // Step out of container when clicking empty space and select the container
+            // Step out of container when clicking empty space and clear selection
             if (this.isInContainerContext()) {
-                // Store container before stepping out
-                const containerToSelect = this.getContainerContext();
-
                 this.stepOutOfContainer();
-
-                // Select the container we just stepped out of
-                if (containerToSelect) {
-                    this.clearSelection('step-out');
-                    this.select(containerToSelect);
-                    return; // Don't clear selection - we want container selected
-                }
             }
 
-            // Only clear selection if not stepping out
+            // Clear selection for both step-out and normal empty space clicks
             this.clearSelection('empty-space');
         }
     }
