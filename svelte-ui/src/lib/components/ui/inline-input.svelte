@@ -259,7 +259,7 @@
 </script>
 
 <div class={cn('inline-input-container', className)}>
-	<div class="relative flex items-center bg-accent rounded-md h-8 border border-transparent focus-within:border-primary transition-colors">
+	<div class="relative flex items-center bg-[#212121] rounded-md h-8 border border-[#2E2E2E] focus-within:border-[#6b7280] transition-colors">
 		<!-- Label -->
 		<span class="text-xs text-muted-foreground px-2 py-1 flex-shrink-0 min-w-0 truncate">
 			{label}
@@ -285,12 +285,12 @@
 
 		<!-- Interactive Controls -->
 		{#if showArrows && type === 'number'}
-			<div class="flex flex-col border-l border-[#242424]">
+			<div class="flex flex-col border-l border-[#2E2E2E]">
 				<button
 					type="button"
 					tabindex="-1"
 					onmousedown={(e) => startArrowInteraction(e, 'up')}
-					class="flex items-center justify-center w-5 h-3 text-xs text-gray-400 hover:text-gray-200 hover:bg-gray-800 transition-colors cursor-ns-resize"
+					class="flex items-center justify-center w-5 h-3 text-xs text-gray-400 hover:text-gray-200 hover:bg-[#171717] transition-colors cursor-ns-resize"
 					disabled={disabled}
 				>
 					▲
@@ -299,7 +299,7 @@
 					type="button"
 					tabindex="-1"
 					onmousedown={(e) => startArrowInteraction(e, 'down')}
-					class="flex items-center justify-center w-5 h-3 text-xs text-gray-400 hover:text-gray-200 hover:bg-gray-800 transition-colors cursor-ns-resize"
+					class="flex items-center justify-center w-5 h-3 text-xs text-gray-400 hover:text-gray-200 hover:bg-[#171717] transition-colors cursor-ns-resize"
 					disabled={disabled}
 				>
 					▼

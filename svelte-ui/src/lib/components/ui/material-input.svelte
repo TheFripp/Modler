@@ -72,7 +72,7 @@
 <div class={cn('material-input space-y-2', className)} {...restProps}>
 	<!-- Color Input with Color Picker -->
 	<div class="relative">
-		<div class="flex items-center bg-accent rounded-md h-8 border border-transparent focus-within:border-primary transition-colors">
+		<div class="flex items-center bg-[#212121] rounded-md h-8 border border-[#2E2E2E] focus-within:border-[#6b7280] transition-colors">
 			<span class="text-xs text-muted-foreground px-2 py-1 flex-shrink-0">Color</span>
 			<input
 				type="text"
@@ -82,7 +82,7 @@
 				class="flex-1 bg-transparent border-none outline-none text-xs text-foreground px-1 py-1 font-mono"
 				placeholder="#ffffff"
 			/>
-			<div class="border-l border-[#242424] px-1">
+			<div class="border-l border-[#2E2E2E] px-1">
 				<input
 					type="color"
 					value={color}

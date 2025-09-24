@@ -146,8 +146,8 @@
             left: 0;
             width: 280px;
             height: 100vh;
-            background: #252525;
-            border-right: 1px solid #404040;
+            background: #171717;
+            border-right: 1px solid #2E2E2E;
             z-index: 99999;
             transform: translateX(0);
             overflow: hidden;
@@ -184,6 +184,7 @@
             const handleMouseMove = (e) => {
                 if (!isDragging) return;
                 e.preventDefault();
+                e.stopPropagation();
 
                 const width = startWidth + (e.clientX - startX);
                 const minWidth = 200;
@@ -201,9 +202,14 @@
                 document.body.style.cursor = '';
                 document.body.style.userSelect = '';
 
+                // Remove all event listeners from multiple elements for better coverage
                 document.removeEventListener('mousemove', handleMouseMove, true);
                 document.removeEventListener('mouseup', cleanup, true);
                 document.removeEventListener('keydown', handleEscape, true);
+                document.removeEventListener('mouseleave', cleanup, true);
+                document.documentElement.removeEventListener('mousemove', handleMouseMove, true);
+                document.documentElement.removeEventListener('mouseup', cleanup, true);
+                document.documentElement.removeEventListener('mouseleave', cleanup, true);
                 window.removeEventListener('blur', cleanup, true);
 
                 clearTimeout(timeoutId);
@@ -218,10 +224,17 @@
             // Auto-cleanup after 10 seconds to prevent infinite drag
             const timeoutId = setTimeout(() => cleanup(), 10000);
 
-            // Use capture phase to ensure events are caught
+            // Use capture phase and multiple elements to ensure events are caught even during fast dragging
             document.addEventListener('mousemove', handleMouseMove, true);
             document.addEventListener('mouseup', cleanup, true);
             document.addEventListener('keydown', handleEscape, true);
+            document.addEventListener('mouseleave', cleanup, true);
+
+            // Also add to documentElement for better coverage
+            document.documentElement.addEventListener('mousemove', handleMouseMove, true);
+            document.documentElement.addEventListener('mouseup', cleanup, true);
+            document.documentElement.addEventListener('mouseleave', cleanup, true);
+
             window.addEventListener('blur', cleanup, true); // Handle window losing focus
         });
 
@@ -234,7 +247,7 @@
             width: 100%;
             height: 100vh;
             border: none;
-            background: #252525;
+            background: #171717;
         `;
 
         // Add error handling for iframe
@@ -273,8 +286,8 @@
             right: 0;
             width: 320px;
             height: 100vh;
-            background: #1a1a1a;
-            border-left: 1px solid #404040;
+            background: #171717;
+            border-left: 1px solid #2E2E2E;
             z-index: 99999;
             transform: translateX(0);
             overflow: hidden;
@@ -311,6 +324,7 @@
             const handleMouseMove = (e) => {
                 if (!isDragging) return;
                 e.preventDefault();
+                e.stopPropagation();
 
                 const width = startWidth - (e.clientX - startX); // Subtract for right panel
                 const minWidth = 250;
@@ -328,9 +342,14 @@
                 document.body.style.cursor = '';
                 document.body.style.userSelect = '';
 
+                // Remove all event listeners from multiple elements for better coverage
                 document.removeEventListener('mousemove', handleMouseMove, true);
                 document.removeEventListener('mouseup', cleanup, true);
                 document.removeEventListener('keydown', handleEscape, true);
+                document.removeEventListener('mouseleave', cleanup, true);
+                document.documentElement.removeEventListener('mousemove', handleMouseMove, true);
+                document.documentElement.removeEventListener('mouseup', cleanup, true);
+                document.documentElement.removeEventListener('mouseleave', cleanup, true);
                 window.removeEventListener('blur', cleanup, true);
 
                 clearTimeout(timeoutId);
@@ -345,10 +364,17 @@
             // Auto-cleanup after 10 seconds to prevent infinite drag
             const timeoutId = setTimeout(() => cleanup(), 10000);
 
-            // Use capture phase to ensure events are caught
+            // Use capture phase and multiple elements to ensure events are caught even during fast dragging
             document.addEventListener('mousemove', handleMouseMove, true);
             document.addEventListener('mouseup', cleanup, true);
             document.addEventListener('keydown', handleEscape, true);
+            document.addEventListener('mouseleave', cleanup, true);
+
+            // Also add to documentElement for better coverage
+            document.documentElement.addEventListener('mousemove', handleMouseMove, true);
+            document.documentElement.addEventListener('mouseup', cleanup, true);
+            document.documentElement.addEventListener('mouseleave', cleanup, true);
+
             window.addEventListener('blur', cleanup, true); // Handle window losing focus
         });
 
@@ -361,7 +387,7 @@
             width: 100%;
             height: 100vh;
             border: none;
-            background: #1a1a1a;
+            background: #171717;
         `;
 
         // Add error handling for iframe
@@ -1131,6 +1157,180 @@
     }
 
     /**
+     * Handle object move to container from Svelte drag and drop
+     */
+    function handleObjectMoveToContainer(objectId, targetContainerId) {
+        try {
+            console.log('🚚 Moving object to container:', objectId, 'to', targetContainerId);
+
+            if (!window.modlerComponents?.sceneController || !window.modlerComponents?.containerCrudManager) {
+                console.error('Required components not available for move operation');
+                return;
+            }
+
+            const sceneController = window.modlerComponents.sceneController;
+            const containerManager = window.modlerComponents.containerCrudManager;
+
+            const objectData = sceneController.getObject(objectId);
+            const targetContainer = sceneController.getObject(targetContainerId);
+
+            if (!objectData) {
+                console.error('Object not found:', objectId);
+                return;
+            }
+
+            if (!targetContainer || !targetContainer.isContainer) {
+                console.error('Target container not found or invalid:', targetContainerId);
+                return;
+            }
+
+            // Remove from current container if needed
+            if (objectData.parentContainer) {
+                const removeSuccess = containerManager.removeObjectFromContainer(objectData);
+                if (!removeSuccess) {
+                    console.error('Failed to remove object from current container');
+                    return;
+                }
+            }
+
+            // Add to new container
+            const success = containerManager.addObjectToContainer(objectData, targetContainer);
+            if (success) {
+                console.log('✅ Successfully moved object to container');
+
+                // Show auto layout notification if container has layout enabled
+                if (targetContainer.autoLayout?.enabled) {
+                    console.log(`📐 Object moved to ${targetContainer.autoLayout.direction?.toUpperCase()}-axis layout container`);
+                }
+            } else {
+                console.error('❌ Failed to move object to container');
+            }
+
+        } catch (error) {
+            console.error('Error moving object to container:', error);
+        }
+    }
+
+    /**
+     * Handle object move to root from Svelte drag and drop
+     */
+    function handleObjectMoveToRoot(objectId) {
+        try {
+            console.log('🚚 Moving object to root:', objectId);
+
+            if (!window.modlerComponents?.sceneController || !window.modlerComponents?.containerCrudManager) {
+                console.error('Required components not available for move operation');
+                return;
+            }
+
+            const sceneController = window.modlerComponents.sceneController;
+            const containerManager = window.modlerComponents.containerCrudManager;
+
+            const objectData = sceneController.getObject(objectId);
+
+            if (!objectData) {
+                console.error('Object not found:', objectId);
+                return;
+            }
+
+            if (!objectData.parentContainer) {
+                console.log('Object is already at root level');
+                return;
+            }
+
+            // Remove from current container
+            const success = containerManager.removeObjectFromContainer(objectData);
+            if (success) {
+                console.log('✅ Successfully moved object to root level');
+            } else {
+                console.error('❌ Failed to move object to root level');
+            }
+
+        } catch (error) {
+            console.error('Error moving object to root:', error);
+        }
+    }
+
+    /**
+     * Handle object reordering at root level from Svelte drag and drop
+     */
+    function handleObjectReorderAtRoot(draggedObjectId, targetObjectId, position) {
+        try {
+            console.log('🔄 Reordering object at root:', draggedObjectId, position, targetObjectId);
+
+            if (!window.modlerComponents?.sceneController) {
+                console.error('SceneController not available for reorder operation');
+                return;
+            }
+
+            const sceneController = window.modlerComponents.sceneController;
+            const draggedObject = sceneController.getObject(draggedObjectId);
+            const targetObject = sceneController.getObject(targetObjectId);
+
+            if (!draggedObject || !targetObject) {
+                console.error('Objects not found for reordering:', { draggedObject, targetObject });
+                return;
+            }
+
+            // For now, we'll just trigger a hierarchy update since the UI handles the visual order
+            // In a more advanced implementation, we could modify the actual object order in the scene
+            console.log('✅ Root reordering requested - UI will handle visual order');
+
+            // Trigger hierarchy update
+            if (window.notifyObjectHierarchyChanged) {
+                window.notifyObjectHierarchyChanged();
+            }
+
+        } catch (error) {
+            console.error('Error reordering object at root:', error);
+        }
+    }
+
+    /**
+     * Handle object reordering within container from Svelte drag and drop
+     */
+    function handleObjectReorderInContainer(draggedObjectId, targetObjectId, containerId, position) {
+        try {
+            console.log('🔄 Reordering object in container:', draggedObjectId, position, targetObjectId, 'container:', containerId);
+
+            if (!window.modlerComponents?.sceneController || !window.modlerComponents?.containerCrudManager) {
+                console.error('Required components not available for container reorder operation');
+                return;
+            }
+
+            const sceneController = window.modlerComponents.sceneController;
+            const containerManager = window.modlerComponents.containerCrudManager;
+
+            const draggedObject = sceneController.getObject(draggedObjectId);
+            const targetObject = sceneController.getObject(targetObjectId);
+            const container = sceneController.getObject(containerId);
+
+            if (!draggedObject || !targetObject || !container) {
+                console.error('Objects not found for container reordering:', { draggedObject, targetObject, container });
+                return;
+            }
+
+            // For now, we'll just trigger a hierarchy update and container resize
+            // In a more advanced implementation, we could modify the actual object order within the container
+            console.log('✅ Container reordering requested - UI will handle visual order');
+
+            // Trigger container recalculation if it has auto-layout
+            if (container.autoLayout?.enabled) {
+                // Preserve container position during reordering to avoid moving child objects
+                containerManager.resizeContainerToFitChildren(container, null, true);
+            }
+
+            // Trigger hierarchy update
+            if (window.notifyObjectHierarchyChanged) {
+                window.notifyObjectHierarchyChanged();
+            }
+
+        } catch (error) {
+            console.error('Error reordering object in container:', error);
+        }
+    }
+
+    /**
      * Set up data synchronization with main app
      */
     function setupDataSync() {
@@ -1155,6 +1355,22 @@
             } else if (event.data && event.data.type === 'snap-toggle') {
                 // Handle snap toggle from Svelte UI
                 handleSnapToggle();
+            } else if (event.data && event.data.type === 'object-move-to-container') {
+                // Handle drag and drop move to container
+                const { objectId, targetContainerId } = event.data.data;
+                handleObjectMoveToContainer(objectId, targetContainerId);
+            } else if (event.data && event.data.type === 'object-move-to-root') {
+                // Handle drag and drop move to root
+                const { objectId } = event.data.data;
+                handleObjectMoveToRoot(objectId);
+            } else if (event.data && event.data.type === 'object-reorder-root') {
+                // Handle reordering objects at root level
+                const { draggedObjectId, targetObjectId, position } = event.data.data;
+                handleObjectReorderAtRoot(draggedObjectId, targetObjectId, position);
+            } else if (event.data && event.data.type === 'object-reorder-container') {
+                // Handle reordering objects within a container
+                const { draggedObjectId, targetObjectId, containerId, position } = event.data.data;
+                handleObjectReorderInContainer(draggedObjectId, targetObjectId, containerId, position);
             }
         });
 
@@ -1266,8 +1482,8 @@
                 left: 0;
                 width: 280px;
                 height: 100vh;
-                background: #252525;
-                border-right: 1px solid #404040;
+                background: #171717;
+                border-right: 1px solid #2E2E2E;
                 z-index: 99999;
                 overflow: hidden;
                 display: flex;
@@ -1290,8 +1506,8 @@
                 right: 0;
                 width: 320px;
                 height: 100vh;
-                background: #252525;
-                border-left: 1px solid #404040;
+                background: #171717;
+                border-left: 1px solid #2E2E2E;
                 z-index: 99999;
                 overflow: hidden;
                 display: flex;

@@ -371,7 +371,8 @@ class ContainerCrudManager {
         }
 
         sceneController.setParentContainer(objectData.id, containerData.id, false);
-        this.resizeContainer(containerData, { mode: 'fit-children' });
+        // When adding objects to container, preserve container position to avoid moving child objects
+        this.resizeContainerToFitChildren(containerData, null, true);
 
         const meshSynchronizer = window.modlerComponents?.meshSynchronizer;
         if (meshSynchronizer) {
@@ -431,7 +432,8 @@ class ContainerCrudManager {
         sceneController.setParentContainer(objectData.id, null);
 
         if (parentContainer) {
-            this.resizeContainer(parentContainer, { mode: 'fit-children' });
+            // When removing objects from container, preserve container position to avoid moving remaining child objects
+            this.resizeContainerToFitChildren(parentContainer, null, true);
         }
 
         // Trigger hierarchy update for new Svelte UI
@@ -498,22 +500,107 @@ class ContainerCrudManager {
         const childObjects = sceneController.getChildObjects(containerData.id);
         if (childObjects.length === 0) return false;
 
+
         const bounds = this.calculateContainerBounds(containerData, childObjects, newContainerSize, immediateUpdate);
         if (!bounds) return false;
 
-        const targetPosition = preservePosition ? containerData.mesh.position : bounds.center;
+        /**
+         * CONTAINER EXPANSION SOLUTION:
+         * 1. Calculate child object bounds in container's local coordinate space
+         * 2. Position container to center around those bounds
+         * 3. Compensate child positions to maintain their world positions
+         *
+         * This ensures the container "wraps around" objects without moving them
+         */
+
+        // Calculate bounds of children in container's local coordinate space
+        const childMeshes = childObjects.map(child => child.mesh);
+        let localMin = new THREE.Vector3(Infinity, Infinity, Infinity);
+        let localMax = new THREE.Vector3(-Infinity, -Infinity, -Infinity);
+
+        childMeshes.forEach((mesh) => {
+            if (mesh.geometry) {
+                mesh.geometry.computeBoundingBox();
+                const box = mesh.geometry.boundingBox;
+                if (box) {
+                    // Transform bounding box corners using the mesh's LOCAL transform (position, rotation, scale)
+                    const corners = [
+                        new THREE.Vector3(box.min.x, box.min.y, box.min.z),
+                        new THREE.Vector3(box.max.x, box.min.y, box.min.z),
+                        new THREE.Vector3(box.min.x, box.max.y, box.min.z),
+                        new THREE.Vector3(box.max.x, box.max.y, box.min.z),
+                        new THREE.Vector3(box.min.x, box.min.y, box.max.z),
+                        new THREE.Vector3(box.max.x, box.min.y, box.max.z),
+                        new THREE.Vector3(box.min.x, box.max.y, box.max.z),
+                        new THREE.Vector3(box.max.x, box.max.y, box.max.z)
+                    ];
+
+                    corners.forEach(corner => {
+                        // Apply the child's local transform (relative to container)
+                        corner.applyMatrix4(mesh.matrix);
+
+                        // Update local bounds
+                        localMin.min(corner);
+                        localMax.max(corner);
+                    });
+                }
+            }
+        });
+
+        const localCenter = new THREE.Vector3(
+            (localMin.x + localMax.x) / 2,
+            (localMin.y + localMax.y) / 2,
+            (localMin.z + localMax.z) / 2
+        );
+        const localSize = new THREE.Vector3(
+            localMax.x - localMin.x,
+            localMax.y - localMin.y,
+            localMax.z - localMin.z
+        );
+
+        // Calculate the correct container position to center it around the child objects
+        // The container should be positioned so that its center aligns with the center of child bounds
+        const currentContainerPosition = containerData.mesh.position.clone();
+
+        // Calculate world position where container should be centered
+        const targetWorldPosition = currentContainerPosition.clone().add(localCenter);
+
+        const adjustedSize = localSize;
+
+        // Get layout direction for wireframe visualization (for hug mode containers too)
+        const layoutDirection = containerData.autoLayout?.enabled && containerData.autoLayout?.direction ?
+            containerData.autoLayout.direction : null;
+
         const success = LayoutGeometry.updateContainerGeometry(
             containerData.mesh,
-            bounds.size,
-            targetPosition,
-            !preservePosition
+            adjustedSize,
+            targetWorldPosition,
+            true, // Reposition container to center around child objects
+            layoutDirection // Layout direction for wireframe visualization
         );
 
         if (success) {
-            if (!preservePosition) {
-                sceneController.updateObject(containerData.id, { position: targetPosition });
-            }
+            // Calculate the offset that the container moved
+            const containerMovement = targetWorldPosition.clone().sub(currentContainerPosition);
+
+            // Compensate child object positions so they don't move in world space
+            // Since children are in container's local space, we need to subtract the container movement
+            childObjects.forEach(childObj => {
+                if (childObj.mesh) {
+                    // Move child in opposite direction to compensate for container movement
+                    childObj.mesh.position.sub(containerMovement);
+
+                    // Update the child object data to reflect the new position
+                    sceneController.updateObject(childObj.id, {
+                        position: childObj.mesh.position.clone()
+                    });
+                }
+            });
+
+            // Update container position to the calculated bounds center
+            sceneController.updateObject(containerData.id, { position: targetWorldPosition });
             this.handleContainerVisibilityAfterResize(containerData, immediateUpdate);
+
         }
 
         return success;
@@ -532,13 +619,19 @@ class ContainerCrudManager {
         }
 
         const sceneController = validation.sceneController;
+
+        // Get layout direction for wireframe visualization
+        const layoutDirection = containerData.autoLayout?.enabled && containerData.autoLayout?.direction ?
+            containerData.autoLayout.direction : null;
+
         // SIMPLIFIED ARCHITECTURE: Container never moves during auto-layout, only resizes
         // This eliminates coordinate system mismatches and prevents object positioning breakage
         const success = LayoutGeometry.updateContainerGeometry(
             containerData.mesh,
             layoutBounds.size,
             containerData.mesh.position, // Keep current position
-            false // shouldReposition = false
+            false, // shouldReposition = false
+            layoutDirection // Layout direction for wireframe visualization
         );
 
         return success;
@@ -556,11 +649,16 @@ class ContainerCrudManager {
             return false;
         }
 
+        // Get layout direction for wireframe visualization
+        const layoutDirection = containerData.autoLayout?.enabled && containerData.autoLayout?.direction ?
+            containerData.autoLayout.direction : null;
+
         return LayoutGeometry.updateContainerGeometry(
             containerData.mesh,
             size,
             containerData.mesh.position,
-            false
+            false,
+            layoutDirection // Layout direction for wireframe visualization
         );
     }
 

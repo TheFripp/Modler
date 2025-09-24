@@ -56,17 +56,18 @@
 	}
 
 	.floating-toolbar {
-		background: rgba(42, 42, 42, 0.95);
+		background: #171717;
 		backdrop-filter: blur(10px);
-		border: 1px solid rgba(64, 64, 64, 0.8);
+		border: 1px solid #2E2E2E;
 		border-radius: 12px;
-		padding: 8px 16px;
+		padding: 12px 16px;
 		height: 48px;
 		display: flex;
 		align-items: center;
 		gap: 12px;
 		box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
 		width: fit-content;
+		margin: 0 16px;
 	}
 
 	.toolbar-btn {
@@ -74,8 +75,8 @@
 		align-items: center;
 		gap: 8px;
 		padding: 6px 12px;
-		background: rgba(255, 255, 255, 0.1);
-		border: 1px solid rgba(255, 255, 255, 0.2);
+		background: #212121;
+		border: 1px solid #2E2E2E;
 		border-radius: 8px;
 		color: #ffffff;
 		font-size: 12px;
@@ -86,19 +87,21 @@
 	}
 
 	.toolbar-btn:hover {
-		background: rgba(255, 255, 255, 0.15);
-		border-color: rgba(255, 255, 255, 0.3);
+		background: #2E2E2E;
+		border-color: #6b7280;
 		transform: translateY(-1px);
 	}
 
 	.toolbar-btn.active {
-		background: rgba(74, 144, 226, 0.8);
-		border-color: rgba(74, 144, 226, 1);
-		box-shadow: 0 0 0 2px rgba(74, 144, 226, 0.3);
+		background: #212121;
+		border-color: #4a9eff;
+		border-width: 1px;
+		box-shadow: none;
 	}
 
 	.toolbar-btn.active:hover {
-		background: rgba(74, 144, 226, 0.9);
+		background: #2E2E2E;
+		border-color: #6bb6ff;
 	}
 
 	.tool-icon {

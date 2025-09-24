@@ -152,36 +152,14 @@ class SceneController {
             }
         }
 
-        // UNIFIED ARCHITECTURE: Create support meshes for regular objects only
-        // Containers use wireframe children from LayoutGeometry (new architecture)
+        // UNIFIED ARCHITECTURE: Create support meshes for all objects
+        // Support mesh factory handles containers and regular objects differently
         const supportMeshFactory = window.SupportMeshFactory ? new SupportMeshFactory() : null;
-        if (supportMeshFactory && !objectData.isContainer) {
-            console.log('SceneController.addObject - Creating support meshes for regular object:', {
-                objectName: objectData.name,
-                isContainer: objectData.isContainer,
-                meshPosition: mesh.position.clone(),
-                meshWorldPosition: mesh.getWorldPosition(new THREE.Vector3())
-            });
-
-            // Create support meshes for regular objects only
+        if (supportMeshFactory) {
+            // Create support meshes for all objects (factory handles containers vs regular objects)
             supportMeshFactory.createObjectSupportMeshes(mesh);
-        } else if (objectData.isContainer) {
-            console.log('SceneController.addObject - Skipping support meshes for container (uses new architecture):', objectData.name);
         }
 
-        // DEBUG: Log support mesh creation results (regular objects only)
-        if (supportMeshFactory && !objectData.isContainer && mesh.userData.supportMeshes) {
-                const supportMeshes = mesh.userData.supportMeshes;
-                console.log('SceneController.addObject - Support meshes created:', {
-                    objectName: objectData.name,
-                    isContainer: objectData.isContainer,
-                    hasSelectionWireframe: !!supportMeshes.selectionWireframe,
-                    hasInteractiveMesh: !!supportMeshes.interactiveMesh,
-                    hasFaceHighlight: !!supportMeshes.faceHighlight,
-                    interactiveMeshParent: supportMeshes.interactiveMesh ?
-                        (supportMeshes.interactiveMesh.parent === mesh ? 'CORRECT' : 'WRONG') : 'N/A'
-                });
-        }
 
         // Add to scene and registry
         this.scene.add(mesh);
@@ -437,23 +415,97 @@ class SceneController {
     
     /**
      * Reset child positions to prepare for layout calculation
-     * Moves children to container-relative positions near (0,0,0) so layout can position them correctly
+     * Preserves the original center of child objects to prevent spatial offset during layout mode switch
      * @param {number} containerId - Container object ID
      */
     resetChildPositionsForLayout(containerId) {
         const childObjects = this.getChildObjects(containerId);
         if (childObjects.length === 0) return;
 
+        const container = this.objects.get(containerId);
+        if (!container || !container.mesh) return;
 
-        // Reset each child to container-relative position at (0,0,0)
-        childObjects.forEach((childData, index) => {
+        // Calculate the size-weighted center of all child objects in world space
+        // This preserves the visual balance of different-sized objects during layout transitions
+        const originalCenter = this.calculateObjectsCenter(childObjects);
+
+        // Convert original center to container-relative coordinates
+        const containerWorldPosition = container.mesh.getWorldPosition(new THREE.Vector3());
+        const originalCenterRelative = originalCenter.clone().sub(containerWorldPosition);
+
+        // Store the original center as layout anchor for the layout engine
+        container.layoutAnchor = originalCenterRelative.clone();
+
+        console.log('resetChildPositionsForLayout:', {
+            containerId,
+            childCount: childObjects.length,
+            originalWorldCenter: originalCenter.clone(),
+            containerWorldPosition: containerWorldPosition.clone(),
+            layoutAnchor: container.layoutAnchor.clone()
+        });
+
+        // Convert each child to container-relative coordinates, preserving their relative positions
+        childObjects.forEach((childData) => {
             if (childData.mesh) {
-                // Position all children at (0,0,0) - layout calculation will position them properly
-                // Removing the index * 0.1 offset that was causing layout positioning issues
-                childData.mesh.position.set(0, 0, 0);
+                const worldPos = childData.mesh.getWorldPosition(new THREE.Vector3());
+                const relativePos = worldPos.clone().sub(containerWorldPosition);
+
+                childData.mesh.position.copy(relativePos);
                 childData.mesh.updateMatrixWorld();
             }
         });
+    }
+
+    /**
+     * Calculate the center point of a collection of positions
+     * @param {Array<THREE.Vector3>} positions - Array of position vectors
+     * @returns {THREE.Vector3} Center point
+     */
+    /**
+     * Calculate the size-weighted center position of multiple objects
+     * @param {Array} objectsData - Array of object data with mesh and size information
+     * @returns {THREE.Vector3} Size-weighted center position
+     */
+    calculateObjectsCenter(objectsData) {
+        if (objectsData.length === 0) return new THREE.Vector3(0, 0, 0);
+
+        // If we receive an array of positions (legacy usage), fall back to geometric center
+        if (objectsData[0] instanceof THREE.Vector3) {
+            const sum = objectsData.reduce((acc, pos) => acc.add(pos), new THREE.Vector3(0, 0, 0));
+            return sum.divideScalar(objectsData.length);
+        }
+
+        let totalWeight = 0;
+        const weightedSum = new THREE.Vector3(0, 0, 0);
+
+        objectsData.forEach(objData => {
+            if (!objData.mesh) return;
+
+            // Get object position in world space
+            const position = objData.mesh.getWorldPosition(new THREE.Vector3());
+
+            // Calculate object size using LayoutEngine for consistency
+            const size = window.LayoutEngine ?
+                window.LayoutEngine.getObjectSize(objData) :
+                new THREE.Vector3(1, 1, 1);
+
+            // Calculate volume as weight (width × height × depth)
+            const volume = size.x * size.y * size.z;
+
+            // Add weighted position to sum
+            weightedSum.add(position.clone().multiplyScalar(volume));
+            totalWeight += volume;
+        });
+
+        // Return size-weighted center
+        if (totalWeight > 0) {
+            return weightedSum.divideScalar(totalWeight);
+        } else {
+            // Fallback to geometric center if no valid sizes
+            const positions = objectsData.map(obj => obj.mesh.getWorldPosition(new THREE.Vector3()));
+            const sum = positions.reduce((acc, pos) => acc.add(pos), new THREE.Vector3(0, 0, 0));
+            return sum.divideScalar(positions.length);
+        }
     }
 
     /**
@@ -493,16 +545,16 @@ class SceneController {
             const containerSize = this.getContainerSize(container);
 
 
-            const layoutResult = window.LayoutEngine.calculateLayout(children, container.autoLayout, containerSize);
+            // Pass the layout anchor if it exists (preserves original center when switching to layout mode)
+            const layoutAnchor = container.layoutAnchor || null;
+            const layoutResult = window.LayoutEngine.calculateLayout(children, container.autoLayout, containerSize, layoutAnchor);
 
             this.applyLayoutPositionsAndSizes(children, layoutResult.positions, layoutResult.sizes, container);
 
-            // Calculate actual object sizes (not layout engine modified sizes)
-            const actualSizes = children.map(child => window.LayoutEngine.getObjectSize(child));
-
-            // Calculate the container size needed to wrap the layout objects
-            // SIMPLIFIED: No coordinate conversion needed since container doesn't move
-            const layoutBounds = this.calculateLayoutBounds(layoutResult.positions, actualSizes);
+            // CRITICAL FIX: Use layoutResult.sizes (not recalculated sizes) for bounds calculation
+            // layoutResult.positions corresponds to layoutResult.sizes from LayoutEngine
+            // Recalculating sizes breaks the array index correspondence and causes position/size mismatch
+            const layoutBounds = this.calculateLayoutBounds(layoutResult.positions, layoutResult.sizes, layoutAnchor);
 
             return { success: true, layoutBounds };
         } else {
@@ -541,9 +593,10 @@ class SceneController {
      * SIMPLIFIED: Only calculates size, container position never changes
      * @param {Array} positions - Array of THREE.Vector3 positions (local space)
      * @param {Array} sizes - Array of THREE.Vector3 sizes
+     * @param {THREE.Vector3} layoutAnchor - Optional layout anchor to subtract from positions (fixes double-offset)
      * @returns {THREE.Vector3} Container size needed to wrap all objects
      */
-    calculateLayoutBounds(positions, sizes) {
+    calculateLayoutBounds(positions, sizes, layoutAnchor = null) {
         if (!positions || !sizes || positions.length === 0) {
             return { size: new THREE.Vector3(1, 1, 1) };
         }
@@ -556,14 +609,23 @@ class SceneController {
             const pos = positions[i];
             const size = sizes[i];
 
+            // Apply layout anchor offset correction to get origin-centered bounds
+            // This fixes the double-offset issue when layoutAnchor was used in layout calculation
+            const correctedPos = layoutAnchor ?
+                new THREE.Vector3(
+                    pos.x - layoutAnchor.x,
+                    pos.y - layoutAnchor.y,
+                    pos.z - layoutAnchor.z
+                ) : pos;
+
             const halfSize = size.clone().multiplyScalar(0.5);
 
-            minX = Math.min(minX, pos.x - halfSize.x);
-            maxX = Math.max(maxX, pos.x + halfSize.x);
-            minY = Math.min(minY, pos.y - halfSize.y);
-            maxY = Math.max(maxY, pos.y + halfSize.y);
-            minZ = Math.min(minZ, pos.z - halfSize.z);
-            maxZ = Math.max(maxZ, pos.z + halfSize.z);
+            minX = Math.min(minX, correctedPos.x - halfSize.x);
+            maxX = Math.max(maxX, correctedPos.x + halfSize.x);
+            minY = Math.min(minY, correctedPos.y - halfSize.y);
+            maxY = Math.max(maxY, correctedPos.y + halfSize.y);
+            minZ = Math.min(minZ, correctedPos.z - halfSize.z);
+            maxZ = Math.max(maxZ, correctedPos.z + halfSize.z);
         }
 
         const size = new THREE.Vector3(

@@ -2,7 +2,7 @@
 body {
     margin: 0;
     padding: 0;
-    background: #1a1a1a;
+    background: #171717;
     color: #e0e0e0;
     font-family: Arial, sans-serif;
     overflow: hidden; /* Prevent page scrolling */
@@ -32,7 +32,7 @@ html {
     left: 280px; /* Account for left panel */
     right: 320px; /* Account for right panel */
     bottom: 0;
-    background: #1a1a1a;
+    background: #171717;
     overflow: hidden;
 }
 

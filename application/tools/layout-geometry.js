@@ -337,7 +337,7 @@ class LayoutGeometry {
      * @param {THREE.Vector3} newCenter - New container center position
      * @param {boolean} shouldReposition - Whether to update container position (default: true)
      */
-    static updateContainerGeometry(containerMesh, newSize, newCenter, shouldReposition = true) {
+    static updateContainerGeometry(containerMesh, newSize, newCenter, shouldReposition = true, layoutDirection = null) {
         if (!containerMesh) {
             console.error('Container mesh not found for geometry update');
             return false;
@@ -366,15 +366,31 @@ class LayoutGeometry {
         const newGeometry = new THREE.BoxGeometry(newSize.x, newSize.y, newSize.z);
 
         if (visualEffects) {
-            // Use centralized wireframe creation
-            const newWireframe = visualEffects.createPreviewBox(
-                newSize.x, newSize.y, newSize.z,
-                new THREE.Vector3(0, 0, 0), // Position will be set below
-                color, // Use configured color
-                opacity // Use configured opacity
-            );
-            newEdgeGeometry = newWireframe.geometry;
-            newMaterial = newWireframe.material;
+            let tempWireframe = null; // Declare variable to hold temporary wireframe
+
+            // Use layout-aware wireframe if layout direction is specified
+            if (layoutDirection && ['x', 'y', 'z'].includes(layoutDirection)) {
+                const layoutWireframe = visualEffects.createLayoutAwareWireframe(
+                    newSize.x, newSize.y, newSize.z,
+                    new THREE.Vector3(0, 0, 0), // Position will be set below
+                    color, // Use configured color
+                    opacity, // Use configured opacity
+                    layoutDirection // Layout direction for opacity visualization
+                );
+                // For layout-aware wireframes, we'll replace the entire wireframe child
+                newEdgeGeometry = layoutWireframe;
+                newMaterial = null; // Group doesn't have a single material
+            } else {
+                // Use standard wireframe creation
+                tempWireframe = visualEffects.createPreviewBox(
+                    newSize.x, newSize.y, newSize.z,
+                    new THREE.Vector3(0, 0, 0), // Position will be set below
+                    color, // Use configured color
+                    opacity // Use configured opacity
+                );
+                newEdgeGeometry = tempWireframe.geometry;
+                newMaterial = tempWireframe.material;
+            }
 
             // Update line width if supported
             if (newMaterial && newMaterial.linewidth !== undefined) {
@@ -382,8 +398,10 @@ class LayoutGeometry {
             }
 
             // Clean up the temporary wireframe object (we only needed its geometry and material)
-            newWireframe.geometry = null; // Don't dispose, we're using it
-            newWireframe.material = null; // Don't dispose, we're using it
+            if (tempWireframe) {
+                tempWireframe.geometry = null; // Don't dispose, we're using it
+                tempWireframe.material = null; // Don't dispose, we're using it
+            }
         } else {
             // Fallback to manual wireframe creation
             console.warn('VisualEffects not available, using fallback wireframe update');
@@ -429,15 +447,35 @@ class LayoutGeometry {
         );
 
         if (wireframeChild) {
-            // Dispose old wireframe geometry
-            if (wireframeChild.geometry) {
-                wireframeChild.geometry.dispose();
-            }
+            // Handle layout-aware wireframes (groups) vs normal wireframes (line segments)
+            if (newEdgeGeometry.userData && newEdgeGeometry.userData.isLayoutAwareWireframe) {
+                // Layout-aware wireframe is a group - replace the entire wireframe child
 
-            // Update wireframe child with new edge geometry and material
-            wireframeChild.geometry = newEdgeGeometry;
-            wireframeChild.material = newMaterial;
-            wireframeChild.renderOrder = renderOrder;
+                // Dispose old wireframe geometry
+                if (wireframeChild.geometry) {
+                    wireframeChild.geometry.dispose();
+                }
+
+                // Remove old wireframe child and add new group
+                containerMesh.remove(wireframeChild);
+
+                // Add layout-aware wireframe group as new wireframe child
+                newEdgeGeometry.userData.supportMeshType = 'wireframe';
+                newEdgeGeometry.renderOrder = renderOrder;
+                containerMesh.add(newEdgeGeometry);
+            } else {
+                // Standard wireframe - update geometry and material as before
+
+                // Dispose old wireframe geometry
+                if (wireframeChild.geometry) {
+                    wireframeChild.geometry.dispose();
+                }
+
+                // Update wireframe child with new edge geometry and material
+                wireframeChild.geometry = newEdgeGeometry;
+                wireframeChild.material = newMaterial;
+                wireframeChild.renderOrder = renderOrder;
+            }
         } else {
             console.warn('updateContainerGeometry: wireframe child not found in container');
         }
@@ -487,9 +525,11 @@ class LayoutGeometry {
 
         // Geometry update completed successfully
         
-        // Optimize raycast for updated geometry
-        newEdgeGeometry.computeBoundingBox();
-        newEdgeGeometry.computeBoundingSphere();
+        // Optimize raycast for updated geometry (only if it's a geometry, not a Group)
+        if (newEdgeGeometry.computeBoundingBox) {
+            newEdgeGeometry.computeBoundingBox();
+            newEdgeGeometry.computeBoundingSphere();
+        }
         newGeometry.computeBoundingBox();
         newGeometry.computeBoundingSphere();
         

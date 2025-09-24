@@ -1485,7 +1485,104 @@ class VisualEffects {
         
         return edgesMesh;
     }
-    
+
+    /**
+     * Create a layout-aware wireframe box with different opacity for layout direction edges
+     * @param {number} width - Box width
+     * @param {number} height - Box height
+     * @param {number} depth - Box depth
+     * @param {THREE.Vector3} position - Position vector
+     * @param {number} color - Line color (hex)
+     * @param {number} opacity - Base opacity for non-layout edges
+     * @param {string} layoutDirection - Layout direction ('x', 'y', 'z', or null)
+     * @returns {THREE.Group} Group containing wireframe with layout visualization
+     */
+    createLayoutAwareWireframe(width, height, depth, position, color = 0x00ff00, opacity = 0.8, layoutDirection = null) {
+        const group = new THREE.Group();
+        group.position.copy(position);
+
+        // Half dimensions for positioning
+        const halfWidth = width / 2;
+        const halfHeight = height / 2;
+        const halfDepth = depth / 2;
+
+        // Define box vertices
+        const vertices = [
+            // Front face
+            [-halfWidth, -halfHeight, halfDepth],   // 0
+            [halfWidth, -halfHeight, halfDepth],    // 1
+            [halfWidth, halfHeight, halfDepth],     // 2
+            [-halfWidth, halfHeight, halfDepth],    // 3
+            // Back face
+            [-halfWidth, -halfHeight, -halfDepth],  // 4
+            [halfWidth, -halfHeight, -halfDepth],   // 5
+            [halfWidth, halfHeight, -halfDepth],    // 6
+            [-halfWidth, halfHeight, -halfDepth]    // 7
+        ];
+
+        // Define edges by direction
+        const edgesByDirection = {
+            x: [ // X-direction edges (parallel to X axis)
+                [0, 1], [2, 3], // Front face horizontal
+                [4, 5], [6, 7]  // Back face horizontal
+            ],
+            y: [ // Y-direction edges (parallel to Y axis)
+                [0, 3], [1, 2], // Front face vertical
+                [4, 7], [5, 6]  // Back face vertical
+            ],
+            z: [ // Z-direction edges (parallel to Z axis)
+                [0, 4], [1, 5], [2, 6], [3, 7] // Connecting front to back
+            ]
+        };
+
+        // Create materials for different opacity levels
+        const fullOpacityMaterial = new THREE.LineBasicMaterial({
+            color: color,
+            transparent: true,
+            opacity: opacity,
+            linewidth: 1
+        });
+
+        const reducedOpacityMaterial = new THREE.LineBasicMaterial({
+            color: color,
+            transparent: true,
+            opacity: opacity * 0.5, // 50% opacity for layout direction edges
+            linewidth: 1
+        });
+
+        // Create line segments for each direction
+        Object.keys(edgesByDirection).forEach(direction => {
+            const edges = edgesByDirection[direction];
+            const positions = [];
+
+            edges.forEach(([startIdx, endIdx]) => {
+                const start = vertices[startIdx];
+                const end = vertices[endIdx];
+                positions.push(start[0], start[1], start[2]);
+                positions.push(end[0], end[1], end[2]);
+            });
+
+            const geometry = new THREE.BufferGeometry();
+            geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+
+            // Use reduced opacity for the layout direction, full opacity for others
+            const material = (layoutDirection === direction) ? reducedOpacityMaterial : fullOpacityMaterial;
+            const lineSegments = new THREE.LineSegments(geometry, material);
+
+            // Store direction info for potential future updates
+            lineSegments.userData.direction = direction;
+            lineSegments.userData.isLayoutDirection = (layoutDirection === direction);
+
+            group.add(lineSegments);
+        });
+
+        // Store layout direction on the group for reference
+        group.userData.layoutDirection = layoutDirection;
+        group.userData.isLayoutAwareWireframe = true;
+
+        return group;
+    }
+
     /**
      * Color constants for different tools - easy to maintain and consistent
      */

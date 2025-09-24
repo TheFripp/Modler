@@ -3,6 +3,7 @@
 	import { propertyController } from '$lib/services/property-controller';
 	import PropertyGroup from '$lib/components/ui/property-group.svelte';
 	import XyzInput from '$lib/components/ui/xyz-input.svelte';
+	import InlineInput from '$lib/components/ui/inline-input.svelte';
 	import ButtonGroup from '$lib/components/ui/button-group.svelte';
 	import MaterialInput from '$lib/components/ui/material-input.svelte';
 	import Badge from '$lib/components/ui/badge.svelte';
@@ -54,7 +55,7 @@
 	}
 </script>
 
-<div class="property-panel h-full bg-card border-l border-[#242424] p-4 overflow-y-auto">
+<div class="property-panel h-full bg-[#171717] border-l border-[#2E2E2E] p-4 overflow-y-auto">
 
 	{#if $displayObject}
 		<!-- Object Name and Type -->
@@ -141,21 +142,21 @@
 							<button
 								type="button"
 								onclick={() => selectLayoutAxis('x')}
-								class="px-3 py-2 text-xs border border-gray-600 rounded-md hover:bg-gray-600 transition-colors {$displayObject.autoLayout?.enabled && $displayObject.autoLayout?.direction === 'x' ? 'bg-gray-600 text-white border-gray-500' : ''}"
+								class="px-3 py-2 text-xs border border-[#2E2E2E] rounded-md hover:bg-[#212121] transition-colors {$displayObject.autoLayout?.enabled && $displayObject.autoLayout?.direction === 'x' ? 'bg-[#212121] text-white border-[#2E2E2E]' : 'bg-[#171717]'}"
 							>
 								Width (X)
 							</button>
 							<button
 								type="button"
 								onclick={() => selectLayoutAxis('y')}
-								class="px-3 py-2 text-xs border border-gray-600 rounded-md hover:bg-gray-600 transition-colors {$displayObject.autoLayout?.enabled && $displayObject.autoLayout?.direction === 'y' ? 'bg-gray-600 text-white border-gray-500' : ''}"
+								class="px-3 py-2 text-xs border border-[#2E2E2E] rounded-md hover:bg-[#212121] transition-colors {$displayObject.autoLayout?.enabled && $displayObject.autoLayout?.direction === 'y' ? 'bg-[#212121] text-white border-[#2E2E2E]' : 'bg-[#171717]'}"
 							>
 								Height (Y)
 							</button>
 							<button
 								type="button"
 								onclick={() => selectLayoutAxis('z')}
-								class="px-3 py-2 text-xs border border-gray-600 rounded-md hover:bg-gray-600 transition-colors {$displayObject.autoLayout?.enabled && $displayObject.autoLayout?.direction === 'z' ? 'bg-gray-600 text-white border-gray-500' : ''}"
+								class="px-3 py-2 text-xs border border-[#2E2E2E] rounded-md hover:bg-[#212121] transition-colors {$displayObject.autoLayout?.enabled && $displayObject.autoLayout?.direction === 'z' ? 'bg-[#212121] text-white border-[#2E2E2E]' : 'bg-[#171717]'}"
 							>
 								Depth (Z)
 							</button>
@@ -167,36 +168,33 @@
 					{#if $displayObject.autoLayout?.enabled}
 						{@const gapMixed = getMixedValue('autoLayout.gap')}
 						<div class="space-y-2">
-							<label class="text-xs font-medium text-foreground">Gap</label>
-							<input
+							<h4 class="text-xs font-medium text-foreground/80 uppercase tracking-wide">Gap</h4>
+							<InlineInput
+								label="Gap"
 								type="number"
 								value={gapMixed.displayValue}
 								placeholder={gapMixed.placeholder}
-								onblur={(e) => propertyController.updateProperty(getObjectIdForUpdate(), 'autoLayout.gap', parseFloat(e.target.value) || 0)}
-								class="w-full px-2 py-1 text-xs bg-gray-800 border border-gray-600 rounded {gapMixed.class}"
-								step="0.1"
-								min="0"
+								objectId={getObjectIdForUpdate()}
+								property="autoLayout.gap"
+								class={gapMixed.class}
 							/>
 						</div>
 
 						<!-- Padding Controls -->
 						<div class="space-y-2">
-							<label class="text-xs font-medium text-foreground">Padding</label>
+							<h4 class="text-xs font-medium text-foreground/80 uppercase tracking-wide">Padding</h4>
 							<div class="grid grid-cols-2 gap-2">
 								{#each ['top', 'bottom', 'left', 'right', 'front', 'back'] as side}
 									{@const paddingMixed = getMixedValue(`autoLayout.padding.${side}`)}
-									<div>
-										<label class="text-xs text-muted-foreground">{side.charAt(0).toUpperCase() + side.slice(1)}</label>
-										<input
-											type="number"
-											value={paddingMixed.displayValue}
-											placeholder={paddingMixed.placeholder}
-											onblur={(e) => propertyController.updateProperty(getObjectIdForUpdate(), `autoLayout.padding.${side}`, parseFloat(e.target.value) || 0)}
-											class="w-full px-2 py-1 text-xs bg-gray-800 border border-gray-600 rounded {paddingMixed.class}"
-											step="0.1"
-											min="0"
-										/>
-									</div>
+									<InlineInput
+										label={side.charAt(0).toUpperCase() + side.slice(1)}
+										type="number"
+										value={paddingMixed.displayValue}
+										placeholder={paddingMixed.placeholder}
+										objectId={getObjectIdForUpdate()}
+										property={`autoLayout.padding.${side}`}
+										class={paddingMixed.class}
+									/>
 								{/each}
 							</div>
 						</div>

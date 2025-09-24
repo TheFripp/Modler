@@ -8,9 +8,10 @@ class LayoutEngine {
      * @param {Array} objects - Array of object data from SceneController
      * @param {Object} layoutConfig - Layout configuration from container
      * @param {THREE.Vector3} containerSize - Optional container size for fill calculations
+     * @param {THREE.Vector3} layoutAnchor - Optional anchor point to center layout around (default: origin)
      * @returns {Object} Object with {positions: Array, sizes: Array}
      */
-    static calculateLayout(objects, layoutConfig, containerSize = null) {
+    static calculateLayout(objects, layoutConfig, containerSize = null, layoutAnchor = null) {
         if (!objects || objects.length === 0) return { positions: [], sizes: [] };
 
 
@@ -28,15 +29,15 @@ class LayoutEngine {
 
         switch (direction) {
             case 'x':
-                return this.calculateLinearLayout(objects, 'x', gap, padding, axisSize, containerSize);
+                return this.calculateLinearLayout(objects, 'x', gap, padding, axisSize, containerSize, layoutAnchor);
             case 'y':
-                return this.calculateLinearLayout(objects, 'y', gap, padding, axisSize, containerSize);
+                return this.calculateLinearLayout(objects, 'y', gap, padding, axisSize, containerSize, layoutAnchor);
             case 'z':
-                return this.calculateLinearLayout(objects, 'z', gap, padding, axisSize, containerSize);
+                return this.calculateLinearLayout(objects, 'z', gap, padding, axisSize, containerSize, layoutAnchor);
             case 'xy':
-                return this.calculateGridLayout(objects, 'xy', gap, padding, layoutConfig);
+                return this.calculateGridLayout(objects, 'xy', gap, padding, layoutConfig, layoutAnchor);
             case 'xyz':
-                return this.calculateGridLayout(objects, 'xyz', gap, padding, layoutConfig);
+                return this.calculateGridLayout(objects, 'xyz', gap, padding, layoutConfig, layoutAnchor);
             default:
                 console.warn(`LayoutEngine: Unknown layout direction '${direction}'`);
                 return {
@@ -54,9 +55,10 @@ class LayoutEngine {
      * @param {Object} padding - Padding configuration
      * @param {number} axisSize - Available container size along the axis (optional)
      * @param {THREE.Vector3} fullContainerSize - Full container size for fill calculations (optional)
+     * @param {THREE.Vector3} layoutAnchor - Optional anchor point to center layout around (default: origin)
      * @returns {Array} Array of positions
      */
-    static calculateLinearLayout(objects, axis, gap, padding, axisSize = null, fullContainerSize = null) {
+    static calculateLinearLayout(objects, axis, gap, padding, axisSize = null, fullContainerSize = null, layoutAnchor = null) {
         const positions = [];
         const paddingOffset = this.getPaddingOffset(axis, padding);
 
@@ -99,8 +101,8 @@ class LayoutEngine {
             positions.push(position);
         });
 
-        // Center the entire layout
-        const centeredPositions = this.centerLayoutPositions(positions, axis);
+        // Center the entire layout around the layout anchor (or origin if no anchor)
+        const centeredPositions = this.centerLayoutPositions(positions, axis, layoutAnchor);
 
         // Apply padding after centering
         const finalPositions = this.applyPaddingToAxis(centeredPositions, axis, paddingOffset);
@@ -118,9 +120,10 @@ class LayoutEngine {
      * @param {number} gap - Gap between objects
      * @param {Object} padding - Padding configuration
      * @param {Object} layoutConfig - Full layout configuration
+     * @param {THREE.Vector3} layoutAnchor - Optional anchor point to center layout around (default: origin)
      * @returns {Array} Array of positions
      */
-    static calculateGridLayout(objects, mode, gap, padding, layoutConfig) {
+    static calculateGridLayout(objects, mode, gap, padding, layoutConfig, layoutAnchor = null) {
         const positions = [];
         
         if (mode === 'xy') {
@@ -164,7 +167,21 @@ class LayoutEngine {
             });
         }
         
-        return this.applyPadding(positions, padding);
+        // Apply padding and center around layout anchor for grid layouts
+        const paddedPositions = this.applyPadding(positions, padding);
+
+        // For grid layouts, we need to center the entire grid around the layout anchor
+        if (layoutAnchor) {
+            return paddedPositions.map(pos => {
+                return new THREE.Vector3(
+                    pos.x + layoutAnchor.x,
+                    pos.y + layoutAnchor.y,
+                    pos.z + layoutAnchor.z
+                );
+            });
+        }
+
+        return paddedPositions;
     }
     
     /**
@@ -369,28 +386,38 @@ class LayoutEngine {
      * Center layout positions along the layout axis
      * @param {Array} positions - Array of position vectors
      * @param {string} axis - Layout axis
+     * @param {THREE.Vector3} layoutAnchor - Optional anchor point to center layout around (default: origin)
      * @returns {Array} Centered positions
      */
-    static centerLayoutPositions(positions, axis) {
+    static centerLayoutPositions(positions, axis, layoutAnchor = null) {
         if (positions.length === 0) return positions;
-        
+
         // Find the center of the layout
         let min = Infinity, max = -Infinity;
-        
+
         positions.forEach(pos => {
             const value = axis === 'x' ? pos.x : axis === 'y' ? pos.y : pos.z;
             min = Math.min(min, value);
             max = Math.max(max, value);
         });
-        
+
         const center = (min + max) / 2;
 
-        // Adjust all positions to center the layout around origin
+        // Determine target center: use layoutAnchor if provided, otherwise origin
+        let targetCenter = 0;
+        if (layoutAnchor) {
+            if (axis === 'x') targetCenter = layoutAnchor.x;
+            else if (axis === 'y') targetCenter = layoutAnchor.y;
+            else if (axis === 'z') targetCenter = layoutAnchor.z;
+        }
+
+        // Adjust all positions to center the layout around the target center
+        const offset = targetCenter - center;
         return positions.map(pos => {
             const centeredPos = pos.clone();
-            if (axis === 'x') centeredPos.x -= center;
-            else if (axis === 'y') centeredPos.y -= center;
-            else if (axis === 'z') centeredPos.z -= center;
+            if (axis === 'x') centeredPos.x += offset;
+            else if (axis === 'y') centeredPos.y += offset;
+            else if (axis === 'z') centeredPos.z += offset;
             return centeredPos;
         });
     }

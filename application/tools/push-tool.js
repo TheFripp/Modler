@@ -376,7 +376,8 @@ class PushTool {
             this.pushedObject,
             newSize,
             this.pushedObject.position,
-            false
+            false,
+            null // No layout direction visualization during push operations
         );
     }
 
@@ -860,7 +861,8 @@ class PushTool {
             containerMesh,
             bounds.size,
             newCenterPosition,
-            true // shouldReposition = true
+            true, // shouldReposition = true
+            null // No layout direction visualization during push operations
         );
 
         // Update SceneController with new container position

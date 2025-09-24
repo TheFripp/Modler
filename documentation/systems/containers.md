@@ -68,7 +68,18 @@ autoLayout: {
 - **Visual feedback**: 25% opacity wireframe during context
 - **Collision management**: Disables other containers during step-into
 
+## Container Expansion (Wrapping Objects)
+
+### Algorithm: `resizeContainerToFitChildren`
+When dragging objects into containers, the container must expand to wrap around child objects without moving them:
+
+1. **Calculate Local Bounds**: Compute bounds of all child objects in container's local coordinate space
+2. **Reposition Container**: Move container so its center aligns with the center of child bounds
+3. **Compensate Children**: Adjust child positions to maintain their world positions when container moves
+
+**Implementation**: `ContainerCrudManager.resizeContainerToFitChildren()` in `application/tools/container-crud-manager.js:507`
+
 ### Key Files
-- **ContainerCrudManager**: `application/tools/container-crud-manager.js` - Container CRUD operations only
+- **ContainerCrudManager**: `application/tools/container-crud-manager.js` - Container CRUD operations and expansion logic
 - **ContainerInteractionManager**: `interaction/container-interaction-manager.js` - Step-into/out interaction state
 - **LayoutGeometry**: `application/tools/layout-geometry.js` - Geometry creation and calculations

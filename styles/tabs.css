@@ -1,8 +1,8 @@
 /* Tab system for left panel */
 .tab-header {
     display: flex;
-    background: #2a2a2a;
-    border-bottom: 1px solid #404040;
+    background: #171717;
+    border-bottom: 1px solid #2E2E2E;
     margin-bottom: 16px;
 }
 

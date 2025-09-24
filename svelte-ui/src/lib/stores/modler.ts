@@ -40,7 +40,7 @@ export const objectHierarchy: Writable<ObjectData[]> = writable([]);
 export const containerContext: Writable<ContainerContext | null> = writable(null);
 export const toolState: Writable<ToolState> = writable({
 	activeTool: 'select',
-	snapEnabled: true
+	snapEnabled: false
 });
 
 
