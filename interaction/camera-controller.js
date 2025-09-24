@@ -40,7 +40,7 @@ class CameraController {
 
     setupEventListeners() {
         // Only essential events - InputController handles mouse events
-        this.canvas.addEventListener('wheel', this.onWheel.bind(this));
+        this.canvas.addEventListener('wheel', this.onWheel.bind(this), { passive: false });
         this.canvas.addEventListener('contextmenu', (e) => e.preventDefault());
         this.canvas.addEventListener('mouseleave', this.onMouseLeave.bind(this));
     }

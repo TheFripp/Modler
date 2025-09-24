@@ -327,6 +327,253 @@ class PositionTransform {
         
         return true;
     }
+
+    /**
+     * NESTED CONTAINER SUPPORT: Extended coordinate transformation chain
+     * Handles multiple levels of container nesting
+     */
+
+    /**
+     * Get the full transformation chain from world space to an object's local space
+     * @param {string} objectId - Target object ID
+     * @returns {Array<Object>} Array of transform steps: [{container, transform}, ...]
+     */
+    static getTransformationChain(objectId) {
+        const sceneController = window.modlerComponents?.sceneController;
+        if (!sceneController) {
+            console.error('PositionTransform: SceneController not available');
+            return [];
+        }
+
+        const chain = [];
+        let currentObject = sceneController.getObject(objectId);
+
+        // Walk up the parent chain, collecting transformations
+        while (currentObject && currentObject.parentContainer) {
+            const parentContainer = sceneController.getObject(currentObject.parentContainer);
+            if (!parentContainer || !parentContainer.mesh) break;
+
+            chain.unshift({
+                container: parentContainer,
+                mesh: parentContainer.mesh,
+                transform: parentContainer.mesh.matrix.clone()
+            });
+
+            currentObject = parentContainer;
+        }
+
+        return chain;
+    }
+
+    /**
+     * Transform a world position through nested container hierarchy
+     * @param {THREE.Vector3} worldPosition - Position in world space
+     * @param {string} targetContainerId - Target container to transform into
+     * @returns {THREE.Vector3} Position in target container's local space
+     */
+    static worldToNestedLocal(worldPosition, targetContainerId) {
+        const sceneController = window.modlerComponents?.sceneController;
+        if (!sceneController) {
+            console.error('PositionTransform: SceneController not available');
+            return worldPosition.clone();
+        }
+
+        const targetContainer = sceneController.getObject(targetContainerId);
+        if (!targetContainer || !targetContainer.mesh) {
+            return worldPosition.clone();
+        }
+
+        // Get the full transformation chain to the target container
+        const chain = this.getTransformationChain(targetContainerId);
+
+        // Apply inverse transformations in reverse order
+        let transformedPosition = worldPosition.clone();
+
+        // Include the target container's own transform
+        chain.push({
+            container: targetContainer,
+            mesh: targetContainer.mesh,
+            transform: targetContainer.mesh.matrix.clone()
+        });
+
+        // Apply inverse of each transformation in the chain
+        for (let i = chain.length - 1; i >= 0; i--) {
+            const step = chain[i];
+            const inverseMatrix = step.transform.clone().invert();
+            transformedPosition.applyMatrix4(inverseMatrix);
+        }
+
+        return transformedPosition;
+    }
+
+    /**
+     * Transform a position from nested local space to world space
+     * @param {THREE.Vector3} localPosition - Position in container's local space
+     * @param {string} containerId - Container the position is relative to
+     * @returns {THREE.Vector3} Position in world space
+     */
+    static nestedLocalToWorld(localPosition, containerId) {
+        const sceneController = window.modlerComponents?.sceneController;
+        if (!sceneController) {
+            console.error('PositionTransform: SceneController not available');
+            return localPosition.clone();
+        }
+
+        const container = sceneController.getObject(containerId);
+        if (!container || !container.mesh) {
+            return localPosition.clone();
+        }
+
+        // Get the full transformation chain from world to container
+        const chain = this.getTransformationChain(containerId);
+
+        // Start with the local position
+        let transformedPosition = localPosition.clone();
+
+        // Include the container's own transform
+        chain.push({
+            container: container,
+            mesh: container.mesh,
+            transform: container.mesh.matrix.clone()
+        });
+
+        // Apply each transformation in forward order
+        chain.forEach(step => {
+            transformedPosition.applyMatrix4(step.transform);
+        });
+
+        return transformedPosition;
+    }
+
+    /**
+     * Handle nested container positioning when a container is moved to another container
+     * @param {THREE.Object3D} containerMesh - Container mesh to move
+     * @param {THREE.Object3D} targetParentMesh - Target parent container mesh
+     * @returns {boolean} Success status
+     */
+    static preserveNestedContainerPosition(containerMesh, targetParentMesh) {
+        if (!containerMesh || !targetParentMesh) {
+            console.error('PositionTransform: Invalid container or parent for nested positioning');
+            return false;
+        }
+
+        // Store world transform before hierarchy changes
+        const worldPosition = containerMesh.getWorldPosition(new THREE.Vector3());
+        const worldRotation = containerMesh.getWorldQuaternion(new THREE.Quaternion());
+        const worldScale = containerMesh.getWorldScale(new THREE.Vector3());
+
+        // Add to new parent
+        targetParentMesh.add(containerMesh);
+
+        // Convert world transform to new parent's local space
+        const parentWorldMatrixInverse = targetParentMesh.matrixWorld.clone().invert();
+        const localMatrix = new THREE.Matrix4();
+
+        // Build transform matrix from world transform
+        const worldMatrix = new THREE.Matrix4().compose(worldPosition, worldRotation, worldScale);
+
+        // Convert to parent's local space
+        localMatrix.multiplyMatrices(parentWorldMatrixInverse, worldMatrix);
+
+        // Apply the local transform
+        containerMesh.matrix.copy(localMatrix);
+        containerMesh.matrixAutoUpdate = false; // Use manual matrix
+        containerMesh.updateMatrixWorld();
+
+        // Force update all child meshes (including context highlights)
+        containerMesh.traverse(child => {
+            if (child !== containerMesh) {
+                child.updateMatrixWorld();
+            }
+        });
+
+        // Update context highlights for this container if it's in a step-in state
+        const visualizationManager = window.modlerComponents?.visualizationManager;
+        if (visualizationManager && visualizationManager.containerVisualizer) {
+            visualizationManager.containerVisualizer.updateContainerContextHighlight(containerMesh);
+        }
+
+        // Validate the transformation
+        const newWorldPosition = containerMesh.getWorldPosition(new THREE.Vector3());
+        const distance = newWorldPosition.distanceTo(worldPosition);
+
+        if (distance > 0.001) {
+            console.warn('⚠️ Nested container position validation failed:', {
+                container: containerMesh.name || 'unnamed',
+                expected: worldPosition.clone(),
+                actual: newWorldPosition.clone(),
+                distance: distance
+            });
+            return false;
+        }
+
+        return true;
+    }
+
+    /**
+     * Calculate nested bounds considering the full container hierarchy
+     * @param {Array<Object>} objects - Objects to calculate bounds for
+     * @param {string} targetContainerId - Container space to calculate bounds in
+     * @returns {Object} {min, max, center, size} in target container's space
+     */
+    static calculateNestedBounds(objects, targetContainerId) {
+        if (!objects || objects.length === 0) {
+            return {
+                min: new THREE.Vector3(),
+                max: new THREE.Vector3(),
+                center: new THREE.Vector3(),
+                size: new THREE.Vector3()
+            };
+        }
+
+        const sceneController = window.modlerComponents?.sceneController;
+        if (!sceneController) {
+            console.error('PositionTransform: SceneController not available for bounds calculation');
+            return null;
+        }
+
+        let min = new THREE.Vector3(Infinity, Infinity, Infinity);
+        let max = new THREE.Vector3(-Infinity, -Infinity, -Infinity);
+
+        objects.forEach(obj => {
+            if (!obj.mesh) return;
+
+            // Get object's world bounding box
+            const worldBox = new THREE.Box3().setFromObject(obj.mesh);
+
+            // Transform bounding box corners to target container space
+            const corners = [
+                new THREE.Vector3(worldBox.min.x, worldBox.min.y, worldBox.min.z),
+                new THREE.Vector3(worldBox.max.x, worldBox.min.y, worldBox.min.z),
+                new THREE.Vector3(worldBox.min.x, worldBox.max.y, worldBox.min.z),
+                new THREE.Vector3(worldBox.max.x, worldBox.max.y, worldBox.min.z),
+                new THREE.Vector3(worldBox.min.x, worldBox.min.y, worldBox.max.z),
+                new THREE.Vector3(worldBox.max.x, worldBox.min.y, worldBox.max.z),
+                new THREE.Vector3(worldBox.min.x, worldBox.max.y, worldBox.max.z),
+                new THREE.Vector3(worldBox.max.x, worldBox.max.y, worldBox.max.z)
+            ];
+
+            corners.forEach(corner => {
+                const localCorner = this.worldToNestedLocal(corner, targetContainerId);
+                min.min(localCorner);
+                max.max(localCorner);
+            });
+        });
+
+        const center = new THREE.Vector3(
+            (min.x + max.x) / 2,
+            (min.y + max.y) / 2,
+            (min.z + max.z) / 2
+        );
+
+        const size = new THREE.Vector3(
+            max.x - min.x,
+            max.y - min.y,
+            max.z - min.z
+        );
+
+        return { min, max, center, size };
+    }
 }
 
 // Export for use in main application

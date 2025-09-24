@@ -1,53 +1,35 @@
 // Object list management
 class ObjectList {
     constructor() {
-        console.log('🎯 ObjectList constructor called');
         this.setupEventListeners();
     }
 
     setupEventListeners() {
-        console.log('🔧 Setting up event listeners');
-        console.log('📄 Document ready state:', document.readyState);
-
         if (document.readyState === 'loading') {
             document.addEventListener('DOMContentLoaded', () => {
-                console.log('📄 DOM content loaded, binding events');
                 this.bindObjectListEvents();
             });
         } else {
-            console.log('📄 DOM already loaded, binding events immediately');
             this.bindObjectListEvents();
         }
     }
 
     bindObjectListEvents() {
-        console.log('🎮 Binding object list events');
-
         // Check if object list container exists
         const objectListContainer = document.getElementById('object-list');
-        console.log('🔍 Object list container check:', objectListContainer);
 
         // Try to populate the object list immediately to test
-        console.log('🧪 Testing populateObjectList function...');
         window.populateObjectList();
 
         // Check if any object items exist after population
         setTimeout(() => {
             const objectItems = document.querySelectorAll('.object-item');
-            console.log('🔎 Object items found after population:', objectItems.length, objectItems);
-
-            // Log all elements in the object list container
-            if (objectListContainer) {
-                console.log('📝 Object list container contents:', objectListContainer.innerHTML);
-            }
         }, 100);
 
         // Set up click handlers for object list items
         document.addEventListener('click', (event) => {
-            // console.log('👆 Click event detected', event.target);
             const objectItem = event.target.closest('.object-item');
             if (objectItem) {
-                // console.log('✅ Object item clicked:', objectItem.dataset.objectName);
                 const objectName = objectItem.querySelector('.object-name').textContent;
                 this.selectObjectFromList(objectName, event);
             }
@@ -58,39 +40,25 @@ class ObjectList {
     }
 
     setupDragAndDropHandlers() {
-        console.log('🎯 Setting up drag and drop handlers');
         let draggedItem = null;
         let draggedData = null;
 
-        // Test: Add general document click listener to verify events are working
-        document.addEventListener('click', (event) => {
-            // console.log('🌐 Global click detected anywhere on page:', event.target);
-        });
-
         // Debug: Add mousedown listener to verify interaction
         document.addEventListener('mousedown', (event) => {
-            // console.log('🌐 Global mousedown detected:', event.target);
             const objectItem = event.target.closest('.object-item');
             if (objectItem) {
-                console.log('🖱️ Mouse down on object item:', objectItem.dataset.objectName, 'draggable:', objectItem.draggable);
-                console.log('🔍 Element:', objectItem);
-                console.log('🎯 Event target:', event.target);
-            } else {
-                // console.log('❌ No object item found for:', event.target);
+                // Object item found for interaction
             }
         });
 
         // Drag start - when user starts dragging an object
         document.addEventListener('dragstart', (event) => {
-            console.log('🔵 Dragstart event fired', event.target);
 
             const objectItem = event.target.closest('.object-item');
             if (!objectItem) {
-                console.log('❌ No object item found');
                 return;
             }
 
-            console.log('✅ Object item found:', objectItem.dataset.objectName);
 
             draggedItem = objectItem;
             draggedData = {
@@ -100,7 +68,6 @@ class ObjectList {
                 parentContainer: objectItem.dataset.parentContainer || null
             };
 
-            console.log('📦 Drag data:', draggedData);
 
             // Set drag data for browser compatibility
             event.dataTransfer.setData('text/plain', draggedData.objectId);
@@ -313,7 +280,6 @@ class ObjectList {
         const dropType = this.getDropType(dropTarget);
         const targetId = this.getDropTargetId(dropTarget);
 
-        console.log('Executing drop:', { dragData, dropType, targetId });
 
         const sceneController = window.modlerComponents?.sceneController;
         const containerManager = window.modlerComponents?.containerCrudManager;
@@ -368,7 +334,6 @@ class ObjectList {
     // Move object to root level (remove from container)
     moveToRoot(objectData, containerManager) {
         if (!objectData.parentContainer) {
-            console.log('Object is already at root level');
             return true;
         }
 
@@ -401,7 +366,6 @@ class ObjectList {
         const success = containerManager.addObjectToContainer(objectData, targetContainer);
 
         if (success && targetContainer.autoLayout?.enabled) {
-            console.log(`✅ Object moved to auto-layout container (${targetContainer.autoLayout.direction}-axis)`);
             this.showAutoLayoutNotification(targetContainer);
         }
 
@@ -596,33 +560,26 @@ window.updateObjectListSelection = function(selectedObjectNames) {
 
 // Global function to populate object list from scene with hierarchy support
 window.populateObjectList = function() {
-    // console.log('🔄 populateObjectList called');
     const objectListContainer = document.getElementById('object-list');
     if (!objectListContainer) {
-        // console.log('❌ Object list container not found');
         return;
     }
-    console.log('✅ Object list container found:', objectListContainer);
 
     const sceneController = window.modlerComponents?.sceneController;
     if (!sceneController) {
-        console.log('❌ Scene controller not available');
         return;
     }
-    console.log('✅ Scene controller available');
 
     // Clear existing list
     objectListContainer.innerHTML = '';
 
     // Get all objects from scene controller
     const objects = sceneController.getAllObjects();
-    console.log('📦 Total objects found:', objects.length, objects);
 
     // Filter out special objects
     const filteredObjects = objects.filter(obj =>
         obj.name !== 'Ground Plane' && obj.name !== 'FloorGrid'
     );
-    console.log('📋 Filtered objects:', filteredObjects.length, filteredObjects);
 
     // Build hierarchy structure
     const hierarchy = buildObjectHierarchy(filteredObjects);
@@ -714,7 +671,6 @@ function createObjectItem(objectData, indentLevel) {
     objectItem.dataset.isContainer = objectData.isContainer;
     objectItem.dataset.parentContainer = objectData.parentContainer || '';
 
-    console.log('🔧 Created draggable item:', objectData.name, 'draggable:', objectItem.draggable);
 
     // Add hierarchy indentation
     if (indentLevel > 0) {
@@ -764,5 +720,4 @@ function createObjectItem(objectData, indentLevel) {
 // Toggle container expansion state (placeholder for future implementation)
 function toggleContainerExpansion(containerId) {
     // TODO: Implement container expansion/collapse
-    console.log('Toggle expansion for container:', containerId);
 }

@@ -243,7 +243,14 @@
 
 	function executeDrop(draggedObj, targetObj, position) {
 		if (position === 'into' && targetObj.isContainer) {
-			// Move object into container
+			// Check if this would be a valid container nesting
+			if (draggedObj.isContainer && !isValidContainerNesting(draggedObj, targetObj)) {
+				// Invalid nesting - show visual feedback and abort
+				showInvalidNestingFeedback();
+				return;
+			}
+
+			// Move object or container into target container
 			moveObjectToContainer(draggedObj, targetObj);
 		} else if (position === 'before' || position === 'after') {
 			// Handle reordering
@@ -272,9 +279,13 @@
 	}
 
 	function moveObjectToContainer(objectToMove, targetContainer) {
-		// Use postMessage to communicate with parent window
+		// Use different message types for objects vs containers
+		const messageType = objectToMove.isContainer ?
+			'container-move-to-container' :
+			'object-move-to-container';
+
 		const messageData = {
-			type: 'object-move-to-container',
+			type: messageType,
 			data: {
 				objectId: objectToMove.id,
 				targetContainerId: targetContainer.id
@@ -329,6 +340,79 @@
 		};
 
 		window.parent.postMessage(messageData, '*');
+	}
+
+	/**
+	 * NESTED CONTAINER SUPPORT: Validation functions for drag & drop
+	 */
+
+	function isValidContainerNesting(childContainer, parentContainer) {
+		// Can't nest into itself
+		if (childContainer.id === parentContainer.id) {
+			return false;
+		}
+
+		// Check if parent is already a child of the container we're trying to nest
+		// (This prevents circular references)
+		if (isDescendantContainer(parentContainer.id, childContainer.id)) {
+			return false;
+		}
+
+		// Check nesting depth - prevent overly deep hierarchies
+		const currentDepth = getContainerNestingDepth(parentContainer.id);
+		if (currentDepth >= 4) { // Max 5 levels (0-4)
+			return false;
+		}
+
+		return true;
+	}
+
+	function isDescendantContainer(potentialDescendantId, ancestorId) {
+		// Walk up the parent chain to see if ancestorId is found
+		let current = filteredHierarchy.find(obj => obj.id === potentialDescendantId);
+		const visited = new Set(); // Prevent infinite loops
+
+		while (current && current.parentContainer) {
+			// Prevent infinite loops in corrupted data
+			if (visited.has(current.id)) {
+				console.error('Circular reference detected in container hierarchy:', current.id);
+				return true; // Treat as circular to prevent nesting
+			}
+			visited.add(current.id);
+
+			if (current.parentContainer === ancestorId) {
+				return true; // Found ancestor relationship
+			}
+
+			// Move up to parent
+			current = filteredHierarchy.find(obj => obj.id === current.parentContainer);
+		}
+
+		return false;
+	}
+
+	function getContainerNestingDepth(containerId) {
+		let depth = 0;
+		let current = filteredHierarchy.find(obj => obj.id === containerId);
+		const visited = new Set();
+
+		while (current && current.parentContainer) {
+			if (visited.has(current.id)) {
+				return -1; // Error state
+			}
+			visited.add(current.id);
+
+			depth++;
+			current = filteredHierarchy.find(obj => obj.id === current.parentContainer);
+		}
+
+		return depth;
+	}
+
+	function showInvalidNestingFeedback() {
+		// Could implement visual feedback here (e.g., red flash, tooltip)
+		console.warn('Invalid container nesting attempted');
+		// For now, just log - could add toast notification or visual indicator
 	}
 
 	function updateLocalObjectOrder(parentId, draggedId, targetId, position) {

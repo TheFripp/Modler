@@ -260,7 +260,17 @@ class ContainerCrudManager {
                 if (!objectData.isContainer) {
                     sceneController.setParentContainer(objectData.id, containerObject.id, false);
                 } else {
-                    objectData.parentContainer = containerObject.id;
+                    // For containers, we need to preserve their position AND their children's positions
+                    // First, preserve the container's world position relative to its new parent
+                    if (!PositionTransform.preserveNestedContainerPosition(obj, containerObject.mesh)) {
+                        console.error('Failed to preserve nested container position during container creation');
+                        return;
+                    }
+
+                    // Set parent relationship after position is preserved
+                    sceneController.setParentContainer(objectData.id, containerObject.id, false);
+
+                    // Ensure container visibility
                     if (obj.visible === false) {
                         obj.visible = true;
                     }
@@ -390,10 +400,108 @@ class ContainerCrudManager {
                 window.populateObjectList();
             }, 10);
         }
-        
+
         return true;
     }
-    
+
+    /**
+     * NESTED CONTAINER SUPPORT: Add container to another container
+     * @param {Object} childContainerData - Container to be nested
+     * @param {Object} parentContainerData - Parent container to nest into
+     * @returns {boolean} Success status
+     */
+    addContainerToContainer(childContainerData, parentContainerData) {
+        const sceneController = window.modlerComponents?.sceneController;
+        if (!sceneController) {
+            console.error('addContainerToContainer: SceneController not available');
+            return false;
+        }
+
+        // Validate both containers
+        if (!childContainerData || !childContainerData.isContainer || !childContainerData.mesh) {
+            console.error('addContainerToContainer: Invalid child container data');
+            return false;
+        }
+
+        if (!parentContainerData || !parentContainerData.isContainer || !parentContainerData.mesh) {
+            console.error('addContainerToContainer: Invalid parent container data');
+            return false;
+        }
+
+        // Check for circular references
+        if (sceneController.wouldCreateCircularReference(childContainerData.id, parentContainerData.id)) {
+            console.error('addContainerToContainer: Would create circular reference');
+            return false;
+        }
+
+        // Check nesting depth limit (prevent overly complex hierarchies)
+        const currentDepth = sceneController.getContainerNestingDepth(parentContainerData.id);
+        if (currentDepth >= 5) { // Max 5 levels deep
+            console.error('addContainerToContainer: Maximum nesting depth reached (5 levels)');
+            return false;
+        }
+
+        const childMesh = childContainerData.mesh;
+        const parentMesh = parentContainerData.mesh;
+
+        // Use specialized nested container positioning
+        if (!PositionTransform.preserveNestedContainerPosition(childMesh, parentMesh)) {
+            console.error('Failed to preserve nested container position');
+            return false;
+        }
+
+        // Update the data structure
+        sceneController.setParentContainer(childContainerData.id, parentContainerData.id, false);
+
+        // Resize parent container to fit the new child container
+        // Preserve parent position to avoid moving all child objects
+        this.resizeContainerToFitChildren(parentContainerData, null, true);
+
+        // If the child container also has children, we may need cascading updates
+        const childChildren = sceneController.getChildObjects(childContainerData.id);
+        if (childChildren.length > 0) {
+            // The child container may also need to resize after coordinate space changes
+            this.resizeContainerToFitChildren(childContainerData, null, true);
+        }
+
+        const meshSynchronizer = window.modlerComponents?.meshSynchronizer;
+        if (meshSynchronizer) {
+            // Sync both the nested container and its parent
+            meshSynchronizer.syncAllRelatedMeshes(childMesh, 'transform');
+            meshSynchronizer.syncAllRelatedMeshes(parentMesh, 'geometry');
+        }
+
+        // Update UI hierarchies
+        if (window.notifyObjectHierarchyChanged) {
+            window.notifyObjectHierarchyChanged();
+        }
+
+        // Legacy support for old object list
+        if (window.populateObjectList) {
+            setTimeout(() => {
+                window.populateObjectList();
+            }, 10);
+        }
+
+        return true;
+    }
+
+    /**
+     * Enhanced addObjectToContainer that supports both objects and containers
+     * @param {Object} objectData - Object or container to add
+     * @param {Object} containerData - Target container
+     * @returns {boolean} Success status
+     */
+    addObjectOrContainerToContainer(objectData, containerData) {
+        // If the object is a container, use specialized container nesting
+        if (objectData.isContainer) {
+            return this.addContainerToContainer(objectData, containerData);
+        } else {
+            // Use existing logic for regular objects
+            return this.addObjectToContainer(objectData, containerData);
+        }
+    }
+
     /**
      * Remove object from container
      * @param {Object} objectData - Object to remove from container

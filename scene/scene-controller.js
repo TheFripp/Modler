@@ -931,6 +931,119 @@ class SceneController {
         }
     }
 
+    /**
+     * NESTED CONTAINER SUPPORT: Circular reference validation
+     * Prevents containers from containing themselves or creating cycles
+     */
+
+    /**
+     * Check if placing containerA inside containerB would create a circular reference
+     * @param {string} containerAId - ID of container to be nested
+     * @param {string} containerBId - ID of target parent container
+     * @returns {boolean} true if would create circular reference, false if safe
+     */
+    wouldCreateCircularReference(containerAId, containerBId) {
+        // Can't contain itself
+        if (containerAId === containerBId) {
+            return true;
+        }
+
+        // Check if containerB is already descendant of containerA
+        return this.isDescendantContainer(containerBId, containerAId);
+    }
+
+    /**
+     * Check if a container is a descendant of another container
+     * @param {string} potentialDescendantId - Container that might be a descendant
+     * @param {string} ancestorId - Container that might be an ancestor
+     * @returns {boolean} true if descendant relationship exists
+     */
+    isDescendantContainer(potentialDescendantId, ancestorId) {
+        const descendant = this.objects.get(potentialDescendantId);
+        if (!descendant || !descendant.isContainer) {
+            return false;
+        }
+
+        // Walk up the parent chain
+        let currentId = potentialDescendantId;
+        const visited = new Set(); // Prevent infinite loops in corrupted data
+
+        while (currentId) {
+            // Prevent infinite loops
+            if (visited.has(currentId)) {
+                console.error('Circular reference detected in container hierarchy:', currentId);
+                return true; // Treat as circular to prevent further nesting
+            }
+            visited.add(currentId);
+
+            const current = this.objects.get(currentId);
+            if (!current) break;
+
+            // Check if current container's parent is our target ancestor
+            if (current.parentContainer === ancestorId) {
+                return true; // Found ancestor relationship
+            }
+
+            // Move up to parent
+            currentId = current.parentContainer;
+        }
+
+        return false;
+    }
+
+    /**
+     * Get the nesting depth of a container (how many levels deep it is)
+     * @param {string} containerId - ID of container to check
+     * @returns {number} nesting depth (0 = root level)
+     */
+    getContainerNestingDepth(containerId) {
+        const container = this.objects.get(containerId);
+        if (!container || !container.isContainer) {
+            return 0;
+        }
+
+        let depth = 0;
+        let currentId = container.parentContainer;
+        const visited = new Set();
+
+        while (currentId) {
+            if (visited.has(currentId)) {
+                console.error('Circular reference in nesting depth calculation:', currentId);
+                return -1; // Error state
+            }
+            visited.add(currentId);
+
+            const parent = this.objects.get(currentId);
+            if (!parent || !parent.isContainer) break;
+
+            depth++;
+            currentId = parent.parentContainer;
+        }
+
+        return depth;
+    }
+
+    /**
+     * Get all nested containers within a parent container (recursive)
+     * @param {string} parentContainerId - Parent container ID
+     * @returns {Array<Object>} Array of nested container objects
+     */
+    getNestedContainers(parentContainerId) {
+        const children = this.getChildObjects(parentContainerId);
+        const nestedContainers = [];
+
+        children.forEach(child => {
+            if (child.isContainer) {
+                nestedContainers.push(child);
+                // Recursively get nested containers within this child container
+                const deeplyNested = this.getNestedContainers(child.id);
+                nestedContainers.push(...deeplyNested);
+            }
+        });
+
+        return nestedContainers;
+    }
+
     // Memory cleanup
     destroy() {
         this.clear();

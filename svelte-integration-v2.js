@@ -38,7 +38,6 @@
                     SVELTE_LEFT_PANEL_URL = `${SVELTE_BASE_URL}/left-panel`;
                     SVELTE_MAIN_TOOLBAR_URL = `${SVELTE_BASE_URL}/main-toolbar`;
                     SVELTE_SYSTEM_TOOLBAR_URL = `${SVELTE_BASE_URL}/system-toolbar`;
-                    console.log(`✅ Using cached Svelte dev server at port ${cachedPort}`);
                     return true;
                 }
             } catch (error) {
@@ -84,7 +83,6 @@
                 SVELTE_LEFT_PANEL_URL = `${SVELTE_BASE_URL}/left-panel`;
                 SVELTE_MAIN_TOOLBAR_URL = `${SVELTE_BASE_URL}/main-toolbar`;
                 SVELTE_SYSTEM_TOOLBAR_URL = `${SVELTE_BASE_URL}/system-toolbar`;
-                console.log(`✅ Found Svelte dev server at port ${successfulPort}`);
                 return true;
             }
         } catch (error) {
@@ -396,7 +394,6 @@
         };
 
         rightIframe.onload = () => {
-            console.log('✅ Right panel iframe loaded, sending current data');
             // Send current data once the iframe is ready
             if (window.modlerComponents) {
                 const currentSelection = window.modlerComponents.selectionController?.getSelectedObjects() || [];
@@ -438,10 +435,8 @@
         `;
 
         mainToolbarIframe.onload = () => {
-            console.log('✅ Main toolbar iframe loaded successfully');
             // Verify communication channel
             if (mainToolbarIframe.contentWindow) {
-                console.log('✅ Main toolbar communication channel ready');
             } else {
                 console.warn('⚠️ Main toolbar communication channel not available');
             }
@@ -482,10 +477,8 @@
         `;
 
         systemToolbarIframe.onload = () => {
-            console.log('✅ System toolbar iframe loaded successfully');
             // Verify communication channel
             if (systemToolbarIframe.contentWindow) {
-                console.log('✅ System toolbar communication channel ready');
             } else {
                 console.warn('⚠️ System toolbar communication channel not available');
             }
@@ -1196,7 +1189,6 @@
             // Add to new container
             const success = containerManager.addObjectToContainer(objectData, targetContainer);
             if (success) {
-                console.log('✅ Successfully moved object to container');
 
                 // Show auto layout notification if container has layout enabled
                 if (targetContainer.autoLayout?.enabled) {
@@ -1208,6 +1200,71 @@
 
         } catch (error) {
             console.error('Error moving object to container:', error);
+        }
+    }
+
+    /**
+     * NESTED CONTAINER SUPPORT: Handle container move to container from Svelte drag and drop
+     */
+    function handleContainerMoveToContainer(containerToMoveId, targetContainerId) {
+        try {
+            console.log('🏠 Moving container to container:', containerToMoveId, 'to', targetContainerId);
+
+            if (!window.modlerComponents?.sceneController || !window.modlerComponents?.containerCrudManager) {
+                console.error('Required components not available for container nesting operation');
+                return;
+            }
+
+            const sceneController = window.modlerComponents.sceneController;
+            const containerManager = window.modlerComponents.containerCrudManager;
+
+            const containerToMove = sceneController.getObject(containerToMoveId);
+            const targetContainer = sceneController.getObject(targetContainerId);
+
+            if (!containerToMove || !containerToMove.isContainer) {
+                console.error('Container to move not found or invalid:', containerToMoveId);
+                return;
+            }
+
+            if (!targetContainer || !targetContainer.isContainer) {
+                console.error('Target container not found or invalid:', targetContainerId);
+                return;
+            }
+
+            // Double-check for circular references (already validated in UI, but safety first)
+            if (sceneController.wouldCreateCircularReference(containerToMoveId, targetContainerId)) {
+                console.error('Circular reference detected - aborting container nesting');
+                return;
+            }
+
+            // Remove from current parent container if needed
+            if (containerToMove.parentContainer) {
+                const removeSuccess = containerManager.removeObjectFromContainer(containerToMove);
+                if (!removeSuccess) {
+                    console.error('Failed to remove container from current parent');
+                    return;
+                }
+            }
+
+            // Use the specialized container-to-container method
+            const success = containerManager.addContainerToContainer(containerToMove, targetContainer);
+            if (success) {
+                console.log('🎉 Container successfully nested');
+
+                // Show nesting notification
+                const nestingDepth = sceneController.getContainerNestingDepth(containerToMoveId);
+                console.log(`📦 Container nested at depth ${nestingDepth} (${containerToMove.name} inside ${targetContainer.name})`);
+
+                // Show auto layout notification if target container has layout enabled
+                if (targetContainer.autoLayout?.enabled) {
+                    console.log(`📐 Container moved to ${targetContainer.autoLayout.direction?.toUpperCase()}-axis layout container`);
+                }
+            } else {
+                console.error('❌ Failed to nest container');
+            }
+
+        } catch (error) {
+            console.error('Error moving container to container:', error);
         }
     }
 
@@ -1241,7 +1298,6 @@
             // Remove from current container
             const success = containerManager.removeObjectFromContainer(objectData);
             if (success) {
-                console.log('✅ Successfully moved object to root level');
             } else {
                 console.error('❌ Failed to move object to root level');
             }
@@ -1274,7 +1330,6 @@
 
             // For now, we'll just trigger a hierarchy update since the UI handles the visual order
             // In a more advanced implementation, we could modify the actual object order in the scene
-            console.log('✅ Root reordering requested - UI will handle visual order');
 
             // Trigger hierarchy update
             if (window.notifyObjectHierarchyChanged) {
@@ -1312,7 +1367,6 @@
 
             // For now, we'll just trigger a hierarchy update and container resize
             // In a more advanced implementation, we could modify the actual object order within the container
-            console.log('✅ Container reordering requested - UI will handle visual order');
 
             // Trigger container recalculation if it has auto-layout
             if (container.autoLayout?.enabled) {
@@ -1359,6 +1413,10 @@
                 // Handle drag and drop move to container
                 const { objectId, targetContainerId } = event.data.data;
                 handleObjectMoveToContainer(objectId, targetContainerId);
+            } else if (event.data && event.data.type === 'container-move-to-container') {
+                // Handle drag and drop container nesting
+                const { objectId, targetContainerId } = event.data.data;
+                handleContainerMoveToContainer(objectId, targetContainerId);
             } else if (event.data && event.data.type === 'object-move-to-root') {
                 // Handle drag and drop move to root
                 const { objectId } = event.data.data;

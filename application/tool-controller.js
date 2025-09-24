@@ -162,47 +162,159 @@ class ToolController {
     }
     
     /**
-     * Create auto layout container from selected objects
+     * ENHANCED: Create container or handle nesting scenarios from selected objects
+     * Supports multiple scenarios:
+     * - Objects only: Create new container (existing behavior)
+     * - Container + objects: Add objects to existing container
+     * - Container + container: Nest one container inside another
+     * - Multiple containers: Smart nesting (first contains others)
      */
     createLayoutContainer() {
         const selectedObjects = this.selectionController.getSelectedObjects();
-        
+
         if (selectedObjects.length === 0) {
             return false;
         }
-        
-        // Filter out non-selectable objects (like floor grid) to ensure clean container bounds
+
+        // Get required components
         const sceneController = window.modlerComponents?.sceneController;
-        const selectableObjects = selectedObjects.filter(obj => {
-            if (!sceneController) return true; // Fallback: include all if SceneController unavailable
-            const objectData = sceneController.getObjectByMesh(obj);
-            return objectData && objectData.selectable === true;
-        });
-        
-        if (selectableObjects.length === 0) {
-            return false;
-        }
-        
-        if (selectableObjects.length !== selectedObjects.length) {
-        }
-        
-        // Direct container creation - no tool dependency
         const containerCrudManager = window.modlerComponents?.containerCrudManager;
-        if (!containerCrudManager) {
-            console.error('ContainerCrudManager not available');
+
+        if (!sceneController || !containerCrudManager) {
+            console.error('Required components not available');
             return false;
         }
 
-        // Create container directly from ContainerCrudManager
-        const success = containerCrudManager.createContainerFromSelection(selectableObjects);
-        
-        if (success) {
-            
-            // REMOVED: Automatic tool switching - user controls tool selection
-            // Only the user should switch tools, not automatic behavior
+        // Filter out non-selectable objects and get object data
+        const selectableObjectData = [];
+        for (const mesh of selectedObjects) {
+            const objectData = sceneController.getObjectByMesh(mesh);
+            console.log('🔍 Checking object:', {
+                name: objectData?.name,
+                id: objectData?.id,
+                isContainer: objectData?.isContainer,
+                selectable: objectData?.selectable,
+                hasObjectData: !!objectData
+            });
+
+            // Include containers even if selectable is not explicitly true
+            // This is because containers might have different selectable logic
+            if (objectData && (objectData.selectable === true || objectData.isContainer)) {
+                selectableObjectData.push(objectData);
+            }
         }
-        
-        return success;
+
+        if (selectableObjectData.length === 0) {
+            return false;
+        }
+
+        // Debug: Log what we found
+        console.log('🔍 Selection analysis:', {
+            totalObjects: selectableObjectData.length,
+            objectDetails: selectableObjectData.map(obj => ({
+                id: obj.id,
+                name: obj.name,
+                isContainer: obj.isContainer,
+                type: obj.type
+            }))
+        });
+
+        // Analyze selection to determine the appropriate action
+        const containers = selectableObjectData.filter(obj => obj.isContainer);
+        const regularObjects = selectableObjectData.filter(obj => !obj.isContainer);
+
+        console.log('📊 Scenario detection:', {
+            containers: containers.length,
+            containerNames: containers.map(c => c.name),
+            regularObjects: regularObjects.length,
+            regularObjectNames: regularObjects.map(o => o.name)
+        });
+
+        // Scenario 1: Objects only - Create new container (existing behavior)
+        if (containers.length === 0 && regularObjects.length > 0) {
+            console.log('📦 Creating new container from selected objects');
+            const selectableMeshes = regularObjects.map(obj => obj.mesh);
+            return containerCrudManager.createContainerFromSelection(selectableMeshes);
+        }
+
+        // Scenario 2: Container + objects - Create NEW container containing everything
+        if (containers.length === 1 && regularObjects.length > 0) {
+            console.log(`🏗️ Creating new container from ${containers.length} container(s) and ${regularObjects.length} object(s)`);
+
+            // Combine all meshes (both containers and objects)
+            const allMeshes = [
+                ...containers.map(obj => obj.mesh),
+                ...regularObjects.map(obj => obj.mesh)
+            ];
+
+            return containerCrudManager.createContainerFromSelection(allMeshes);
+        }
+
+        // Scenario 3: Container + container - Nest one container inside another
+        if (containers.length === 2 && regularObjects.length === 0) {
+            const [containerA, containerB] = containers;
+
+            // Check which nesting makes sense (avoid circular references)
+            const canNestAIntoB = !sceneController.wouldCreateCircularReference(containerA.id, containerB.id);
+            const canNestBIntoA = !sceneController.wouldCreateCircularReference(containerB.id, containerA.id);
+
+            if (canNestAIntoB && !canNestBIntoA) {
+                // Only A can go into B
+                console.log(`🏠 Nesting container ${containerA.name} into ${containerB.name}`);
+                return containerCrudManager.addContainerToContainer(containerA, containerB);
+            } else if (canNestBIntoA && !canNestAIntoB) {
+                // Only B can go into A
+                console.log(`🏠 Nesting container ${containerB.name} into ${containerA.name}`);
+                return containerCrudManager.addContainerToContainer(containerB, containerA);
+            } else if (canNestAIntoB && canNestBIntoA) {
+                // Both are possible - choose based on size or hierarchy
+                const depthA = sceneController.getContainerNestingDepth(containerA.id);
+                const depthB = sceneController.getContainerNestingDepth(containerB.id);
+
+                if (depthA > depthB) {
+                    // A is deeper, put A into B
+                    console.log(`🏠 Nesting deeper container ${containerA.name} (depth ${depthA}) into ${containerB.name} (depth ${depthB})`);
+                    return containerCrudManager.addContainerToContainer(containerA, containerB);
+                } else {
+                    // B is deeper or equal, put B into A
+                    console.log(`🏠 Nesting deeper container ${containerB.name} (depth ${depthB}) into ${containerA.name} (depth ${depthA})`);
+                    return containerCrudManager.addContainerToContainer(containerB, containerA);
+                }
+            } else {
+                console.error('❌ Cannot nest these containers - would create circular reference');
+                return false;
+            }
+        }
+
+        // Scenario 4: Multiple containers (2+ containers, no regular objects) - Create new container containing all
+        if (containers.length >= 2 && regularObjects.length === 0) {
+            console.log(`🏗️ Creating new container from ${containers.length} selected containers`);
+
+            const allMeshes = containers.map(obj => obj.mesh);
+            return containerCrudManager.createContainerFromSelection(allMeshes);
+        }
+
+        // Scenario 5: Mixed selection with multiple containers + objects - Create new container containing everything
+        if (containers.length > 1 && regularObjects.length > 0) {
+            console.log(`🏗️ Creating new container from ${containers.length} container(s) and ${regularObjects.length} object(s)`);
+
+            // Combine all meshes (both containers and objects)
+            const allMeshes = [
+                ...containers.map(obj => obj.mesh),
+                ...regularObjects.map(obj => obj.mesh)
+            ];
+
+            return containerCrudManager.createContainerFromSelection(allMeshes);
+        }
+
+        // Fallback: Single container selected
+        if (containers.length === 1 && regularObjects.length === 0) {
+            console.log('ℹ️ Single container selected - no action needed');
+            return false;
+        }
+
+        console.warn('⚠️ Unhandled selection scenario');
+        return false;
     }
 
     /**
