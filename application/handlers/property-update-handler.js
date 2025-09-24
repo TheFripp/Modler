@@ -94,11 +94,6 @@ class PropertyUpdateHandler {
                 // Step 13: PropertyUpdateHandler → containerCrudManager.showContainer(containerId, true)
                 this.containerCrudManager.showContainer(objectData.id, true);
 
-                // Show layout axis guides when layout is enabled
-                const visualEffects = window.modlerComponents?.visualEffects;
-                if (visualEffects && objectData.mesh && objectData.autoLayout.direction) {
-                    visualEffects.showLayoutAxisGuides(objectData.mesh, objectData.autoLayout.direction);
-                }
 
                 return true;
                 } else {
@@ -315,6 +310,13 @@ class PropertyUpdateHandler {
                 mesh.material.color.setHex(colorValue);
                 console.log('✅ Material color updated through centralized system:', { objectId, value });
             } else if (materialProp === 'opacity') {
+                console.log('🔧 PROPERTY SYSTEM OPACITY CHANGE:', {
+                    objectId,
+                    objectName: mesh.name || 'unnamed',
+                    oldOpacity: mesh.material.opacity,
+                    newOpacity: value,
+                    stackTrace: new Error().stack?.split('\n')[3]?.trim()
+                });
                 mesh.material.opacity = value;
                 mesh.material.transparent = value < 1;
                 console.log('✅ Material opacity updated through centralized system:', { objectId, value });

@@ -24,13 +24,6 @@ class VisualEffects {
                 defaultColor: 0x00ff00, // Green for previews
                 opacity: 0.8,
                 linewidth: 1
-            },
-            layoutGuides: {
-                color: 0xff0000,        // Red for layout guides
-                opacity: 0.8,
-                linewidth: 2,
-                dashSize: 0.2,
-                gapSize: 0.1
             }
         },
 
@@ -447,7 +440,7 @@ class VisualEffects {
 
     /**
      * Material Factory - Creates and caches materials to prevent duplication
-     * @param {string} type - Material type ('object', 'axis', 'preview', 'layoutGuides')
+     * @param {string} type - Material type ('object', 'axis', 'preview')
      * @param {Object} [overrides] - Configuration overrides
      * @returns {THREE.Material} Cached or new material
      */
@@ -490,19 +483,6 @@ class VisualEffects {
                 });
                 break;
 
-            case 'layoutGuides':
-                material = new THREE.LineDashedMaterial({
-                    color: config.color,
-                    linewidth: config.linewidth,
-                    scale: 1,
-                    dashSize: config.dashSize,
-                    gapSize: config.gapSize,
-                    transparent: true,
-                    opacity: config.opacity,
-                    depthTest: false,
-                    depthWrite: false
-                });
-                break;
 
             default:
                 return null;
@@ -1614,74 +1594,6 @@ class VisualEffects {
         this.stopFadeAnimation();
     }
 
-    /**
-     * Show layout axis guides for a container
-     * Creates dashed red lines between opposite face centers along the specified axis
-     */
-    showLayoutAxisGuides(container, axis) {
-        // Clear any existing guides
-        this.clearLayoutAxisGuides();
-
-        if (!container || !container.geometry) return;
-
-        // Calculate container bounds
-        container.geometry.computeBoundingBox();
-        const bbox = container.geometry.boundingBox;
-        if (!bbox) return;
-
-        // Get opposite face centers based on axis
-        let startPoint, endPoint;
-        switch (axis) {
-            case 'x':
-                startPoint = new THREE.Vector3(bbox.min.x, (bbox.min.y + bbox.max.y) / 2, (bbox.min.z + bbox.max.z) / 2);
-                endPoint = new THREE.Vector3(bbox.max.x, (bbox.min.y + bbox.max.y) / 2, (bbox.min.z + bbox.max.z) / 2);
-                break;
-            case 'y':
-                startPoint = new THREE.Vector3((bbox.min.x + bbox.max.x) / 2, bbox.min.y, (bbox.min.z + bbox.max.z) / 2);
-                endPoint = new THREE.Vector3((bbox.min.x + bbox.max.x) / 2, bbox.max.y, (bbox.min.z + bbox.max.z) / 2);
-                break;
-            case 'z':
-                startPoint = new THREE.Vector3((bbox.min.x + bbox.max.x) / 2, (bbox.min.y + bbox.max.y) / 2, bbox.min.z);
-                endPoint = new THREE.Vector3((bbox.min.x + bbox.max.x) / 2, (bbox.min.y + bbox.max.y) / 2, bbox.max.z);
-                break;
-            default:
-                return;
-        }
-
-        // Transform points to world space
-        const containerWorldMatrix = container.matrixWorld;
-        startPoint.applyMatrix4(containerWorldMatrix);
-        endPoint.applyMatrix4(containerWorldMatrix);
-
-        // Create dashed line geometry
-        const points = [startPoint, endPoint];
-        const geometry = new THREE.BufferGeometry().setFromPoints(points);
-
-        // Create dashed material from factory
-        const material = this.createMaterial('layoutGuides');
-
-        // Create line mesh
-        const line = new THREE.Line(geometry, material);
-        line.computeLineDistances(); // Required for dashed lines
-        line.renderOrder = 1001; // Render above other objects
-
-        // Store reference for cleanup
-        this.layoutAxisGuides = line;
-
-        // Add to scene
-        this.scene.add(line);
-
-    }
-
-    /**
-     * Clear layout axis guides
-     */
-    clearLayoutAxisGuides() {
-        if (this.layoutAxisGuides) {
-            this.cleanupVisualResource(this.layoutAxisGuides);
-            this.layoutAxisGuides = null;
-        }
-    }
 
 }
 

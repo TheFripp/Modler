@@ -53,6 +53,65 @@
 			class: mixedState.isMixed ? 'text-muted-foreground/60' : ''
 		};
 	}
+
+	// Fill functionality for dimensions
+	function shouldShowFillButtons(): boolean {
+		if (!$displayObject) {
+			console.log('DEBUG: No displayObject');
+			return false;
+		}
+
+		if ($displayObject.isContainer) {
+			console.log('DEBUG: Object is a container, no fill buttons');
+			return false;
+		}
+
+		// Check if PropertyManager is available
+		const hasPropertyManager = window.modlerComponents?.propertyManager;
+		console.log('DEBUG: PropertyManager available:', !!hasPropertyManager);
+
+		if (!hasPropertyManager) {
+			console.log('DEBUG: PropertyManager not available');
+			return false;
+		}
+
+		// Check if object is in a layout-enabled container
+		const isInLayoutContainer = window.modlerComponents.propertyManager.isInLayoutContainer($displayObject.id);
+		console.log('DEBUG: Object in layout container:', isInLayoutContainer);
+		console.log('DEBUG: Object ID:', $displayObject.id);
+		console.log('DEBUG: displayObject:', $displayObject);
+
+		return isInLayoutContainer;
+	}
+
+	function getFillStates(): { x?: boolean; y?: boolean; z?: boolean } {
+		if (!$displayObject || !window.modlerComponents?.propertyManager) return {};
+
+		const pm = window.modlerComponents.propertyManager;
+		return {
+			x: pm.isAxisFilled($displayObject.id, 'x'),
+			y: pm.isAxisFilled($displayObject.id, 'y'),
+			z: pm.isAxisFilled($displayObject.id, 'z')
+		};
+	}
+
+	function handleFillToggle(axis: 'x' | 'y' | 'z') {
+		if (window.modlerComponents?.propertyManager) {
+			window.modlerComponents.propertyManager.toggleFillProperty(axis);
+		}
+	}
+
+	function handleFillHover(axis: 'x' | 'y' | 'z' | null) {
+		// Trigger face highlighting via VisualEffects
+		const visualEffects = window.modlerComponents?.visualEffects;
+		if (!visualEffects) return;
+
+		if (axis) {
+			visualEffects.showAxisFaceHighlight(axis);
+		} else {
+			visualEffects.clearHighlight();
+		}
+	}
 </script>
 
 <div class="property-panel h-full bg-[#171717] border-l border-[#2E2E2E] p-4 overflow-y-auto">
@@ -113,6 +172,10 @@
 						objectId={$displayObject.id}
 						propertyBase="dimensions"
 						labels={{ x: 'W', y: 'H', z: 'D' }}
+						showFillButtons={shouldShowFillButtons()}
+						fillStates={getFillStates()}
+						onFillToggle={handleFillToggle}
+						onFillHover={handleFillHover}
 					/>
 				</div>
 			</div>

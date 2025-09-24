@@ -3,6 +3,167 @@
  * Streamlined initialization and component coordination
  */
 
+// PropertyManager class (embedded to ensure loading)
+class PropertyManager {
+    constructor() {
+        this.initialized = false;
+
+        // Component references
+        this.sceneController = null;
+        this.selectionController = null;
+        this.meshSynchronizer = null;
+        this.layoutEngine = null;
+        this.historyManager = null;
+
+        // Property update throttling
+        this.updateThrottles = new Map();
+        this.throttleDelay = 100; // ms
+    }
+
+    /**
+     * Initialize with required components
+     */
+    initialize() {
+        this.sceneController = window.modlerComponents?.sceneController;
+        this.selectionController = window.modlerComponents?.selectionController;
+        this.meshSynchronizer = window.modlerComponents?.meshSynchronizer;
+        this.layoutEngine = window.LayoutEngine || null;
+        this.historyManager = window.modlerComponents?.historyManager;
+
+        this.initialized = true;
+        console.log('✅ PropertyManager initialized');
+    }
+
+    /**
+     * Check if object has fill enabled for specific axis
+     * @param {string} objectId - Object ID
+     * @param {string} axis - 'x', 'y', or 'z'
+     * @returns {boolean} True if fill is enabled
+     */
+    isAxisFilled(objectId, axis) {
+        if (!this.sceneController) return false;
+
+        const objectData = this.sceneController.getObject(objectId);
+        if (!objectData || !objectData.layoutProperties) return false;
+
+        const sizeProperty = `size${axis.toUpperCase()}`;
+        return objectData.layoutProperties[sizeProperty] === 'fill';
+    }
+
+    /**
+     * Check if object is in a layout-enabled container
+     * @param {string} objectId - Object ID
+     * @returns {boolean} True if in layout container
+     */
+    isInLayoutContainer(objectId) {
+        if (!this.sceneController) return false;
+
+        const objectData = this.sceneController.getObject(objectId);
+        if (!objectData || !objectData.parentContainer) return false;
+
+        const container = this.sceneController.getObject(objectData.parentContainer);
+        return container && container.autoLayout && container.autoLayout.enabled;
+    }
+
+    /**
+     * Toggle fill property for an axis
+     * @param {string} axis - 'x', 'y', or 'z'
+     */
+    toggleFillProperty(axis) {
+        if (!this.initialized) return;
+
+        const selectedObjects = this.selectionController?.getSelectedObjects();
+        if (!selectedObjects || selectedObjects.length === 0) return;
+
+        const mesh = selectedObjects[0]; // Handle first selected object
+        if (!mesh.userData?.id) return;
+
+        const objectData = this.sceneController?.getObject(mesh.userData.id);
+        if (!objectData) return;
+
+        // Check if object is in a layout container
+        if (!objectData.parentContainer) {
+            console.warn('PropertyManager: Object is not in a container, cannot toggle fill');
+            return;
+        }
+
+        const container = this.sceneController.getObject(objectData.parentContainer);
+        if (!container || !container.autoLayout || !container.autoLayout.enabled) {
+            console.warn('PropertyManager: Parent container does not have layout enabled');
+            return;
+        }
+
+        // Initialize layoutProperties if needed
+        if (!objectData.layoutProperties) {
+            objectData.layoutProperties = {
+                sizeX: 'fixed',
+                sizeY: 'fixed',
+                sizeZ: 'fixed'
+            };
+        }
+
+        // Toggle fill state for the axis
+        const sizeProperty = `size${axis.toUpperCase()}`;
+        const currentState = objectData.layoutProperties[sizeProperty];
+        const newState = currentState === 'fill' ? 'fixed' : 'fill';
+
+        objectData.layoutProperties[sizeProperty] = newState;
+
+        console.log(`PropertyManager: Toggled ${axis}-axis fill to ${newState} for object ${objectData.name}`);
+
+        // Apply layout update
+        if (this.sceneController) {
+            this.sceneController.updateLayout(container.id);
+        }
+
+        // Update property panel display
+        if (window.updatePropertyPanelFromObject) {
+            window.updatePropertyPanelFromObject(mesh);
+        }
+
+        // Sync related meshes
+        if (this.meshSynchronizer) {
+            this.meshSynchronizer.syncRelatedMeshes(mesh);
+        }
+
+        // Notify SceneController
+        this.sceneController.notifyObjectModified(objectData.id);
+
+        // Trigger property panel refresh for all affected objects
+        this.refreshLayoutPropertyPanels(container);
+    }
+
+    /**
+     * Refresh property panels for all objects in a container when layout changes
+     * @param {Object} container - Container data
+     */
+    refreshLayoutPropertyPanels(container) {
+        if (!container || !this.sceneController) return;
+
+        const children = this.sceneController.getChildren(container.id);
+        if (!children || children.length === 0) return;
+
+        // Refresh property panel if any child is currently selected
+        const selectedObjects = this.selectionController?.getSelectedObjects();
+        if (!selectedObjects || selectedObjects.length === 0) return;
+
+        const selectedIds = selectedObjects.map(mesh => mesh.userData?.id).filter(Boolean);
+        const shouldRefresh = children.some(child => selectedIds.includes(child.id));
+
+        if (shouldRefresh) {
+            // Trigger property panel update
+            setTimeout(() => {
+                if (window.updatePropertyPanelFromObject) {
+                    window.updatePropertyPanelFromObject(selectedObjects[0]);
+                }
+            }, 100); // Small delay to allow layout calculations to complete
+        }
+    }
+}
+
+// Make PropertyManager available globally
+window.PropertyManager = PropertyManager;
+
 // System components registry
 let modlerV2Components = {};
     
@@ -74,8 +235,8 @@ function initializeInteraction() {
 
     // Connect selection components
     modlerV2Components.selectionController.initialize(
-        modlerV2Components.visualizationManager,
-        modlerV2Components.containerInteractionManager
+        modlerV2Components.visualizationManager
+        // containerInteractionManager removed - NavigationController handles all container context
     );
 
     // Move gizmo removed - face-based movement system is cleaner and more intuitive
@@ -100,9 +261,17 @@ function initializeInteraction() {
 function initializeApplication() {
     modlerV2Components.configurationManager = new ConfigurationManager();
 
+    // Initialize HistoryManager for undo/redo functionality
+    modlerV2Components.historyManager = new HistoryManager();
+
+    // Initialize NavigationController for centralized hierarchy navigation
+    modlerV2Components.navigationController = new NavigationController();
 
     // Initialize PropertyUpdateHandler for property-panel driven layout system
     modlerV2Components.propertyUpdateHandler = new PropertyUpdateHandler();
+
+    // Initialize PropertyManager for object property updates and fill functionality
+    modlerV2Components.propertyManager = new PropertyManager();
 
     // Initialize components that depend on ConfigurationManager
     if (modlerV2Components.visualizationManager) {
@@ -202,10 +371,35 @@ function registerSnapBehaviors() {
  */
 function connectComponents() {
     // Move gizmo connection removed - face-based movement handles all object manipulation
-    
+
+    // Initialize HistoryManager
+    const { historyManager } = modlerV2Components;
+    if (historyManager) {
+        historyManager.initialize();
+        console.log('✅ HistoryManager initialized and connected');
+    }
+
+    // Initialize PropertyManager
+    const { propertyManager } = modlerV2Components;
+    if (propertyManager) {
+        propertyManager.initialize();
+        console.log('✅ PropertyManager initialized and connected');
+    }
+
+    // Initialize NavigationController with required components
+    const { navigationController, selectionController, visualizationManager, containerVisualizer } = modlerV2Components;
+    if (navigationController && selectionController && visualizationManager) {
+        // Note: containerVisualizer is part of visualizationManager
+        const containerViz = visualizationManager.containerVisualizer;
+        if (containerViz) {
+            navigationController.initialize(selectionController, visualizationManager, containerViz);
+            console.log('✅ NavigationController initialized and connected');
+        }
+    }
+
     // Connect snap system to animation loop
-    const { sceneFoundation, snapController, snapVisualizer, toolController, selectionController } = modlerV2Components;
-    
+    const { sceneFoundation, snapController, snapVisualizer, toolController } = modlerV2Components;
+
     if (sceneFoundation && snapController && snapVisualizer && toolController && selectionController) {
         sceneFoundation.addAnimationCallback(() => {
             const activeToolName = toolController.getActiveToolName();
