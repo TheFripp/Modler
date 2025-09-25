@@ -2,7 +2,7 @@
 	import { onMount } from 'svelte';
 	import { initializeBridge } from '$lib/bridge/threejs-bridge';
 	import { toolState } from '$lib/stores/modler';
-	import { activateToolInScene } from '$lib/bridge/threejs-bridge';
+	import { activateToolInScene, toggleSnapInScene } from '$lib/bridge/threejs-bridge';
 
 	// Main tool configuration
 	const tools = [
@@ -17,6 +17,14 @@
 			activateToolInScene(toolName);
 		} catch (error) {
 			console.error('❌ Tool activation failed:', error);
+		}
+	}
+
+	function handleSnapToggle() {
+		try {
+			toggleSnapInScene();
+		} catch (error) {
+			console.error('❌ Snap toggle failed:', error);
 		}
 	}
 
@@ -45,6 +53,19 @@
 			<span class="tool-icon">{tool.icon}</span>
 		</button>
 	{/each}
+
+	<!-- Separator -->
+	<div class="separator"></div>
+
+	<!-- Snap Toggle -->
+	<button
+		class="toolbar-btn"
+		class:active={$toolState.snapEnabled}
+		on:click={handleSnapToggle}
+		title="Toggle Snapping {$toolState.snapEnabled ? '(On)' : '(Off)'}"
+	>
+		<span class="tool-icon">🧲</span>
+	</button>
 </div>
 
 <style>
@@ -60,7 +81,7 @@
 		backdrop-filter: blur(10px);
 		border: 1px solid #2E2E2E;
 		border-radius: 12px;
-		padding: 12px 16px;
+		padding: 20px 16px; /* Increased from 12px to 20px for 8px more top/bottom padding */
 		height: 48px;
 		display: flex;
 		align-items: center;
@@ -75,8 +96,8 @@
 		align-items: center;
 		gap: 8px;
 		padding: 6px 12px;
-		background: #212121;
-		border: 1px solid #2E2E2E;
+		background: transparent; /* Removed fill color */
+		border: none; /* Removed border for non-active */
 		border-radius: 8px;
 		color: #ffffff;
 		font-size: 12px;
@@ -87,21 +108,26 @@
 	}
 
 	.toolbar-btn:hover {
-		background: #2E2E2E;
-		border-color: #6b7280;
+		background: rgba(255, 255, 255, 0.1);
 		transform: translateY(-1px);
 	}
 
 	.toolbar-btn.active {
-		background: #212121;
-		border-color: #4a9eff;
-		border-width: 1px;
+		background: transparent;
+		border: 1px solid #4a9eff; /* Only active buttons have border */
 		box-shadow: none;
 	}
 
 	.toolbar-btn.active:hover {
-		background: #2E2E2E;
+		background: rgba(255, 255, 255, 0.05);
 		border-color: #6bb6ff;
+	}
+
+	.separator {
+		width: 1px;
+		height: 24px;
+		background: #2E2E2E;
+		margin: 0 4px;
 	}
 
 	.tool-icon {

@@ -153,7 +153,7 @@ class SupportMeshFactory {
             return null;
         }
 
-        const edgeGeometry = this.geometryFactory.createEdgeGeometry(mainMesh);
+        const edgeGeometry = this.geometryFactory.createEdgeGeometry(mainMesh.geometry);
         const wireframe = new THREE.LineSegments(edgeGeometry, this.materials.selectionWireframe);
 
         // Position at (0,0,0) relative to parent - inherits parent transform
@@ -170,7 +170,7 @@ class SupportMeshFactory {
     createContainerWireframe(mainMesh) {
         if (!mainMesh.geometry) return null;
 
-        const edgeGeometry = this.geometryFactory.createEdgeGeometry(mainMesh);
+        const edgeGeometry = this.geometryFactory.createEdgeGeometry(mainMesh.geometry);
         const wireframe = new THREE.LineSegments(edgeGeometry, this.materials.containerWireframe);
 
         wireframe.position.set(0, 0.001, 0); // Small Y offset

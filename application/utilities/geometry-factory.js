@@ -6,11 +6,17 @@ class GeometryFactory {
     constructor() {
         // Geometry pools for frequently used shapes
         this.pools = {
+            boxes: new Map(), // size string -> geometry array
             boxEdges: new Map(), // size string -> geometry array
             faceTriangles: new Map(), // face key -> geometry array
             rectangularFaces: new Map(), // face key -> geometry array
             wireframes: new Map(), // dimensions -> geometry array
-            planes: new Map() // size -> geometry array
+            planes: new Map(), // size -> geometry array
+            cylinders: new Map(), // size -> geometry array
+            spheres: new Map(), // size -> geometry array
+            rings: new Map(), // size -> geometry array
+            edges: new Map(), // source key -> geometry array
+            lines: new Map() // points key -> geometry array
         };
 
         // Active geometry tracking for cleanup
@@ -26,11 +32,17 @@ class GeometryFactory {
 
         // Pool size limits to prevent memory bloat
         this.maxPoolSize = {
+            boxes: 30,
             boxEdges: 20,
             faceTriangles: 50,
             rectangularFaces: 30,
             wireframes: 15,
-            planes: 25
+            planes: 25,
+            cylinders: 20,
+            spheres: 15,
+            rings: 10,
+            edges: 25,
+            lines: 40
         };
     }
 
@@ -741,11 +753,13 @@ class GeometryFactory {
         }
 
         // Fallback: use bounding box characteristics
-        geometry.computeBoundingBox();
-        const box = geometry.boundingBox;
-        if (box) {
-            const size = box.getSize(new THREE.Vector3());
-            return `${size.x.toFixed(2)}_${size.y.toFixed(2)}_${size.z.toFixed(2)}`;
+        if (geometry && geometry.computeBoundingBox) {
+            geometry.computeBoundingBox();
+            const box = geometry.boundingBox;
+            if (box) {
+                const size = box.getSize(new THREE.Vector3());
+                return `${size.x.toFixed(2)}_${size.y.toFixed(2)}_${size.z.toFixed(2)}`;
+            }
         }
 
         // Final fallback: use vertex count
@@ -768,6 +782,65 @@ class GeometryFactory {
             hitRate: this.stats.poolHits / (this.stats.poolHits + this.stats.poolMisses) || 0,
             activeGeometries: this.activeGeometries.size || 'unknown'
         };
+    }
+
+    /**
+     * Return geometry to pool for reuse
+     * @param {THREE.BufferGeometry} geometry - Geometry to return
+     * @param {string} type - Type hint for pooling (box, plane, etc.)
+     */
+    returnGeometry(geometry, type = 'unknown') {
+        if (!geometry) return;
+
+        try {
+            // Try to determine pool type and key from geometry metadata
+            const metadata = this.activeGeometries.get(geometry);
+            if (metadata && metadata.type && metadata.key) {
+                // Use metadata to return to correct pool
+                const poolName = this.getPoolNameFromType(metadata.type);
+                if (poolName) {
+                    this.storeInPool(poolName, metadata.key, geometry);
+                    return;
+                }
+            }
+
+            // Fallback: try to determine from type parameter
+            const poolName = this.getPoolNameFromType(type);
+            if (poolName) {
+                const key = this.generateGeometryKey(geometry);
+                this.storeInPool(poolName, key, geometry);
+            } else {
+                // Can't pool - just dispose
+                this.disposeGeometry(geometry);
+            }
+        } catch (error) {
+            console.warn('GeometryFactory: Error returning geometry to pool:', error);
+            // Fallback to disposal
+            this.disposeGeometry(geometry);
+        }
+    }
+
+    /**
+     * Get pool name from geometry type
+     * @param {string} type - Geometry type
+     * @returns {string|null} Pool name or null
+     */
+    getPoolNameFromType(type) {
+        const typeMapping = {
+            'box': 'boxes',
+            'plane': 'planes',
+            'cylinder': 'cylinders',
+            'sphere': 'spheres',
+            'ring': 'rings',
+            'edges': 'edges',
+            'wireframe': 'wireframes',
+            'line': 'lines',
+            'triangle': 'faceTriangles',
+            'rectangular': 'rectangularFaces',
+            'boxEdges': 'boxEdges'
+        };
+
+        return typeMapping[type] || null;
     }
 
     /**

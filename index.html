@@ -70,17 +70,12 @@
     <script src="application/tools/box-creation-tool.js"></script>
     <script src="v2-main.js"></script>
 
-    <!-- Application Scripts -->
-    <script src="js/ui/config-form-builder.js"></script>
-    <script src="js/ui/settings-content.js"></script>
-    <script src="js/core/keyboard-shortcuts.js"></script>
-    <script src="js/ui/tab-system.js"></script>
-    <script src="js/ui/configuration-ui.js"></script>
-    <script src="js/ui/object-list.js"></script>
-    <script src="js/ui/property-panel.js"></script>
-    <script src="js/core/initialization.js"></script>
+    <!-- Legacy V1 UI scripts removed - replaced by Svelte UI -->
 
-    <!-- Svelte UI Integration (Development Only) -->
-    <script src="svelte-integration-v2.js"></script>
+    <!-- Svelte UI Integration (Development Only - Modularized) -->
+    <script src="integration/svelte/port-detection.js"></script>
+    <script src="integration/svelte/panel-manager.js"></script>
+    <script src="integration/svelte/data-sync.js"></script>
+    <script src="integration/svelte/main-integration.js"></script>
 </body>
 </html>

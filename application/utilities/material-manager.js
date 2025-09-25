@@ -112,7 +112,7 @@ class MaterialManager {
             this.updateMaterialsOfType(this.materialTypes.PADDING_VISUALIZATION, 'linewidth', newValue);
         });
 
-        console.log('MaterialManager: Configuration callbacks registered');
+        // Configuration callbacks registered
     }
 
     /**
@@ -159,7 +159,15 @@ class MaterialManager {
         if (cached) return cached;
 
         // Create new material
-        const colorHex = parseInt(config.color.replace('#', ''), 16);
+        // Safe color parsing to handle various color input types
+        let colorHex;
+        if (typeof config.color === 'string') {
+            colorHex = parseInt(config.color.replace('#', ''), 16);
+        } else if (typeof config.color === 'number') {
+            colorHex = config.color;
+        } else {
+            colorHex = 0xffffff; // Default to white
+        }
         const material = new THREE.LineBasicMaterial({
             color: colorHex,
             transparent: config.transparent,
@@ -199,7 +207,15 @@ class MaterialManager {
         if (cached) return cached;
 
         // Create new material
-        const colorHex = parseInt(config.color.replace('#', ''), 16);
+        // Safe color parsing to handle various color input types
+        let colorHex;
+        if (typeof config.color === 'string') {
+            colorHex = parseInt(config.color.replace('#', ''), 16);
+        } else if (typeof config.color === 'number') {
+            colorHex = config.color;
+        } else {
+            colorHex = 0xffffff; // Default to white
+        }
         const material = new THREE.LineBasicMaterial({
             color: colorHex,
             transparent: config.transparent,
@@ -241,7 +257,15 @@ class MaterialManager {
         if (cached) return cached;
 
         // Create new material
-        const colorHex = parseInt(config.color.replace('#', ''), 16);
+        // Safe color parsing to handle various color input types
+        let colorHex;
+        if (typeof config.color === 'string') {
+            colorHex = parseInt(config.color.replace('#', ''), 16);
+        } else if (typeof config.color === 'number') {
+            colorHex = config.color;
+        } else {
+            colorHex = 0xffffff; // Default to white
+        }
         const material = new THREE.MeshBasicMaterial({
             color: colorHex,
             transparent: config.transparent,
@@ -307,7 +331,15 @@ class MaterialManager {
         if (cached) return cached;
 
         // Create new material
-        const colorHex = parseInt(config.color.replace('#', ''), 16);
+        // Safe color parsing to handle various color input types
+        let colorHex;
+        if (typeof config.color === 'string') {
+            colorHex = parseInt(config.color.replace('#', ''), 16);
+        } else if (typeof config.color === 'number') {
+            colorHex = config.color;
+        } else {
+            colorHex = 0xffffff; // Default to white
+        }
         const material = new THREE.MeshBasicMaterial({
             color: colorHex,
             opacity: config.opacity,
@@ -345,7 +377,15 @@ class MaterialManager {
         if (cached) return cached;
 
         // Create new material
-        const colorHex = parseInt(config.color.replace('#', ''), 16);
+        // Safe color parsing to handle various color input types
+        let colorHex;
+        if (typeof config.color === 'string') {
+            colorHex = parseInt(config.color.replace('#', ''), 16);
+        } else if (typeof config.color === 'number') {
+            colorHex = config.color;
+        } else {
+            colorHex = 0xffffff; // Default to white
+        }
         const material = new THREE.LineBasicMaterial({
             color: colorHex,
             transparent: config.transparent,
@@ -379,7 +419,15 @@ class MaterialManager {
         if (cached) return cached;
 
         // Create new material
-        const colorHex = parseInt(config.color.replace('#', ''), 16);
+        // Safe color parsing to handle various color input types
+        let colorHex;
+        if (typeof config.color === 'string') {
+            colorHex = parseInt(config.color.replace('#', ''), 16);
+        } else if (typeof config.color === 'number') {
+            colorHex = config.color;
+        } else {
+            colorHex = 0xffffff; // Default to white
+        }
         const material = new THREE.MeshBasicMaterial({
             color: colorHex,
             transparent: config.transparent,
@@ -413,7 +461,15 @@ class MaterialManager {
         if (cached) return cached;
 
         // Create new material
-        const colorHex = parseInt(config.color.replace('#', ''), 16);
+        // Safe color parsing to handle various color input types
+        let colorHex;
+        if (typeof config.color === 'string') {
+            colorHex = parseInt(config.color.replace('#', ''), 16);
+        } else if (typeof config.color === 'number') {
+            colorHex = config.color;
+        } else {
+            colorHex = 0xffffff; // Default to white
+        }
         const material = new THREE.LineBasicMaterial({
             color: colorHex,
             transparent: config.transparent,
@@ -532,7 +588,7 @@ class MaterialManager {
 
         if (updatedCount > 0) {
             this.stats.configUpdates++;
-            console.log(`MaterialManager: Updated ${updatedCount} materials of type ${type} with ${property}=${value}`);
+            // Updated ${updatedCount} materials of type ${type}
         }
     }
 
@@ -772,6 +828,19 @@ class MaterialManager {
         console.log('Total cache entries:', this.materialCache.size);
         console.log('Stats:', this.getStats());
         console.groupEnd();
+    }
+
+    /**
+     * Track material for resource management
+     * @param {THREE.Material} material - Material to track
+     */
+    trackMaterial(material) {
+        // Add to tracking collection if not already tracked
+        if (material && !material.userData.tracked) {
+            material.userData.tracked = true;
+            material.userData.createdAt = Date.now();
+            // Could add to a tracking collection here if needed for advanced resource management
+        }
     }
 
     /**

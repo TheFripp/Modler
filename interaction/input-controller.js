@@ -211,11 +211,12 @@ class InputController {
             }
 
             // Tool switching shortcuts
+            const toolController = window.modlerComponents?.toolController;
             switch (event.code) {
-                case 'KeyQ': if (window.activateTool) window.activateTool('select'); break;
-                case 'KeyW': if (window.activateTool) window.activateTool('move'); break;
-                case 'KeyE': if (window.activateTool) window.activateTool('push'); break;
-                case 'KeyR': if (window.activateTool) window.activateTool('box-creation'); break;
+                case 'KeyQ': if (toolController) toolController.switchToTool('select'); break;
+                case 'KeyW': if (toolController) toolController.switchToTool('move'); break;
+                case 'KeyE': if (toolController) toolController.switchToTool('push'); break;
+                case 'KeyR': if (toolController) toolController.switchToTool('box-creation'); break;
                 case 'Escape': this.selectionController.clearSelection(); break;
             }
         }

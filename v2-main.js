@@ -515,3 +515,17 @@ function getModlerV2Status() {
         sceneStats: modlerV2Components.sceneController?.getStats()
     };
 }
+
+// Auto-initialize when DOM is ready
+document.addEventListener('DOMContentLoaded', () => {
+    const canvas = document.getElementById('canvas');
+    if (canvas) {
+        initializeModlerV2(canvas).then(() => {
+            console.log('✅ Modler V2 auto-initialization complete');
+        }).catch(error => {
+            console.error('❌ Modler V2 auto-initialization failed:', error);
+        });
+    } else {
+        console.error('❌ Canvas element not found - Modler V2 initialization skipped');
+    }
+});
