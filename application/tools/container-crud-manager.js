@@ -202,7 +202,7 @@ class ContainerCrudManager {
         });
 
         const containerObject = sceneController.addObject(edgeContainer, null, {
-            name: sceneController.generateContainerName(),
+            name: sceneController.generateObjectName('container'),
             type: 'container',
             position: bounds.center.clone(),
             isContainer: true,
@@ -325,7 +325,7 @@ class ContainerCrudManager {
         const edgeContainer = containerData.mesh;
         
         const containerObject = sceneController.addObject(edgeContainer, null, {
-            name: sceneController.generateContainerName(),
+            name: sceneController.generateObjectName('container'),
             type: 'container',
             position,
             isContainer: true,

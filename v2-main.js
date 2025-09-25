@@ -476,11 +476,6 @@ function createDemoObjects() {
         sc.addObject(geometry, material, { name, type: 'test', position });
     });
 
-    // Migrate any existing objects to support mesh architecture
-    // This ensures demo objects have proper support meshes
-    setTimeout(() => {
-        sc.migrateLegacyObjectsToSupportMeshes();
-    }, 100); // Small delay to ensure SupportMeshFactory is loaded
 }
 
 /**

@@ -237,7 +237,7 @@ class BoxCreationTool {
             const material = new THREE.MeshLambertMaterial({ color: 0x888888 });
 
             const boxData = sceneController.addObject(geometry, material, {
-                name: sceneController.generateBoxName(),
+                name: sceneController.generateObjectName('box'),
                 type: 'cube', // Consistent with centralized system
                 position: new THREE.Vector3(centerX, centerY, centerZ)
             });

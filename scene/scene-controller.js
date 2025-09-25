@@ -31,24 +31,25 @@ class SceneController {
     }
     
     /**
-     * Generate next sequential box name
-     * @returns {string} Box name like "Box 001"
+     * Generate sequential names for objects
+     * @param {string} type - Object type ('box', 'container')
+     * @returns {string} Generated name like "Box 001" or "Container 001"
      */
-    generateBoxName() {
-        const name = `Box ${this.nextBoxNumber.toString().padStart(3, '0')}`;
-        this.nextBoxNumber++;
-        return name;
+    generateObjectName(type) {
+        switch (type) {
+            case 'box':
+                const boxName = `Box ${this.nextBoxNumber.toString().padStart(3, '0')}`;
+                this.nextBoxNumber++;
+                return boxName;
+            case 'container':
+                const containerName = `Container ${this.nextContainerNumber.toString().padStart(3, '0')}`;
+                this.nextContainerNumber++;
+                return containerName;
+            default:
+                return `Object ${Date.now()}`;
+        }
     }
-    
-    /**
-     * Generate next sequential container name  
-     * @returns {string} Container name like "Container 001"
-     */
-    generateContainerName() {
-        const name = `Container ${this.nextContainerNumber.toString().padStart(3, '0')}`;
-        this.nextContainerNumber++;
-        return name;
-    }
+
     
     // Simple event system for object lifecycle notifications
     on(event, callback) {
@@ -83,74 +84,13 @@ class SceneController {
         const id = this.nextId++;
         
         // Set up object metadata
-        const objectData = {
-            id: id,
-            mesh: mesh,
-            type: options.type || 'mesh',
-            name: options.name || `object_${id}`,
-            category: options.category || 'permanent', // 'permanent', 'ui', 'system'
-            created: Date.now(),
-            visible: true,
-            selectable: options.selectable !== false, // default true
-            userData: options.userData || {},
-            
-            // Auto layout properties
-            isContainer: options.isContainer || false,
-            autoLayout: null, // Will contain layout config when enabled
-            parentContainer: options.parentContainer || null,
-            layoutProperties: {
-                sizeX: options.sizeX || 'fixed', // 'fixed', 'fill', 'hug'
-                sizeY: options.sizeY || 'fixed',
-                sizeZ: options.sizeZ || 'fixed',
-                fixedSize: options.fixedSize || null // Used when size mode is 'fixed'
-            }
-        };
+        const objectData = this.createObjectMetadata(id, mesh, options);
         
         // Configure mesh
-        mesh.name = objectData.name;
-        mesh.userData.id = id;
-        mesh.userData.type = objectData.type;
-        
-        // No shadows - keep it simple
-        mesh.castShadow = false;
-        mesh.receiveShadow = false;
-        
-        // Position if specified
-        if (options.position) {
-            mesh.position.copy(options.position);
-
-            // DEBUG: Log mesh positioning for containers
-            if (options.isContainer) {
-                console.log('SceneController.addObject - Container positioning:', {
-                    containerName: objectData.name,
-                    positionSet: options.position.clone(),
-                    meshPositionAfter: mesh.position.clone()
-                });
-            }
-        }
-        
-        // Rotation if specified
-        if (options.rotation) {
-            mesh.rotation.copy(options.rotation);
-        }
-        
-        // Scale if specified
-        if (options.scale) {
-            mesh.scale.copy(options.scale);
-        }
+        this.configureMesh(mesh, objectData, options);
 
         // Calculate dimensions from geometry for property panel consistency
-        if (mesh.geometry && mesh.geometry.computeBoundingBox) {
-            mesh.geometry.computeBoundingBox();
-            const box = mesh.geometry.boundingBox;
-            if (box) {
-                objectData.dimensions = {
-                    x: Math.abs(box.max.x - box.min.x),
-                    y: Math.abs(box.max.y - box.min.y),
-                    z: Math.abs(box.max.z - box.min.z)
-                };
-            }
-        }
+        this.calculateObjectDimensions(mesh, objectData);
 
         // UNIFIED ARCHITECTURE: Create support meshes for all objects
         // Support mesh factory handles containers and regular objects differently
@@ -164,18 +104,6 @@ class SceneController {
         // Add to scene and registry
         this.scene.add(mesh);
 
-        // DEBUG: Log final positions after adding to scene for containers (new architecture)
-        if (objectData.isContainer) {
-            const wireframeChild = mesh.children.find(child => child.userData.supportMeshType === 'wireframe');
-            console.log('SceneController.addObject - Container added with new architecture:', {
-                containerName: objectData.name,
-                containerPosition: mesh.position.clone(),
-                containerWorldPosition: mesh.getWorldPosition(new THREE.Vector3()),
-                hasWireframeChild: !!wireframeChild,
-                wireframeChildVisible: wireframeChild ? wireframeChild.visible : 'N/A',
-                sceneChildrenCount: this.scene.children.length
-            });
-        }
 
         this.objects.set(id, objectData);
         
@@ -338,8 +266,7 @@ class SceneController {
         }
     }
     
-    // Find objects by name pattern
-    // Removed unused findObjectsByName method
+    // Find objects by name pattern (if needed, can be added back)
     
     // Get selectable objects (for raycasting)
     getSelectableObjects() {
@@ -347,8 +274,6 @@ class SceneController {
             .filter(obj => obj.selectable && obj.visible)
             .map(obj => obj.mesh);
     }
-    
-    // Removed unused updateObjectMetadata method - dead code elimination
     
     // Clear all objects
     clear() {
@@ -436,13 +361,6 @@ class SceneController {
         // Store the original center as layout anchor for the layout engine
         container.layoutAnchor = originalCenterRelative.clone();
 
-        console.log('resetChildPositionsForLayout:', {
-            containerId,
-            childCount: childObjects.length,
-            originalWorldCenter: originalCenter.clone(),
-            containerWorldPosition: containerWorldPosition.clone(),
-            layoutAnchor: container.layoutAnchor.clone()
-        });
 
         // Convert each child to container-relative coordinates, preserving their relative positions
         childObjects.forEach((childData) => {
@@ -468,12 +386,6 @@ class SceneController {
      */
     calculateObjectsCenter(objectsData) {
         if (objectsData.length === 0) return new THREE.Vector3(0, 0, 0);
-
-        // If we receive an array of positions (legacy usage), fall back to geometric center
-        if (objectsData[0] instanceof THREE.Vector3) {
-            const sum = objectsData.reduce((acc, pos) => acc.add(pos), new THREE.Vector3(0, 0, 0));
-            return sum.divideScalar(objectsData.length);
-        }
 
         let totalWeight = 0;
         const weightedSum = new THREE.Vector3(0, 0, 0);
@@ -573,16 +485,9 @@ class SceneController {
             return new THREE.Vector3(1, 1, 1); // Default size
         }
 
-        // Force geometry bounds recalculation
-        container.mesh.geometry.computeBoundingBox();
-        const box = container.mesh.geometry.boundingBox;
-
-        if (box) {
-            return new THREE.Vector3(
-                box.max.x - box.min.x,
-                box.max.y - box.min.y,
-                box.max.z - box.min.z
-            );
+        const dimensions = GeometryUtils.getGeometryDimensions(container.mesh.geometry);
+        if (dimensions) {
+            return new THREE.Vector3(dimensions.x, dimensions.y, dimensions.z);
         }
 
         return new THREE.Vector3(1, 1, 1); // Fallback
@@ -676,7 +581,7 @@ class SceneController {
 
         objects.forEach((obj, index) => {
             const layoutPosition = positions[index];
-            const layoutSize = sizes[index];
+            // layoutSize available if needed: sizes[index]
 
             // CRITICAL FIX: Use local positions when objects are children of container
             // Layout positions are already relative to container coordinate space
@@ -702,8 +607,7 @@ class SceneController {
             // CAD PRINCIPLE: Never resize objects - maintain 1:1 scale
             // Objects keep their original geometry - layout only positions them
 
-            // Notify of transform change for selection wireframe updates
-            this.syncSelectionWireframes(obj.id);
+            // Transform change notification handled by mesh synchronizer
         });
 
     }
@@ -769,16 +673,8 @@ class SceneController {
         }
         
         // Update metadata
-        const oldParent = obj.parentContainer;
         obj.parentContainer = parentId;
 
-        console.log('🏗️ PARENT-CHILD RELATIONSHIP SET:', {
-            objectName: obj.name,
-            objectId: objectId,
-            oldParent: oldParent || 'root',
-            newParent: parentId || 'root',
-            isContainer: obj.isContainer
-        });
         
         // Update layout of the new parent container only if requested
         if (parentId && updateLayout) {
@@ -792,21 +688,6 @@ class SceneController {
         return true;
     }
     
-    /**
-     * Sync selection wireframes for a specific object
-     * Updates the wireframe transform to match the object's current transform
-     * @param {string} objectId - ID of the object whose wireframe needs syncing
-     */
-    syncSelectionWireframes(objectId) {
-        const obj = this.objects.get(objectId);
-        if (!obj) {
-            // Skip wireframe sync - object not found
-            return;
-        }
-
-
-        // Selection wireframe sync is now handled by direct mesh sync from property panel
-    }
     /**
      * Update object dimensions using CAD-style geometry modification
      * Follows geometry-based manipulation principles from CLAUDE.md
@@ -826,42 +707,28 @@ class SceneController {
         const geometry = mesh.geometry;
 
         try {
-            // Force geometry bounds recalculation
-            geometry.computeBoundingBox();
-            const bbox = geometry.boundingBox;
-
-            // Calculate current dimension and scale factor
-            const axisIndex = { x: 0, y: 1, z: 2 }[axis];
-            const currentDimension = bbox.max[axis] - bbox.min[axis];
-            const scaleFactor = newDimension / currentDimension;
-            const center = (bbox.max[axis] + bbox.min[axis]) * 0.5;
-
-            // Modify vertices directly for true CAD behavior
-            const positions = geometry.getAttribute('position');
-            const vertices = positions.array;
-
-            for (let i = 0; i < vertices.length; i += 3) {
-                const vertexIndex = i + axisIndex;
-                const distanceFromCenter = vertices[vertexIndex] - center;
-                vertices[vertexIndex] = center + (distanceFromCenter * scaleFactor);
+            // Validate geometry for manipulation
+            if (!GeometryUtils.validateGeometryForManipulation(geometry)) {
+                console.warn('Geometry is not valid for manipulation:', objectId);
+                return false;
             }
 
-            // Update geometry and trigger proper updates
-            positions.needsUpdate = true;
-            geometry.computeBoundingBox();
-
-            // Update support mesh geometries to match new main geometry
-            const supportMeshFactory = window.SupportMeshFactory ? new SupportMeshFactory() : null;
-            if (supportMeshFactory) {
-                supportMeshFactory.updateSupportMeshGeometries(mesh);
+            // Use GeometryUtils for CAD-style vertex manipulation
+            const success = GeometryUtils.scaleGeometryAlongAxis(geometry, axis, newDimension);
+            if (!success) {
+                console.error('Failed to scale geometry along axis:', axis);
+                return false;
             }
+
+            // Update support mesh geometries using GeometryUtils wrapper
+            GeometryUtils.updateSupportMeshGeometries(mesh);
 
             // Update object metadata
             if (!objectData.dimensions) objectData.dimensions = { x: 1, y: 1, z: 1 };
             objectData.dimensions[axis] = newDimension;
 
-            // Trigger transform change notification for container updates
-            this.notifyObjectTransformChanged(objectId);
+            // Use centralized completion pattern
+            TransformNotificationUtils.completeDimensionChange(mesh, axis);
 
             return true;
 
@@ -894,7 +761,6 @@ class SceneController {
 
         // Update related meshes (selection wireframes, etc.) but suppress container wireframes during container context
         const meshSynchronizer = window.modlerComponents?.meshSynchronizer;
-        const selectionController = window.modlerComponents?.selectionController;
         if (meshSynchronizer) {
             // Check if we're in container context and this is the container we're stepped into
             const navigationController = window.modlerComponents?.navigationController;
@@ -907,37 +773,6 @@ class SceneController {
             }
 
             meshSynchronizer.syncAllRelatedMeshes(obj.mesh, 'transform', true);
-        }
-    }
-    /**
-     * Migrate existing objects to support mesh architecture
-     * Adds support meshes to objects that don't have them
-     */
-    migrateLegacyObjectsToSupportMeshes() {
-        const supportMeshFactory = window.SupportMeshFactory ? new SupportMeshFactory() : null;
-        if (!supportMeshFactory) {
-            console.warn('SupportMeshFactory not available for migration');
-            return;
-        }
-
-        let migratedCount = 0;
-        for (const [id, objectData] of this.objects) {
-            const mesh = objectData.mesh;
-            if (mesh && !mesh.userData.supportMeshes) {
-                if (objectData.isContainer) {
-                    // NEW ARCHITECTURE: Skip containers - they use wireframe children from LayoutGeometry
-                    console.log('Skipping migration for container (uses new architecture):', objectData.name);
-                    continue;
-                } else {
-                    supportMeshFactory.createObjectSupportMeshes(mesh);
-                    migratedCount++;
-                    console.log('Migrated object to support mesh architecture:', objectData.name);
-                }
-            }
-        }
-
-        if (migratedCount > 0) {
-            console.log(`Successfully migrated ${migratedCount} objects to support mesh architecture`);
         }
     }
 
@@ -981,8 +816,8 @@ class SceneController {
         while (currentId) {
             // Prevent infinite loops
             if (visited.has(currentId)) {
-                console.error('Circular reference detected in container hierarchy:', currentId);
-                return true; // Treat as circular to prevent further nesting
+                // Circular reference detected - treat as circular to prevent further nesting
+                return true;
             }
             visited.add(currentId);
 
@@ -1018,7 +853,7 @@ class SceneController {
 
         while (currentId) {
             if (visited.has(currentId)) {
-                console.error('Circular reference in nesting depth calculation:', currentId);
+                // Circular reference in nesting depth calculation
                 return -1; // Error state
             }
             visited.add(currentId);
@@ -1052,6 +887,81 @@ class SceneController {
         });
 
         return nestedContainers;
+    }
+
+    /**
+     * Create object metadata structure
+     * @param {number} id - Object ID
+     * @param {THREE.Object3D} mesh - Three.js mesh
+     * @param {Object} options - Object creation options
+     * @returns {Object} Object metadata
+     */
+    createObjectMetadata(id, mesh, options) {
+        return {
+            id: id,
+            mesh: mesh,
+            type: options.type || 'mesh',
+            name: options.name || `object_${id}`,
+            category: options.category || 'permanent', // 'permanent', 'ui', 'system'
+            created: Date.now(),
+            visible: true,
+            selectable: options.selectable !== false, // default true
+            userData: options.userData || {},
+
+            // Auto layout properties
+            isContainer: options.isContainer || false,
+            autoLayout: null, // Will contain layout config when enabled
+            parentContainer: options.parentContainer || null,
+            layoutProperties: {
+                sizeX: options.sizeX || 'fixed', // 'fixed', 'fill', 'hug'
+                sizeY: options.sizeY || 'fixed',
+                sizeZ: options.sizeZ || 'fixed',
+                fixedSize: options.fixedSize || null // Used when size mode is 'fixed'
+            }
+        };
+    }
+
+    /**
+     * Configure mesh properties and transforms
+     * @param {THREE.Object3D} mesh - Mesh to configure
+     * @param {Object} objectData - Object metadata
+     * @param {Object} options - Configuration options
+     */
+    configureMesh(mesh, objectData, options) {
+        mesh.name = objectData.name;
+        mesh.userData.id = objectData.id;
+        mesh.userData.type = objectData.type;
+
+        // No shadows - keep it simple
+        mesh.castShadow = false;
+        mesh.receiveShadow = false;
+
+        // Apply transforms if specified
+        if (options.position) {
+            mesh.position.copy(options.position);
+        }
+
+        if (options.rotation) {
+            mesh.rotation.copy(options.rotation);
+        }
+
+        if (options.scale) {
+            mesh.scale.copy(options.scale);
+        }
+    }
+
+    /**
+     * Calculate object dimensions from geometry
+     * @param {THREE.Object3D} mesh - Mesh to analyze
+     * @param {Object} objectData - Object metadata to update
+     */
+    calculateObjectDimensions(mesh, objectData) {
+        if (mesh.geometry) {
+            const dimensions = GeometryUtils.getGeometryDimensions(mesh.geometry);
+            if (dimensions) {
+                objectData.dimensions = dimensions;
+            }
+        }
     }
 
     // Memory cleanup
