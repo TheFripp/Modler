@@ -26,8 +26,6 @@ class PushTool {
         this.lastPushDelta = undefined;
         this.originalGeometry = null;
 
-        // Deferred selection for face-based tools
-        this.pendingSelection = null;
 
         // Cached objects for performance
         this.cache = {
@@ -50,7 +48,6 @@ class PushTool {
         this.isContainerPush = false;
         this.originalContainerSize = null;
         this.actualPushedMesh = null;
-        this.pendingSelection = null;
     }
 
     resetMovementState() {
@@ -121,17 +118,17 @@ class PushTool {
     }
 
     onClick(hit, event) {
+        // Empty space clicks should ALWAYS deselect, regardless of tool state
+        if (!hit || !hit.object) {
+            this.selectionController.handleEmptySpaceClick(event);
+            return;
+        }
+
+        // If tool is active, don't handle object clicks
         if (this.active) return;
 
-        // For face-based tools, defer selection until operation completes
-        // This prevents automatic container selection from interfering with face manipulation
-        if (hit && hit.object) {
-            // Store click info for deferred selection
-            this.pendingSelection = { hit, event };
-        } else {
-            // Empty space clicks can be handled immediately
-            this.selectionController.handleEmptySpaceClick(event);
-        }
+        // Use immediate selection like other tools for consistent behavior
+        this.selectionController.handleObjectClick(hit.object, event, { toolType: 'PushTool' });
     }
 
     onDoubleClick(hit, event) {
@@ -600,12 +597,6 @@ class PushTool {
 
         // Clear any existing highlights and hover states to ensure clean state
         this.faceToolBehavior.clearHover();
-
-        // Handle deferred selection - now that push operation is complete, apply selection
-        if (this.pendingSelection) {
-            this.selectionController.handleObjectClick(this.pendingSelection.hit.object, this.pendingSelection.event, { toolType: 'PushTool' });
-            this.pendingSelection = null;
-        }
 
         // Final container updates based on push type
         if (this.isContainerPush) {

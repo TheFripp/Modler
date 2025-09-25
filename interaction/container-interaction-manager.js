@@ -4,74 +4,59 @@
 
 class ContainerInteractionManager {
     constructor() {
-        // Container context state
-        this.containerContext = null; // Current container we're "stepped into"
-        this.containerEdgeHighlight = null; // Faded container selection frame
-
+        // DEPRECATED: Container context state - NavigationController manages this now
+        this.containerContext = null; // UNUSED - NavigationController is authoritative
+        this.containerEdgeHighlight = null; // Visual state only
     }
 
     /**
-     * Step into a container - sets container context and shows faded selection frame
+     * REMOVED: Container navigation - NavigationController is the single authority
+     * ContainerInteractionManager is now a passive responder only
      */
     stepIntoContainer(containerObject) {
-
-        // Clear any previous container context
-        this.stepOutOfContainer();
-
-        this.containerContext = containerObject;
-
-        // Clear any selection wireframe to prevent dual wireframe conflict
-        this.clearSelectionWireframe();
-
-        // Disable container collision meshes to prevent accidental interaction
-        this.disableContainerCollisionMeshes();
-
-        // Create faded edge highlight for the container
-        this.createContainerEdgeHighlight(containerObject);
-
+        console.warn('ContainerInteractionManager.stepIntoContainer: Use NavigationController instead');
+        // This method is deprecated - use NavigationController.navigateToContainer() directly
+        return false;
     }
 
     /**
-     * Step out of current container context
+     * REMOVED: Container navigation - NavigationController is the single authority
+     * ContainerInteractionManager is now a passive responder only
      */
     stepOutOfContainer() {
-
-        // Commit any pending object position changes before stepping out
-        this.commitObjectPositions();
-
-        // Re-enable container collision meshes when stepping out
-        this.enableContainerCollisionMeshes();
-
-        // Store previous container for wireframe restoration
-        const previousContainer = this.containerContext;
-
-        if (this.containerEdgeHighlight) {
-            if (this.containerEdgeHighlight.parent) {
-                this.containerEdgeHighlight.parent.remove(this.containerEdgeHighlight);
-            }
-            if (this.containerEdgeHighlight.geometry) {
-                this.containerEdgeHighlight.geometry.dispose();
-            }
-            this.containerEdgeHighlight = null;
-        }
-
-        this.containerContext = null;
-
-        // Restore selection wireframe if the container was previously selected
-        this.restoreSelectionWireframe(previousContainer);
+        console.warn('ContainerInteractionManager.stepOutOfContainer: Use NavigationController instead');
+        // This method is deprecated - use NavigationController.navigateUp() directly
+        return false;
     }
 
     /**
      * Check if we're currently inside a container context
+     * Delegates to NavigationController as single source of truth
      */
     isInContainerContext() {
+        // Primary source: NavigationController
+        const navigationController = window.modlerComponents?.navigationController;
+        if (navigationController) {
+            return navigationController.isInContainerContext();
+        }
+
+        // Fallback to local state if NavigationController unavailable
         return this.containerContext !== null;
     }
 
     /**
      * Get the current container context
+     * Delegates to NavigationController as single source of truth
      */
     getContainerContext() {
+        // Primary source: NavigationController
+        const navigationController = window.modlerComponents?.navigationController;
+        if (navigationController) {
+            const currentContainer = navigationController.getCurrentContainer();
+            return currentContainer ? currentContainer.mesh : null;
+        }
+
+        // Fallback to local state if NavigationController unavailable
         return this.containerContext;
     }
 
@@ -195,29 +180,21 @@ class ContainerInteractionManager {
 
     /**
      * Handle container context during selection clearing
+     * SIMPLIFIED: Now respects NavigationController authority
      */
     handleSelectionClear(reason = 'normal') {
-        // ENHANCED LOGIC: Only step out of container for specific reasons
-        // Stay in container context when selecting different objects within the same container
-        const containerPreservingReasons = [
-            'step-into-container',
-            'object-selection',
-            'drill-down-selection',      // During drill-down operations within container
-            'drill-down-enter',          // When entering drill-down mode
-            'drill-down-enter-child',    // When entering drill-down for specific child
-            'hierarchical-selection',    // During hierarchical selection within container
-            'double-click-selection',    // Double-click selection within container
-            'tool-operation'             // During move/push tool operations
-            // Note: 'empty-space' is NOT in this list - clicking empty space should exit container context
-        ];
+        // SIMPLIFICATION: Check NavigationController authority first
+        const navigationController = window.modlerComponents?.navigationController;
+        if (navigationController?.isNavigating) {
+            return;
+        }
 
-        const shouldStepOut = this.isInContainerContext() &&
-            !containerPreservingReasons.includes(reason);
-
+        // SIMPLIFIED LOGIC: Only step out for empty space clicks
+        // Everything else preserves container context
+        const shouldStepOut = this.isInContainerContext() && reason === 'empty-space';
 
         if (shouldStepOut) {
             this.stepOutOfContainer();
-        } else {
         }
     }
 
@@ -303,10 +280,26 @@ class ContainerInteractionManager {
     }
 
     /**
+     * Clean up container edge highlights (called by NavigationController)
+     */
+    cleanupEdgeHighlights() {
+        if (this.containerEdgeHighlight) {
+            if (this.containerEdgeHighlight.parent) {
+                this.containerEdgeHighlight.parent.remove(this.containerEdgeHighlight);
+            }
+            if (this.containerEdgeHighlight.geometry) {
+                this.containerEdgeHighlight.geometry.dispose();
+            }
+            this.containerEdgeHighlight = null;
+        }
+    }
+
+    /**
      * Clean up container context
      */
     destroy() {
-        this.stepOutOfContainer();
+        this.cleanupEdgeHighlights();
+        // stepOutOfContainer() is deprecated - cleanup handled elsewhere
     }
 }
 

@@ -56,32 +56,18 @@
 
 	// Fill functionality for dimensions
 	function shouldShowFillButtons(): boolean {
-		if (!$displayObject) {
-			console.log('DEBUG: No displayObject');
+		if (!$displayObject || $displayObject.isContainer) {
 			return false;
 		}
 
-		if ($displayObject.isContainer) {
-			console.log('DEBUG: Object is a container, no fill buttons');
-			return false;
-		}
-
-		// Check if PropertyManager is available
-		const hasPropertyManager = window.modlerComponents?.propertyManager;
-		console.log('DEBUG: PropertyManager available:', !!hasPropertyManager);
-
+		// Check if PropertyManager is available (silently return false if not)
+		const hasPropertyManager = window.modlerComponents?.propertyManager?.initialized;
 		if (!hasPropertyManager) {
-			console.log('DEBUG: PropertyManager not available');
 			return false;
 		}
 
 		// Check if object is in a layout-enabled container
-		const isInLayoutContainer = window.modlerComponents.propertyManager.isInLayoutContainer($displayObject.id);
-		console.log('DEBUG: Object in layout container:', isInLayoutContainer);
-		console.log('DEBUG: Object ID:', $displayObject.id);
-		console.log('DEBUG: displayObject:', $displayObject);
-
-		return isInLayoutContainer;
+		return window.modlerComponents.propertyManager.isInLayoutContainer($displayObject.id);
 	}
 
 	function getFillStates(): { x?: boolean; y?: boolean; z?: boolean } {

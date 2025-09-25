@@ -323,7 +323,7 @@ class HierarchicalSelectionManager {
     }
     
     /**
-     * Handle keyboard shortcuts for navigation
+     * Handle keyboard shortcuts for navigation - delegates to NavigationController for unified navigation
      * @param {KeyboardEvent} event - Keyboard event
      * @returns {boolean} True if key was handled
      */
@@ -331,12 +331,20 @@ class HierarchicalSelectionManager {
         switch (event.code) {
             case 'Escape':
                 if (this.mode === 'drill-down') {
-                    this.navigateUp();
-                    return true;
+                    const navigationController = window.modlerComponents?.navigationController;
+                    if (navigationController) {
+                        // Use NavigationController for unified navigation
+                        navigationController.navigateUp();
+                        return true;
+                    } else {
+                        // Fallback to local navigation if NavigationController unavailable
+                        this.navigateUp();
+                        return true;
+                    }
                 }
                 break;
         }
-        
+
         return false;
     }
     

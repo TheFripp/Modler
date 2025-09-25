@@ -769,7 +769,16 @@ class SceneController {
         }
         
         // Update metadata
+        const oldParent = obj.parentContainer;
         obj.parentContainer = parentId;
+
+        console.log('🏗️ PARENT-CHILD RELATIONSHIP SET:', {
+            objectName: obj.name,
+            objectId: objectId,
+            oldParent: oldParent || 'root',
+            newParent: parentId || 'root',
+            isContainer: obj.isContainer
+        });
         
         // Update layout of the new parent container only if requested
         if (parentId && updateLayout) {
@@ -888,8 +897,9 @@ class SceneController {
         const selectionController = window.modlerComponents?.selectionController;
         if (meshSynchronizer) {
             // Check if we're in container context and this is the container we're stepped into
-            const isInContainerContext = selectionController?.isInContainerContext();
-            const containerContext = selectionController?.getContainerContext();
+            const navigationController = window.modlerComponents?.navigationController;
+            const isInContainerContext = navigationController?.isInContainerContext() || false;
+            const containerContext = navigationController?.getCurrentContainer()?.mesh;
 
             if (isInContainerContext && obj.isContainer && obj.mesh === containerContext) {
                 // Skip wireframe updates for the container we're stepped into - ContainerInteractionManager handles its visualization

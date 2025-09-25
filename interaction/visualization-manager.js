@@ -129,32 +129,24 @@ class VisualizationManager {
 
     // Container-specific methods (delegate to ContainerVisualizer)
 
-    /**
-     * Step into container context
-     */
-    stepIntoContainer(containerObject) {
-        return this.containerVisualizer.stepIntoContainer(containerObject);
-    }
+    // REMOVED: Container navigation methods - NavigationController is the single authority
+    // VisualizationManager focuses solely on visual state management, not navigation
+    // Use NavigationController directly for all container navigation needs
 
     /**
-     * Step out of container context
-     */
-    stepOutOfContainer() {
-        return this.containerVisualizer.stepOutOfContainer();
-    }
-
-    /**
-     * Check if currently in container context
+     * Check if currently in container context - delegate to NavigationController
      */
     isInContainerContext() {
-        return this.containerVisualizer.isInContainerContext();
+        const navigationController = window.modlerComponents?.navigationController;
+        return navigationController ? navigationController.isInContainerContext() : false;
     }
 
     /**
-     * Get current container context
+     * Get current container context - delegate to NavigationController
      */
     getContainerContext() {
-        return this.containerVisualizer.getContainerContext();
+        const navigationController = window.modlerComponents?.navigationController;
+        return navigationController ? navigationController.getCurrentContainer()?.mesh : null;
     }
 
     // Legacy compatibility methods (for easier transition)

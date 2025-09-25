@@ -230,7 +230,8 @@ class MoveTool {
         
         // Update container context highlight if we're in container mode and moving a container
         // Skip real-time updates when moving child objects - container will resize at end of drag
-        if (this.selectionController.isInContainerContext()) {
+        const navigationController = window.modlerComponents?.navigationController;
+        if (navigationController?.isInContainerContext()) {
             const sceneController = window.modlerComponents?.sceneController;
             if (sceneController) {
                 const objectData = sceneController.getObjectByMesh(this.dragObject);

@@ -11,6 +11,7 @@ class ContainerVisualizer extends ObjectVisualizer {
         this.paddingVisualizations = new Map(); // container -> padding mesh
         this.layoutGuides = new Map(); // container -> layout guide meshes
         this.dimmedObjects = new Map(); // object -> { originalProperties, contextLevel } (for dimming in context)
+        this.pendingDimmingUpdate = false; // Flag to prevent duplicate dimming updates
 
         // Container-specific materials
         this.containerMaterial = null;
@@ -182,8 +183,11 @@ class ContainerVisualizer extends ObjectVisualizer {
 
     /**
      * Step into container context (supports nested contexts)
+     * @param {THREE.Object3D} containerObject - Container to step into
+     * @param {Object} options - Options for container entry
+     * @param {boolean} options.skipDimming - Skip automatic dimming update (for atomic operations)
      */
-    stepIntoContainer(containerObject) {
+    stepIntoContainer(containerObject, options = {}) {
         // Add to context stack
         this.containerContextStack.push(containerObject);
 
@@ -196,8 +200,10 @@ class ContainerVisualizer extends ObjectVisualizer {
         // Disable other container interactions
         this.disableOtherContainers(containerObject);
 
-        // Apply dimming to objects outside the container context
-        this.dimNonSelectedObjectsInContext();
+        // TEMPORARILY DISABLED: Apply dimming to objects outside the container context (unless skipped for atomic operations)
+        // if (!options.skipDimming) {
+        //     this.scheduleDimmingUpdate();
+        // }
     }
 
     /**
@@ -210,16 +216,19 @@ class ContainerVisualizer extends ObjectVisualizer {
         const containerToRemove = this.containerContextStack.pop();
         const newContextLevel = this.containerContextStack.length;
 
-        // If this was the last container in the stack, re-enable all containers
+        // If this was the last container in the stack, restore dimming but keep containers disabled
         if (newContextLevel === 0) {
-            this.enableAllContainers();
+            // ARCHITECTURAL CHANGE: Do not re-enable container interactive meshes at root
+            // Containers should only be selectable via child objects
+            // this.enableAllContainers(); // DISABLED
+
             // Restore all dimmed objects when exiting container context completely
             this.restoreAllDimmedObjects();
         } else {
             // Still in a container context - selectively restore objects that are no longer in context
             this.restoreDimmingForContextLevel(newContextLevel + 1);
-            // Re-apply dimming for the current context level
-            this.dimNonSelectedObjectsInContext();
+            // TEMPORARILY DISABLED: Re-apply dimming for the current context level
+            // this.scheduleDimmingUpdate();
         }
 
         // Set the container to normal state only if it's no longer in the context stack
@@ -284,10 +293,27 @@ class ContainerVisualizer extends ObjectVisualizer {
     }
 
     /**
+     * Schedule a debounced dimming update to prevent redundant calls
+     * Uses requestAnimationFrame to ensure all state changes settle first
+     */
+    scheduleDimmingUpdate() {
+        if (this.pendingDimmingUpdate) return; // Already scheduled
+
+        this.pendingDimmingUpdate = true;
+        requestAnimationFrame(() => {
+            this.pendingDimmingUpdate = false;
+            this.dimNonSelectedObjectsInContext();
+        });
+    }
+
+    /**
      * Dim objects outside the current container context (50% opacity)
      * This creates focus by dimming everything NOT in the current container branch
      */
     dimNonSelectedObjectsInContext() {
+        // TEMPORARILY DISABLED: Skip dimming to isolate navigation issues
+        return;
+
         if (!this.isInContainerContext()) return;
 
         const sceneController = window.modlerComponents?.sceneController;
@@ -309,14 +335,23 @@ class ContainerVisualizer extends ObjectVisualizer {
             // Skip if this object is currently selected
             if (selectionController.isSelected(objectData.mesh)) return;
 
-            // Skip if already dimmed
-            if (this.dimmedObjects.has(objectData.mesh)) return;
-
             // Skip containers in the context stack (they should stay visible)
             if (this.containerContextStack.includes(objectData.mesh)) return;
 
-            // Skip if this object is INSIDE the current container context
-            if (this.isObjectInsideContainerBranch(objectData, containerData)) return;
+            // Check if this object is INSIDE the current container context
+            if (this.isObjectInsideContainerBranch(objectData, containerData)) {
+                // CRITICAL FIX: Actively restore inside objects to full opacity
+                // This ensures objects inside containers are guaranteed bright
+                if (this.dimmedObjects.has(objectData.mesh)) {
+                        const dimmingData = this.dimmedObjects.get(objectData.mesh);
+                    this.restoreObject(objectData.mesh, dimmingData);
+                    this.dimmedObjects.delete(objectData.mesh);
+                }
+                return; // Don't dim inside objects
+            }
+
+            // Skip if already dimmed
+            if (this.dimmedObjects.has(objectData.mesh)) return;
 
             // Dim objects that are OUTSIDE the container context
             this.dimObject(objectData.mesh);
@@ -334,27 +369,40 @@ class ContainerVisualizer extends ObjectVisualizer {
         // 1. It's a direct child of the container
         // 2. It's a child of any nested container within this container
 
-        if (!objectData || !containerData) return false;
+        if (!objectData || !containerData) {
+            return false;
+        }
 
         // Check if object is the container itself
-        if (objectData.id === containerData.id) return true;
+        if (objectData.id === containerData.id) {
+            return true;
+        }
 
         // Check if object is a direct child of the container
-        if (objectData.parentContainer === containerData.id) return true;
+        if (objectData.parentContainer === containerData.id) {
+            return true;
+        }
 
         // Check if object is nested deeper in the container hierarchy
         let currentParent = objectData.parentContainer;
         const sceneController = window.modlerComponents?.sceneController;
+        let depth = 0;
 
-        while (currentParent && sceneController) {
+        while (currentParent && sceneController && depth < 10) { // Safety limit
             const parentData = sceneController.getObject(currentParent);
-            if (!parentData) break;
+            if (!parentData) {
+                break;
+            }
+
 
             // If we found our target container in the parent chain
-            if (parentData.id === containerData.id) return true;
+            if (parentData.id === containerData.id) {
+                return true;
+            }
 
             // Move up the hierarchy
             currentParent = parentData.parentContainer;
+            depth++;
         }
 
         return false;
@@ -395,9 +443,10 @@ class ContainerVisualizer extends ObjectVisualizer {
      * Dim a single object (50% opacity)
      */
     dimObject(mesh) {
-        if (!mesh || !mesh.material) return;
+        if (!mesh || !mesh.material) {
+            return;
+        }
         if (this.dimmedObjects.has(mesh)) {
-            // Object is already dimmed - don't dim it again
             return;
         }
 
@@ -428,55 +477,8 @@ class ContainerVisualizer extends ObjectVisualizer {
         mesh.material.transparent = originalProperties.transparent;
     }
 
-    /**
-     * Update dimming when selection changes in container context
-     * More selective approach - only updates objects that need changes
-     */
-    updateContextDimming() {
-        if (!this.isInContainerContext()) {
-            this.restoreAllDimmedObjects();
-            return;
-        }
-
-        const sceneController = window.modlerComponents?.sceneController;
-        const selectionController = window.modlerComponents?.selectionController;
-        if (!sceneController || !selectionController) return;
-
-        // Get the current container context
-        const currentContainer = this.getContainerContext();
-        if (!currentContainer) return;
-
-        // Find the container data
-        const containerData = sceneController.getObjectByMesh(currentContainer);
-        if (!containerData || !containerData.isContainer) return;
-
-        // Get ALL objects in the scene to evaluate dimming
-        const allObjects = sceneController.getAllObjects();
-        const currentContextLevel = this.containerContextStack.length;
-
-        allObjects.forEach(objectData => {
-            const isSelected = selectionController.isSelected(objectData.mesh);
-            const isDimmed = this.dimmedObjects.has(objectData.mesh);
-            const isInsideContainer = this.isObjectInsideContainerBranch(objectData, containerData);
-            const isInContextStack = this.containerContextStack.includes(objectData.mesh);
-
-            if (isInsideContainer || isInContextStack || isSelected) {
-                // Objects inside container, in context stack, or selected should NOT be dimmed
-                if (isDimmed) {
-                    const dimmingData = this.dimmedObjects.get(objectData.mesh);
-                    if (dimmingData && dimmingData.contextLevel === currentContextLevel) {
-                        this.restoreObject(objectData.mesh, dimmingData);
-                        this.dimmedObjects.delete(objectData.mesh);
-                    }
-                }
-            } else {
-                // Objects outside container should be dimmed
-                if (!isDimmed) {
-                    this.dimObject(objectData.mesh);
-                }
-            }
-        });
-    }
+    // REMOVED: updateContextDimming() method - competing with dimNonSelectedObjectsInContext()
+    // All dimming is now handled exclusively by dimNonSelectedObjectsInContext() via NavigationController
 
     /**
      * Override applyStateVisuals for container-specific states
@@ -500,14 +502,14 @@ class ContainerVisualizer extends ObjectVisualizer {
             this.showPaddingVisualization(object);
             this.showChildContainers(object);
 
-            // Update dimming in container context when container becomes selected
-            this.dimNonSelectedObjectsInContext();
+            // TEMPORARILY DISABLED: Update dimming in container context when container becomes selected
+            // this.scheduleDimmingUpdate();
         } else {
             // Fall back to parent for non-container specific states
             super.applyStateVisuals(object, newState, oldState);
 
-            // Update dimming when any object becomes selected/deselected in container context
-            this.dimNonSelectedObjectsInContext();
+            // TEMPORARILY DISABLED: Update dimming when any object becomes selected/deselected in container context
+            // this.scheduleDimmingUpdate();
         }
     }
 
@@ -535,16 +537,16 @@ class ContainerVisualizer extends ObjectVisualizer {
             // Force hide all child containers to handle nested container clearing
             this.hideChildContainers(object, true);
 
-            // Update dimming in container context when container selection changes
-            this.dimNonSelectedObjectsInContext();
+            // TEMPORARILY DISABLED: Update dimming in container context when container selection changes
+            // this.scheduleDimmingUpdate();
             return;
         }
 
         // Handle other standard states through parent
         super.clearStateVisuals(object, state);
 
-        // Update dimming when any object selection changes in container context
-        this.dimNonSelectedObjectsInContext();
+        // TEMPORARILY DISABLED: Update dimming when any object selection changes in container context
+        // this.scheduleDimmingUpdate();
     }
 
     /**
@@ -685,21 +687,17 @@ class ContainerVisualizer extends ObjectVisualizer {
     }
 
     /**
-     * Re-enable collision detection for all containers
+     * DISABLED: Do not re-enable container interactive meshes at root level
+     * Containers should only be selectable via their child objects
+     * Interactive meshes are only enabled for specific operations (layout, etc.)
      */
     enableAllContainers() {
-        const sceneController = window.modlerComponents?.sceneController;
-        if (!sceneController) return;
+        // ARCHITECTURAL CHANGE: Containers are not directly selectable at root level
+        // They can only be selected by clicking their child objects
+        // This prevents empty-space clicks from selecting containers
 
-        // Get all objects in the scene
-        const allObjects = sceneController.getAllObjects();
-
-        for (const objectData of allObjects) {
-            if (objectData.isContainer) {
-                const containerMesh = objectData.mesh;
-                this.enableContainerInteractiveMesh(containerMesh);
-            }
-        }
+        // If needed for specific operations, containers can be enabled individually
+        // via enableContainerInteractiveMesh(containerMesh) when required
     }
 
     /**
@@ -748,17 +746,25 @@ class ContainerVisualizer extends ObjectVisualizer {
 
     /**
      * Check if currently in container context
+     * Delegates to NavigationController as single source of truth
      */
     isInContainerContext() {
-        return this.containerContextStack.length > 0;
+        // NavigationController is the ONLY source of truth
+        const navigationController = window.modlerComponents?.navigationController;
+        return navigationController ? navigationController.isInContainerContext() : false;
+        // REMOVED: Fallback to local state - creates competing context sources
     }
 
     /**
      * Get current container context (the most recent one)
+     * Delegates to NavigationController as single source of truth
      */
     getContainerContext() {
-        return this.containerContextStack.length > 0 ?
-            this.containerContextStack[this.containerContextStack.length - 1] : null;
+        // NavigationController is the ONLY source of truth
+        const navigationController = window.modlerComponents?.navigationController;
+        const currentContainer = navigationController ? navigationController.getCurrentContainer() : null;
+        return currentContainer ? currentContainer.mesh : null;
+        // REMOVED: Fallback to local state - creates competing context sources
     }
 
     /**

@@ -151,8 +151,8 @@ class PropertyUpdateHandler {
 
         // Check if this is a container layout property change
         if (objectData && objectData.isContainer && isLayoutProp) {
-            console.log('🔧 Routing to handleContainerLayoutPropertyChange');
-            return this.handleContainerLayoutPropertyChange(objectId, property, value);
+            console.log('🔧 Routing to handleContainerLayoutPropertyChange with command pattern');
+            return this.executeLayoutPropertyChangeCommand(objectId, property, value);
         }
 
         // Handle dimension property changes through centralized system
@@ -382,6 +382,73 @@ class PropertyUpdateHandler {
             console.error('PropertyUpdateHandler sizing error:', error);
             return false;
         }
+    }
+
+    /**
+     * Execute layout property change as undoable command
+     * @param {number} objectId - Container ID
+     * @param {string} property - Property name (e.g., 'direction', 'gap')
+     * @param {*} newValue - New property value
+     * @returns {boolean} True if command was executed successfully
+     */
+    executeLayoutPropertyChangeCommand(objectId, property, newValue) {
+        try {
+            const sceneController = window.modlerComponents?.sceneController;
+            const historyManager = window.modlerComponents?.historyManager;
+
+            if (!sceneController) {
+                console.error('SceneController not available for layout property command');
+                return false;
+            }
+
+            // Get current value for undo
+            const objectData = sceneController.getObject(objectId);
+            if (!objectData || !objectData.isContainer) {
+                console.error('Invalid container for layout property command');
+                return false;
+            }
+
+            let oldValue = null;
+            if (property.startsWith('autoLayout.')) {
+                const nestedProperty = property.split('.').slice(1).join('.');
+                oldValue = this.getNestedProperty(objectData.autoLayout, nestedProperty);
+            } else if (property === 'direction') {
+                oldValue = objectData.autoLayout?.direction;
+            }
+
+            // Create and execute command
+            if (historyManager) {
+                const command = new UpdateLayoutPropertyCommand(objectId, property, newValue, oldValue);
+                const success = historyManager.executeCommand(command);
+
+                if (success) {
+                    console.log('✅ Layout property change added to undo stack:', { objectId, property, newValue, oldValue });
+                    return true;
+                } else {
+                    console.error('❌ Failed to execute layout property change command');
+                    return false;
+                }
+            } else {
+                // Fallback to direct execution without undo support
+                console.warn('HistoryManager not available, executing layout property change without undo support');
+                return this.handleContainerLayoutPropertyChange(objectId, property, newValue);
+            }
+
+        } catch (error) {
+            console.error('PropertyUpdateHandler layout command error:', error);
+            return false;
+        }
+    }
+
+    /**
+     * Helper to get nested property value
+     * @param {Object} obj - Object to get property from
+     * @param {string} path - Dot-separated property path
+     * @returns {*} Property value
+     */
+    getNestedProperty(obj, path) {
+        if (!obj || !path) return undefined;
+        return path.split('.').reduce((current, key) => current?.[key], obj);
     }
 }
 

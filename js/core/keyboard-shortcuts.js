@@ -14,6 +14,32 @@ class KeyboardShortcuts {
         // Only handle shortcuts when not typing in input fields
         if (event.target.tagName === 'INPUT') return;
 
+        // Try NavigationController first for navigation keys
+        const navigationController = window.modlerComponents?.navigationController;
+        if (navigationController && navigationController.handleKeyDown(event)) {
+            return; // NavigationController handled the key
+        }
+
+        // Handle undo/redo shortcuts
+        if ((event.metaKey || event.ctrlKey) && event.key === 'z') {
+            if (event.shiftKey) {
+                // Redo (Cmd+Shift+Z / Ctrl+Shift+Z)
+                this.redo();
+            } else {
+                // Undo (Cmd+Z / Ctrl+Z)
+                this.undo();
+            }
+            event.preventDefault();
+            return;
+        }
+
+        // Handle delete key
+        if (event.key === 'Delete' || event.key === 'Backspace') {
+            this.deleteSelectedObjects();
+            event.preventDefault();
+            return;
+        }
+
         switch(event.key) {
             case 'q':
             case 'Q':
@@ -108,6 +134,82 @@ class KeyboardShortcuts {
         }
 
         window.modlerComponents.cameraController.resetToDefault();
+    }
+
+    /**
+     * Undo the last action
+     */
+    undo() {
+        const historyManager = window.modlerComponents?.historyManager;
+        if (!historyManager) {
+            console.warn('KeyboardShortcuts: HistoryManager not available');
+            return;
+        }
+
+        const success = historyManager.undo();
+        if (!success) {
+            console.log('KeyboardShortcuts: Nothing to undo');
+        }
+    }
+
+    /**
+     * Redo the last undone action
+     */
+    redo() {
+        const historyManager = window.modlerComponents?.historyManager;
+        if (!historyManager) {
+            console.warn('KeyboardShortcuts: HistoryManager not available');
+            return;
+        }
+
+        const success = historyManager.redo();
+        if (!success) {
+            console.log('KeyboardShortcuts: Nothing to redo');
+        }
+    }
+
+    /**
+     * Delete currently selected objects
+     */
+    deleteSelectedObjects() {
+        const selectionController = window.modlerComponents?.selectionController;
+        const historyManager = window.modlerComponents?.historyManager;
+        const sceneController = window.modlerComponents?.sceneController;
+
+        if (!selectionController || !historyManager || !sceneController) {
+            console.warn('KeyboardShortcuts: Required components not available for deletion');
+            return;
+        }
+
+        const selectedObjects = selectionController.getSelectedObjects();
+        if (selectedObjects.length === 0) {
+            console.log('KeyboardShortcuts: No objects selected for deletion');
+            return;
+        }
+
+        // Get object IDs from selected meshes
+        const objectIds = [];
+        selectedObjects.forEach(mesh => {
+            const objectData = sceneController.getObjectByMesh(mesh);
+            if (objectData) {
+                objectIds.push(objectData.id);
+            }
+        });
+
+        if (objectIds.length === 0) {
+            console.warn('KeyboardShortcuts: No valid object IDs found for selected objects');
+            return;
+        }
+
+        // Create and execute delete command
+        const deleteCommand = new DeleteObjectCommand(objectIds);
+        const success = historyManager.executeCommand(deleteCommand);
+
+        if (success) {
+            console.log(`KeyboardShortcuts: Successfully deleted ${objectIds.length} object(s)`);
+        } else {
+            console.warn('KeyboardShortcuts: Failed to delete selected objects');
+        }
     }
 }
 

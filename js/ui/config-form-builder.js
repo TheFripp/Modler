@@ -9,6 +9,12 @@ class ConfigFormBuilder {
                     'Opacity': { type: 'range', id: 'config-selection-opacity', min: 0.1, max: 1.0, step: 0.1, value: 0.8 },
                     'Face Highlight Opacity': { type: 'range', id: 'config-effects-face-opacity', min: 0.1, max: 1.0, step: 0.1, value: 0.6 }
                 },
+                'Effects': {
+                    'Axis Highlight Color': { type: 'color', id: 'config-effects-axis-color', value: '#ff6600' },
+                    'Axis Highlight Opacity': { type: 'range', id: 'config-effects-axis-opacity', min: 0.1, max: 1.0, step: 0.1, value: 0.6 },
+                    'Wireframe Line Width': { type: 'range', id: 'config-effects-wireframe-linewidth', min: 1, max: 5, step: 1, value: 2 },
+                    'Preview Line Width': { type: 'range', id: 'config-effects-preview-linewidth', min: 1, max: 5, step: 1, value: 2 }
+                },
                 'Containers': {
                     'Color': { type: 'color', id: 'config-container-color', value: '#00ff00' },
                     'Box Creation Color': { type: 'color', id: 'config-box-creation-color', value: '#00ff00' },

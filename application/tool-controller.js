@@ -125,6 +125,24 @@ class ToolController {
         // Check if tool has isPushing property
         return this.activeTool.isPushing === true;
     }
+
+    /**
+     * Clear any active face highlights from the current tool
+     * Used when performing operations that should reset tool state (like Cmd+F)
+     */
+    clearActiveToolHighlights() {
+        if (!this.activeTool) return;
+
+        // Clear face highlights for face-based tools
+        if (this.activeTool.clearHover && typeof this.activeTool.clearHover === 'function') {
+            this.activeTool.clearHover();
+        }
+
+        // Also clear visual effects highlights as fallback
+        if (this.visualEffects && this.visualEffects.clearHighlight) {
+            this.visualEffects.clearHighlight();
+        }
+    }
     
     /**
      * Setup keyboard shortcuts for tool switching
@@ -170,6 +188,9 @@ class ToolController {
      * - Multiple containers: Smart nesting (first contains others)
      */
     createLayoutContainer() {
+        // Clear any active face highlights from tools before creating container
+        this.clearActiveToolHighlights();
+
         const selectedObjects = this.selectionController.getSelectedObjects();
 
         if (selectedObjects.length === 0) {
@@ -234,7 +255,7 @@ class ToolController {
         if (containers.length === 0 && regularObjects.length > 0) {
             console.log('📦 Creating new container from selected objects');
             const selectableMeshes = regularObjects.map(obj => obj.mesh);
-            return containerCrudManager.createContainerFromSelection(selectableMeshes);
+            return this.executeContainerCreationCommand(selectableMeshes);
         }
 
         // Scenario 2: Container + objects - Create NEW container containing everything
@@ -247,7 +268,7 @@ class ToolController {
                 ...regularObjects.map(obj => obj.mesh)
             ];
 
-            return containerCrudManager.createContainerFromSelection(allMeshes);
+            return this.executeContainerCreationCommand(allMeshes);
         }
 
         // Scenario 3: Container + container - Nest one container inside another
@@ -291,7 +312,7 @@ class ToolController {
             console.log(`🏗️ Creating new container from ${containers.length} selected containers`);
 
             const allMeshes = containers.map(obj => obj.mesh);
-            return containerCrudManager.createContainerFromSelection(allMeshes);
+            return this.executeContainerCreationCommand(allMeshes);
         }
 
         // Scenario 5: Mixed selection with multiple containers + objects - Create new container containing everything
@@ -304,7 +325,7 @@ class ToolController {
                 ...regularObjects.map(obj => obj.mesh)
             ];
 
-            return containerCrudManager.createContainerFromSelection(allMeshes);
+            return this.executeContainerCreationCommand(allMeshes);
         }
 
         // Fallback: Single container selected
@@ -315,6 +336,34 @@ class ToolController {
 
         console.warn('⚠️ Unhandled selection scenario');
         return false;
+    }
+
+    /**
+     * Execute container creation as an undoable command
+     * @param {Array} selectedMeshes - Meshes to include in container
+     * @returns {boolean} True if command was executed successfully
+     */
+    executeContainerCreationCommand(selectedMeshes) {
+        const historyManager = window.modlerComponents?.historyManager;
+
+        if (!historyManager) {
+            console.warn('ToolController: HistoryManager not available, creating container without undo support');
+            // Fallback to direct creation
+            const containerCrudManager = window.modlerComponents?.containerCrudManager;
+            return containerCrudManager?.createContainerFromSelection(selectedMeshes);
+        }
+
+        // Create and execute the command
+        const command = new CreateContainerCommand(selectedMeshes);
+        const success = historyManager.executeCommand(command);
+
+        if (success) {
+            console.log('✅ Container creation added to undo stack');
+        } else {
+            console.error('❌ Failed to execute container creation command');
+        }
+
+        return success;
     }
 
     /**

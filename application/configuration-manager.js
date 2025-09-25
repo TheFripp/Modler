@@ -117,6 +117,14 @@ class ConfigurationManager {
                 panelBackground: '#252525',
                 textColor: '#e0e0e0',
                 borderColor: '#404040'
+            },
+            history: {
+                maxSteps: 50,
+                enabled: true,
+                trackMoves: true,
+                trackCreation: true,
+                trackDeletion: true,
+                trackModification: true
             }
         };
         

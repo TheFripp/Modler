@@ -5,31 +5,44 @@ class ObjectList {
     }
 
     setupEventListeners() {
+        console.log('📋 SETUP EVENT LISTENERS - DOM state:', document.readyState);
         if (document.readyState === 'loading') {
+            console.log('📋 DOM LOADING - adding DOMContentLoaded listener');
             document.addEventListener('DOMContentLoaded', () => {
+                console.log('📋 DOM CONTENT LOADED - binding object list events');
                 this.bindObjectListEvents();
             });
         } else {
+            console.log('📋 DOM READY - binding object list events immediately');
             this.bindObjectListEvents();
         }
     }
 
     bindObjectListEvents() {
+
         // Check if object list container exists
         const objectListContainer = document.getElementById('object-list');
 
         // Try to populate the object list immediately to test
-        window.populateObjectList();
+        if (window.populateObjectList) {
+                window.populateObjectList();
+        } else {
+            console.log('📋 populateObjectList NOT AVAILABLE');
+        }
 
         // Check if any object items exist after population
         setTimeout(() => {
-            const objectItems = document.querySelectorAll('.object-item');
-        }, 100);
+            }, 100);
+
 
         // Set up click handlers for object list items
         document.addEventListener('click', (event) => {
             const objectItem = event.target.closest('.object-item');
             if (objectItem) {
+                // CRITICAL FIX: Stop event propagation to prevent triggering other click handlers
+                event.stopPropagation();
+                event.preventDefault();
+
                 const objectName = objectItem.querySelector('.object-name').textContent;
                 this.selectObjectFromList(objectName, event);
             }
@@ -481,7 +494,22 @@ class ObjectList {
                     selectionController.toggle(targetObject);
                 }
             } else {
-                // Single-select mode: clear previous selection and select this object
+                // Single-select mode: use NavigationController for smart navigation
+                const navigationController = window.modlerComponents?.navigationController;
+                const sceneController = window.modlerComponents?.sceneController;
+
+                if (navigationController && sceneController) {
+                    // Get object data for NavigationController
+                    const objectData = sceneController.getObjectByMesh(targetObject);
+
+                    if (objectData) {
+                        // Use NavigationController for unified navigation
+                        navigationController.navigateToObject(objectData.id);
+                        return; // NavigationController handles everything
+                    }
+                }
+
+                // Fallback to old behavior
                 selectionController.clearSelection();
 
                 // Only select if it's a regular mesh object (not grid helper)

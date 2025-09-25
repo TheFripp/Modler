@@ -454,9 +454,18 @@
 		// Check if we're in iframe context
 		const isInIframe = window !== window.parent;
 
-		if (!isInIframe && (window as any).selectObjectInSceneDirectly) {
-			// Direct context: use direct communication
+		if (!isInIframe) {
+			// Direct context: use NavigationController if available
+			const navigationController = (window as any).modlerComponents?.navigationController;
+			if (navigationController) {
+				// Use NavigationController for unified navigation
+				navigationController.navigateToObject(objectId);
+				return;
+			}
+		}
 
+		// Fallback to legacy direct methods
+		if ((window as any).selectObjectInSceneDirectly) {
 			// If object is a child of a container, step into the container first
 			if (selectedObject?.parentContainer) {
 				// Step into the parent container
@@ -474,7 +483,8 @@
 			type: 'object-select',
 			data: {
 				objectId,
-				parentContainer: selectedObject?.parentContainer || null
+				parentContainer: selectedObject?.parentContainer || null,
+				useNavigationController: true
 			}
 		};
 

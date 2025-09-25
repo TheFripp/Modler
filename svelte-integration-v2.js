@@ -762,8 +762,10 @@
 
         // Get current container context
         let containerContext = null;
-        if (selectionController?.isInContainerContext()) {
-            const contextMesh = selectionController.getContainerContext();
+        const navigationController = window.modlerComponents?.navigationController;
+        if (navigationController?.isInContainerContext()) {
+            const contextContainer = navigationController.getCurrentContainer();
+            const contextMesh = contextContainer?.mesh;
             if (contextMesh && sceneController) {
                 const contextData = sceneController.getObjectByMesh(contextMesh);
                 if (contextData) {
@@ -930,6 +932,12 @@
                     mesh.material.color.setHex(colorValue);
                 } else if (materialProp === 'opacity') {
                     // Handle opacity updates
+                    console.log('🔧 SVELTE OPACITY CHANGE:', {
+                        objectName: mesh.name || 'unnamed',
+                        oldOpacity: mesh.material.opacity,
+                        newOpacity: value,
+                        stackTrace: new Error().stack?.split('\n')[2]?.trim()
+                    });
                     mesh.material.opacity = value;
                     mesh.material.transparent = value < 1;
                 }
@@ -1001,13 +1009,13 @@
      * Step into container by ID (for direct communication)
      */
     window.stepIntoContainerById = function(containerId) {
-        const selectionController = window.modlerComponents?.selectionController;
+        const navigationController = window.modlerComponents?.navigationController;
         const sceneController = window.modlerComponents?.sceneController;
 
-        if (selectionController && sceneController) {
+        if (navigationController && sceneController) {
             const containerData = sceneController.getObject(containerId);
             if (containerData && containerData.mesh) {
-                selectionController.stepIntoContainer(containerData.mesh);
+                navigationController.navigateToContainer(containerData.mesh);
                 return true;
             }
         }
@@ -1017,17 +1025,30 @@
     /**
      * Handle object selection from hierarchy panel
      */
+    // New NavigationController-based object selection
+    function handleObjectSelectionWithNavigation(objectId) {
+        const navigationController = window.modlerComponents?.navigationController;
+
+        if (navigationController) {
+            navigationController.navigateToObject(objectId);
+        } else {
+            // Fallback to legacy method
+            handleObjectSelection(objectId, null);
+        }
+    }
+
     function handleObjectSelection(objectId, parentContainer = null) {
         const selectionController = window.modlerComponents?.selectionController;
+        const navigationController = window.modlerComponents?.navigationController;
         const sceneController = window.modlerComponents?.sceneController;
 
         if (selectionController && sceneController) {
             // If object is a child of a container, step into the container first
-            if (parentContainer) {
+            if (parentContainer && navigationController) {
                 const containerData = sceneController.getObject(parentContainer);
                 if (containerData && containerData.mesh) {
                     // Step into the parent container
-                    selectionController.stepIntoContainer(containerData.mesh);
+                    navigationController.navigateToContainer(containerData.mesh);
                 }
             }
 
@@ -1463,8 +1484,15 @@
                 handlePropertyUpdate(objectId, property, value, source);
             } else if (event.data && event.data.type === 'object-select') {
                 // Handle object selection from hierarchy
-                const { objectId, parentContainer } = event.data.data;
-                handleObjectSelection(objectId, parentContainer);
+                const { objectId, parentContainer, useNavigationController } = event.data.data;
+
+                if (useNavigationController) {
+                    // Use NavigationController for unified navigation
+                    handleObjectSelectionWithNavigation(objectId);
+                } else {
+                    // Legacy method
+                    handleObjectSelection(objectId, parentContainer);
+                }
             } else if (event.data && event.data.type === 'tool-activate') {
                 // Handle tool activation from Svelte UI
                 const { toolName } = event.data.data;
@@ -1545,13 +1573,7 @@
             sendFullDataUpdate(initialSelection, 'initial-state');
         }, 50);
 
-        // Send periodic updates less frequently to ensure panels stay in sync
-        setInterval(() => {
-            if (window.modlerComponents) {
-                const currentSelection = window.modlerComponents.selectionController?.getSelectedObjects() || [];
-                sendFullDataUpdate(currentSelection, 'periodic-update');
-            }
-        }, 10000); // Every 10 seconds
+        // Removed periodic polling - system now uses event-driven updates via NavigationController
     }
 
     /**

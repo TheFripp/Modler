@@ -49,7 +49,7 @@ class ConfigurationUI {
 
         // Visual Effects color inputs with live preview
         this.bindColorInputWithPreview('config-effects-face-color', 'visual.effects.materials.face.color');
-        this.bindColorInputWithPreview('config-effects-axis-color', 'visual.effects.materials.axis.color');
+        this.bindColorInputWithPreview('config-effects-axis-color', 'visual.effects.axisHighlight.color');
         this.bindColorInputWithPreview('config-effects-object-color', 'visual.effects.materials.object.color');
         this.bindColorInputWithPreview('config-effects-guides-color', 'visual.effects.materials.guides.color');
 
@@ -67,7 +67,9 @@ class ConfigurationUI {
         // Visual Effects range inputs
         this.bindRangeInput('config-effects-face-opacity', 'visual.effects.materials.face.opacity');
         this.bindRangeInput('config-effects-face-renderorder', 'visual.effects.materials.face.renderOrder');
-        this.bindRangeInput('config-effects-axis-opacity', 'visual.effects.materials.axis.opacity');
+        this.bindRangeInput('config-effects-axis-opacity', 'visual.effects.axisHighlight.opacity');
+        this.bindRangeInput('config-effects-wireframe-linewidth', 'visual.effects.wireframe.lineWidth');
+        this.bindRangeInput('config-effects-preview-linewidth', 'visual.effects.preview.lineWidth');
         this.bindRangeInput('config-effects-object-opacity', 'visual.effects.materials.object.opacity');
         this.bindRangeInput('config-effects-object-linewidth', 'visual.effects.materials.object.lineWidth');
         this.bindRangeInput('config-effects-guides-opacity', 'visual.effects.materials.guides.opacity');
@@ -150,7 +152,7 @@ class ConfigurationUI {
 
         // Update Visual Effects color inputs
         this.updateColorInput('config-effects-face-color', config.visual?.effects?.materials?.face?.color);
-        this.updateColorInput('config-effects-axis-color', config.visual?.effects?.materials?.axis?.color);
+        this.updateColorInput('config-effects-axis-color', config.visual?.effects?.axisHighlight?.color);
         this.updateColorInput('config-effects-object-color', config.visual?.effects?.materials?.object?.color);
         this.updateColorInput('config-effects-guides-color', config.visual?.effects?.materials?.guides?.color);
 
@@ -168,7 +170,9 @@ class ConfigurationUI {
         // Update Visual Effects range inputs
         this.updateRangeInput('config-effects-face-opacity', config.visual?.effects?.materials?.face?.opacity);
         this.updateRangeInput('config-effects-face-renderorder', config.visual?.effects?.materials?.face?.renderOrder);
-        this.updateRangeInput('config-effects-axis-opacity', config.visual?.effects?.materials?.axis?.opacity);
+        this.updateRangeInput('config-effects-axis-opacity', config.visual?.effects?.axisHighlight?.opacity);
+        this.updateRangeInput('config-effects-wireframe-linewidth', config.visual?.effects?.wireframe?.lineWidth);
+        this.updateRangeInput('config-effects-preview-linewidth', config.visual?.effects?.preview?.lineWidth);
         this.updateRangeInput('config-effects-object-opacity', config.visual?.effects?.materials?.object?.opacity);
         this.updateRangeInput('config-effects-object-linewidth', config.visual?.effects?.materials?.object?.lineWidth);
         this.updateRangeInput('config-effects-guides-opacity', config.visual?.effects?.materials?.guides?.opacity);

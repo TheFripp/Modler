@@ -150,8 +150,8 @@ class ObjectVisualizer {
                 break;
         }
 
-        // Notify container visualizer about state changes for dimming updates
-        this.notifyContainerVisualizerOfStateChange();
+        // REMOVED: notifyContainerVisualizerOfStateChange() call
+        // Dimming is now handled exclusively by NavigationController → ContainerVisualizer
     }
 
     /**
@@ -168,8 +168,8 @@ class ObjectVisualizer {
                 break;
         }
 
-        // Notify container visualizer about state changes for dimming updates
-        this.notifyContainerVisualizerOfStateChange();
+        // REMOVED: notifyContainerVisualizerOfStateChange() call
+        // Dimming is now handled exclusively by NavigationController → ContainerVisualizer
     }
 
     /**
@@ -635,16 +635,8 @@ class ObjectVisualizer {
         this.objectStates.clear();
     }
 
-    /**
-     * Notify container visualizer of state changes for dimming updates
-     */
-    notifyContainerVisualizerOfStateChange() {
-        // Get the visualization manager to access container visualizer
-        const visualizationManager = window.modlerComponents?.visualizationManager;
-        if (visualizationManager && visualizationManager.containerVisualizer) {
-            visualizationManager.containerVisualizer.updateContextDimming();
-        }
-    }
+    // REMOVED: notifyContainerVisualizerOfStateChange() method
+    // Dimming conflicts eliminated - NavigationController → ContainerVisualizer is the only pathway
 }
 
 // Export for use in application

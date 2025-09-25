@@ -31,7 +31,9 @@ class SupportMeshFactory {
             color: selectionColorHex,
             transparent: true,
             opacity: selectionConfig.opacity,
-            linewidth: selectionConfig.lineWidth
+            linewidth: selectionConfig.lineWidth,
+            depthTest: true, // Enable depth test so wireframe doesn't show through the object itself
+            depthWrite: false // Disable depth write to prevent z-fighting with the object
         });
         this.materials.selectionWireframe.lineWidth = selectionConfig.lineWidth;
         this.materials.selectionWireframe.renderOrder = selectionConfig.renderOrder || 999;
@@ -42,7 +44,9 @@ class SupportMeshFactory {
             color: faceHighlightColorHex,
             transparent: true,
             opacity: 0.1, // 10% opacity
-            side: THREE.DoubleSide
+            side: THREE.DoubleSide,
+            depthTest: false, // Allow face highlights to show through objects for visual feedback
+            depthWrite: false // Disable depth write to prevent interference with other objects
         });
 
         // Container wireframe material
@@ -55,7 +59,9 @@ class SupportMeshFactory {
             color: containerColorHex,
             transparent: true,
             opacity: containerConfig.opacity,
-            linewidth: containerConfig.lineWidth
+            linewidth: containerConfig.lineWidth,
+            depthTest: true, // Enable depth test so wireframe doesn't show through the container itself
+            depthWrite: false // Disable depth write to prevent z-fighting with the container
         });
         this.materials.containerWireframe.lineWidth = containerConfig.lineWidth;
         this.materials.containerWireframe.renderOrder = containerConfig.renderOrder || 998;

@@ -134,6 +134,10 @@ class LayoutGeometry {
         mainMesh.userData.isContainer = true;
         mainMesh.userData.containerType = 'main';
 
+        // CONTAINER-FIRST SELECTION: Disable direct raycasting on container mesh
+        // Containers can only be selected via their child objects
+        mainMesh.raycast = () => {};
+
         // Get container configuration for wireframe child
         const configManager = window.modlerComponents?.configurationManager;
         const wireframeColor = configManager ?

@@ -163,7 +163,13 @@ class PropertyPanel {
 
     updateObjectDimension(axis, value) {
         if (window.PropertyManager) {
-            window.PropertyManager.updateObjectGeometryDimension(axis, value);
+            // Use enhanced method that handles container resize effects on fill children
+            if (window.PropertyManager.updateObjectGeometryDimensionWithFillUpdate) {
+                window.PropertyManager.updateObjectGeometryDimensionWithFillUpdate(axis, value);
+            } else {
+                // Fallback to basic method
+                window.PropertyManager.updateObjectGeometryDimension(axis, value);
+            }
         }
     }
 
@@ -228,14 +234,12 @@ class PropertyPanel {
             // Toggle OFF - disable layout
             this.updateLayoutAxisButtons(null); // Clear all active states
             this.updateLayoutProperty('direction', null);
-            this.clearLayoutAxisGuides();
             this.hideLayoutSections();
             this.setDimensionInputsState(false); // Enable dimension inputs when layout disabled
         } else {
             // Toggle ON - enable layout
             this.updateLayoutAxisButtons(axis);
             this.updateLayoutProperty('direction', axis);
-            this.showLayoutAxisGuides(axis);
             this.showLayoutSections();
             this.setDimensionInputsState(true); // Disable dimension inputs in layout mode
         }
@@ -290,36 +294,6 @@ class PropertyPanel {
         });
     }
 
-    showLayoutAxisGuides(axis) {
-        const selectedObjects = window.modlerComponents?.selectionController?.getSelectedObjects();
-        const visualEffects = window.modlerComponents?.visualEffects;
-        const sceneController = window.modlerComponents?.sceneController;
-
-        if (!selectedObjects || selectedObjects.length === 0 || !visualEffects || !sceneController) {
-            return;
-        }
-
-        // Only show guides if the selected object is a container
-        const selectedObject = selectedObjects[0];
-        if (selectedObject && selectedObject.userData && selectedObject.userData.id) {
-            const objectData = sceneController.getObject(selectedObject.userData.id);
-
-            // Only show layout axis guides for containers
-            if (objectData && objectData.isContainer) {
-                visualEffects.showLayoutAxisGuides(selectedObject, axis);
-            } else {
-                // Clear guides if selected object is not a container
-                visualEffects.clearLayoutAxisGuides();
-            }
-        }
-    }
-
-    clearLayoutAxisGuides() {
-        const visualEffects = window.modlerComponents?.visualEffects;
-        if (visualEffects) {
-            visualEffects.clearLayoutAxisGuides();
-        }
-    }
 
     // Fill dimension functionality
     toggleFillDimension(axis, buttonElement) {

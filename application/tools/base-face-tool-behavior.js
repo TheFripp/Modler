@@ -75,7 +75,8 @@ class BaseFaceToolBehavior {
 
         // Face detection completed
 
-        // Filter out child objects of selected containers - they should not show face highlighting
+        // CHILD OBJECT TRANSPARENCY: If we hit a child object inside a selected container,
+        // ignore the child hit but preserve existing container highlights
         if (!this.selectionController.isSelected(targetObject)) {
             const sceneController = window.modlerComponents?.sceneController;
             const objectData = sceneController?.getObjectByMesh(hit.object);
@@ -83,14 +84,15 @@ class BaseFaceToolBehavior {
             if (objectData && objectData.parentContainer) {
                 const parentContainer = sceneController.getObject(objectData.parentContainer);
                 if (parentContainer && this.selectionController.isSelected(parentContainer.mesh)) {
-                    // Object is child of selected container - don't show any highlighting
-                    this.clearHover();
-                    return false;
+                    // Child object hit inside selected container - ignore it but preserve existing highlights
+                    // Return true to indicate "handled" but don't clear or set new highlights
+                    return true;
                 }
             }
         }
 
         // Only highlight faces of selected objects (including interactive meshes of selected containers)
+        // Note: targetObject may have been changed above to the container when hitting child objects
         if (this.selectionController.isSelected(targetObject)) {
             // CAMERA-FACING CHECK: Only highlight faces oriented toward the camera
             if (!this.isFaceTowardCamera(hit)) {
@@ -185,7 +187,8 @@ class BaseFaceToolBehavior {
         if (!hit || !hit.object) return null;
 
         // Check if we're in container context (stepped into a container)
-        const isInContainerContext = this.selectionController.isInContainerContext();
+        const navigationController = window.modlerComponents?.navigationController;
+        const isInContainerContext = navigationController?.isInContainerContext() || false;
 
         // Use same detection logic as handleFaceDetection
         const isContainerInteractive = hit.object.userData.isContainerInteractive;
