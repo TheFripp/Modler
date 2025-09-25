@@ -73,8 +73,22 @@ Tools receive pre-coordinated events from InputController rather than direct DOM
 - **Visual feedback** via VisualEffects
 - **Property updates** via PropertyUpdateHandler
 
+## Factory System Integration
+
+### Centralized Resource Usage
+Tools use centralized factory systems for all resource creation and manipulation:
+- **TransformationManager**: All object positioning, rotation, scaling (replaces direct mesh.position.copy)
+- **GeometryFactory**: Any dynamic geometry creation (preview meshes, temporary overlays)
+- **MaterialManager**: Consistent material creation and caching
+
+### Architecture Compliance
+- **NEVER use direct THREE.js creation** (`new THREE.BoxGeometry`, `mesh.position.copy`)
+- **ALWAYS use factory systems** for resource management and performance optimization
+- **Automatic cleanup** through factory resource pooling and tracking
+
 ## Key Patterns
 - **Shared selection behavior** prevents inconsistencies
 - **Face-based interaction** for CAD workflows
 - **Event coordination** prevents conflicts
 - **Tool-agnostic container creation** via direct commands
+- **Centralized resource management** through factory systems

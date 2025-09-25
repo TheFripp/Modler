@@ -180,7 +180,7 @@
 **Key Patterns Established**:
 - Container-first selection mental model
 - Dual geometry system for containers  
-- Single event coordination through InputHandler
+- Single event coordination through InputController
 - Centralized mesh synchronization
 - Tool-based interaction with shared selection behaviors
 

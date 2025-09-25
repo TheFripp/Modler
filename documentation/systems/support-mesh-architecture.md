@@ -31,9 +31,16 @@ The support mesh architecture implements a "create once, show/hide only" pattern
 ## Implementation Flow
 
 1. **Object Creation**: `SceneController.addObject()` → `SupportMeshFactory.createObjectSupportMeshes(mesh)`
-2. **Selection**: `ObjectVisualizer.createEdgeHighlight()` → Shows `mesh.userData.supportMeshes.selectionWireframe`
+2. **Selection**: `VisualizationManager.createEdgeHighlight()` → Shows `mesh.userData.supportMeshes.selectionWireframe`
 3. **Face Highlighting**: `VisualEffects.showFaceHighlight()` → Shows `mesh.userData.supportMeshes.faceHighlight`
 4. **Cleanup**: `SceneController.removeObject()` → `SupportMeshFactory.cleanupSupportMeshes(mesh)`
+
+## Factory Integration
+
+Support meshes are created through centralized factory systems for consistency and performance:
+- **Geometry**: `GeometryFactory.createEdgeGeometry()` for wireframes and highlights
+- **Materials**: `MaterialManager.createPreviewWireframeMaterial()` for selection wireframes
+- **Cleanup**: Automatic return to resource pools when support meshes are disposed
 
 ## Architecture Rules
 
@@ -64,7 +71,7 @@ supportMesh.position.copy(parentObject.position);  // Unnecessary and error-pron
 ## Reference Implementation
 
 - Object creation: `SceneController.addObject()` lines 146-158
-- Selection visualization: `ObjectVisualizer.createEdgeHighlight()` lines 183-194
+- Selection visualization: `VisualizationManager.createEdgeHighlight()` lines 183-194
 - Face highlighting: `VisualEffects.showFaceHighlight()` lines 802-813
 - Support mesh factory: `SupportMeshFactory` (complete implementation)
 

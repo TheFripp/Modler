@@ -67,6 +67,9 @@ Unregister all relationships before disposal. The synchronizer handles cleanup o
 
 ## Integration Points
 
+### TransformationManager (Centralized Factory Integration)
+Automatic mesh synchronization trigger when transformations are applied through centralized TransformationManager, ensuring all related meshes stay coordinated without manual sync calls.
+
 ### SelectionController
 Selection wireframes automatically sync with main object position and visibility through registered relationships.
 

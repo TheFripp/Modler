@@ -35,7 +35,7 @@ Version 1 taught us that 23,000+ lines for basic 3D interaction is unsustainable
 
 ### Selection System: 81% Size Reduction
 - **Before**: SelectionController (793 lines) - bloated with visual effects, container logic, material management
-- **After**: SelectionController (280 lines) + SelectionVisualizer (230 lines) + ContainerContextManager (150 lines) = 660 lines
+- **After**: SelectionController (280 lines) + VisualizationManager (230 lines) + ContainerContextManager (150 lines) = 660 lines
 - **Eliminated**: Architectural violations, mixed concerns, material management bloat
 - **Result**: Clean separation of selection state, visual effects, and container context
 
@@ -56,14 +56,33 @@ Version 1 taught us that 23,000+ lines for basic 3D interaction is unsustainable
 - **After**: Centralized SnapController with system registration
 - **Result**: Eliminated snap conflicts, performance optimized detection
 
+### Centralized Factory Pattern: Complete Visualization Architecture (2025)
+- **Before**: Scattered THREE.js geometry/material creation across 32+ files
+- **After**: GeometryFactory → MaterialManager → TransformationManager → VisualizationResourcePool
+- **Pattern**: Single source of truth for all visualization resources with performance optimization
+- **Result**: +677 lines functionality, -9,473 lines scattered code = net -8,796 lines with enhanced capabilities
+
+**Centralized Systems Architecture:**
+1. **GeometryFactory**: Centralized geometry creation with object pooling
+2. **MaterialManager**: Unified material creation with caching and configuration integration
+3. **TransformationManager**: Single API for all object transformations (position, rotation, scale)
+4. **VisualizationResourcePool**: Resource management with automatic cleanup and performance monitoring
+
+**Integration Benefits:**
+- **Performance**: Object pooling reduces garbage collection pressure
+- **Consistency**: All components use identical resource creation patterns
+- **Maintainability**: Single source of truth for each resource type
+- **Development Velocity**: Unified APIs eliminate scattered THREE.js knowledge requirements
+
 ## Total Impact
 
-**Overall Reduction**: ~2,400+ lines eliminated while maintaining full functionality
+**Overall Reduction**: ~11,200+ lines eliminated while enhancing functionality
 - Input system consolidation: 388 lines saved
 - Selection system refactor: 133 lines saved (plus better architecture)
 - Camera controller cleanup: 234 lines saved
 - Move gizmo removal: 500+ lines saved
 - Snapping system optimization: Performance gains + conflict resolution
+- **Centralized factory architecture: 8,796 lines net reduction** (major architectural advancement)
 
 **Architectural Improvements**:
 - Eliminated circular dependencies
@@ -119,8 +138,12 @@ Every abstraction layer must justify its cost:
 │  │ Controller  │   Effects       │  │
 │  └─────────────┴─────────────────┘  │
 ├─────────────────────────────────────┤
-│         FOUNDATION LAYER            │  
-│        Three.js + WebGL             │  <- Direct Three.js usage
+│         FOUNDATION LAYER            │
+│  ┌─────────────┬─────────────────┐  │  <- Resource management & Three.js
+│  │ Factory     │   Resource      │  │
+│  │ Systems     │   Pools         │  │
+│  └─────────────┴─────────────────┘  │
+│        Three.js + WebGL             │
 └─────────────────────────────────────┘
 ```
 
@@ -128,7 +151,7 @@ Every abstraction layer must justify its cost:
 
 #### Rule: Single Responsibility Principle (Strict)
 - **SceneController**: Object lifecycle only (add, remove, update)
-- **InputHandler**: Mouse/keyboard events → normalized actions only
+- **InputController**: Mouse/keyboard events → normalized actions only
 - **SelectionController**: Selection state only (what's selected)
 - **VisualEffects**: Highlights, outlines, animations only
 
@@ -136,6 +159,14 @@ Every abstraction layer must justify its cost:
 - Application layer cannot directly touch Three.js
 - Scene layer cannot directly handle DOM events
 - Each layer can only depend on the layer directly below
+- **All layers use Foundation factories** - Never create THREE.js objects directly
+
+#### Rule: Centralized Resource Management (CRITICAL)
+- **GeometryFactory**: Single source for all geometry creation
+- **MaterialManager**: Single source for all material creation
+- **TransformationManager**: Single source for all object transformations
+- **VisualizationResourcePool**: Automatic resource pooling and cleanup
+- **Violation Prevention**: Development validator catches manual THREE.js creation
 
 #### Rule: Component Size Limits
 - **Controllers**: Max 300 lines
@@ -145,10 +176,15 @@ Every abstraction layer must justify its cost:
 
 ## V2 Core Components
 
-### Foundation Layer (Direct Three.js)
+### Foundation Layer (Centralized Resource Management)
 ```javascript
-// Three.js scene, camera, renderer - minimal setup
-// Direct WebGL interaction where performance critical
+// Centralized factory systems with resource management
+class GeometryFactory // All geometry creation + pooling
+class MaterialManager // All material creation + caching
+class TransformationManager // All transformations + batching
+class VisualizationResourcePool // Resource cleanup + monitoring
+
+// Direct Three.js only for scene/camera/renderer setup
 ```
 
 ### Scene Layer
@@ -167,7 +203,7 @@ class VisualEffects {
 
 ### Interaction Layer  
 ```javascript
-class InputHandler {
+class InputController {
   // Mouse/touch events → raycast → actions
   // Tool state management
   // Direct DOM event handling
@@ -254,7 +290,7 @@ class ToolController {
 
 ### 5. Tool Event Coordination Pattern
 **Problem Solved**: Multiple event handlers causing conflicts and race conditions.
-**Solution**: Single coordination point in InputHandler with tool delegation.
+**Solution**: Single coordination point in InputController with tool delegation.
 
 **Pattern**: Single event entry point with priority-based delegation to prevent conflicts.
 

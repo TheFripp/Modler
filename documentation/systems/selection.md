@@ -28,7 +28,7 @@ Container-first selection with direct object access through double-click.
 
 ### VisualizationManager
 **File**: `interaction/visualization-manager.js`
-- Edge highlight creation/removal through ContainerVisualizer
+- Edge highlight creation/removal through unified visualization system
 - Material management for wireframes
 - Visual feedback coordination
 

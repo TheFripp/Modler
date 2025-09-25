@@ -20,35 +20,34 @@ Key method signatures and concepts for Modler V2 components. For implementation 
 
 **File**: `scene/scene-controller.js`
 
-### SelectionController (Streamlined)
-**Purpose**: Core selection state management only - visual effects delegated to SelectionVisualizer
+### SelectionController (Unified)
+**Purpose**: Complete selection management with container context awareness and visualization integration
 
 **Key Methods**:
 - `select(object)` → boolean
 - `deselect(object)` → boolean
 - `toggle(object)` → boolean
 - `clearSelection(reason)` → void
-- `initialize(selectionVisualizer, containerContextManager)` → void
+- `initialize(visualizationManager)` → void
 
-**Container Context Delegation**:
+**Container Context Management**:
 - `stepIntoContainer(containerObject)` → void
 - `stepOutOfContainer()` → void
 - `isInContainerContext()` → boolean
 - `getContainerContext()` → object | null
 
-**File**: `interaction/selection-controller.js` (280 lines, down from 793)
+**File**: `interaction/selection-controller.js` (centralized selection architecture)
 
-### SelectionVisualizer (New)
-**Purpose**: All selection visual feedback - edge highlights, materials, configuration
+### VisualizationManager (Unified System)
+**Purpose**: All visual feedback through centralized factory systems - replaces scattered visualization components
 
-**Key Methods**:
-- `updateObjectVisual(object, isSelected)` → void
-- `createEdgeHighlight(object)` → void
-- `removeEdgeHighlight(object)` → void
-- `showContainerWireframe(object)` → void
-- `hideContainerWireframe(object)` → void
+**Key Integration Points**:
+- Uses GeometryFactory for wireframe creation
+- Uses MaterialManager for selection materials
+- Integrates with MeshSynchronizer for related mesh updates
+- Handles container, object, and face visualization uniformly
 
-**File**: `interaction/selection-visualizer.js` (230 lines)
+**File**: `interaction/visualization-manager.js` (230 lines)
 
 ### ContainerContextManager (New)
 **Purpose**: Container step-in/out logic and context highlighting
@@ -84,17 +83,40 @@ Key method signatures and concepts for Modler V2 components. For implementation 
 
 ## Tool System
 
-### SelectionController (Centralized)
-**Purpose**: Unified selection logic for all tools - eliminates BaseSelectionBehavior duplication
+## Foundation Layer (Centralized Resources)
+
+### GeometryFactory
+**Purpose**: Single source for all geometry creation with object pooling and performance optimization
 
 **Key Methods**:
-- `handleObjectClick(object, event, options)` → boolean - Container context-aware selection
-- `handleDoubleClick(hit, event)` → boolean - Container step-into functionality
-- `handleEmptySpaceClick(event)` → void - Clear selection and exit context
-- `isSelectableObject(object)` → boolean - Object selectability validation
-- `select(object)` → boolean - Context-aware selection with container logic
-- `stepIntoContainer(containerObject)` → void - Establish container context
-- `stepOutOfContainer()` → void - Exit container context
+- `createBoxGeometry(width, height, depth)` → THREE.BoxGeometry
+- `createPlaneGeometry(width, height)` → THREE.PlaneGeometry
+- `createEdgeGeometry(sourceGeometry)` → THREE.EdgesGeometry
+- `returnGeometry(geometry, type)` → void - Return to pool for reuse
+
+**File**: `application/utilities/geometry-factory.js`
+
+### MaterialManager
+**Purpose**: Single source for all material creation with configuration integration and caching
+
+**Key Methods**:
+- `createMeshLambertMaterial(options)` → THREE.MeshLambertMaterial
+- `createPreviewWireframeMaterial(options)` → THREE.LineBasicMaterial
+- `createInvisibleRaycastMaterial(options)` → THREE.MeshBasicMaterial
+- `returnMaterial(material)` → void - Return to cache for reuse
+
+**File**: `application/utilities/material-manager.js`
+
+### TransformationManager
+**Purpose**: Single API for all object transformations with performance optimization and mesh synchronization
+
+**Key Methods**:
+- `setPosition(object, position, options)` → boolean
+- `setRotation(object, rotation, options)` → boolean
+- `setScale(object, scale, options)` → boolean
+- `applyTransform(object, transforms, options)` → boolean
+
+**File**: `application/utilities/transformation-manager.js`
 
 **File**: `interaction/selection-controller.js`
 

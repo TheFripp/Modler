@@ -7,10 +7,18 @@ class SceneController {
         this.objects = new Map(); // id -> object data
         this.nextId = 1;
         this.eventCallbacks = {}; // Event system for UI notifications
-        
+
         // Sequential naming counters
         this.nextBoxNumber = 1;
         this.nextContainerNumber = 1;
+
+        // Centralized transformation system
+        this.transformationManager = null;
+
+        // Initialize transformation manager after components are loaded
+        setTimeout(() => {
+            this.transformationManager = window.modlerComponents?.transformationManager;
+        }, 100);
         
         // Setup CAD lighting - balanced illumination to show face differences clearly
         // Key light from front-top-right for primary illumination
@@ -205,34 +213,85 @@ class SceneController {
             return false;
         }
         
-        // Update transform properties
-        if (updates.position) {
-            if (updates.position instanceof THREE.Vector3) {
-                mesh.position.copy(updates.position);
-            } else {
-                mesh.position.set(updates.position.x || mesh.position.x, 
-                                updates.position.y || mesh.position.y, 
-                                updates.position.z || mesh.position.z);
+        // Update transform properties using centralized TransformationManager
+        if (this.transformationManager) {
+            // Use centralized transformation system with batch processing for multiple transforms
+            const transformUpdates = {};
+            let hasTransforms = false;
+
+            if (updates.position) {
+                if (updates.position instanceof THREE.Vector3) {
+                    transformUpdates.position = updates.position;
+                } else {
+                    transformUpdates.position = new THREE.Vector3(
+                        updates.position.x ?? mesh.position.x,
+                        updates.position.y ?? mesh.position.y,
+                        updates.position.z ?? mesh.position.z
+                    );
+                }
+                hasTransforms = true;
             }
-        }
-        
-        if (updates.rotation) {
-            if (updates.rotation instanceof THREE.Euler) {
-                mesh.rotation.copy(updates.rotation);
-            } else {
-                mesh.rotation.set(updates.rotation.x || mesh.rotation.x,
-                                updates.rotation.y || mesh.rotation.y,
-                                updates.rotation.z || mesh.rotation.z);
+
+            if (updates.rotation) {
+                if (updates.rotation instanceof THREE.Euler) {
+                    transformUpdates.rotation = updates.rotation;
+                } else {
+                    transformUpdates.rotation = new THREE.Euler(
+                        updates.rotation.x ?? mesh.rotation.x,
+                        updates.rotation.y ?? mesh.rotation.y,
+                        updates.rotation.z ?? mesh.rotation.z
+                    );
+                }
+                hasTransforms = true;
             }
-        }
-        
-        if (updates.scale) {
-            if (updates.scale instanceof THREE.Vector3) {
-                mesh.scale.copy(updates.scale);
-            } else {
-                mesh.scale.set(updates.scale.x || mesh.scale.x,
-                             updates.scale.y || mesh.scale.y,
-                             updates.scale.z || mesh.scale.z);
+
+            if (updates.scale) {
+                if (updates.scale instanceof THREE.Vector3) {
+                    transformUpdates.scale = updates.scale;
+                } else {
+                    transformUpdates.scale = new THREE.Vector3(
+                        updates.scale.x ?? mesh.scale.x,
+                        updates.scale.y ?? mesh.scale.y,
+                        updates.scale.z ?? mesh.scale.z
+                    );
+                }
+                hasTransforms = true;
+            }
+
+            // Apply all transforms in a single operation for better performance
+            if (hasTransforms) {
+                this.transformationManager.applyTransform(mesh, transformUpdates, { skipNotifications: false });
+            }
+        } else {
+            // Fallback to direct manipulation if TransformationManager unavailable
+            if (updates.position) {
+                if (updates.position instanceof THREE.Vector3) {
+                    mesh.position.copy(updates.position);
+                } else {
+                    mesh.position.set(updates.position.x || mesh.position.x,
+                                    updates.position.y || mesh.position.y,
+                                    updates.position.z || mesh.position.z);
+                }
+            }
+
+            if (updates.rotation) {
+                if (updates.rotation instanceof THREE.Euler) {
+                    mesh.rotation.copy(updates.rotation);
+                } else {
+                    mesh.rotation.set(updates.rotation.x || mesh.rotation.x,
+                                    updates.rotation.y || mesh.rotation.y,
+                                    updates.rotation.z || mesh.rotation.z);
+                }
+            }
+
+            if (updates.scale) {
+                if (updates.scale instanceof THREE.Vector3) {
+                    mesh.scale.copy(updates.scale);
+                } else {
+                    mesh.scale.set(updates.scale.x || mesh.scale.x,
+                                 updates.scale.y || mesh.scale.y,
+                                 updates.scale.z || mesh.scale.z);
+                }
             }
         }
         

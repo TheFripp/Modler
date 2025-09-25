@@ -12,7 +12,7 @@ class MoveTool {
         // Use shared behaviors for consistency
         this.faceToolBehavior = new BaseFaceToolBehavior(selectionController, visualEffects, 'move');
         this.eventHandler = new BaseFaceToolEventHandler(this, this.faceToolBehavior, selectionController);
-        
+
         // Simplified drag state
         this.isDragging = false;
         this.dragObject = null;
@@ -20,12 +20,19 @@ class MoveTool {
         this.dragFaceNormal = null;
         this.lastMousePos = null;
 
+        // Centralized transformation system
+        this.transformationManager = null;
 
         // Container update throttling using shared utils - use default 16ms for smooth updates
         this.containerThrottleState = MovementUtils.createThrottleState();
 
         // Direction change detection for immediate response
         this.lastMovementDelta = undefined;
+
+        // Initialize transformation manager after components are loaded
+        setTimeout(() => {
+            this.transformationManager = window.modlerComponents?.transformationManager;
+        }, 50);
     }
     
     /**
@@ -203,29 +210,46 @@ class MoveTool {
                     this.dragStartPosition
                 );
 
-                // Use axis-constrained snapped position
-                this.dragObject.position.copy(axisConstrainedPosition);
+                // Use axis-constrained snapped position with centralized transformation
+                if (this.transformationManager) {
+                    this.transformationManager.setPosition(this.dragObject, axisConstrainedPosition, { batchUpdate: true });
+                } else {
+                    // Fallback to direct manipulation if TransformationManager unavailable
+                    this.dragObject.position.copy(axisConstrainedPosition);
+                    this.dragObject.updateMatrixWorld(true);
+                }
             } else {
                 // No snap point, use regular movement
-                this.dragObject.position.copy(potentialPosition);
+                if (this.transformationManager) {
+                    this.transformationManager.setPosition(this.dragObject, potentialPosition, { batchUpdate: true });
+                } else {
+                    this.dragObject.position.copy(potentialPosition);
+                    this.dragObject.updateMatrixWorld(true);
+                }
             }
         } else {
             // Snapping disabled, use regular movement
-            this.dragObject.position.copy(potentialPosition);
+            if (this.transformationManager) {
+                this.transformationManager.setPosition(this.dragObject, potentialPosition, { batchUpdate: true });
+            } else {
+                this.dragObject.position.copy(potentialPosition);
+                this.dragObject.updateMatrixWorld(true);
+            }
         }
 
-        // Standard matrix update (automatic parent-child inheritance works)
-        this.dragObject.updateMatrixWorld(true);
-        
-        // Update related meshes through MeshSynchronizer
-        const meshSynchronizer = window.modlerComponents?.meshSynchronizer;
-        if (meshSynchronizer) {
-            meshSynchronizer.syncAllRelatedMeshes(this.dragObject, 'transform', true);
-        }
+        // TransformationManager handles mesh synchronization and notifications automatically
+        // Keep manual sync only as fallback when TransformationManager is not available
+        if (!this.transformationManager) {
+            // Update related meshes through MeshSynchronizer
+            const meshSynchronizer = window.modlerComponents?.meshSynchronizer;
+            if (meshSynchronizer) {
+                meshSynchronizer.syncAllRelatedMeshes(this.dragObject, 'transform', true);
+            }
 
-        // Notify centralized system for real-time property panel updates
-        if (window.notifyObjectModified) {
-            window.notifyObjectModified(this.dragObject, 'transform');
+            // Notify centralized system for real-time property panel updates
+            if (window.notifyObjectModified) {
+                window.notifyObjectModified(this.dragObject, 'transform');
+            }
         }
         
         // Update container context highlight if we're in container mode and moving a container

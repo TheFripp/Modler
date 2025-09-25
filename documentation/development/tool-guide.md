@@ -116,11 +116,11 @@ this.keyBindings = {
 };
 ```
 
-### InputHandler Coordination
-Tools receive events through InputHandler coordination:
+### InputController Coordination
+Tools receive events through InputController coordination:
 
 ```javascript
-// InputHandler delegates to current tool
+// InputController delegates to current tool
 const currentTool = this.toolBehaviors[this.currentTool];
 if (currentTool && typeof currentTool.onClick === 'function') {
     currentTool.onClick(hit, event);
@@ -166,7 +166,7 @@ this.visualEffects.clearHighlight();
 ### Tool Not Receiving Events
 1. Check if tool is registered in ToolController
 2. Verify method names match expected interface
-3. Ensure InputHandler is delegating correctly
+3. Ensure InputController is delegating correctly
 
 ### Selection Not Working in Tool
 1. Verify using SelectionController.handleObjectClick() directly instead of custom logic

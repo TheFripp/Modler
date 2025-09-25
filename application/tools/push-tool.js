@@ -26,6 +26,14 @@ class PushTool {
         this.lastPushDelta = undefined;
         this.originalGeometry = null;
 
+        // Centralized transformation system
+        this.transformationManager = null;
+
+        // Initialize transformation manager after components are loaded
+        setTimeout(() => {
+            this.transformationManager = window.modlerComponents?.transformationManager;
+        }, 50);
+
 
         // Cached objects for performance
         this.cache = {
@@ -789,8 +797,13 @@ class PushTool {
             newPosition.z += directionalOffset;
         }
 
-        // Just move the container - don't recalculate everything
-        containerMesh.position.copy(newPosition);
+        // Just move the container using centralized transformation
+        if (this.transformationManager) {
+            this.transformationManager.setPosition(containerMesh, newPosition, { batchUpdate: true });
+        } else {
+            // Fallback to direct manipulation
+            containerMesh.position.copy(newPosition);
+        }
     }
 
     updateContainerFull(containerData, isFinalUpdate) {
@@ -842,7 +855,13 @@ class PushTool {
         // Move all child objects back to compensate for container movement
         childObjects.forEach(childData => {
             if (childData.mesh) {
-                childData.mesh.position.sub(containerMovement);
+                if (this.transformationManager) {
+                    const newChildPosition = childData.mesh.position.clone().sub(containerMovement);
+                    this.transformationManager.setPosition(childData.mesh, newChildPosition, { batchUpdate: true });
+                } else {
+                    // Fallback to direct manipulation
+                    childData.mesh.position.sub(containerMovement);
+                }
                 sceneController.updateObject(childData.id, { position: childData.mesh.position });
             }
         });
@@ -871,8 +890,13 @@ class PushTool {
         scene.traverse((object) => {
             if (object.userData.isContainerInteractive &&
                 object.userData.containerMesh === containerData.mesh) {
-                object.position.copy(containerData.mesh.position);
-                object.updateMatrixWorld(true);
+                if (this.transformationManager) {
+                    this.transformationManager.setPosition(object, containerData.mesh.position, { batchUpdate: true });
+                } else {
+                    // Fallback to direct manipulation
+                    object.position.copy(containerData.mesh.position);
+                    object.updateMatrixWorld(true);
+                }
             }
         });
     }

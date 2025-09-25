@@ -226,6 +226,7 @@ function initializeInteraction() {
     // CONTAINER CRUD MANAGER: Container creation, configuration, and lifecycle operations
     modlerV2Components.containerCrudManager = new ContainerCrudManager();
     modlerV2Components.meshSynchronizer = new MeshSynchronizer();
+    modlerV2Components.transformationManager = new TransformationManager();
     modlerV2Components.fieldNavigationManager = new FieldNavigationManager();
 
     // Initialize unified visualization system components
