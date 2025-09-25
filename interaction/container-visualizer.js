@@ -28,39 +28,10 @@ class ContainerVisualizer extends ObjectVisualizer {
      * Create container-specific materials
      */
     createContainerMaterials() {
-        const configManager = this.getConfigManager();
-
-        // Container wireframe material (green)
-        const containerConfig = configManager ?
-            configManager.get('visual.containers') :
-            { wireframeColor: '#00ff00', lineWidth: 1, opacity: 0.8, renderOrder: 998 };
-
-        const containerColorHex = parseInt(containerConfig.wireframeColor.replace('#', ''), 16);
-
-        this.containerMaterial = new THREE.LineBasicMaterial({
-            color: containerColorHex,
-            transparent: true,
-            opacity: containerConfig.opacity,
-            linewidth: containerConfig.lineWidth
-        });
-        this.containerMaterial.lineWidth = containerConfig.lineWidth;
-        this.containerMaterial.renderOrder = containerConfig.renderOrder || 998;
-
-        // Padding visualization material
-        this.paddingMaterial = new THREE.LineBasicMaterial({
-            color: 0x00ff00,
-            transparent: true,
-            opacity: 0.3,
-            linewidth: 1
-        });
-
-        // Layout guide material
-        this.layoutGuideMaterial = new THREE.LineBasicMaterial({
-            color: 0xffff00,
-            transparent: true,
-            opacity: 0.5,
-            linewidth: 1
-        });
+        // Use MaterialManager for centralized material creation
+        this.containerMaterial = this.materialManager.createContainerWireframeMaterial();
+        this.paddingMaterial = this.materialManager.createPaddingVisualizationMaterial();
+        this.layoutGuideMaterial = this.materialManager.createLayoutGuideMaterial();
     }
 
     /**

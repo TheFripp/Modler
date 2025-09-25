@@ -9,7 +9,12 @@ class ObjectVisualizer {
         this.edgeHighlights = new Map(); // object -> edge mesh
         this.faceHighlights = new Map(); // object -> face highlight meshes
 
-        // Base materials
+        // New unified systems
+        this.geometryFactory = new GeometryFactory();
+        this.materialManager = new MaterialManager();
+        this.resourcePool = new VisualizationResourcePool();
+
+        // Base materials - now managed by MaterialManager
         this.edgeMaterial = null;
         this.faceHighlightMaterial = null;
 
@@ -30,31 +35,9 @@ class ObjectVisualizer {
      * Create base materials used by all objects
      */
     createBaseMaterials() {
-        const configManager = this.getConfigManager();
-
-        // Base edge material for regular objects (orange)
-        const selectionConfig = configManager ?
-            configManager.get('visual.selection') :
-            { color: '#ff6600', lineWidth: 2, opacity: 0.8, renderOrder: 999 };
-
-        const colorHex = parseInt(selectionConfig.color.replace('#', ''), 16);
-
-        this.edgeMaterial = new THREE.LineBasicMaterial({
-            color: colorHex,
-            transparent: true,
-            opacity: selectionConfig.opacity,
-            linewidth: selectionConfig.lineWidth
-        });
-        this.edgeMaterial.lineWidth = selectionConfig.lineWidth;
-        this.edgeMaterial.renderOrder = selectionConfig.renderOrder || 999;
-
-        // Face highlight material for tool interactions - use selection color instead of hardcoded green
-        this.faceHighlightMaterial = new THREE.MeshBasicMaterial({
-            color: colorHex, // Use same color as selection edges
-            transparent: true,
-            opacity: 0.1, // Lower opacity to match support mesh factory face highlights
-            side: THREE.DoubleSide
-        });
+        // Use MaterialManager for centralized material creation
+        this.edgeMaterial = this.materialManager.createSelectionEdgeMaterial();
+        this.faceHighlightMaterial = this.materialManager.createFaceHighlightMaterial();
     }
 
     /**
@@ -216,12 +199,12 @@ class ObjectVisualizer {
                 object.geometry.computeBoundingBox();
             }
 
-            // Create edge geometry and thick line group
-            const edgeGeometry = new THREE.EdgesGeometry(object.geometry);
+            // Create edge geometry using GeometryFactory for pooling
+            const edgeGeometry = this.geometryFactory.createEdgeGeometry(object);
             const edgeMesh = this.createThickLineGroup(edgeGeometry, this.edgeMaterial.lineWidth || 2, this.edgeMaterial);
 
-            // Clean up temporary geometry
-            edgeGeometry.dispose();
+            // Return geometry to pool for reuse
+            this.geometryFactory.returnEdgeGeometry(edgeGeometry);
 
             // Make non-raycastable
             edgeMesh.raycast = () => {};
@@ -516,8 +499,8 @@ class ObjectVisualizer {
                     if (child.geometry) child.geometry.dispose();
                 }
 
-                // Create new edge geometry and rebuild group
-                const edgeGeometry = new THREE.EdgesGeometry(mainMesh.geometry);
+                // Create new edge geometry using GeometryFactory for pooling
+                const edgeGeometry = this.geometryFactory.createEdgeGeometry(mainMesh);
                 const lineWidth = relatedMesh.material?.lineWidth || this.edgeMaterial?.lineWidth || 2;
 
                 const offsets = this.generateLineOffsets(lineWidth);
@@ -527,7 +510,8 @@ class ObjectVisualizer {
                     relatedMesh.add(lineMesh);
                 });
 
-                edgeGeometry.dispose();
+                // Return geometry to pool for reuse
+                this.geometryFactory.returnEdgeGeometry(edgeGeometry);
             }
 
             // Sync transform

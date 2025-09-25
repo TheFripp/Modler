@@ -5,67 +5,21 @@ class VisualEffects {
     constructor(scene) {
         this.scene = scene;
 
-        // Essential state
-        this.highlightMaterial = null;
+        // Essential state - support mesh system handles materials
         this.currentHighlight = null;
         this.highlightMesh = null;
         this.rectanglePreview = null;
 
-        this.setupHighlightMaterial();
+        // New unified systems
+        this.geometryFactory = new GeometryFactory();
+        this.materialManager = new MaterialManager();
+
+        // Material setup handled by support mesh system
         this.registerWithConfigurationManager();
     }
 
     // ===== MATERIAL SETUP =====
-
-    setupHighlightMaterial() {
-        const configManager = window.modlerComponents?.configurationManager;
-        const selectionColor = configManager?.get('visual.selection.color') || '#ff6600';
-        const faceOpacity = configManager?.get('visual.effects.materials.face.opacity') || 0.6;
-        const renderOrder = configManager?.get('visual.effects.materials.face.renderOrder') || 1000;
-
-        const colorHex = parseInt(selectionColor.replace('#', ''), 16);
-
-        this.highlightMaterial = new THREE.MeshBasicMaterial({
-            color: colorHex,
-            transparent: true,
-            opacity: faceOpacity,
-            side: THREE.DoubleSide,
-            depthTest: false,
-            depthWrite: false
-        });
-
-        this.highlightMaterial.renderOrder = renderOrder;
-    }
-
-    createContextualHighlightMaterial(targetObject) {
-        const configManager = window.modlerComponents?.configurationManager;
-
-        let highlightColor;
-        if (this.isContainer(targetObject)) {
-            highlightColor = configManager?.get('visual.containers.wireframeColor') || '#00ff00';
-        } else {
-            highlightColor = configManager?.get('visual.selection.color') || '#ff6600';
-        }
-
-        const faceOpacity = configManager?.get('visual.effects.materials.face.opacity') || 0.6;
-        const renderOrder = configManager?.get('visual.effects.materials.face.renderOrder') || 1000;
-        const colorHex = parseInt(highlightColor.replace('#', ''), 16);
-
-        if (this.highlightMaterial) {
-            this.highlightMaterial.dispose();
-        }
-
-        this.highlightMaterial = new THREE.MeshBasicMaterial({
-            color: colorHex,
-            transparent: true,
-            opacity: faceOpacity,
-            side: THREE.DoubleSide,
-            depthTest: false,
-            depthWrite: false
-        });
-
-        this.highlightMaterial.renderOrder = renderOrder;
-    }
+    // Support mesh system handles all material creation and management
 
     isContainer(object) {
         const sceneController = window.modlerComponents?.sceneController;
@@ -94,19 +48,8 @@ class VisualEffects {
     }
 
     onConfigChanged() {
-        if (this.highlightMaterial) {
-            const configManager = window.modlerComponents?.configurationManager;
-            const selectionColor = configManager?.get('visual.selection.color') || '#ff6600';
-            const faceOpacity = configManager?.get('visual.effects.materials.face.opacity') || 0.6;
-            const renderOrder = configManager?.get('visual.effects.materials.face.renderOrder') || 1000;
-
-            const colorHex = parseInt(selectionColor.replace('#', ''), 16);
-            this.highlightMaterial.color.setHex(colorHex);
-            this.highlightMaterial.opacity = faceOpacity;
-            this.highlightMaterial.renderOrder = renderOrder;
-            this.highlightMaterial.needsUpdate = true;
-        }
-
+        // Configuration changes handled by support mesh system and MaterialManager
+        // Re-create current highlight to pick up new configuration
         if (this.currentHighlight && this.highlightMesh) {
             const hit = {
                 object: this.currentHighlight.object,
@@ -177,23 +120,9 @@ class VisualEffects {
             supportMeshes.faceHighlight.visible = true;
             this.highlightMesh = supportMeshes.faceHighlight;
         } else {
-            // Fallback: create legacy highlight
-            console.warn('Object missing support meshes, creating legacy face highlight:', targetObject.name);
-
-            this.createContextualHighlightMaterial(hit.object);
-            const faceGeometry = this.createFaceGeometry(hit);
-            if (!faceGeometry) return false;
-
-            this.highlightMesh = new THREE.Mesh(faceGeometry, this.highlightMaterial);
-            const normalOffset = hit.face.normal.clone().multiplyScalar(0.001);
-            this.highlightMesh.position.copy(normalOffset);
-            this.highlightMesh.raycast = () => {};
-
-            if (targetObject) {
-                targetObject.add(this.highlightMesh);
-            } else {
-                this.scene.add(this.highlightMesh);
-            }
+            // ARCHITECTURE: Support mesh system required - no legacy fallback
+            console.warn('Object missing support meshes - cannot show face highlight:', targetObject.name);
+            return false;
         }
 
         this.currentHighlight = {
@@ -226,15 +155,9 @@ class VisualEffects {
         const axisColor = configManager?.get('visual.effects.axisHighlight.color') || '#00ff88';
         const axisOpacity = configManager?.get('visual.effects.axisHighlight.opacity') || 0.3;
 
-        const colorHex = parseInt(axisColor.replace('#', ''), 16);
-
-        const axisMaterial = new THREE.MeshBasicMaterial({
-            color: colorHex,
-            opacity: axisOpacity,
-            transparent: true,
-            side: THREE.DoubleSide,
-            depthTest: false,
-            depthWrite: false
+        const axisMaterial = this.materialManager.createAxisHighlightMaterial({
+            color: axisColor,
+            opacity: axisOpacity
         });
 
         this.highlightMesh = new THREE.Mesh(faceGeometry, axisMaterial);
@@ -288,84 +211,52 @@ class VisualEffects {
 
     // ===== GEOMETRY CREATION =====
 
-    createFaceGeometry(hit) {
+    createFaceGeometry(hit, type = 'auto') {
         if (!hit?.object?.geometry || !hit?.face) return null;
 
-        const object = hit.object;
-        const geometry = object.geometry;
-
         try {
-            if (geometry.type === 'BoxGeometry' || this.isBoxLikeGeometry(geometry)) {
-                return this.createRectangularFaceGeometry(hit);
-            } else {
-                return this.createTriangleFaceGeometry(hit);
-            }
+            // Delegate to GeometryFactory for centralized geometry creation with pooling
+            return this.geometryFactory.createFaceGeometry(hit, type);
         } catch (error) {
-            console.error('createFaceGeometry error:', error);
+            console.error('VisualEffects: createFaceGeometry error:', error);
             return null;
         }
     }
 
     createTriangleFaceGeometry(hit) {
-        const positionAttribute = hit.object.geometry.getAttribute('position');
-        if (!positionAttribute) return null;
+        if (!hit?.object?.geometry || !hit?.face) return null;
 
-        const va = new THREE.Vector3().fromBufferAttribute(positionAttribute, hit.face.a);
-        const vb = new THREE.Vector3().fromBufferAttribute(positionAttribute, hit.face.b);
-        const vc = new THREE.Vector3().fromBufferAttribute(positionAttribute, hit.face.c);
-
-        const positions = [va.x, va.y, va.z, vb.x, vb.y, vb.z, vc.x, vc.y, vc.z];
-        const faceGeometry = new THREE.BufferGeometry();
-        faceGeometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-        return faceGeometry;
+        try {
+            // Delegate to GeometryFactory for centralized geometry creation with pooling
+            return this.geometryFactory.createTriangleFaceGeometry(hit);
+        } catch (error) {
+            console.error('VisualEffects: createTriangleFaceGeometry error:', error);
+            return null;
+        }
     }
 
     createRectangularFaceGeometry(hit) {
-        const object = hit.object;
-        const face = hit.face;
-        const normal = face.normal.clone().normalize();
+        if (!hit?.object?.geometry || !hit?.face) return null;
 
-        object.geometry.computeBoundingBox();
-        const box = object.geometry.boundingBox;
-        if (!box) return null;
-
-        // Determine which face to highlight based on normal
-        const absNormal = new THREE.Vector3(Math.abs(normal.x), Math.abs(normal.y), Math.abs(normal.z));
-        let axis, side;
-
-        if (absNormal.x > 0.9) {
-            axis = 'x';
-            side = normal.x > 0 ? 'max' : 'min';
-        } else if (absNormal.y > 0.9) {
-            axis = 'y';
-            side = normal.y > 0 ? 'max' : 'min';
-        } else if (absNormal.z > 0.9) {
-            axis = 'z';
-            side = normal.z > 0 ? 'max' : 'min';
-        } else {
-            return this.createTriangleFaceGeometry(hit);
+        try {
+            // Delegate to GeometryFactory for centralized geometry creation with pooling
+            return this.geometryFactory.createRectangularFaceGeometry(hit);
+        } catch (error) {
+            console.error('VisualEffects: createRectangularFaceGeometry error:', error);
+            return null;
         }
-
-        const vertices = this.generateRectangularFaceVertices(box, axis, side);
-        const faceGeometry = new THREE.BufferGeometry();
-        faceGeometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
-        return faceGeometry;
     }
 
     createAxisFacesGeometry(object, axis) {
-        if (!object.geometry) return null;
+        if (!object?.geometry) return null;
 
-        object.geometry.computeBoundingBox();
-        const box = object.geometry.boundingBox;
-        if (!box) return null;
-
-        const minVertices = this.generateRectangularFaceVertices(box, axis, 'min');
-        const maxVertices = this.generateRectangularFaceVertices(box, axis, 'max');
-        const allVertices = [...minVertices, ...maxVertices];
-
-        const geometry = new THREE.BufferGeometry();
-        geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(allVertices), 3));
-        return geometry;
+        try {
+            // Delegate to GeometryFactory for centralized geometry creation with pooling
+            return this.geometryFactory.createAxisFacesGeometry(object, axis);
+        } catch (error) {
+            console.error('VisualEffects: createAxisFacesGeometry error:', error);
+            return null;
+        }
     }
 
     generateRectangularFaceVertices(bbox, axis, side) {
@@ -462,7 +353,7 @@ class VisualEffects {
 
         const lineWidth = configManager?.get('visual.effects.wireframe.lineWidth') || 1;
 
-        const material = new THREE.LineBasicMaterial({
+        const material = this.materialManager.createPreviewWireframeMaterial({
             color: color,
             linewidth: lineWidth
         });
@@ -500,11 +391,10 @@ class VisualEffects {
 
         const geometry = new THREE.BoxGeometry(width, height, depth);
         const edges = new THREE.EdgesGeometry(geometry);
-        const material = new THREE.LineBasicMaterial({
+        const material = this.materialManager.createPreviewWireframeMaterial({
             color: color,
-            transparent: true,
-            opacity: opacity,
-            linewidth: lineWidth
+            linewidth: lineWidth,
+            opacity: opacity
         });
 
         const edgesMesh = new THREE.LineSegments(edges, material);
@@ -542,18 +432,15 @@ class VisualEffects {
             z: [[0, 4], [1, 5], [2, 6], [3, 7]]
         };
 
-        const fullOpacityMaterial = new THREE.LineBasicMaterial({
+        const fullOpacityMaterial = this.materialManager.createPreviewWireframeMaterial({
             color: color,
-            transparent: true,
-            opacity: opacity,
-            linewidth: lineWidth
+            linewidth: lineWidth,
+            opacity: opacity
         });
-
-        const reducedOpacityMaterial = new THREE.LineBasicMaterial({
+        const reducedOpacityMaterial = this.materialManager.createPreviewWireframeMaterial({
             color: color,
-            transparent: true,
-            opacity: opacity * 0.5,
-            linewidth: lineWidth
+            linewidth: lineWidth,
+            opacity: opacity * 0.5
         });
 
         Object.keys(edgesByDirection).forEach(direction => {
@@ -687,11 +574,9 @@ class VisualEffects {
 
     createPaddingBox(width, height, depth, position, color, opacity) {
         const geometry = new THREE.BoxGeometry(width, height, depth);
-        const material = new THREE.MeshBasicMaterial({
+        const material = this.materialManager.createPaddingVisualizationMaterial({
             color: color,
-            transparent: true,
-            opacity: opacity,
-            wireframe: true
+            opacity: opacity
         });
 
         const box = new THREE.Mesh(geometry, material);
@@ -703,11 +588,7 @@ class VisualEffects {
 
     destroy() {
         this.clearHighlight();
-
-        if (this.highlightMaterial) {
-            this.highlightMaterial.dispose();
-            this.highlightMaterial = null;
-        }
+        // Support mesh system handles material cleanup
     }
 }
 
