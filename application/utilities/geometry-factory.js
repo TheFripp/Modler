@@ -537,6 +537,222 @@ class GeometryFactory {
         this.activeGeometries = new WeakMap();
     }
 
+    // ===== STANDARD GEOMETRY CREATION METHODS =====
+
+    /**
+     * Create box geometry with pooling
+     * @param {number} width - Box width
+     * @param {number} height - Box height
+     * @param {number} depth - Box depth
+     * @returns {THREE.BoxGeometry} Pooled box geometry
+     */
+    createBoxGeometry(width, height, depth) {
+        const key = `${width}_${height}_${depth}`;
+
+        // Check pool first
+        const pooledGeometry = this.getFromPool('boxes', key);
+        if (pooledGeometry) {
+            return pooledGeometry;
+        }
+
+        // Create new geometry
+        const geometry = new THREE.BoxGeometry(width, height, depth);
+
+        // Store in pool and track
+        this.storeInPool('boxes', key, geometry);
+        this.trackGeometry(geometry, { type: 'box', key });
+
+        this.stats.created++;
+        return geometry;
+    }
+
+    /**
+     * Create plane geometry with pooling
+     * @param {number} width - Plane width
+     * @param {number} height - Plane height
+     * @param {number} widthSegments - Width segments (optional)
+     * @param {number} heightSegments - Height segments (optional)
+     * @returns {THREE.PlaneGeometry} Pooled plane geometry
+     */
+    createPlaneGeometry(width, height, widthSegments = 1, heightSegments = 1) {
+        const key = `${width}_${height}_${widthSegments}_${heightSegments}`;
+
+        // Check pool first
+        const pooledGeometry = this.getFromPool('planes', key);
+        if (pooledGeometry) {
+            return pooledGeometry;
+        }
+
+        // Create new geometry
+        const geometry = new THREE.PlaneGeometry(width, height, widthSegments, heightSegments);
+
+        // Store in pool and track
+        this.storeInPool('planes', key, geometry);
+        this.trackGeometry(geometry, { type: 'plane', key });
+
+        this.stats.created++;
+        return geometry;
+    }
+
+    /**
+     * Create cylinder geometry with pooling
+     * @param {number} radiusTop - Top radius
+     * @param {number} radiusBottom - Bottom radius
+     * @param {number} height - Cylinder height
+     * @param {number} radialSegments - Radial segments (optional)
+     * @returns {THREE.CylinderGeometry} Pooled cylinder geometry
+     */
+    createCylinderGeometry(radiusTop, radiusBottom, height, radialSegments = 8) {
+        const key = `${radiusTop}_${radiusBottom}_${height}_${radialSegments}`;
+
+        // Check pool first
+        const pooledGeometry = this.getFromPool('cylinders', key);
+        if (pooledGeometry) {
+            return pooledGeometry;
+        }
+
+        // Create new geometry
+        const geometry = new THREE.CylinderGeometry(radiusTop, radiusBottom, height, radialSegments);
+
+        // Store in pool and track
+        this.storeInPool('cylinders', key, geometry);
+        this.trackGeometry(geometry, { type: 'cylinder', key });
+
+        this.stats.created++;
+        return geometry;
+    }
+
+    /**
+     * Create sphere geometry with pooling
+     * @param {number} radius - Sphere radius
+     * @param {number} widthSegments - Width segments (optional)
+     * @param {number} heightSegments - Height segments (optional)
+     * @returns {THREE.SphereGeometry} Pooled sphere geometry
+     */
+    createSphereGeometry(radius, widthSegments = 32, heightSegments = 16) {
+        const key = `${radius}_${widthSegments}_${heightSegments}`;
+
+        // Check pool first
+        const pooledGeometry = this.getFromPool('spheres', key);
+        if (pooledGeometry) {
+            return pooledGeometry;
+        }
+
+        // Create new geometry
+        const geometry = new THREE.SphereGeometry(radius, widthSegments, heightSegments);
+
+        // Store in pool and track
+        this.storeInPool('spheres', key, geometry);
+        this.trackGeometry(geometry, { type: 'sphere', key });
+
+        this.stats.created++;
+        return geometry;
+    }
+
+    /**
+     * Create ring geometry with pooling
+     * @param {number} innerRadius - Inner radius
+     * @param {number} outerRadius - Outer radius
+     * @param {number} segments - Number of segments (optional)
+     * @returns {THREE.RingGeometry} Pooled ring geometry
+     */
+    createRingGeometry(innerRadius, outerRadius, segments = 32) {
+        const key = `${innerRadius}_${outerRadius}_${segments}`;
+
+        // Check pool first
+        const pooledGeometry = this.getFromPool('rings', key);
+        if (pooledGeometry) {
+            return pooledGeometry;
+        }
+
+        // Create new geometry
+        const geometry = new THREE.RingGeometry(innerRadius, outerRadius, segments);
+
+        // Store in pool and track
+        this.storeInPool('rings', key, geometry);
+        this.trackGeometry(geometry, { type: 'ring', key });
+
+        this.stats.created++;
+        return geometry;
+    }
+
+    /**
+     * Create edges geometry from source geometry with pooling
+     * @param {THREE.BufferGeometry} sourceGeometry - Source geometry to create edges from
+     * @returns {THREE.EdgesGeometry} Pooled edges geometry
+     */
+    createEdgeGeometryFromSource(sourceGeometry) {
+        // Generate key from source geometry characteristics
+        const key = this.generateGeometryKey(sourceGeometry);
+
+        // Check pool first
+        const pooledGeometry = this.getFromPool('edges', key);
+        if (pooledGeometry) {
+            return pooledGeometry;
+        }
+
+        // Create new edges geometry
+        const geometry = new THREE.EdgesGeometry(sourceGeometry);
+
+        // Store in pool and track
+        this.storeInPool('edges', key, geometry);
+        this.trackGeometry(geometry, { type: 'edges', key });
+
+        this.stats.created++;
+        return geometry;
+    }
+
+    /**
+     * Create line geometry from points with pooling
+     * @param {Array<THREE.Vector3>} points - Array of points
+     * @returns {THREE.BufferGeometry} Pooled line geometry
+     */
+    createLineGeometryFromPoints(points) {
+        // Generate key from points
+        const key = points.map(p => `${p.x.toFixed(2)}_${p.y.toFixed(2)}_${p.z.toFixed(2)}`).join('|');
+
+        // Check pool first
+        const pooledGeometry = this.getFromPool('lines', key);
+        if (pooledGeometry) {
+            return pooledGeometry;
+        }
+
+        // Create new line geometry
+        const geometry = new THREE.BufferGeometry().setFromPoints(points);
+
+        // Store in pool and track
+        this.storeInPool('lines', key, geometry);
+        this.trackGeometry(geometry, { type: 'line', key });
+
+        this.stats.created++;
+        return geometry;
+    }
+
+    /**
+     * Generate a key for geometry based on its characteristics
+     * @param {THREE.BufferGeometry} geometry - Source geometry
+     * @returns {string} Generated key
+     */
+    generateGeometryKey(geometry) {
+        if (geometry.parameters) {
+            // Use parameters if available (for standard geometries)
+            const params = geometry.parameters;
+            return Object.values(params).join('_');
+        }
+
+        // Fallback: use bounding box characteristics
+        geometry.computeBoundingBox();
+        const box = geometry.boundingBox;
+        if (box) {
+            const size = box.getSize(new THREE.Vector3());
+            return `${size.x.toFixed(2)}_${size.y.toFixed(2)}_${size.z.toFixed(2)}`;
+        }
+
+        // Final fallback: use vertex count
+        const position = geometry.getAttribute('position');
+        return `vertices_${position ? position.count : 0}`;
+    }
+
     /**
      * Get performance statistics
      * @returns {Object} Performance stats

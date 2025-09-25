@@ -435,14 +435,27 @@ function createFloorGrid() {
     // Set renderOrder to prevent z-fighting with wireframes
     gridHelper.renderOrder = gridRenderOrder;
 
-    const floorPlane = new THREE.Mesh(
-        new THREE.PlaneGeometry(20, 20),
-        new THREE.MeshBasicMaterial({
-            transparent: true,
-            opacity: 0.0,
-            side: THREE.DoubleSide
-        })
-    );
+    // Access centralized systems for floor plane creation
+    const geometryFactory = window.GeometryFactory ? new GeometryFactory() : null;
+    const materialManager = window.MaterialManager ? new MaterialManager() : null;
+
+    // Floor plane creation using centralized systems where available
+    let planeGeometry, planeMaterial;
+
+    if (geometryFactory) {
+        planeGeometry = geometryFactory.createPlaneGeometry(20, 20);
+    } else {
+        planeGeometry = new THREE.PlaneGeometry(20, 20);
+    }
+
+    // Keep manual creation due to unique transparency properties for invisible raycast plane
+    planeMaterial = new THREE.MeshBasicMaterial({
+        transparent: true,
+        opacity: 0.0,
+        side: THREE.DoubleSide
+    });
+
+    const floorPlane = new THREE.Mesh(planeGeometry, planeMaterial);
     floorPlane.rotation.x = -Math.PI / 2;
     floorPlane.position.y = -1.0;
     floorPlane.name = 'Floor Plane';
@@ -463,17 +476,31 @@ function createFloorGrid() {
  * Create demo objects for testing
  */
 function createDemoObjects() {
-    const material = new THREE.MeshLambertMaterial({ color: 0x999999 });
+    // Access centralized systems for geometry and material creation
+    const geometryFactory = window.GeometryFactory ? new GeometryFactory() : null;
+    const materialManager = window.MaterialManager ? new MaterialManager() : null;
     const sc = modlerV2Components.sceneController;
-    
-    const objects = [
-        [new THREE.BoxGeometry(2, 2, 2), 'Test Cube', new THREE.Vector3(0, 1, 0)],
-        [new THREE.BoxGeometry(1.5, 1.5, 1.5), 'Small Cube', new THREE.Vector3(3, 0.75, 2)],
-        [new THREE.CylinderGeometry(1, 1, 2, 8), 'Test Cylinder', new THREE.Vector3(-3, 1, -2)]
-    ];
-    
-    objects.forEach(([geometry, name, position]) => {
-        sc.addObject(geometry, material, { name, type: 'test', position });
+
+    // Create a simple demonstration scene with centralized systems
+    let material, geometry;
+
+    if (materialManager) {
+        material = materialManager.createMeshLambertMaterial({ color: 0x888888 });
+    } else {
+        material = new THREE.MeshLambertMaterial({ color: 0x888888 });
+    }
+
+    // Create a single test cube using centralized systems where available
+    if (geometryFactory) {
+        geometry = geometryFactory.createBoxGeometry(2, 2, 2);
+    } else {
+        geometry = new THREE.BoxGeometry(2, 2, 2);
+    }
+
+    sc.addObject(geometry, material, {
+        name: 'Demo Cube',
+        type: 'cube',
+        position: new THREE.Vector3(0, 1, 0)
     });
 
 }

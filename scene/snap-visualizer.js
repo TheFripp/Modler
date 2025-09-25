@@ -10,6 +10,11 @@ class SnapVisualizer {
         this.camera = camera;
         this.canvas = canvas;
 
+        // New unified systems
+        this.geometryFactory = new GeometryFactory();
+        this.materialManager = new MaterialManager();
+        this.resourcePool = new VisualizationResourcePool();
+
         // Visual indicator state
         this.currentIndicator = null;
         this.indicatorMesh = null;
@@ -17,7 +22,7 @@ class SnapVisualizer {
         // Snap state - controlled by SnapController
         this.isSnapEnabled = true;
 
-        // Create materials with configuration values
+        // Create materials and geometry with configuration values
         this.createMaterials();
 
         // Register for configuration updates
@@ -39,43 +44,39 @@ class SnapVisualizer {
     }
     
     /**
-     * Create materials with current configuration values
+     * Create materials and geometries using centralized systems
      */
     createMaterials() {
         const configManager = window.modlerComponents?.configurationManager;
-        const snapConfig = configManager ? 
-            configManager.get('visual.snapping') : 
+        const snapConfig = configManager ?
+            configManager.get('visual.snapping') :
             { indicatorColor: '#ffffff', cornerSize: 0.1, faceSize: 0.05, borderWidth: 2, opacity: 1.0, renderOrder: 1001 };
-        
-        // Convert hex color to Three.js color
-        const colorHex = parseInt(snapConfig.indicatorColor.replace('#', ''), 16);
-        
-        // Materials for different snap types
+
+        // Create materials using MaterialManager
         this.materials = {
-            corner: new THREE.RingGeometry(snapConfig.cornerSize * 0.5, snapConfig.cornerSize, 16),
-            edge: new THREE.LineBasicMaterial({ 
-                color: colorHex, 
+            edge: this.materialManager.createPreviewWireframeMaterial({
+                color: snapConfig.indicatorColor,
                 linewidth: snapConfig.borderWidth + 1,
-                transparent: true,
                 opacity: snapConfig.opacity * 0.9,
                 depthTest: false,
                 depthWrite: false
-            }),
+            })
+        };
+
+        // Create geometries using GeometryFactory (TODO: Add ring geometry support)
+        this.geometries = {
+            corner: new THREE.RingGeometry(snapConfig.cornerSize * 0.5, snapConfig.cornerSize, 16),
             face: new THREE.RingGeometry(snapConfig.faceSize * 0.5, snapConfig.faceSize, 16)
         };
-        
-        // Snap indicator material
-        this.snapMaterial = new THREE.MeshBasicMaterial({
-            color: colorHex,
-            transparent: true,
+
+        // Snap indicator material using MaterialManager
+        this.snapMaterial = this.materialManager.createPreviewWireframeMaterial({
+            color: snapConfig.indicatorColor,
             opacity: snapConfig.opacity,
             depthTest: false,
             depthWrite: false,
-            side: THREE.DoubleSide
+            renderOrder: snapConfig.renderOrder || 1001
         });
-        
-        // Ensure snap indicators render on top
-        this.snapMaterial.renderOrder = snapConfig.renderOrder || 1001;
     }
     
     /**
@@ -135,13 +136,13 @@ class SnapVisualizer {
         const cornerSize = configManager.get('visual.snapping.cornerSize', 0.1);
         const faceSize = configManager.get('visual.snapping.faceSize', 0.05);
         
-        // Dispose old geometries
-        if (this.materials.corner) this.materials.corner.dispose();
-        if (this.materials.face) this.materials.face.dispose();
-        
-        // Create new geometries with updated sizes
-        this.materials.corner = new THREE.RingGeometry(cornerSize * 0.5, cornerSize, 16);
-        this.materials.face = new THREE.RingGeometry(faceSize * 0.5, faceSize, 16);
+        // Return old geometries to pool instead of disposing
+        if (this.geometries.corner) this.geometryFactory.returnGeometry(this.geometries.corner, 'ring');
+        if (this.geometries.face) this.geometryFactory.returnGeometry(this.geometries.face, 'ring');
+
+        // Create new geometries with updated sizes using GeometryFactory
+        this.geometries.corner = this.geometryFactory.createRingGeometry(cornerSize * 0.5, cornerSize, 16);
+        this.geometries.face = this.geometryFactory.createRingGeometry(faceSize * 0.5, faceSize, 16);
         
     }
     
@@ -215,7 +216,7 @@ class SnapVisualizer {
         // Create circle geometry with fixed screen size (8px radius)
         const radius = this.calculateFixedScreenRadius(snapPoint.worldPos, 8);
 
-        const cornerGeometry = new THREE.RingGeometry(radius * 0.7, radius, 32);
+        const cornerGeometry = this.geometryFactory.createRingGeometry(radius * 0.7, radius, 32);
         const indicatorMesh = new THREE.Mesh(cornerGeometry, this.snapMaterial);
 
         // Position at world snap point
@@ -250,13 +251,12 @@ class SnapVisualizer {
 
         // Create line geometry for the full edge
         const points = [snapPoint.edgeStart, snapPoint.edgeEnd];
-        const lineGeometry = new THREE.BufferGeometry().setFromPoints(points);
+        const lineGeometry = this.geometryFactory.createLineGeometryFromPoints(points);
 
-        // Create double-thickness line material
-        const edgeMaterial = new THREE.LineBasicMaterial({
-            color: colorHex,
-            linewidth: 4, // Double normal thickness
-            transparent: true,
+        // Create material using MaterialManager
+        const edgeMaterial = this.materialManager.createPreviewWireframeMaterial({
+            color: snapConfig.indicatorColor,
+            linewidth: 4,
             opacity: 0.9,
             depthTest: false,
             depthWrite: false
@@ -320,14 +320,14 @@ class SnapVisualizer {
 
             // Clean up dynamically created geometry
             if (this.indicatorMesh.userData.dynamicGeometry) {
-                this.indicatorMesh.userData.dynamicGeometry.dispose();
+                this.geometryFactory.returnGeometry(this.indicatorMesh.userData.dynamicGeometry, 'ring');
             } else if (this.indicatorMesh.geometry) {
-                this.indicatorMesh.geometry.dispose();
+                this.geometryFactory.returnGeometry(this.indicatorMesh.geometry, 'ring');
             }
 
-            // Clean up material if it's not shared
+            // Return material to pool if it's not shared
             if (this.indicatorMesh.material && this.indicatorMesh.material !== this.snapMaterial) {
-                this.indicatorMesh.material.dispose();
+                this.materialManager.returnMaterial(this.indicatorMesh.material);
             }
 
             this.indicatorMesh = null;
@@ -357,22 +357,22 @@ class SnapVisualizer {
     destroy() {
         this.clearIndicator();
         
-        // Dispose shared materials
+        // Return shared materials to pool
         if (this.snapMaterial) {
-            this.snapMaterial.dispose();
+            this.materialManager.returnMaterial(this.snapMaterial);
         }
-        
+
         if (this.materials.edge) {
-            this.materials.edge.dispose();
+            this.materialManager.returnMaterial(this.materials.edge);
         }
-        
-        // Dispose geometries
-        if (this.materials.corner) {
-            this.materials.corner.dispose();
+
+        // Return geometries to pool
+        if (this.geometries?.corner) {
+            this.geometryFactory.returnGeometry(this.geometries.corner, 'ring');
         }
-        
-        if (this.materials.face) {
-            this.materials.face.dispose();
+
+        if (this.geometries?.face) {
+            this.geometryFactory.returnGeometry(this.geometries.face, 'ring');
         }
         
     }

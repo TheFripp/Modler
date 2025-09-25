@@ -115,10 +115,20 @@ class LayoutGeometry {
     static createContainerGeometry(size) {
         console.log('LayoutGeometry.createContainerGeometry - NEW ARCHITECTURE: Creating solid-first container');
 
-        // NEW ARCHITECTURE: Create solid BoxGeometry as main mesh (like regular objects)
-        const containerGeometry = new THREE.BoxGeometry(size.x, size.y, size.z);
+        // Access centralized systems
+        const geometryFactory = window.GeometryFactory ? new GeometryFactory() : null;
+        const materialManager = window.MaterialManager ? new MaterialManager() : null;
+        const resourcePool = window.VisualizationResourcePool ? new VisualizationResourcePool() : null;
 
-        // Create invisible material for main solid mesh
+        // NEW ARCHITECTURE: Create solid BoxGeometry as main mesh (like regular objects)
+        let containerGeometry;
+        if (geometryFactory) {
+            containerGeometry = geometryFactory.createBoxGeometry(size.x, size.y, size.z);
+        } else {
+            containerGeometry = new THREE.BoxGeometry(size.x, size.y, size.z);
+        }
+
+        // Create invisible material for main solid mesh - keep manual due to unique colorWrite property
         const mainMaterial = new THREE.MeshBasicMaterial({
             transparent: true,
             opacity: 0.0,
@@ -127,7 +137,7 @@ class LayoutGeometry {
             wireframe: false   // CRITICAL: Explicitly disable wireframe rendering to prevent triangle edges
         });
 
-        // Create main solid mesh
+        // TODO: Use resourcePool.getMesh when available
         const mainMesh = new THREE.Mesh(containerGeometry, mainMaterial);
         // NOTE: Material-based invisibility (opacity: 0.0, colorWrite: false, depthWrite: false)
         // makes the container invisible while keeping child objects visible
@@ -148,13 +158,29 @@ class LayoutGeometry {
             configManager.get('visual.containers.renderOrder', 998) : 998;
 
         // Create wireframe as CHILD of main mesh (consistent with objects)
-        const edgeGeometry = new THREE.EdgesGeometry(containerGeometry);
-        const wireframeMaterial = new THREE.LineBasicMaterial({
-            color: new THREE.Color(wireframeColor).getHex(),
-            transparent: true,
-            opacity: opacity
-        });
+        let edgeGeometry;
+        if (geometryFactory) {
+            edgeGeometry = geometryFactory.createEdgeGeometryFromSource(containerGeometry);
+        } else {
+            edgeGeometry = new THREE.EdgesGeometry(containerGeometry);
+        }
 
+        // Use MaterialManager for wireframe material if available
+        let wireframeMaterial;
+        if (materialManager) {
+            wireframeMaterial = materialManager.createContainerWireframeMaterial({
+                color: wireframeColor,
+                opacity: opacity
+            });
+        } else {
+            wireframeMaterial = new THREE.LineBasicMaterial({
+                color: new THREE.Color(wireframeColor).getHex(),
+                transparent: true,
+                opacity: opacity
+            });
+        }
+
+        // TODO: Use resourcePool.getLineMesh when available
         const wireframeChild = new THREE.LineSegments(edgeGeometry, wireframeMaterial);
         wireframeChild.position.set(0, 0.001, 0); // Small Y offset to prevent z-fighting
         wireframeChild.renderOrder = renderOrder;
@@ -364,10 +390,20 @@ class LayoutGeometry {
         // Convert hex color to THREE.js color
         const color = new THREE.Color(wireframeColor).getHex();
 
+        // Access centralized systems for geometry creation
+        const geometryFactory = window.GeometryFactory ? new GeometryFactory() : null;
+        const materialManager = window.MaterialManager ? new MaterialManager() : null;
+
         // Try to create new wireframe using centralized function (prevents triangles)
         const visualEffects = window.modlerComponents?.visualEffects;
         let newEdgeGeometry, newMaterial;
-        const newGeometry = new THREE.BoxGeometry(newSize.x, newSize.y, newSize.z);
+
+        let newGeometry;
+        if (geometryFactory) {
+            newGeometry = geometryFactory.createBoxGeometry(newSize.x, newSize.y, newSize.z);
+        } else {
+            newGeometry = new THREE.BoxGeometry(newSize.x, newSize.y, newSize.z);
+        }
 
         if (visualEffects) {
             let tempWireframe = null; // Declare variable to hold temporary wireframe
@@ -407,15 +443,31 @@ class LayoutGeometry {
                 tempWireframe.material = null; // Don't dispose, we're using it
             }
         } else {
-            // Fallback to manual wireframe creation
+            // Fallback to centralized systems or manual creation
             console.warn('VisualEffects not available, using fallback wireframe update');
-            newEdgeGeometry = new THREE.EdgesGeometry(newGeometry);
-            newMaterial = new THREE.LineBasicMaterial({
-                color: color, // Use configured color
-                linewidth: lineWidth, // Use configured line width
-                transparent: true,
-                opacity: opacity // Use configured opacity
-            });
+            if (geometryFactory) {
+                newEdgeGeometry = geometryFactory.createEdgeGeometryFromSource(newGeometry);
+            } else {
+                newEdgeGeometry = new THREE.EdgesGeometry(newGeometry);
+            }
+
+            // Use MaterialManager for wireframe material if available
+            if (materialManager) {
+                newMaterial = materialManager.createContainerWireframeMaterial({
+                    color: wireframeColor,
+                    opacity: opacity
+                });
+                if (newMaterial.linewidth !== undefined) {
+                    newMaterial.linewidth = lineWidth;
+                }
+            } else {
+                newMaterial = new THREE.LineBasicMaterial({
+                    color: color, // Use configured color
+                    linewidth: lineWidth, // Use configured line width
+                    transparent: true,
+                    opacity: opacity // Use configured opacity
+                });
+            }
         }
         
         // Find interactive mesh - check both as child and at scene level
@@ -627,11 +679,21 @@ class LayoutGeometry {
 
             // Create slightly larger box geometry for reliable raycasting without oversized selection
             // Minimal increase ensures interactive mesh is hit instead of child objects
-            const faceGeometry = new THREE.BoxGeometry(
-                width * 1.01,  // 1% larger - enough for reliable raycasting, not user-noticeable
-                height * 1.01,
-                depth * 1.01
-            );
+            let faceGeometry;
+            const geometryFactory = window.GeometryFactory ? new GeometryFactory() : null;
+            if (geometryFactory) {
+                faceGeometry = geometryFactory.createBoxGeometry(
+                    width * 1.01,  // 1% larger - enough for reliable raycasting, not user-noticeable
+                    height * 1.01,
+                    depth * 1.01
+                );
+            } else {
+                faceGeometry = new THREE.BoxGeometry(
+                    width * 1.01,  // 1% larger - enough for reliable raycasting, not user-noticeable
+                    height * 1.01,
+                    depth * 1.01
+                );
+            }
 
             return faceGeometry;
         } else {

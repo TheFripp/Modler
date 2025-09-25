@@ -198,7 +198,7 @@ class VisualEffects {
                     this.highlightMesh.parent.remove(this.highlightMesh);
                 }
                 if (this.highlightMesh.geometry) {
-                    this.highlightMesh.geometry.dispose();
+                    this.geometryFactory.returnGeometry(this.highlightMesh.geometry, 'face');
                 }
             }
 
@@ -374,10 +374,10 @@ class VisualEffects {
                 this.rectanglePreview.parent.remove(this.rectanglePreview);
             }
             if (this.rectanglePreview.geometry) {
-                this.rectanglePreview.geometry.dispose();
+                this.geometryFactory.returnGeometry(this.rectanglePreview.geometry, 'wireframe');
             }
             if (this.rectanglePreview.material) {
-                this.rectanglePreview.material.dispose();
+                this.materialManager.returnMaterial(this.rectanglePreview.material);
             }
             this.rectanglePreview = null;
         }
@@ -400,7 +400,7 @@ class VisualEffects {
         const edgesMesh = new THREE.LineSegments(edges, material);
         edgesMesh.position.copy(position);
 
-        geometry.dispose();
+        this.geometryFactory.returnGeometry(geometry, 'box');
         return edgesMesh;
     }
 
@@ -557,14 +557,14 @@ class VisualEffects {
         // Find and remove existing padding visualization
         const existingPadding = mesh.getObjectByName('paddingVisualization');
         if (existingPadding) {
-            // Clean up all geometries and materials
+            // Return all geometries and materials to pools
             existingPadding.traverse((child) => {
-                if (child.geometry) child.geometry.dispose();
+                if (child.geometry) this.geometryFactory.returnGeometry(child.geometry, 'edge');
                 if (child.material) {
                     if (Array.isArray(child.material)) {
-                        child.material.forEach(mat => mat.dispose());
+                        child.material.forEach(mat => this.materialManager.returnMaterial(mat));
                     } else {
-                        child.material.dispose();
+                        this.materialManager.returnMaterial(child.material);
                     }
                 }
             });

@@ -442,11 +442,20 @@ class DeleteObjectCommand extends BaseCommand {
                 return null;
             }
 
-            // Create material using captured data
+            // Create material using captured data and centralized systems
             const materialData = snapshot.geometryData?.materialData || {};
-            const material = new THREE.MeshLambertMaterial({
-                color: materialData.color || snapshot.materialConfig?.color || 0x808080
-            });
+            const materialManager = window.MaterialManager ? new MaterialManager() : null;
+
+            let material;
+            if (materialManager) {
+                material = materialManager.createMeshLambertMaterial({
+                    color: materialData.color || snapshot.materialConfig?.color || 0x808080
+                });
+            } else {
+                material = new THREE.MeshLambertMaterial({
+                    color: materialData.color || snapshot.materialConfig?.color || 0x808080
+                });
+            }
 
             // Add object using SceneController's addObject method
             const restoredObjectData = this.sceneController.addObject(
@@ -486,12 +495,22 @@ class DeleteObjectCommand extends BaseCommand {
      * Recreate geometry from snapshot data
      */
     recreateGeometry(snapshot) {
+        // Access centralized geometry factory
+        const geometryFactory = window.GeometryFactory ? new GeometryFactory() : null;
+
         // Try to use enhanced geometry data first
         if (snapshot.geometryData) {
             const geoData = snapshot.geometryData;
 
             switch (geoData.type) {
                 case 'BoxGeometry':
+                    if (geometryFactory) {
+                        return geometryFactory.createBoxGeometry(
+                            geoData.width || 1,
+                            geoData.height || 1,
+                            geoData.depth || 1
+                        );
+                    }
                     return new THREE.BoxGeometry(
                         geoData.width || 1,
                         geoData.height || 1,
@@ -499,6 +518,14 @@ class DeleteObjectCommand extends BaseCommand {
                     );
 
                 case 'CylinderGeometry':
+                    if (geometryFactory) {
+                        return geometryFactory.createCylinderGeometry(
+                            geoData.radiusTop || 1,
+                            geoData.radiusBottom || 1,
+                            geoData.height || 1,
+                            geoData.radialSegments || 8
+                        );
+                    }
                     return new THREE.CylinderGeometry(
                         geoData.radiusTop || 1,
                         geoData.radiusBottom || 1,
@@ -507,6 +534,13 @@ class DeleteObjectCommand extends BaseCommand {
                     );
 
                 case 'SphereGeometry':
+                    if (geometryFactory) {
+                        return geometryFactory.createSphereGeometry(
+                            geoData.radius || 1,
+                            geoData.widthSegments || 32,
+                            geoData.heightSegments || 16
+                        );
+                    }
                     return new THREE.SphereGeometry(
                         geoData.radius || 1,
                         geoData.widthSegments || 32,
@@ -516,6 +550,13 @@ class DeleteObjectCommand extends BaseCommand {
                 default:
                     // Use fallback data if available
                     if (geoData.width && geoData.height && geoData.depth) {
+                        if (geometryFactory) {
+                            return geometryFactory.createBoxGeometry(
+                                geoData.width,
+                                geoData.height,
+                                geoData.depth
+                            );
+                        }
                         return new THREE.BoxGeometry(
                             geoData.width,
                             geoData.height,
@@ -532,16 +573,25 @@ class DeleteObjectCommand extends BaseCommand {
 
             // Check if it's a box-like geometry
             if (width && height && depth) {
+                if (geometryFactory) {
+                    return geometryFactory.createBoxGeometry(width, height, depth);
+                }
                 return new THREE.BoxGeometry(width, height, depth);
             }
 
             // Check if it's a cylinder (height and width/radius)
             if (height && width && !depth) {
+                if (geometryFactory) {
+                    return geometryFactory.createCylinderGeometry(width, width, height, 8);
+                }
                 return new THREE.CylinderGeometry(width, width, height, 8);
             }
         }
 
         // Final fallback to a basic box geometry
+        if (geometryFactory) {
+            return geometryFactory.createBoxGeometry(1, 1, 1);
+        }
         return new THREE.BoxGeometry(1, 1, 1);
     }
 

@@ -4,7 +4,12 @@
 
 class SupportMeshFactory {
     constructor() {
-        // Material cache for reuse
+        // New unified systems
+        this.geometryFactory = new GeometryFactory();
+        this.materialManager = new MaterialManager();
+        this.resourcePool = new VisualizationResourcePool();
+
+        // Material cache for reuse - now managed by MaterialManager
         this.materials = {
             selectionWireframe: null,
             faceHighlight: null,
@@ -16,57 +21,16 @@ class SupportMeshFactory {
     }
 
     /**
-     * Create base materials used by support meshes
+     * Create base materials using MaterialManager for centralized management
      */
     createBaseMaterials() {
-        const configManager = window.modlerComponents?.configurationManager;
+        // Use MaterialManager for centralized material creation and caching
+        this.materials.selectionWireframe = this.materialManager.createSelectionEdgeMaterial();
+        this.materials.faceHighlight = this.materialManager.createFaceHighlightMaterial();
+        this.materials.containerWireframe = this.materialManager.createContainerWireframeMaterial();
 
-        // Selection wireframe material
-        const selectionConfig = configManager ?
-            configManager.get('visual.selection') :
-            { color: '#ff6600', lineWidth: 2, opacity: 0.8, renderOrder: 999 };
-
-        const selectionColorHex = parseInt(selectionConfig.color.replace('#', ''), 16);
-        this.materials.selectionWireframe = new THREE.LineBasicMaterial({
-            color: selectionColorHex,
-            transparent: true,
-            opacity: selectionConfig.opacity,
-            linewidth: selectionConfig.lineWidth,
-            depthTest: true, // Enable depth test so wireframe doesn't show through the object itself
-            depthWrite: false // Disable depth write to prevent z-fighting with the object
-        });
-        this.materials.selectionWireframe.lineWidth = selectionConfig.lineWidth;
-        this.materials.selectionWireframe.renderOrder = selectionConfig.renderOrder || 999;
-
-        // Face highlight material - uses selection color with 10% opacity
-        const faceHighlightColorHex = parseInt(selectionConfig.color.replace('#', ''), 16);
-        this.materials.faceHighlight = new THREE.MeshBasicMaterial({
-            color: faceHighlightColorHex,
-            transparent: true,
-            opacity: 0.1, // 10% opacity
-            side: THREE.DoubleSide,
-            depthTest: false, // Allow face highlights to show through objects for visual feedback
-            depthWrite: false // Disable depth write to prevent interference with other objects
-        });
-
-        // Container wireframe material
-        const containerConfig = configManager ?
-            configManager.get('visual.containers') :
-            { wireframeColor: '#00ff00', lineWidth: 1, opacity: 0.8, renderOrder: 998 };
-
-        const containerColorHex = parseInt(containerConfig.wireframeColor.replace('#', ''), 16);
-        this.materials.containerWireframe = new THREE.LineBasicMaterial({
-            color: containerColorHex,
-            transparent: true,
-            opacity: containerConfig.opacity,
-            linewidth: containerConfig.lineWidth,
-            depthTest: true, // Enable depth test so wireframe doesn't show through the container itself
-            depthWrite: false // Disable depth write to prevent z-fighting with the container
-        });
-        this.materials.containerWireframe.lineWidth = containerConfig.lineWidth;
-        this.materials.containerWireframe.renderOrder = containerConfig.renderOrder || 998;
-
-        // Container interactive material
+        // Container interactive material - specialized invisible raycasting material
+        // This is kept as manual creation due to its unique colorWrite:false property
         this.materials.containerInteractive = new THREE.MeshBasicMaterial({
             transparent: true,
             opacity: 0.0, // Invisible but raycastable
@@ -189,7 +153,7 @@ class SupportMeshFactory {
             return null;
         }
 
-        const edgeGeometry = new THREE.EdgesGeometry(mainMesh.geometry);
+        const edgeGeometry = this.geometryFactory.createEdgeGeometry(mainMesh);
         const wireframe = new THREE.LineSegments(edgeGeometry, this.materials.selectionWireframe);
 
         // Position at (0,0,0) relative to parent - inherits parent transform
@@ -206,7 +170,7 @@ class SupportMeshFactory {
     createContainerWireframe(mainMesh) {
         if (!mainMesh.geometry) return null;
 
-        const edgeGeometry = new THREE.EdgesGeometry(mainMesh.geometry);
+        const edgeGeometry = this.geometryFactory.createEdgeGeometry(mainMesh);
         const wireframe = new THREE.LineSegments(edgeGeometry, this.materials.containerWireframe);
 
         wireframe.position.set(0, 0.001, 0); // Small Y offset
@@ -220,8 +184,8 @@ class SupportMeshFactory {
      * Create face highlight mesh - ARCHITECTURE: position once per hover, no repositioning during geometry changes
      */
     createFaceHighlight(mainMesh) {
-        // Create generic plane geometry that can be positioned and scaled
-        const faceGeometry = new THREE.PlaneGeometry(1, 1);
+        // Create generic plane geometry using GeometryFactory
+        const faceGeometry = this.geometryFactory.createPlaneGeometry(1, 1);
 
         const faceHighlight = new THREE.Mesh(faceGeometry, this.materials.faceHighlight);
         faceHighlight.position.set(0, 0, 0); // Initial position - will be set when first shown
@@ -287,7 +251,7 @@ class SupportMeshFactory {
         }
 
         // Create solid box geometry with the extracted dimensions
-        const faceGeometry = new THREE.BoxGeometry(size.x, size.y, size.z);
+        const faceGeometry = this.geometryFactory.createBoxGeometry(size.x, size.y, size.z);
 
         // Verify BoxGeometry centering
         faceGeometry.computeBoundingBox();
@@ -317,16 +281,18 @@ class SupportMeshFactory {
         const supportMeshes = mainMesh.userData.supportMeshes;
         if (!supportMeshes || !mainMesh.geometry) return;
 
-        // Update wireframes
+        // Update wireframes using GeometryFactory
         if (supportMeshes.selectionWireframe) {
-            const newEdgeGeometry = new THREE.EdgesGeometry(mainMesh.geometry);
-            supportMeshes.selectionWireframe.geometry.dispose();
+            const newEdgeGeometry = this.geometryFactory.createEdgeGeometry(mainMesh);
+            // Return old geometry to pool instead of disposing
+            this.geometryFactory.returnGeometry(supportMeshes.selectionWireframe.geometry, 'edge');
             supportMeshes.selectionWireframe.geometry = newEdgeGeometry;
         }
 
         if (supportMeshes.containerWireframe) {
-            const newEdgeGeometry = new THREE.EdgesGeometry(mainMesh.geometry);
-            supportMeshes.containerWireframe.geometry.dispose();
+            const newEdgeGeometry = this.geometryFactory.createEdgeGeometry(mainMesh);
+            // Return old geometry to pool instead of disposing
+            this.geometryFactory.returnGeometry(supportMeshes.containerWireframe.geometry, 'edge');
             supportMeshes.containerWireframe.geometry = newEdgeGeometry;
         }
 
@@ -335,7 +301,8 @@ class SupportMeshFactory {
         // Update interactive mesh for containers
         if (supportMeshes.interactiveMesh) {
             const newFaceGeometry = mainMesh.geometry.clone();
-            supportMeshes.interactiveMesh.geometry.dispose();
+            // Return old geometry to pool instead of disposing
+            this.geometryFactory.returnGeometry(supportMeshes.interactiveMesh.geometry, 'face');
             supportMeshes.interactiveMesh.geometry = newFaceGeometry;
         }
 
@@ -368,7 +335,9 @@ class SupportMeshFactory {
             vc.x, vc.y, vc.z
         ]);
 
-        supportMeshes.faceHighlight.geometry.dispose();
+        // Return old geometry to pool instead of disposing
+        this.geometryFactory.returnGeometry(supportMeshes.faceHighlight.geometry, 'face');
+        // TODO: Consider adding dynamic BufferGeometry creation to GeometryFactory
         const faceGeometry = new THREE.BufferGeometry();
         faceGeometry.setAttribute('position', new THREE.BufferAttribute(vertices, 3));
         supportMeshes.faceHighlight.geometry = faceGeometry;
@@ -630,9 +599,13 @@ class SupportMeshFactory {
         Object.values(supportMeshes).forEach(mesh => {
             if (mesh) {
                 mainMesh.remove(mesh);
-                if (mesh.geometry) mesh.geometry.dispose();
+                // Return geometry to pool instead of disposing
+                if (mesh.geometry) {
+                    this.geometryFactory.returnGeometry(mesh.geometry, 'edge');
+                }
+                // Return material to pool if it's not shared
                 if (mesh.material && mesh.material !== this.materials.faceHighlight) {
-                    mesh.material.dispose();
+                    this.materialManager.returnMaterial(mesh.material);
                 }
             }
         });

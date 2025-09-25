@@ -12,6 +12,11 @@ class BoxCreationTool {
         this.selectionController = selectionController;
         this.visualEffects = visualEffects;
 
+        // New unified systems
+        this.geometryFactory = new GeometryFactory();
+        this.materialManager = new MaterialManager();
+        this.resourcePool = new VisualizationResourcePool();
+
         // Core state
         this.state = BoxCreationState.IDLE;
         this.startPosition = null;
@@ -232,9 +237,8 @@ class BoxCreationTool {
                 this.creationObject = null;
             }
 
-            const geometry = new THREE.BoxGeometry(width, height, depth);
-            // Use same material properties as centralized createObject function
-            const material = new THREE.MeshLambertMaterial({ color: 0x888888 });
+            const geometry = this.geometryFactory.createBoxGeometry(width, height, depth);
+            const material = this.materialManager.createMeshLambertMaterial({ color: 0x888888 });
 
             const boxData = sceneController.addObject(geometry, material, {
                 name: sceneController.generateObjectName('box'),
@@ -292,27 +296,26 @@ class BoxCreationTool {
         // Create proper face-edge wireframe like selection boxes and containers
         let boxGeometry, edgeGeometry, material;
         try {
-            boxGeometry = new THREE.BoxGeometry(actualWidth, actualHeight, actualDepth);
-            edgeGeometry = new THREE.EdgesGeometry(boxGeometry);
+            boxGeometry = this.geometryFactory.createBoxGeometry(actualWidth, actualHeight, actualDepth);
+            edgeGeometry = this.geometryFactory.createEdgeGeometryFromSource(boxGeometry);
             // Get configurable color from configuration manager
             const configManager = window.modlerComponents?.configurationManager;
             const configColor = configManager?.get('visual.boxCreation.color') || '#00ff00';
-            const color = parseInt(configColor.replace('#', ''), 16);
 
-            material = new THREE.LineBasicMaterial({
-                color: color,
-                transparent: true,
+            // Use MaterialManager for consistent wireframe material
+            material = this.materialManager.createPreviewWireframeMaterial({
+                color: configColor,
                 opacity: 0.8
             });
 
             this.previewBox = new THREE.LineSegments(edgeGeometry, material);
 
-            // Dispose the box geometry as we only need the edges
-            boxGeometry.dispose();
+            // Return the box geometry to pool as we only need the edges
+            this.geometryFactory.returnGeometry(boxGeometry, 'box');
         } catch (error) {
-            if (boxGeometry) boxGeometry.dispose();
-            if (edgeGeometry) edgeGeometry.dispose();
-            if (material) material.dispose();
+            if (boxGeometry) this.geometryFactory.returnGeometry(boxGeometry, 'box');
+            if (edgeGeometry) this.geometryFactory.returnGeometry(edgeGeometry, 'edge');
+            if (material) this.materialManager.returnMaterial(material);
             return;
         }
 
@@ -425,17 +428,17 @@ class BoxCreationTool {
         const actualDepth = Math.max(depth, minSize);
         const actualHeight = Math.max(height, minSize);
 
-        // Dispose old geometry
+        // Return old geometry to pool
         if (this.previewBox.geometry) {
-            this.previewBox.geometry.dispose();
+            this.geometryFactory.returnGeometry(this.previewBox.geometry, 'edge');
         }
 
         // Create new face-edge geometry with correct dimensions
-        const boxGeometry = new THREE.BoxGeometry(actualWidth, actualHeight, actualDepth);
-        this.previewBox.geometry = new THREE.EdgesGeometry(boxGeometry);
+        const boxGeometry = this.geometryFactory.createBoxGeometry(actualWidth, actualHeight, actualDepth);
+        this.previewBox.geometry = this.geometryFactory.createEdgeGeometryFromSource(boxGeometry);
 
-        // Dispose the temporary box geometry
-        boxGeometry.dispose();
+        // Return the temporary box geometry to pool
+        this.geometryFactory.returnGeometry(boxGeometry, 'box');
 
         // Update position to account for new height
         const centerY = actualHeight / 2 + 0.001;
@@ -479,13 +482,13 @@ class BoxCreationTool {
             // Remove from scene first
             scene.remove(this.previewBox);
 
-            // Dispose geometry and material safely
+            // Return geometry and material to pools safely
             try {
-                if (this.previewBox.geometry && this.previewBox.geometry.dispose) {
-                    this.previewBox.geometry.dispose();
+                if (this.previewBox.geometry) {
+                    this.geometryFactory.returnGeometry(this.previewBox.geometry, 'edge');
                 }
-                if (this.previewBox.material && this.previewBox.material.dispose) {
-                    this.previewBox.material.dispose();
+                if (this.previewBox.material) {
+                    this.materialManager.returnMaterial(this.previewBox.material);
                 }
             } catch (error) {
             }
@@ -528,12 +531,11 @@ class BoxCreationTool {
         if (!sceneController) return;
 
         // Create minimal geometry and invisible material
-        const geometry = new THREE.BoxGeometry(0.01, 0.01, 0.01);
-        const material = new THREE.MeshLambertMaterial({
+        const geometry = this.geometryFactory.createBoxGeometry(0.01, 0.01, 0.01);
+        const material = this.materialManager.createMeshLambertMaterial({
             color: 0x888888,
             transparent: true,
-            opacity: 0.0,
-            visible: false
+            opacity: 0.0
         });
 
         // Add to scene controller but make it invisible
@@ -569,15 +571,15 @@ class BoxCreationTool {
         const height = this.currentHeight || 0.01;
 
         // Update the geometry
-        const newGeometry = new THREE.BoxGeometry(
+        const newGeometry = this.geometryFactory.createBoxGeometry(
             Math.max(width, 0.01),
             Math.max(height, 0.01),
             Math.max(depth, 0.01)
         );
 
-        // Dispose old geometry
+        // Return old geometry to pool
         if (this.creationObject.geometry) {
-            this.creationObject.geometry.dispose();
+            this.geometryFactory.returnGeometry(this.creationObject.geometry, 'box');
         }
 
         this.creationObject.geometry = newGeometry;

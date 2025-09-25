@@ -582,6 +582,152 @@ class MaterialManager {
         console.log('MaterialManager: All materials cleared and disposed');
     }
 
+    // ===== STANDARD MATERIAL CREATION METHODS =====
+
+    /**
+     * Create MeshLambertMaterial with caching and configuration
+     * @param {Object} options - Material options
+     * @param {number|string} options.color - Material color (hex number or string)
+     * @param {number} options.opacity - Material opacity (optional)
+     * @param {boolean} options.transparent - Enable transparency (optional)
+     * @param {boolean} options.wireframe - Enable wireframe mode (optional)
+     * @returns {THREE.MeshLambertMaterial} Cached or new material
+     */
+    createMeshLambertMaterial(options = {}) {
+        // Normalize options
+        const normalizedOptions = {
+            color: this.normalizeColor(options.color || '#888888'),
+            opacity: options.opacity !== undefined ? options.opacity : 1.0,
+            transparent: options.transparent !== undefined ? options.transparent : (options.opacity !== undefined && options.opacity < 1.0),
+            wireframe: options.wireframe || false
+        };
+
+        // Generate cache key
+        const key = `lambert_${normalizedOptions.color}_${normalizedOptions.opacity}_${normalizedOptions.transparent}_${normalizedOptions.wireframe}`;
+
+        // Check cache first
+        if (this.materialCache.has(key)) {
+            this.stats.cached++;
+            return this.materialCache.get(key);
+        }
+
+        // Create new material
+        const material = new THREE.MeshLambertMaterial({
+            color: normalizedOptions.color,
+            opacity: normalizedOptions.opacity,
+            transparent: normalizedOptions.transparent,
+            wireframe: normalizedOptions.wireframe
+        });
+
+        // Add metadata and cache
+        material.userData.materialManagerType = 'meshLambert';
+        material.userData.materialManagerKey = key;
+        this.cacheMaterial(key, material);
+        this.trackMaterial(material);
+
+        this.stats.created++;
+        return material;
+    }
+
+    /**
+     * Create MeshBasicMaterial with caching and configuration
+     * @param {Object} options - Material options
+     * @param {number|string} options.color - Material color (hex number or string)
+     * @param {number} options.opacity - Material opacity (optional)
+     * @param {boolean} options.transparent - Enable transparency (optional)
+     * @param {boolean} options.wireframe - Enable wireframe mode (optional)
+     * @param {boolean} options.colorWrite - Enable color write (optional)
+     * @param {boolean} options.depthWrite - Enable depth write (optional)
+     * @param {number} options.side - Material side (optional)
+     * @returns {THREE.MeshBasicMaterial} Cached or new material
+     */
+    createMeshBasicMaterial(options = {}) {
+        // Normalize options
+        const normalizedOptions = {
+            color: this.normalizeColor(options.color || '#888888'),
+            opacity: options.opacity !== undefined ? options.opacity : 1.0,
+            transparent: options.transparent !== undefined ? options.transparent : (options.opacity !== undefined && options.opacity < 1.0),
+            wireframe: options.wireframe || false,
+            colorWrite: options.colorWrite !== undefined ? options.colorWrite : true,
+            depthWrite: options.depthWrite !== undefined ? options.depthWrite : true,
+            side: options.side !== undefined ? options.side : THREE.FrontSide
+        };
+
+        // Generate cache key
+        const key = `basic_${normalizedOptions.color}_${normalizedOptions.opacity}_${normalizedOptions.transparent}_${normalizedOptions.wireframe}_${normalizedOptions.colorWrite}_${normalizedOptions.depthWrite}_${normalizedOptions.side}`;
+
+        // Check cache first
+        if (this.materialCache.has(key)) {
+            this.stats.cached++;
+            return this.materialCache.get(key);
+        }
+
+        // Create new material
+        const material = new THREE.MeshBasicMaterial({
+            color: normalizedOptions.color,
+            opacity: normalizedOptions.opacity,
+            transparent: normalizedOptions.transparent,
+            wireframe: normalizedOptions.wireframe,
+            colorWrite: normalizedOptions.colorWrite,
+            depthWrite: normalizedOptions.depthWrite,
+            side: normalizedOptions.side
+        });
+
+        // Add metadata and cache
+        material.userData.materialManagerType = 'meshBasic';
+        material.userData.materialManagerKey = key;
+        this.cacheMaterial(key, material);
+        this.trackMaterial(material);
+
+        this.stats.created++;
+        return material;
+    }
+
+    /**
+     * Create specialized invisible material for raycast planes
+     * @param {Object} options - Material options
+     * @returns {THREE.MeshBasicMaterial} Invisible material optimized for raycasting
+     */
+    createInvisibleRaycastMaterial(options = {}) {
+        return this.createMeshBasicMaterial({
+            transparent: true,
+            opacity: 0.0,
+            colorWrite: false,
+            depthWrite: false,
+            side: options.side || THREE.DoubleSide,
+            ...options
+        });
+    }
+
+    /**
+     * Create specialized container interaction material
+     * @param {Object} options - Material options
+     * @returns {THREE.MeshBasicMaterial} Material optimized for container interaction
+     */
+    createContainerInteractionMaterial(options = {}) {
+        return this.createMeshBasicMaterial({
+            transparent: true,
+            opacity: 0.0,
+            colorWrite: false,
+            depthWrite: false,
+            wireframe: false,
+            side: THREE.DoubleSide,
+            ...options
+        });
+    }
+
+    /**
+     * Normalize color input to hex number
+     * @param {number|string} color - Color as hex number or string
+     * @returns {number} Normalized hex color
+     */
+    normalizeColor(color) {
+        if (typeof color === 'string') {
+            return parseInt(color.replace('#', ''), 16);
+        }
+        return color;
+    }
+
     /**
      * Get performance and usage statistics
      * @returns {Object} Statistics object
