@@ -463,6 +463,7 @@
 		if (!isInIframe) {
 			// Direct context: use NavigationController if available
 			const navigationController = (window as any).modlerComponents?.navigationController;
+
 			if (navigationController) {
 				// Use NavigationController for unified navigation
 				navigationController.navigateToObject(objectId);

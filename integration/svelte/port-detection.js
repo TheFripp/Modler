@@ -93,6 +93,7 @@ class SveltePortDetector {
      * Set URLs for all Svelte components based on detected port
      */
     _setUrls(port) {
+        this.detectedPort = port;
         this.baseUrl = `http://localhost:${port}`;
         this.urls = {
             propertyPanel: `${this.baseUrl}/property-panel`,

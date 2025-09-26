@@ -18,12 +18,19 @@
     let portDetector = null;
     let panelManager = null;
     let dataSync = null;
+    let initializationInProgress = false;
 
     /**
      * Initialize the Svelte integration system
      */
     async function initialize() {
+        if (initializationInProgress) {
+            console.log('⏳ Svelte integration initialization already in progress, skipping...');
+            return;
+        }
+
         try {
+            initializationInProgress = true;
             console.log('🚀 Initializing Svelte integration...');
 
             // Step 1: Detect Svelte dev server
@@ -64,10 +71,22 @@
             }, 1000); // 1 second delay to ensure panels are loaded
 
             // showActivationNotification('Svelte UI Active'); // Disabled toast notification
+            initializationInProgress = false;
 
         } catch (error) {
+            initializationInProgress = false;
             console.error('❌ Svelte integration initialization failed:', error);
             showSvelteError(`Initialization failed: ${error.message}`);
+
+            // Retry initialization once after a delay if critical components failed
+            if (!dataSync || !panelManager) {
+                console.log('🔄 Attempting one-time recovery initialization...');
+                setTimeout(() => {
+                    if (!window.svelteIntegrationActive) {
+                        initializeSvelteIntegration();
+                    }
+                }, 2000);
+            }
         }
     }
 
@@ -90,7 +109,7 @@
                         handleToolSwitch(data.tool);
                         break;
                     case 'object-select':
-                        handleObjectSelection(data.objectId);
+                        handleObjectSelection(data.objectId, data.parentContainer, data.useNavigationController);
                         break;
                     case 'property-update':
                         handlePropertyUpdate(data.objectId, data.property, data.value);
@@ -187,20 +206,67 @@
     }
 
     /**
-     * Handle object selection from Svelte UI
+     * Handle object selection from Svelte UI with container navigation support
      */
-    function handleObjectSelection(objectId) {
+    function handleObjectSelection(objectId, parentContainer = null, useNavigationController = false) {
         const sceneController = window.modlerComponents?.sceneController;
         const selectionController = window.modlerComponents?.selectionController;
+        const navigationController = window.modlerComponents?.navigationController;
 
         if (!sceneController || !selectionController) {
             console.warn('❌ Scene or Selection controller not available for object selection');
             return;
         }
 
-        // Find object by ID and select it
-        const objectData = sceneController.getObjectById(objectId);
+        // Use NavigationController for unified navigation if requested and available
+        if (useNavigationController && navigationController) {
+            navigationController.navigateToObject(objectId);
+            return;
+        }
+
+        // Handle container navigation if object has a parent container
+        if (parentContainer) {
+            console.log('📁 Object is in container, handling container navigation first');
+
+            // Check if we need to step into the parent container
+            const currentContainer = navigationController?.getCurrentContainer();
+            if (!currentContainer || currentContainer.id !== parentContainer) {
+                console.log('🔄 Stepping into parent container:', parentContainer);
+
+                // Step into the container first
+                if (window.stepIntoContainerById) {
+                    window.stepIntoContainerById(parentContainer);
+                } else if (navigationController) {
+                    // Use navigation controller as fallback
+                    const containerData = sceneController.getObject(parentContainer);
+                    if (containerData) {
+                        navigationController.stepIntoContainer(containerData);
+                    }
+                }
+
+                // Small delay to allow container navigation to complete before selecting child
+                setTimeout(() => {
+                    selectObjectInScene(objectId);
+                }, 50);
+                return;
+            }
+        }
+
+        // Direct object selection
+        selectObjectInScene(objectId);
+    }
+
+    /**
+     * Core object selection logic
+     */
+    function selectObjectInScene(objectId) {
+        const sceneController = window.modlerComponents?.sceneController;
+        const selectionController = window.modlerComponents?.selectionController;
+
+        const objectData = sceneController.getObject(objectId);
         if (objectData && objectData.mesh) {
+            console.log('✅ Object found, selecting mesh:', objectData.name);
+            selectionController.clearSelection('svelte-ui-selection');
             selectionController.select(objectData.mesh);
         } else {
             console.warn('❌ Object not found for selection:', objectId);
@@ -218,7 +284,7 @@
             return;
         }
 
-        const objectData = sceneController.getObjectById(objectId);
+        const objectData = sceneController.getObject(objectId);
         if (objectData && objectData.mesh) {
             // Apply property update based on type
             switch (property) {
@@ -498,12 +564,18 @@
     };
 
     // Bridge function: Populate object list in left panel
-    window.populateObjectList = function() {
-        console.log('📋 Main Integration: populateObjectList() called');
-        console.trace('📋 Call stack for populateObjectList:');
+    window.populateObjectList = function(retryCount = 0) {
         if (!dataSync) {
-            console.warn('📋 Main Integration: dataSync not available');
-            return;
+            if (retryCount < 20) { // Max 2 seconds of retries (20 * 100ms)
+                setTimeout(() => {
+                    window.populateObjectList(retryCount + 1);
+                }, 100);
+                return;
+            } else {
+                console.error('❌ Main Integration: dataSync still not available after 2 seconds, giving up');
+                showSvelteError('Svelte data synchronization failed to initialize');
+                return;
+            }
         }
 
         const sceneController = window.modlerComponents?.sceneController;
@@ -514,19 +586,25 @@
 
         try {
             const allObjects = sceneController.getAllObjects();
-            // Found ${allObjects.length} objects from SceneController
 
-            if (allObjects && allObjects.length > 0) {
-                console.log(`📋 Main Integration: Sending ${allObjects.length} objects to hierarchy`);
+            // Filter out utility objects (same logic as bridge)
+            const filteredObjects = allObjects.filter(obj =>
+                obj.name !== 'Floor Grid' &&
+                obj.type !== 'grid' &&
+                !obj.name?.toLowerCase().includes('grid') &&
+                obj.name !== '(Interactive)' &&
+                !obj.name?.toLowerCase().includes('interactive')
+            );
+
+            if (filteredObjects && filteredObjects.length > 0) {
                 // Serialize objects for hierarchy update
-                const serializedObjects = allObjects.map(obj => dataSync.serializeThreeObject(obj.mesh)).filter(Boolean);
+                const serializedObjects = filteredObjects.map(obj => dataSync.serializeThreeObject(obj.mesh)).filter(Boolean);
                 dataSync.sendDataToSveltePanels({
                     updateType: 'hierarchy-changed',
                     objectHierarchy: serializedObjects,
                     timestamp: Date.now()
                 });
             } else {
-                console.log('📋 Main Integration: No objects found, sending empty hierarchy');
                 dataSync.sendDataToSveltePanels({
                     updateType: 'hierarchy-changed',
                     objectHierarchy: [],
@@ -541,7 +619,6 @@
     // Bridge function: Notify object hierarchy changed (containers, parents, children)
     // Simplified to only handle hierarchy updates, following 3-type system
     window.notifyObjectHierarchyChanged = function() {
-        console.log('📋 Main Integration: notifyObjectHierarchyChanged() called');
         if (!dataSync) return;
 
         // Update the full object list to reflect hierarchy changes

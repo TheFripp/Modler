@@ -71,6 +71,32 @@ interface ObjectData {
 
 ## Communication
 
+### Bi-Directional Selection System ✨
+- **Scene → UI**: Objects selected in 3D scene automatically highlight in object list
+- **UI → Scene**: Objects clicked in object list automatically select in 3D scene
+- **Smart Navigation**: Integrates with NavigationController for container context switching
+
+### Core Communication Patterns
 - **Three.js → Svelte**: `syncSelectionFromThreeJS()`, `syncHierarchyFromThreeJS()`
-- **Svelte → Three.js**: `activateToolInScene()`, `updateObjectProperty()`
-- **Architecture**: iframe + PostMessage for isolation
+- **Svelte → Three.js**: `selectObjectInScene()`, `updateObjectProperty()`, `activateToolInScene()`
+- **Architecture**: iframe + PostMessage with port detection for secure communication
+
+### Object Selection Flow
+```typescript
+// In Svelte UI (object list click)
+function selectObjectInScene(objectId: string) {
+    // PostMessage with navigation context
+    window.parent.postMessage({
+        type: 'object-select',
+        data: { objectId, parentContainer, useNavigationController: true }
+    }, '*');
+}
+
+// In Main Integration (message handler)
+function handleObjectSelection(objectId, parentContainer, useNavigationController) {
+    if (useNavigationController && navigationController) {
+        navigationController.navigateToObject(objectId);
+    }
+    // Fallback to direct selection
+}
+```

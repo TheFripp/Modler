@@ -17,6 +17,7 @@
 
 ## 🏗️ System Documentation
 - **Selection System**: [`/systems/selection.md`](systems/selection.md) - Container-first selection patterns
+- **Bi-Directional Selection**: [`/systems/bi-directional-selection.md`](systems/bi-directional-selection.md) - UI ↔ Scene selection system with NavigationController integration
 - **Container System**: [`/systems/containers.md`](systems/containers.md) - Dual geometry containers and layout
 - **Support Mesh Architecture**: [`/systems/support-mesh-architecture.md`](systems/support-mesh-architecture.md) - "Create once, show/hide only" visualization system
 - **Tool System**: [`/systems/tools.md`](systems/tools.md) - Tool coordination and shared behaviors
