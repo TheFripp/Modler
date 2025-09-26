@@ -526,10 +526,8 @@ class SceneController {
 
             this.applyLayoutPositionsAndSizes(children, layoutResult.positions, layoutResult.sizes, container);
 
-            // CRITICAL FIX: Use layoutResult.sizes (not recalculated sizes) for bounds calculation
-            // layoutResult.positions corresponds to layoutResult.sizes from LayoutEngine
-            // Recalculating sizes breaks the array index correspondence and causes position/size mismatch
-            const layoutBounds = this.calculateLayoutBounds(layoutResult.positions, layoutResult.sizes, layoutAnchor);
+            // Use bounds directly from LayoutEngine (architectural improvement)
+            const layoutBounds = layoutResult.bounds;
 
             return { success: true, layoutBounds };
         } else {
@@ -556,54 +554,6 @@ class SceneController {
         return new THREE.Vector3(1, 1, 1); // Fallback
     }
 
-    /**
-     * Calculate container size needed to wrap layout objects
-     * SIMPLIFIED: Only calculates size, container position never changes
-     * @param {Array} positions - Array of THREE.Vector3 positions (local space)
-     * @param {Array} sizes - Array of THREE.Vector3 sizes
-     * @param {THREE.Vector3} layoutAnchor - Optional layout anchor to subtract from positions (fixes double-offset)
-     * @returns {THREE.Vector3} Container size needed to wrap all objects
-     */
-    calculateLayoutBounds(positions, sizes, layoutAnchor = null) {
-        if (!positions || !sizes || positions.length === 0) {
-            return { size: new THREE.Vector3(1, 1, 1) };
-        }
-
-        let minX = Infinity, maxX = -Infinity;
-        let minY = Infinity, maxY = -Infinity;
-        let minZ = Infinity, maxZ = -Infinity;
-
-        for (let i = 0; i < positions.length && i < sizes.length; i++) {
-            const pos = positions[i];
-            const size = sizes[i];
-
-            // Apply layout anchor offset correction to get origin-centered bounds
-            // This fixes the double-offset issue when layoutAnchor was used in layout calculation
-            const correctedPos = layoutAnchor ?
-                new THREE.Vector3(
-                    pos.x - layoutAnchor.x,
-                    pos.y - layoutAnchor.y,
-                    pos.z - layoutAnchor.z
-                ) : pos;
-
-            const halfSize = size.clone().multiplyScalar(0.5);
-
-            minX = Math.min(minX, correctedPos.x - halfSize.x);
-            maxX = Math.max(maxX, correctedPos.x + halfSize.x);
-            minY = Math.min(minY, correctedPos.y - halfSize.y);
-            maxY = Math.max(maxY, correctedPos.y + halfSize.y);
-            minZ = Math.min(minZ, correctedPos.z - halfSize.z);
-            maxZ = Math.max(maxZ, correctedPos.z + halfSize.z);
-        }
-
-        const size = new THREE.Vector3(
-            maxX - minX,
-            maxY - minY,
-            maxZ - minZ
-        );
-
-        return { size };
-    }
 
     /**
      * Get object data by ID (alias for getObject)

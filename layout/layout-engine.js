@@ -107,9 +107,13 @@ class LayoutEngine {
         // Apply padding after centering
         const finalPositions = this.applyPaddingToAxis(centeredPositions, axis, paddingOffset);
 
+        // Calculate bounds for the final layout
+        const layoutBounds = this.calculateLayoutBounds(objects, finalPositions, null, fullContainerSize);
+
         return {
             positions: finalPositions,
-            sizes: objectSizes
+            sizes: objectSizes,
+            bounds: layoutBounds
         };
     }
     
@@ -125,63 +129,78 @@ class LayoutEngine {
      */
     static calculateGridLayout(objects, mode, gap, padding, layoutConfig, layoutAnchor = null) {
         const positions = [];
-        
+        const objectSizes = [];
+
         if (mode === 'xy') {
             // 2D Grid Layout
             const columns = layoutConfig.columns || Math.ceil(Math.sqrt(objects.length));
             const rows = Math.ceil(objects.length / columns);
-            
+
             objects.forEach((obj, index) => {
                 const col = index % columns;
                 const row = Math.floor(index / columns);
-                
+
                 const size = this.getObjectSize(obj);
+                objectSizes.push(size);
+
                 const position = new THREE.Vector3(
                     col * (size.x + gap) - (columns - 1) * (size.x + gap) / 2,
                     -row * (size.y + gap) + (rows - 1) * (size.y + gap) / 2,
                     0
                 );
-                
+
                 positions.push(position);
             });
-            
+
         } else if (mode === 'xyz') {
             // 3D Grid Layout
             const columns = layoutConfig.columns || Math.ceil(Math.cbrt(objects.length));
             const rows = layoutConfig.rows || columns;
             const layers = Math.ceil(objects.length / (columns * rows));
-            
+
             objects.forEach((obj, index) => {
                 const col = index % columns;
                 const row = Math.floor(index / columns) % rows;
                 const layer = Math.floor(index / (columns * rows));
-                
+
                 const size = this.getObjectSize(obj);
+                objectSizes.push(size);
+
                 const position = new THREE.Vector3(
                     col * (size.x + gap) - (columns - 1) * (size.x + gap) / 2,
                     -row * (size.y + gap) + (rows - 1) * (size.y + gap) / 2,
                     layer * (size.z + gap) - (layers - 1) * (size.z + gap) / 2
                 );
-                
+
                 positions.push(position);
             });
         }
-        
+
         // Apply padding and center around layout anchor for grid layouts
         const paddedPositions = this.applyPadding(positions, padding);
 
         // For grid layouts, we need to center the entire grid around the layout anchor
+        let finalPositions;
         if (layoutAnchor) {
-            return paddedPositions.map(pos => {
+            finalPositions = paddedPositions.map(pos => {
                 return new THREE.Vector3(
                     pos.x + layoutAnchor.x,
                     pos.y + layoutAnchor.y,
                     pos.z + layoutAnchor.z
                 );
             });
+        } else {
+            finalPositions = paddedPositions;
         }
 
-        return paddedPositions;
+        // Calculate bounds for the final layout
+        const layoutBounds = this.calculateLayoutBounds(objects, finalPositions);
+
+        return {
+            positions: finalPositions,
+            sizes: objectSizes,
+            bounds: layoutBounds
+        };
     }
     
     /**

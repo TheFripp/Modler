@@ -279,8 +279,8 @@ function setupPostMessageFallback() {
 function handleDataUpdate(data: any) {
 	// Debug logging removed to reduce spam during normal operations
 
-	// Update selection store (only for actual selection changes)
-	if (['selection-change', 'legacy-selection', 'legacy-clear-selection'].includes(data.updateType)) {
+	// Update selection store (for selection changes and property refreshes)
+	if (['selection-change', 'legacy-selection', 'legacy-clear-selection', 'property-refresh'].includes(data.updateType)) {
 		// Syncing selection with objects
 		syncSelectionFromIframe(data.selectedObjects || []);
 	}

@@ -69,6 +69,7 @@ class SvelteDataSync {
         if (objectData.isContainer) {
             serialized.children = objectData.children || [];
             serialized.layout = objectData.layout || null;
+            serialized.autoLayout = objectData.autoLayout || null;
         }
 
         // Add parent relationship
@@ -275,6 +276,11 @@ class SvelteDataSync {
                         } else {
                             sceneController.disableAutoLayout(objectData.id);
                         }
+
+                        // Refresh property panel to show/hide layout controls
+                        setTimeout(() => {
+                            this.refreshPropertyPanel();
+                        }, 50);
                     }
                 }
                 break;
@@ -289,6 +295,55 @@ class SvelteDataSync {
                             direction: value,
                             gap: objectData.autoLayout.gap || 0,
                             padding: objectData.autoLayout.padding || { top: 0, bottom: 0, left: 0, right: 0, front: 0, back: 0 }
+                        });
+
+                        // Refresh property panel to update layout controls
+                        setTimeout(() => {
+                            this.refreshPropertyPanel();
+                        }, 50);
+                    }
+                }
+                break;
+
+            case 'autoLayout.gap':
+                // Handle auto layout gap changes for containers
+                if (objectData.isContainer && objectData.autoLayout?.enabled) {
+                    const sceneController = window.modlerComponents?.sceneController;
+                    if (sceneController) {
+                        // Update layout with new gap value
+                        sceneController.enableAutoLayout(objectData.id, {
+                            direction: objectData.autoLayout.direction,
+                            gap: parseFloat(value),
+                            padding: objectData.autoLayout.padding || { top: 0, bottom: 0, left: 0, right: 0, front: 0, back: 0 }
+                        });
+                    }
+                }
+                break;
+
+            case 'autoLayout.padding.top':
+            case 'autoLayout.padding.bottom':
+            case 'autoLayout.padding.left':
+            case 'autoLayout.padding.right':
+            case 'autoLayout.padding.front':
+            case 'autoLayout.padding.back':
+                // Handle auto layout padding changes for containers
+                if (objectData.isContainer && objectData.autoLayout?.enabled) {
+                    const sceneController = window.modlerComponents?.sceneController;
+                    if (sceneController) {
+                        const paddingSide = property.split('.')[2]; // Extract 'top', 'bottom', etc.
+                        const currentPadding = objectData.autoLayout.padding || { top: 0, bottom: 0, left: 0, right: 0, front: 0, back: 0 };
+
+                        // Update the specific padding side
+                        const updatedPadding = {
+                            ...currentPadding,
+                            [paddingSide]: parseFloat(value)
+                        };
+
+                        // Update layout with new padding
+                        sceneController.enableAutoLayout(objectData.id, {
+                            direction: objectData.autoLayout.direction,
+                            gap: objectData.autoLayout.gap || 0,
+                            padding: updatedPadding
                         });
                     }
                 }
