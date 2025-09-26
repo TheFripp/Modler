@@ -158,6 +158,7 @@
 						objectId={$displayObject.id}
 						propertyBase="dimensions"
 						labels={{ x: 'W', y: 'H', z: 'D' }}
+						idPrefix="dim"
 						showFillButtons={shouldShowFillButtons()}
 						fillStates={getFillStates()}
 						onFillToggle={handleFillToggle}

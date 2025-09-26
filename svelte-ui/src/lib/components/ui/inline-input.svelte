@@ -9,6 +9,7 @@
 		placeholder?: string;
 		disabled?: boolean;
 		class?: string;
+		id?: string;
 		// Property controller integration
 		objectId?: string;
 		property?: PropertyPath;
@@ -26,6 +27,7 @@
 		placeholder = '',
 		disabled = false,
 		class: className = '',
+		id,
 		objectId,
 		property,
 		// Legacy handlers
@@ -224,7 +226,7 @@
 
 		const deltaY = startY - event.clientY; // Invert so dragging up increases value
 		const stepValue = typeof step === 'number' ? step : 0.1;
-		const sensitivity = 2; // Adjust sensitivity
+		const sensitivity = 4; // Improved sensitivity for smoother dragging
 		const rawValue = startValue + (deltaY / sensitivity) * stepValue;
 
 		// Apply constraints during drag, especially for dimensions
@@ -271,6 +273,7 @@
 
 		<!-- Input Field -->
 		<input
+			{id}
 			{type}
 			value={inputValue}
 			{placeholder}

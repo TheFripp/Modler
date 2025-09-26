@@ -73,6 +73,57 @@ export function initializeBridge() {
 }
 
 /**
+ * Setup PostMessage fallback for iframe communication
+ * Listens for data updates from main application
+ */
+function setupPostMessageFallback() {
+	window.addEventListener('message', (event) => {
+		// PostMessage received from main application
+		// Verify origin for security (allow any localhost port for development)
+		if (!event.origin.startsWith('http://localhost:')) {
+			console.warn('⚠️ PostMessage rejected - invalid origin:', event.origin);
+			return;
+		}
+
+		// Handle data-update messages
+		if (event.data.type === 'data-update') {
+			const data = event.data.data;
+			console.log('📨 SVELTE: Received data-update, updateType:', data.updateType, 'selectedCount:', data.selectedObjects?.length);
+
+			// Update selected objects in store
+			if (data.selectedObjects) {
+				console.log('📋 SVELTE: Updating selectedObjects store with dimensions:', data.selectedObjects[0]?.dimensions);
+				syncSelectionFromThreeJS(data.selectedObjects);
+			}
+
+			// Update object hierarchy in store
+			if (data.objectHierarchy) {
+				syncHierarchyFromThreeJS(data.objectHierarchy);
+			}
+
+			// Update container context in store
+			if (data.containerContext) {
+				syncContainerContextFromThreeJS(data.containerContext);
+			}
+		}
+
+		// Handle tool state updates
+		else if (event.data.type === 'tool-state-update') {
+			// Tool state updates from keyboard shortcuts or direct tool switching
+			if (event.data.data && event.data.data.toolState) {
+				toolState.set(event.data.data.toolState);
+			} else {
+				console.warn('⚠️ Tool state update missing toolState data:', event.data);
+			}
+		}
+
+		// Handle other message types as needed
+	});
+
+	console.log('✅ PostMessage listener setup for iframe communication');
+}
+
+/**
  * Setup direct data synchronization with Three.js components
  * Creates centralized event hub for Scene ↔ UI communication
  */
@@ -237,36 +288,6 @@ export function toggleSnapInScene() {
 	console.error('❌ No snap toggle method available');
 }
 
-/**
- * Setup PostMessage fallback for iframe communication
- */
-function setupPostMessageFallback() {
-	window.addEventListener('message', (event) => {
-		// PostMessage received from main application
-
-		// Verify origin for security (allow any localhost port for development)
-		if (!event.origin.startsWith('http://localhost:')) {
-			return;
-		}
-
-
-		// Handle unified message format
-		if (event.data && event.data.type && event.data.data) {
-			try {
-				// All messages now use consistent data-update format
-				if (event.data.type === 'data-update') {
-					handleDataUpdate(event.data.data);
-				} else if (event.data.type === 'tool-state-update') {
-					// Direct tool state update message
-					syncToolStateFromIframe(event.data.data.toolState);
-				}
-				// Note: Legacy modler-data format removed for simplification
-			} catch (error) {
-				console.error('❌ Error processing message:', error);
-			}
-		}
-	});
-}
 
 /**
  * Handle data update from integration system

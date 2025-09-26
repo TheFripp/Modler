@@ -63,10 +63,10 @@ class PropertyController {
 		this.constraints.set('position.y', { step: 0.1 });
 		this.constraints.set('position.z', { step: 0.1 });
 
-		// Rotation constraints
-		this.constraints.set('rotation.x', { step: 1, min: -180, max: 180 });
-		this.constraints.set('rotation.y', { step: 1, min: -180, max: 180 });
-		this.constraints.set('rotation.z', { step: 1, min: -180, max: 180 });
+		// Rotation constraints - no min/max limits to allow continuous multi-rotation
+		this.constraints.set('rotation.x', { step: 1 });
+		this.constraints.set('rotation.y', { step: 1 });
+		this.constraints.set('rotation.z', { step: 1 });
 
 		// Dimension constraints
 		this.constraints.set('dimensions.x', { step: 0.1, min: 0.1 });

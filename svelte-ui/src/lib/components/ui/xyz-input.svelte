@@ -15,6 +15,8 @@
 		step?: number;
 		class?: string;
 		labels?: { x?: string; y?: string; z?: string };
+		// ID generation for Tab navigation
+		idPrefix?: string;
 		// Fill button functionality
 		showFillButtons?: boolean;
 		fillStates?: { x?: boolean; y?: boolean; z?: boolean };
@@ -31,6 +33,7 @@
 		step = 0.1,
 		class: className = '',
 		labels = { x: 'X', y: 'Y', z: 'Z' },
+		idPrefix,
 		showFillButtons = false,
 		fillStates = {},
 		onFillToggle,
@@ -88,6 +91,7 @@
 				<div class="flex items-center gap-1">
 					<div class="flex-1">
 						<InlineInput
+							id={idPrefix ? `${idPrefix}-${axis}` : undefined}
 							label={labels[axis]}
 							type="number"
 							value={displayValue}
