@@ -51,19 +51,163 @@
             // Step 6: Setup component synchronization
             initializeComponentSync();
 
-            // Step 7: Show panels
+            // Step 7: Setup message listener for UI interactions
+            setupMessageListener();
+
+            // Step 8: Show panels
             panelManager.showPanels();
 
             console.log('✅ Svelte integration initialized successfully');
-            showActivationNotification('Svelte UI Active');
-
-            // Add debug button in development
-            createDebugButton();
+            // showActivationNotification('Svelte UI Active'); // Disabled toast notification
 
         } catch (error) {
             console.error('❌ Svelte integration initialization failed:', error);
             showSvelteError(`Initialization failed: ${error.message}`);
         }
+    }
+
+    /**
+     * Setup message listener for commands from Svelte panels
+     */
+    function setupMessageListener() {
+        window.addEventListener('message', (event) => {
+            // Only accept messages from our Svelte panels
+            const sveltePort = portDetector?.detectedPort;
+            if (!sveltePort || event.origin !== `http://localhost:${sveltePort}`) {
+                return;
+            }
+
+            const { type, data } = event.data;
+            console.log('📨 Received message from Svelte panel:', type, data);
+
+            try {
+                switch (type) {
+                    case 'tool-switch':
+                        handleToolSwitch(data.tool);
+                        break;
+                    case 'object-select':
+                        handleObjectSelection(data.objectId);
+                        break;
+                    case 'property-update':
+                        handlePropertyUpdate(data.objectId, data.property, data.value);
+                        break;
+                    case 'container-create':
+                        handleContainerCreate(data);
+                        break;
+                    default:
+                        console.warn('🤷 Unknown message type from Svelte panel:', type);
+                }
+            } catch (error) {
+                console.error('❌ Error handling Svelte panel message:', error);
+            }
+        });
+    }
+
+    /**
+     * Handle tool switching from Svelte UI
+     */
+    function handleToolSwitch(toolName) {
+        const toolController = window.modlerComponents?.toolController;
+        if (!toolController) {
+            console.warn('❌ ToolController not available for tool switch');
+            return;
+        }
+
+        console.log('🔧 Switching to tool:', toolName);
+        const success = toolController.switchToTool(toolName);
+
+        if (success) {
+            console.log('✅ Tool switched successfully to:', toolName);
+        } else {
+            console.warn('❌ Failed to switch to tool:', toolName);
+        }
+    }
+
+    /**
+     * Handle object selection from Svelte UI
+     */
+    function handleObjectSelection(objectId) {
+        const sceneController = window.modlerComponents?.sceneController;
+        const selectionController = window.modlerComponents?.selectionController;
+
+        if (!sceneController || !selectionController) {
+            console.warn('❌ Scene or Selection controller not available for object selection');
+            return;
+        }
+
+        // Find object by ID and select it
+        const objectData = sceneController.getObjectById(objectId);
+        if (objectData && objectData.mesh) {
+            selectionController.select(objectData.mesh);
+            console.log('✅ Object selected from UI:', objectData.name);
+        } else {
+            console.warn('❌ Object not found for selection:', objectId);
+        }
+    }
+
+    /**
+     * Handle property updates from Svelte UI
+     */
+    function handlePropertyUpdate(objectId, property, value) {
+        const sceneController = window.modlerComponents?.sceneController;
+
+        if (!sceneController) {
+            console.warn('❌ SceneController not available for property update');
+            return;
+        }
+
+        const objectData = sceneController.getObjectById(objectId);
+        if (objectData && objectData.mesh) {
+            // Apply property update based on type
+            switch (property) {
+                case 'position.x':
+                case 'position.y':
+                case 'position.z':
+                    const axis = property.split('.')[1];
+                    objectData.mesh.position[axis] = parseFloat(value);
+                    break;
+                case 'rotation.x':
+                case 'rotation.y':
+                case 'rotation.z':
+                    const rotAxis = property.split('.')[1];
+                    objectData.mesh.rotation[rotAxis] = parseFloat(value);
+                    break;
+                case 'scale.x':
+                case 'scale.y':
+                case 'scale.z':
+                    const scaleAxis = property.split('.')[1];
+                    objectData.mesh.scale[scaleAxis] = parseFloat(value);
+                    break;
+                default:
+                    console.warn('❌ Unknown property update:', property);
+                    return;
+            }
+
+            // Notify system of object modification
+            if (window.notifyObjectModified) {
+                window.notifyObjectModified(objectData.mesh, 'property-change');
+            }
+
+            console.log('✅ Property updated:', property, '=', value, 'for', objectData.name);
+        } else {
+            console.warn('❌ Object not found for property update:', objectId);
+        }
+    }
+
+    /**
+     * Handle container creation from Svelte UI
+     */
+    function handleContainerCreate(data) {
+        const containerCrudManager = window.modlerComponents?.containerCrudManager;
+
+        if (!containerCrudManager) {
+            console.warn('❌ ContainerCrudManager not available for container creation');
+            return;
+        }
+
+        console.log('📦 Creating container from UI:', data);
+        // Container creation logic would go here
+        // This depends on the specific container creation API
     }
 
     /**
@@ -75,7 +219,8 @@
         panelManager.createLeftOverlay();
         panelManager.createRightOverlay();
         panelManager.createMainToolbar();
-        panelManager.createSystemToolbar();
+        // Disabled: System toolbar creates duplicate floating snap button over properties panel
+        // panelManager.createSystemToolbar();
     }
 
     /**
@@ -114,19 +259,13 @@
 
             // Initial data sync - send all scene objects to populate object list
             const sceneController = window.modlerComponents?.sceneController;
-            console.log('🔍 DEBUG: Checking sceneController:', !!sceneController);
-            console.log('🔍 DEBUG: getAllObjects method exists:', !!(sceneController && sceneController.getAllObjects));
 
             if (sceneController && sceneController.getAllObjects) {
                 const allObjects = sceneController.getAllObjects();
-                console.log('🔍 DEBUG: getAllObjects returned:', allObjects);
                 console.log('📋 Found scene objects:', allObjects.length);
 
                 if (allObjects && allObjects.length > 0) {
-                    console.log('🔍 DEBUG: First object structure:', allObjects[0]);
                     const allMeshes = allObjects.map(obj => obj.mesh).filter(mesh => mesh);
-                    console.log('🔍 DEBUG: Meshes extracted:', allMeshes.length);
-                    console.log('🔍 DEBUG: First mesh:', allMeshes[0]);
 
                     if (allMeshes.length > 0) {
                         console.log('📋 Sending scene objects to populate object list:', allMeshes.length);
@@ -139,7 +278,6 @@
                 }
             } else {
                 console.warn('❌ SceneController or getAllObjects not available');
-                console.log('🔍 DEBUG: window.modlerComponents:', window.modlerComponents);
             }
 
             // Also sync current selection
@@ -275,170 +413,237 @@
         initialize();
     }
 
+
     /**
-     * Test PostMessage communication
+     * Bridge functions for backward compatibility with legacy selection system
      */
-    function testPostMessage() {
-        console.log('🧪 Testing PostMessage communication...');
 
-        if (!panelManager) {
-            console.error('❌ PanelManager not available');
-            return;
-        }
+    // Bridge function: Update property panel when object is selected/deselected
+    window.updatePropertyPanelFromObject = function(selectedMesh) {
+        if (!dataSync) return;
 
-        const iframes = panelManager.getIframes();
-        console.log('🧪 Available iframes:', Object.keys(iframes));
-
-        // Test sending to left panel
-        if (iframes.left && iframes.left.contentWindow) {
-            try {
-                console.log('🧪 Sending test message to left panel');
-                iframes.left.contentWindow.postMessage({
-                    type: 'data-update',
-                    data: {
-                        selectedObjects: [
-                            {
-                                id: 'test-1',
-                                name: 'Test Object 1',
-                                type: 'box',
-                                position: { x: 0, y: 0, z: 0 }
-                            },
-                            {
-                                id: 'test-2',
-                                name: 'Test Object 2',
-                                type: 'box',
-                                position: { x: 1, y: 1, z: 1 }
-                            }
-                        ],
-                        updateType: 'communication-test',
-                        timestamp: Date.now()
-                    }
-                }, '*');
-                console.log('✅ Test message sent to left panel');
-            } catch (error) {
-                console.error('❌ Failed to send test message to left panel:', error);
-            }
+        if (selectedMesh) {
+            // Send the selected object to Svelte panels
+            dataSync.sendFullDataUpdate([selectedMesh], 'legacy-selection');
         } else {
-            console.error('❌ Left panel iframe not available');
+            // Clear property panel
+            dataSync.sendFullDataUpdate([], 'legacy-clear-selection');
         }
-    }
+    };
 
-    /**
-     * Create a debug button for easy testing
-     */
-    function createDebugButton() {
-        // Create container for multiple buttons
-        const container = document.createElement('div');
-        container.style.cssText = `
-            position: fixed;
-            top: 80px;
-            left: 50%;
-            transform: translateX(-50%);
-            display: flex;
-            gap: 10px;
-            z-index: 1000000;
-        `;
+    // Bridge function: Update object list selection (already handled by dataSync but keeping for compatibility)
+    window.updateObjectListSelection = function(selectedNames) {
+        console.log('📋 Object list selection update:', selectedNames);
+        // This is handled automatically by sendFullDataUpdate, but we can add specific logic if needed
+    };
 
-        // Test PostMessage button
-        const testButton = document.createElement('button');
-        testButton.textContent = 'Test PostMessage';
-        testButton.style.cssText = `
-            background: #10B981;
-            color: white;
-            padding: 10px 20px;
-            border: none;
-            border-radius: 6px;
-            font-family: Arial, sans-serif;
-            font-size: 14px;
-            font-weight: 500;
-            cursor: pointer;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-        `;
-        testButton.addEventListener('click', testPostMessage);
+    // Bridge function: Populate object list in left panel
+    window.populateObjectList = function() {
+        if (!dataSync) return;
 
-        // Create test box button
-        const createButton = document.createElement('button');
-        createButton.textContent = 'Create Test Box';
-        createButton.style.cssText = `
-            background: #3B82F6;
-            color: white;
-            padding: 10px 20px;
-            border: none;
-            border-radius: 6px;
-            font-family: Arial, sans-serif;
-            font-size: 14px;
-            font-weight: 500;
-            cursor: pointer;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-        `;
-        createButton.addEventListener('click', createTestBox);
-
-        container.appendChild(testButton);
-        container.appendChild(createButton);
-        document.body.appendChild(container);
-
-        // Auto-remove after 15 seconds
-        setTimeout(() => {
-            if (container.parentNode) {
-                container.remove();
-            }
-        }, 15000);
-    }
-
-    /**
-     * Create a test box for debugging data flow
-     */
-    function createTestBox() {
         const sceneController = window.modlerComponents?.sceneController;
-        if (!sceneController) {
-            console.warn('❌ SceneController not available for test box creation');
-            return;
-        }
+        if (!sceneController) return;
 
         try {
-            console.log('🔧 Creating test box...');
+            const allObjects = sceneController.getAllObjects();
+            console.log('📋 Populating object list with', allObjects.length, 'objects');
 
-            // Create box geometry and material
-            const geometry = new THREE.BoxGeometry(1, 1, 1);
-            const material = new THREE.MeshLambertMaterial({ color: 0x00ff00 });
+            if (allObjects && allObjects.length > 0) {
+                const allMeshes = allObjects.map(obj => obj.mesh).filter(mesh => mesh);
+                if (allMeshes.length > 0) {
+                    dataSync.sendFullDataUpdate(allMeshes, 'object-list-populate');
+                } else {
+                    // Send empty update to clear list
+                    dataSync.sendFullDataUpdate([], 'object-list-clear');
+                }
+            } else {
+                // Send empty update to clear list
+                dataSync.sendFullDataUpdate([], 'object-list-clear');
+            }
+        } catch (error) {
+            console.warn('❌ Error populating object list:', error);
+        }
+    };
 
-            // Add the box to the scene using SceneController
-            const boxData = sceneController.addObject(geometry, material, {
-                type: 'box',
-                name: 'Test Box',
-                position: { x: 0, y: 0.5, z: 0 }
-            });
+    // Bridge function: Notify object hierarchy changed (containers, parents, children)
+    window.notifyObjectHierarchyChanged = function() {
+        if (!dataSync) return;
 
-            console.log('🔧 Created test box:', boxData);
+        console.log('🌳 Object hierarchy changed - updating all panels');
 
-            // Position the mesh if returned
-            if (boxData && boxData.mesh) {
-                boxData.mesh.position.set(0, 0.5, 0);
+        // Update the full object list to reflect hierarchy changes
+        window.populateObjectList();
+
+        // Also update current selection to reflect any hierarchy changes
+        const selectionController = window.modlerComponents?.selectionController;
+        if (selectionController) {
+            const currentSelection = Array.from(selectionController.selectedObjects || []);
+            if (currentSelection.length > 0) {
+                dataSync.sendFullDataUpdate(currentSelection, 'hierarchy-change-selection');
+            }
+        }
+    };
+
+    // Bridge function: Notify object modified (properties, transforms, etc.)
+    window.notifyObjectModified = function(objectOrId, modificationType = 'geometry') {
+        if (!dataSync) return;
+
+        const sceneController = window.modlerComponents?.sceneController;
+        if (!sceneController) return;
+
+        try {
+            let targetObject = null;
+
+            // Handle both object and ID inputs
+            if (typeof objectOrId === 'string' || typeof objectOrId === 'number') {
+                // ID passed - find the object
+                const objectData = sceneController.getObjectById(objectOrId);
+                targetObject = objectData ? objectData.mesh : null;
+            } else {
+                // Object passed directly
+                targetObject = objectOrId;
             }
 
-            // Trigger data sync after a short delay
-            setTimeout(() => {
-                const allObjects = sceneController.getAllObjects();
-                console.log('🔧 Objects after test box creation:', allObjects.length);
+            if (targetObject) {
+                console.log('🔄 Object modified:', targetObject.userData?.name || 'Unknown', 'Type:', modificationType);
 
-                if (dataSync && allObjects.length > 0) {
-                    const meshes = allObjects.map(obj => obj.mesh).filter(mesh => mesh);
-                    console.log('🔧 Triggering manual data sync with meshes:', meshes.length);
-                    dataSync.sendFullDataUpdate(meshes, 'manual-test');
+                // Send specific update based on modification type
+                dataSync.sendFullDataUpdate([targetObject], `object-modified-${modificationType}`);
+
+                // If this is the currently selected object, also update property panel
+                const selectionController = window.modlerComponents?.selectionController;
+                if (selectionController && selectionController.selectedObjects.has(targetObject)) {
+                    dataSync.sendFullDataUpdate([targetObject], 'property-update');
                 }
-            }, 100);
+            }
         } catch (error) {
-            console.error('❌ Error creating test box:', error);
+            console.warn('❌ Error notifying object modification:', error);
         }
-    }
+    };
+
+    // Bridge function: Update scene background from configuration
+    window.updateSceneBackground = function(backgroundColor) {
+        console.log('🎨 Scene background update:', backgroundColor);
+
+        const scene = window.modlerComponents?.scene;
+        if (!scene) return;
+
+        try {
+            // Parse color and update scene background
+            if (typeof backgroundColor === 'string') {
+                const colorHex = parseInt(backgroundColor.replace('#', ''), 16);
+                scene.background = new THREE.Color(colorHex);
+            } else if (typeof backgroundColor === 'number') {
+                scene.background = new THREE.Color(backgroundColor);
+            }
+
+            // Notify panels of background change if needed
+            if (dataSync) {
+                const bgData = {
+                    backgroundColor: backgroundColor,
+                    timestamp: Date.now()
+                };
+
+                const iframes = panelManager.getIframes();
+                Object.values(iframes).forEach(iframe => {
+                    if (iframe && iframe.contentWindow) {
+                        try {
+                            iframe.contentWindow.postMessage({
+                                type: 'background-update',
+                                data: bgData
+                            }, '*');
+                        } catch (error) {
+                            console.warn('Failed to send background update:', error);
+                        }
+                    }
+                });
+            }
+        } catch (error) {
+            console.warn('❌ Error updating scene background:', error);
+        }
+    };
+
+    // Bridge function: Update config UI from values
+    window.updateConfigUIFromValues = function(configValues) {
+        if (!dataSync || !panelManager) return;
+
+        console.log('⚙️ Config UI update:', Object.keys(configValues || {}).length, 'values');
+
+        try {
+            const configData = {
+                config: configValues || {},
+                timestamp: Date.now()
+            };
+
+            const iframes = panelManager.getIframes();
+            Object.values(iframes).forEach(iframe => {
+                if (iframe && iframe.contentWindow) {
+                    try {
+                        iframe.contentWindow.postMessage({
+                            type: 'config-update',
+                            data: configData
+                        }, '*');
+                    } catch (error) {
+                        console.warn('Failed to send config update:', error);
+                    }
+                }
+            });
+        } catch (error) {
+            console.warn('❌ Error updating config UI:', error);
+        }
+    };
+
+    // Bridge function: Update property panel dimensions (for box creation tool)
+    window.updatePropertyPanelDimensions = function(width, height, depth) {
+        if (!dataSync || !panelManager) return;
+
+        console.log('📏 Property panel dimensions update:', { width, height, depth });
+
+        try {
+            const dimensionData = {
+                dimensions: { width, height, depth },
+                timestamp: Date.now()
+            };
+
+            const iframes = panelManager.getIframes();
+            Object.values(iframes).forEach(iframe => {
+                if (iframe && iframe.contentWindow) {
+                    try {
+                        iframe.contentWindow.postMessage({
+                            type: 'dimension-update',
+                            data: dimensionData
+                        }, '*');
+                    } catch (error) {
+                        console.warn('Failed to send dimension update:', error);
+                    }
+                }
+            });
+        } catch (error) {
+            console.warn('❌ Error updating property panel dimensions:', error);
+        }
+    };
+
+    // Bridge function: Update selected object info (for creation tools)
+    window.updateSelectedObjectInfo = function(object) {
+        if (!dataSync) return;
+
+        console.log('📋 Selected object info update:', object?.userData?.name || 'Unknown');
+
+        try {
+            if (object) {
+                dataSync.sendFullDataUpdate([object], 'creation-object-info');
+            }
+        } catch (error) {
+            console.warn('❌ Error updating selected object info:', error);
+        }
+    };
 
     // Export for debugging/external access
     window.SvelteIntegration = {
         portDetector: () => portDetector,
         panelManager: () => panelManager,
         dataSync: () => dataSync,
-        reinitialize: initialize,
-        createTestBox: createTestBox
+        reinitialize: initialize
     };
 
 })();

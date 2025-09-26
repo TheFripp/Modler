@@ -5,9 +5,9 @@
 		<meta name="viewport" content="width=device-width, initial-scale=1" />
 		%sveltekit.head%
 		<style>
-			/* Prevent white flash by setting dark background immediately */
-			body {
-				background-color: #0f0f23;
+			/* Prevent flicker by setting transparent background immediately */
+			html, body {
+				background: transparent !important;
 				color: #e5e7eb;
 				margin: 0;
 				padding: 0;

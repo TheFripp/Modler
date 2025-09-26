@@ -259,6 +259,8 @@ class SveltePanelManager {
             top: 20px;
             left: 50%;
             transform: translateX(-50%);
+            width: 400px;
+            height: 120px;
             z-index: 100000;
             background: transparent;
             pointer-events: auto;

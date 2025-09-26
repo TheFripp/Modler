@@ -117,7 +117,7 @@ class SvelteDataSync {
      */
     sendDataToSveltePanels(data) {
         const iframes = this.panelManager.getIframes();
-        console.log('🔄 Sending data to Svelte panels:', data.updateType, 'Objects:', data.selectedObjects.length);
+        // Sending data to Svelte panels
 
         // Send to property panel (right)
         if (iframes.right && iframes.right.contentWindow) {
@@ -126,7 +126,7 @@ class SvelteDataSync {
                     type: 'data-update',
                     data: data
                 }, '*');
-                console.log('✅ Sent to property panel');
+                // Sent to property panel
             } catch (error) {
                 console.warn('Failed to send data to property panel:', error);
             }
@@ -139,7 +139,7 @@ class SvelteDataSync {
                     type: 'data-update',
                     data: data
                 }, '*');
-                console.log('✅ Sent to left panel');
+                // Sent to left panel
             } catch (error) {
                 console.warn('Failed to send data to left panel:', error);
             }
@@ -157,16 +157,17 @@ class SvelteDataSync {
             }
         }
 
-        if (iframes.systemToolbar && iframes.systemToolbar.contentWindow) {
-            try {
-                iframes.systemToolbar.contentWindow.postMessage({
-                    type: 'data-update',
-                    data: data
-                }, '*');
-            } catch (error) {
-                console.warn('Failed to send data to system toolbar:', error);
-            }
-        }
+        // System toolbar disabled to prevent duplicate snap button UI
+        // if (iframes.systemToolbar && iframes.systemToolbar.contentWindow) {
+        //     try {
+        //         iframes.systemToolbar.contentWindow.postMessage({
+        //             type: 'data-update',
+        //             data: data
+        //         }, '*');
+        //     } catch (error) {
+        //         console.warn('Failed to send data to system toolbar:', error);
+        //     }
+        // }
     }
 
     /**
@@ -186,7 +187,7 @@ class SvelteDataSync {
      * Handle property update from Svelte UI
      */
     handlePropertyUpdate(objectId, property, value, source = 'input') {
-        console.log('🔧 handlePropertyUpdate called:', { objectId, property, value, source });
+        // Handling property update
 
         const sceneController = window.modlerComponents?.sceneController;
         if (!sceneController) {
@@ -201,7 +202,7 @@ class SvelteDataSync {
             return;
         }
 
-        console.log('🔧 Object found for property update:', objectData);
+        // Object found for property update
         const mesh = objectData.mesh;
 
         // Apply the property update based on type
@@ -229,8 +230,10 @@ class SvelteDataSync {
                 const newRotation = mesh.rotation.clone();
                 newRotation[rotAxis] = parseFloat(value);
 
-                if (transformationManager) {
-                    transformationManager.setRotation(mesh, newRotation, { source: 'svelte-ui' });
+                // Use TransformationManager for centralized transforms
+                const rotationTransformationManager = window.modlerComponents?.transformationManager;
+                if (rotationTransformationManager) {
+                    rotationTransformationManager.setRotation(mesh, newRotation, { source: 'svelte-ui' });
                 } else {
                     mesh.rotation[rotAxis] = parseFloat(value);
                 }
@@ -315,11 +318,7 @@ class SvelteDataSync {
             sceneController.updateObject(mesh);
         }
 
-        // Handle visual updates
-        const meshSynchronizer = window.modlerComponents?.meshSynchronizer;
-        if (meshSynchronizer) {
-            meshSynchronizer.syncAllRelatedMeshes(mesh, changeType === 'dimension' ? 'geometry' : 'transform');
-        }
+        // Handle visual updates (legacy meshSynchronizer removed - support meshes now self-contained children)
 
         // Send updated data back to Svelte panels (throttled)
         this._throttledPropertyUpdate(mesh, changeType);
@@ -354,7 +353,7 @@ class SvelteDataSync {
             this._handleSvelteMessage(event);
         });
 
-        console.log('✅ Data synchronization setup complete');
+        // Data synchronization setup complete
     }
 
     /**
@@ -367,7 +366,7 @@ class SvelteDataSync {
 
         switch (type) {
             case 'property-update':
-                console.log('🔧 Received property-update message:', data);
+                // Received property-update message
                 if (data.objectId && data.property !== undefined && data.value !== undefined) {
                     this.handlePropertyUpdate(data.objectId, data.property, data.value, data.source);
                 } else {
