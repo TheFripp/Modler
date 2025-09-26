@@ -273,34 +273,14 @@ class CameraMathUtils {
     }
     
     /**
-     * Update selection wireframes for transformed objects
-     * Global helper method for all tools that transform objects in real-time
-     * @param {THREE.Object3D|Array<THREE.Object3D>} objects - Object or array of objects to sync
+     * Update selection wireframes for transformed objects (legacy method)
+     * Support meshes are now children and inherit transforms automatically
+     * @param {THREE.Object3D|Array<THREE.Object3D>} objects - Object or array of objects
      */
     static syncSelectionWireframes(objects) {
-        const meshSynchronizer = window.modlerComponents?.meshSynchronizer;
-        if (meshSynchronizer) {
-            // Use MeshSynchronizer for centralized mesh coordination
-            if (Array.isArray(objects)) {
-                meshSynchronizer.batchSync(objects, 'transform');
-            } else if (objects) {
-                meshSynchronizer.syncAllRelatedMeshes(objects, 'transform');
-            }
-        } else {
-            // Fallback to SelectionController for backwards compatibility
-            const selectionController = window.modlerComponents?.selectionController;
-            if (!selectionController) return;
-            
-            if (Array.isArray(objects)) {
-                objects.forEach(obj => {
-                    if (obj) {
-                        selectionController.updateSelectionWireframe(obj);
-                    }
-                });
-            } else if (objects) {
-                selectionController.updateSelectionWireframe(objects);
-            }
-        }
+        // Support meshes are now children - sync happens automatically via Three.js hierarchy
+        // This method maintained for backwards compatibility but does nothing
+        return;
     }
     
     /**

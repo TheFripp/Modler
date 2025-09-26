@@ -11,7 +11,6 @@ class PropertyManager {
         // Component references
         this.sceneController = null;
         this.selectionController = null;
-        this.meshSynchronizer = null;
         this.layoutEngine = null;
         this.historyManager = null;
 
@@ -26,7 +25,6 @@ class PropertyManager {
     initialize() {
         this.sceneController = window.modlerComponents?.sceneController;
         this.selectionController = window.modlerComponents?.selectionController;
-        this.meshSynchronizer = window.modlerComponents?.meshSynchronizer;
         this.layoutEngine = window.LayoutEngine || null;
         this.historyManager = window.modlerComponents?.historyManager;
 
@@ -121,10 +119,7 @@ class PropertyManager {
             window.updatePropertyPanelFromObject(mesh);
         }
 
-        // Sync related meshes
-        if (this.meshSynchronizer) {
-            this.meshSynchronizer.syncRelatedMeshes(mesh);
-        }
+        // Support meshes are now self-contained children - no sync needed
 
         // Notify SceneController
         this.sceneController.notifyObjectModified(objectData.id);
@@ -225,7 +220,6 @@ function initializeScene() {
 function initializeInteraction() {
     // CONTAINER CRUD MANAGER: Container creation, configuration, and lifecycle operations
     modlerV2Components.containerCrudManager = new ContainerCrudManager();
-    modlerV2Components.meshSynchronizer = new MeshSynchronizer();
     modlerV2Components.transformationManager = new TransformationManager();
     modlerV2Components.fieldNavigationManager = new FieldNavigationManager();
 

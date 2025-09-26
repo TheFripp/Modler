@@ -41,7 +41,7 @@
 **Seamless Integration Principle**
 - New centralized systems integrate with existing architecture without breaking changes
 - Fallback mechanisms maintain compatibility during transition periods
-- Existing systems (PositionTransform, MeshSynchronizer) become integration partners, not replaced
+- Existing systems (PositionTransform, SupportMeshFactory) become integration partners, not replaced
 
 **TransformationManager + PositionTransform Integration**
 - TransformationManager handles basic transforms (position, rotation, scale)
@@ -105,7 +105,7 @@
 ## Integration Guidelines
 
 ### Existing System Integration
-- **Don't Replace**: Well-functioning systems (PositionTransform, MeshSynchronizer)
+- **Don't Replace**: Well-functioning systems (PositionTransform, SupportMeshFactory)
 - **Do Integrate**: New centralized systems become partners, not replacements
 - **Maintain Boundaries**: Clear interfaces between centralized and existing systems
 

@@ -206,12 +206,7 @@ class MovementUtils {
             window.notifyObjectModified(object, changeType);
         }
 
-        // Update related meshes through MeshSynchronizer
-        // Use immediate sync for visual updates during real-time operations
-        const meshSynchronizer = window.modlerComponents?.meshSynchronizer;
-        if (meshSynchronizer) {
-            meshSynchronizer.syncAllRelatedMeshes(object, changeType, immediateVisuals);
-        }
+        // Support meshes are now children and inherit transforms automatically
     }
 
     /**

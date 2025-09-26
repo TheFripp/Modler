@@ -44,7 +44,7 @@ Key method signatures and concepts for Modler V2 components. For implementation 
 **Key Integration Points**:
 - Uses GeometryFactory for wireframe creation
 - Uses MaterialManager for selection materials
-- Integrates with MeshSynchronizer for related mesh updates
+- Support meshes are self-contained children, inherit transforms automatically
 - Handles container, object, and face visualization uniformly
 
 **File**: `interaction/visualization-manager.js` (230 lines)
@@ -69,17 +69,12 @@ Key method signatures and concepts for Modler V2 components. For implementation 
 
 **File**: `interaction/selection-controller.js`
 
-### MeshSynchronizer
-**Purpose**: Centralized coordination for related meshes
+### Support Mesh Architecture (Legacy MeshSynchronizer Removed)
+**Purpose**: Support meshes are now self-contained children, inheriting transforms automatically
 
-**Key Methods**:
-- `registerRelatedMesh(mainMesh, relatedMesh, syncType, options)` → void
-- `unregisterRelatedMesh(mainMesh, relatedMesh)` → void
-- `syncAllRelatedMeshes(mainMesh, syncType)` → void
+**Architecture**: Support meshes are created once as children and inherit all parent transforms via Three.js hierarchy. No manual synchronization needed.
 
-**Sync Types**: `'position'`, `'transform'`, `'visibility'`, `'geometry'`, `'highlight'`
-
-**File**: `interaction/mesh-synchronizer.js`
+**File**: `interaction/support-mesh-factory.js`
 
 ## Tool System
 

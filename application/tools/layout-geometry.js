@@ -595,13 +595,7 @@ class LayoutGeometry {
             supportMeshFactory.updateSupportMeshGeometries(containerMesh);
         }
 
-        // CRITICAL FIX: Force MeshSynchronizer to update all related meshes after geometry change
-        // This ensures selection wireframes and other related meshes get updated geometry
-        const meshSynchronizer = window.modlerComponents?.meshSynchronizer;
-        if (meshSynchronizer) {
-            // Force geometry sync for all related meshes (selection wireframes, etc.)
-            meshSynchronizer.syncAllRelatedMeshes(containerMesh, 'geometry');
-        }
+        // Support meshes are now children and inherit geometry changes automatically
         
         return true;
     }

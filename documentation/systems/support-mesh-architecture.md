@@ -45,9 +45,9 @@ Support meshes are created through centralized factory systems for consistency a
 ## Architecture Rules
 
 - **NEVER create support meshes dynamically** - they exist as children from object creation
-- **NEVER modify support mesh geometry directly** - update parent geometry and trigger sync
+- **NEVER modify support mesh geometry directly** - update parent geometry via SupportMeshFactory
 - **ALWAYS use `visible` property** for show/hide operations
-- **ALWAYS use MeshSynchronizer** for geometry updates that affect support meshes
+- Support meshes inherit all transforms automatically as Three.js children
 
 ## Coordinate Space Consistency
 
@@ -80,5 +80,5 @@ supportMesh.position.copy(parentObject.position);  // Unnecessary and error-pron
 - ✅ All object creation goes through SceneController.addObject()
 - ✅ Support meshes created only once at object creation
 - ✅ Visualization systems show/hide pre-created meshes
-- ✅ Geometry updates trigger MeshSynchronizer updates
+- ✅ Geometry updates handled by SupportMeshFactory
 - ✅ Object deletion cleans up support meshes

@@ -428,7 +428,6 @@ class PropertyManager {
             initialized: this.initialized,
             hasSceneController: !!this.sceneController,
             hasSelectionController: !!this.selectionController,
-            hasMeshSynchronizer: !!this.meshSynchronizer,
             hasLayoutEngine: !!this.layoutEngine,
             throttleCount: this.updateThrottles.size
         };

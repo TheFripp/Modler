@@ -27,7 +27,7 @@ CAD software with rule-based parametric design and intelligent 3D auto-layout sy
 - **UI ↔ 3D Communication**: Svelte stores + event system, real-time sync via `notifyObjectModified()`
 - **Container Creation**: Direct command (Cmd+F) → ToolController → ContainerManager
 - **Layout Mode**: Property-panel driven, NOT tool-driven
-- **Mesh Synchronization**: Centralized via MeshSynchronizer, all related meshes update together
+- **Mesh Synchronization**: Support meshes are self-contained children, inherit transforms automatically
 
 ## Development Standards
 - **Implementation**: Direct solutions, no over-engineering, support mesh principle

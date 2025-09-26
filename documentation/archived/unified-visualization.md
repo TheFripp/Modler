@@ -1,5 +1,7 @@
 # Unified Visualization Architecture
 
+> **⚠️ ARCHIVED DOCUMENTATION** - MeshSynchronizer references in this document are outdated. Support meshes are now self-contained children that inherit transforms automatically via Three.js hierarchy.
+
 ## Overview
 
 The unified visualization architecture replaces multiple competing visualization systems with a clean, object-oriented approach that handles all selection states, wireframes, and visual effects for both regular objects and containers.

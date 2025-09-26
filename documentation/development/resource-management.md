@@ -62,10 +62,10 @@
 - Shared configuration integration patterns
 - No direct dependencies between factories
 
-**TransformationManager ↔ MeshSynchronizer**:
-- TransformationManager triggers mesh synchronization automatically
-- Clear boundary: transforms vs. mesh relationships
-- Integration through notification patterns, not direct coupling
+**TransformationManager ↔ Support Meshes**:
+- Support meshes inherit transforms automatically as Three.js children
+- Clear boundary: geometry transforms vs. visualization
+- No synchronization needed - children follow parent automatically
 
 **All Factories ↔ VisualizationResourcePool**:
 - Factories register resources with pool for lifecycle management
@@ -75,13 +75,13 @@
 ### Legacy System Integration
 **Preserve Existing Architecture**:
 - PositionTransform handles complex coordinate conversions
-- MeshSynchronizer manages mesh relationships
+- Support meshes are self-contained children
 - New factories integrate as partners, not replacements
 
 **Clear Integration Points**:
 - TransformationManager calls PositionTransform for complex operations
 - MaterialManager integrates with ConfigurationManager for settings
-- GeometryFactory works with MeshSynchronizer for related geometry updates
+- GeometryFactory works with SupportMeshFactory for geometry updates
 
 ## Decision Framework for Resource Management
 
@@ -138,7 +138,7 @@ this.transformationManager.setPosition(mesh, new THREE.Vector3(x, y, z));
 ### Integration Pattern Compliance
 **Correct Integration**:
 - Factories are used by all layers above Foundation layer
-- Existing systems (PositionTransform, MeshSynchronizer) remain unchanged
+- Existing systems (PositionTransform, SupportMeshFactory) remain unchanged
 - Integration happens through well-defined interfaces
 
 **Violation Prevention**:
@@ -225,7 +225,7 @@ class SomeComponent {
 
 **Debugging Approach**:
 - Check factory usage patterns first
-- Verify integration with existing systems (MeshSynchronizer, PositionTransform)
+- Verify integration with existing systems (SupportMeshFactory, PositionTransform)
 - Monitor resource pool statistics for unusual patterns
 
 ## Evolution Guidelines

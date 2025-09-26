@@ -68,20 +68,16 @@
 - `setParentContainer(objectId, parentId, updateLayout)` → `boolean` - Set parent relationship
 - `updateObject(objectId, updates)` → `boolean` - Update object metadata
 
-## MeshSynchronizer
-**File**: `interaction/mesh-synchronizer.js`
+## Support Mesh Architecture (Legacy MeshSynchronizer Removed)
+**File**: `interaction/support-mesh-factory.js`
 
-### Methods
-- `registerRelatedMesh(mainMesh, relatedMesh, syncType, options)` → `void` - Register mesh relationship
-- `unregisterRelatedMesh(mainMesh, relatedMesh)` → `void` - Remove mesh relationship
-- `syncAllRelatedMeshes(mainMesh, syncType)` → `void` - Sync all related meshes
-- `syncMesh(sourceMesh, targetMesh, syncType)` → `boolean` - Sync specific meshes
+### Architecture
+Support meshes are now self-contained children that inherit all transforms automatically via Three.js hierarchy. No manual synchronization needed.
 
-### Sync Types
-- `'position'` - Synchronize position only
-- `'transform'` - Synchronize position, rotation, scale
-- `'visibility'` - Synchronize visible property
-- `'geometry'` - Synchronize geometry updates
+### Key Principle
+- Support meshes created once as children at object creation
+- All transforms inherited automatically via parent-child relationships
+- Show/hide operations only - no manual position/rotation/scale updates required
 
 ## ToolController
 **File**: `application/tool-controller.js`

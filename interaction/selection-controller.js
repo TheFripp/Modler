@@ -291,15 +291,12 @@ class SelectionController {
 
 
 
-    // Wireframe synchronization (delegates to MeshSynchronizer)
+    // Wireframe synchronization (no longer needed - support meshes are self-contained children)
     updateSelectionWireframe(object) {
         if (!object) return;
 
-        // Delegate to MeshSynchronizer for centralized mesh coordination
-        const meshSynchronizer = window.modlerComponents?.meshSynchronizer;
-        if (meshSynchronizer) {
-            meshSynchronizer.syncAllRelatedMeshes(object, 'transform');
-        }
+        // Support meshes are now children and inherit transforms automatically
+        // No manual synchronization needed
     }
 
     // Selection events

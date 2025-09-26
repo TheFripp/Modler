@@ -238,14 +238,8 @@ class MoveTool {
         }
 
         // TransformationManager handles mesh synchronization and notifications automatically
-        // Keep manual sync only as fallback when TransformationManager is not available
+        // Support meshes are now children - fallback sync no longer needed
         if (!this.transformationManager) {
-            // Update related meshes through MeshSynchronizer
-            const meshSynchronizer = window.modlerComponents?.meshSynchronizer;
-            if (meshSynchronizer) {
-                meshSynchronizer.syncAllRelatedMeshes(this.dragObject, 'transform', true);
-            }
-
             // Notify centralized system for real-time property panel updates
             if (window.notifyObjectModified) {
                 window.notifyObjectModified(this.dragObject, 'transform');

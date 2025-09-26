@@ -225,8 +225,7 @@ class ObjectVisualizer {
             // Store reference
             this.edgeHighlights.set(object, edgeMesh);
 
-            // Register with MeshSynchronizer
-            this.registerForMeshSync(object, edgeMesh);
+            // Support meshes are now children - no registration needed
 
         } catch (error) {
             console.warn('Failed to create edge highlight for object:', object.name, error);
@@ -264,8 +263,7 @@ class ObjectVisualizer {
             // FALLBACK: Clean up legacy wireframe (backward compatibility)
             console.warn('Cleaning up legacy wireframe for object:', object.name);
 
-            // Unregister from MeshSynchronizer
-            this.unregisterFromMeshSync(object, edgeMesh);
+            // Support meshes are now children - no unregistration needed
 
             // Remove from scene
             if (edgeMesh.parent) {
@@ -455,31 +453,7 @@ class ObjectVisualizer {
         return geometry;
     }
 
-    /**
-     * Register object with MeshSynchronizer for automatic updates
-     */
-    registerForMeshSync(object, edgeMesh) {
-        const meshSynchronizer = window.modlerComponents?.meshSynchronizer;
-        if (meshSynchronizer) {
-            meshSynchronizer.registerRelatedMesh(object, edgeMesh, 'selection', {
-                enabled: true,
-                description: 'Selection wireframe',
-                geometryUpdater: (mainMesh, relatedMesh) => {
-                    return this.updateWireframeGeometry(mainMesh, relatedMesh);
-                }
-            });
-        }
-    }
-
-    /**
-     * Unregister from MeshSynchronizer
-     */
-    unregisterFromMeshSync(object, edgeMesh) {
-        const meshSynchronizer = window.modlerComponents?.meshSynchronizer;
-        if (meshSynchronizer) {
-            meshSynchronizer.unregisterRelatedMesh(object, edgeMesh, 'selection');
-        }
-    }
+    // MeshSynchronizer methods removed - support meshes are now self-contained children
 
     /**
      * Update wireframe geometry when main object changes
