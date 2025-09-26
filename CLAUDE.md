@@ -24,7 +24,7 @@ CAD software with rule-based parametric design and intelligent 3D auto-layout sy
 - **Container-First Selection**: Click child → selects parent container, double-click for direct selection
 - **CAD Geometry**: ALWAYS use geometry-based manipulation, NEVER visual transforms
 - **Support Mesh Architecture**: Create once as children at object creation, then only show/hide - master object is single source of truth
-- **UI ↔ 3D Communication**: Svelte stores + event system, real-time sync via `notifyObjectModified()`
+- **UI ↔ 3D Communication**: Simplified 3-type system (selection, hierarchy, tool-state), consistent `parentContainer` field naming
 - **Container Creation**: Direct command (Cmd+F) → ToolController → ContainerManager
 - **Layout Mode**: Property-panel driven, NOT tool-driven
 - **Mesh Synchronization**: Support meshes are self-contained children, inherit transforms automatically
@@ -38,6 +38,7 @@ CAD software with rule-based parametric design and intelligent 3D auto-layout sy
 - **Container Architecture**: Never assume tool dependency for container operations
 
 ## Documentation
+Versioned documentation system with semantic versioning and currency tracking.
 See [`/documentation/README.md`](documentation/README.md) for all documentation.
 
 ## File Structure Reference

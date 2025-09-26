@@ -499,8 +499,12 @@
 
     // Bridge function: Populate object list in left panel
     window.populateObjectList = function() {
-        // populateObjectList() called
-        if (!dataSync) return;
+        console.log('📋 Main Integration: populateObjectList() called');
+        console.trace('📋 Call stack for populateObjectList:');
+        if (!dataSync) {
+            console.warn('📋 Main Integration: dataSync not available');
+            return;
+        }
 
         const sceneController = window.modlerComponents?.sceneController;
         if (!sceneController) {
@@ -513,16 +517,21 @@
             // Found ${allObjects.length} objects from SceneController
 
             if (allObjects && allObjects.length > 0) {
-                const allMeshes = allObjects.map(obj => obj.mesh).filter(mesh => mesh);
-                if (allMeshes.length > 0) {
-                    dataSync.sendFullDataUpdate(allMeshes, 'object-list-populate');
-                } else {
-                    console.log('📋 Main Integration: No meshes found, sending clear');
-                    dataSync.sendFullDataUpdate([], 'object-list-clear');
-                }
+                console.log(`📋 Main Integration: Sending ${allObjects.length} objects to hierarchy`);
+                // Serialize objects for hierarchy update
+                const serializedObjects = allObjects.map(obj => dataSync.serializeThreeObject(obj.mesh)).filter(Boolean);
+                dataSync.sendDataToSveltePanels({
+                    updateType: 'hierarchy-changed',
+                    objectHierarchy: serializedObjects,
+                    timestamp: Date.now()
+                });
             } else {
-                console.log('📋 Main Integration: No objects found, sending clear');
-                dataSync.sendFullDataUpdate([], 'object-list-clear');
+                console.log('📋 Main Integration: No objects found, sending empty hierarchy');
+                dataSync.sendDataToSveltePanels({
+                    updateType: 'hierarchy-changed',
+                    objectHierarchy: [],
+                    timestamp: Date.now()
+                });
             }
         } catch (error) {
             console.warn('❌ Error populating object list:', error);
@@ -530,21 +539,14 @@
     };
 
     // Bridge function: Notify object hierarchy changed (containers, parents, children)
+    // Simplified to only handle hierarchy updates, following 3-type system
     window.notifyObjectHierarchyChanged = function() {
         console.log('📋 Main Integration: notifyObjectHierarchyChanged() called');
         if (!dataSync) return;
 
         // Update the full object list to reflect hierarchy changes
+        // This will send hierarchy-changed updateType automatically
         window.populateObjectList();
-
-        // Also update current selection to reflect any hierarchy changes
-        const selectionController = window.modlerComponents?.selectionController;
-        if (selectionController) {
-            const currentSelection = Array.from(selectionController.selectedObjects || []);
-            if (currentSelection.length > 0) {
-                dataSync.sendFullDataUpdate(currentSelection, 'hierarchy-change-selection');
-            }
-        }
     };
 
     // Bridge function: Notify object modified (properties, transforms, etc.)
@@ -570,8 +572,21 @@
             if (targetObject) {
                 // Support mesh updates (wireframes, highlights) are handled centrally by GeometryUtils
 
-                // Send specific update based on modification type
-                dataSync.sendFullDataUpdate([targetObject], `object-modified-${modificationType}`);
+                // Handle hierarchy changes by refreshing the entire object hierarchy
+                if (modificationType === 'hierarchy') {
+                    // Refresh the entire hierarchy when parent-child relationships change
+                    const allObjects = sceneController.getAllObjects();
+                    // Serialize objects to avoid DataCloneError when sending via postMessage
+                    const serializedObjects = allObjects.map(obj => dataSync.serializeThreeObject(obj.mesh)).filter(Boolean);
+                    dataSync.sendDataToSveltePanels({
+                        updateType: 'hierarchy-changed',
+                        objectHierarchy: serializedObjects,
+                        timestamp: Date.now()
+                    });
+                } else {
+                    // Send specific update based on modification type
+                    dataSync.sendFullDataUpdate([targetObject], `object-modified-${modificationType}`);
+                }
 
                 // If this is the currently selected object, also update property panel
                 const selectionController = window.modlerComponents?.selectionController;

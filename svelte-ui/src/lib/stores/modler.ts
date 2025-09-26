@@ -36,7 +36,9 @@ export interface ContainerContext {
 
 // Core Svelte stores
 export const selectedObjects: Writable<ObjectData[]> = writable([]);
+
 export const objectHierarchy: Writable<ObjectData[]> = writable([]);
+
 export const containerContext: Writable<ContainerContext | null> = writable(null);
 export const toolState: Writable<ToolState> = writable({
 	activeTool: 'select',
@@ -219,9 +221,9 @@ function convertThreeObjectToObjectData(threeObject: any): ObjectData {
 			z: threeObject.position.z
 		},
 		rotation: {
-			x: threeObject.rotation.x,
-			y: threeObject.rotation.y,
-			z: threeObject.rotation.z
+			x: Math.round((threeObject.rotation.x * 180 / Math.PI) * 10) / 10,
+			y: Math.round((threeObject.rotation.y * 180 / Math.PI) * 10) / 10,
+			z: Math.round((threeObject.rotation.z * 180 / Math.PI) * 10) / 10
 		},
 		dimensions: objectData?.dimensions || { x: 1, y: 1, z: 1 },
 		material: objectData?.material || { color: '#ff0000', opacity: 1 },

@@ -135,6 +135,7 @@ function syncHierarchyFromSceneController(sceneController: any) {
 			obj.name !== '(Interactive)' &&
 			!obj.name?.toLowerCase().includes('interactive')
 		);
+
 		syncHierarchyFromThreeJS(filteredObjects);
 	} catch (error) {
 		console.error('❌ Error syncing hierarchy:', error);
@@ -248,130 +249,101 @@ function setupPostMessageFallback() {
 			return;
 		}
 
-		// Handle both old and new message formats
-		if (event.data && event.data.type) {
 
+		// Handle unified message format
+		if (event.data && event.data.type && event.data.data) {
 			try {
+				// All messages now use consistent data-update format
 				if (event.data.type === 'data-update') {
-					// New integration format - data is in event.data.data
-					// Handling data-update message
 					handleDataUpdate(event.data.data);
-				} else if (event.data.type === 'modler-data') {
-					// Legacy format - data is in event.data.data
-					// Handling modler-data message
-					handleModlerData(event.data.data);
 				} else if (event.data.type === 'tool-state-update') {
 					// Direct tool state update message
 					syncToolStateFromIframe(event.data.data.toolState);
 				}
+				// Note: Legacy modler-data format removed for simplification
 			} catch (error) {
 				console.error('❌ Error processing message:', error);
 			}
-		} else {
-			// Message has no type or data
 		}
 	});
 }
 
 /**
- * Handle data update from new integration system
+ * Handle data update from integration system
+ *
+ * SIMPLIFIED ARCHITECTURE: Consolidated from 9+ update types to 3 core categories:
+ * 1. SELECTION UPDATES - Only affect selectedObjects store, never hierarchy
+ * 2. HIERARCHY UPDATES - Only affect objectHierarchy store, never selection
+ * 3. TOOL STATE UPDATES - Only affect toolState store
+ *
+ * This prevents competing updates and ensures single source of truth.
+ * Field naming is consistent throughout: always 'parentContainer' not 'parent'.
  */
 function handleDataUpdate(data: any) {
-	// Debug logging removed to reduce spam during normal operations
-
-	// Update selection store (for selection changes and property refreshes)
-	if (['selection-change', 'legacy-selection', 'legacy-clear-selection', 'property-refresh'].includes(data.updateType)) {
-		// Syncing selection with objects
+	// === CORE UPDATE TYPE 1: SELECTION UPDATES ===
+	// Only affects selectedObjects store, never hierarchy
+	if (isSelectionUpdate(data.updateType)) {
 		syncSelectionFromIframe(data.selectedObjects || []);
+		return;
 	}
 
-	// Update hierarchy store - for scene-objects updates, use selectedObjects as hierarchy
-	if (data.updateType === 'scene-objects' && data.selectedObjects) {
-		// Syncing hierarchy (scene-objects)
-		syncHierarchyFromIframe(data.selectedObjects);
+	// === CORE UPDATE TYPE 2: HIERARCHY UPDATES ===
+	// Only affects objectHierarchy store, never selection
+	if (isHierarchyUpdate(data.updateType)) {
+		// Use proper hierarchy data if available, otherwise empty array
+		const hierarchyData = data.objectHierarchy || data.selectedObjects || [];
+		syncHierarchyFromIframe(hierarchyData);
+		return;
 	}
 
-	// Also sync hierarchy for manual-test updates
-	if (data.updateType === 'manual-test' && data.selectedObjects) {
-		// Syncing hierarchy (manual-test)
-		syncHierarchyFromIframe(data.selectedObjects);
+	// === CORE UPDATE TYPE 3: TOOL STATE UPDATES ===
+	if (data.updateType === 'tool-state-update' && data.toolState) {
+		syncToolStateFromIframe(data.toolState);
+		return;
 	}
 
-	// Handle communication test
-	if (data.updateType === 'communication-test' && data.selectedObjects) {
-		// Communication test successful
-		syncHierarchyFromIframe(data.selectedObjects);
-	}
-
-	// Handle object list populate/clear updates
-	if (data.updateType === 'object-list-populate' && data.selectedObjects) {
-		// Syncing hierarchy (object-list-populate)
-		syncHierarchyFromIframe(data.selectedObjects);
-	}
-
-	if (data.updateType === 'object-list-clear') {
-		// Clearing hierarchy (object-list-clear)
-		syncHierarchyFromIframe([]);
-	}
-
-	// Handle hierarchy change with selection
-	if (data.updateType === 'hierarchy-change-selection' && data.selectedObjects) {
-		// Syncing hierarchy and selection (hierarchy-change)
-		syncHierarchyFromIframe(data.selectedObjects);
-	}
-
-	// Handle initial sync (on startup/component initialization)
-	if (data.updateType === 'initial-sync' && data.selectedObjects) {
-		// Syncing hierarchy (initial-sync)
-		syncHierarchyFromIframe(data.selectedObjects);
-	}
-
-	// Update container context
+	// === ADDITIONAL CONTEXT UPDATES ===
+	// Update container context (separate from core types)
 	if (data.hasOwnProperty('containerContext')) {
 		syncContainerContextFromIframe(data.containerContext);
 	}
 
-	// Update tool state
-	if (data.toolState) {
+	// Update tool state (fallback for legacy format)
+	if (data.toolState && data.updateType !== 'tool-state-update') {
 		syncToolStateFromIframe(data.toolState);
 	}
 }
 
 /**
- * Handle data received from the main application (legacy format)
+ * Determine if update type should only affect selection
  */
-function handleModlerData(data: any) {
-	// Process modler data silently
-
-	if (data.type === 'selection-change' || data.type === 'initial-state' || data.type === 'object-modified' || data.type === 'data-update' || data.type === 'periodic-update' || data.type === 'panel-ready') {
-		// Handle selection updates
-		if (data.selectedObjects) {
-			syncSelectionFromIframe(data.selectedObjects);
-		}
-
-		// Handle hierarchy updates (now included in unified data)
-		if (data.objectHierarchy) {
-			syncHierarchyFromIframe(data.objectHierarchy);
-		}
-
-		// Handle tool state updates (included in unified data)
-		if (data.toolState) {
-			syncToolStateFromIframe(data.toolState);
-		}
-
-		// Handle container context updates (included in unified data)
-		if (data.hasOwnProperty('containerContext')) {
-			syncContainerContextFromIframe(data.containerContext);
-		}
-	} else if (data.type === 'hierarchy-changed') {
-		// Handle standalone hierarchy updates
-		syncHierarchyFromIframe(data.objectHierarchy || []);
-	} else if (data.type === 'tool-state-update') {
-		// Handle standalone tool state updates
-		console.log('🔧 Bridge: Received tool-state-update message:', data);
-		syncToolStateFromIframe(data.toolState);
-	}
+function isSelectionUpdate(updateType: string): boolean {
+	return [
+		'selection-change',
+		'legacy-selection',
+		'legacy-clear-selection',
+		'property-refresh',
+		'hierarchy-change-selection' // This should only update selection
+	].includes(updateType);
 }
+
+/**
+ * Determine if update type should only affect hierarchy
+ */
+function isHierarchyUpdate(updateType: string): boolean {
+	return [
+		'hierarchy-changed',
+		'hierarchy-update',
+		// Legacy types being consolidated:
+		'scene-objects',
+		'manual-test',
+		'communication-test',
+		'object-list-populate',
+		'object-list-clear',
+		'initial-sync'
+	].includes(updateType);
+}
+
 
 /**
  * Sync selection data that's already serialized from iframe integration
@@ -391,8 +363,6 @@ function syncSelectionFromIframe(serializedObjects: any[]) {
  * Sync object hierarchy data for the left panel
  */
 function syncHierarchyFromIframe(hierarchyObjects: any[]) {
-	// Updating object hierarchy with ${hierarchyObjects.length} objects
-
 	// Import and update the object hierarchy store
 	import('$lib/stores/modler').then(({ objectHierarchy }) => {
 		objectHierarchy.set(hierarchyObjects);

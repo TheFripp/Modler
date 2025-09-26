@@ -16,6 +16,7 @@
 	);
 
 
+
 	// Build tree structure from flat hierarchy with recursive nesting
 	$: treeStructure = buildTreeStructure(filteredHierarchy);
 
@@ -31,6 +32,7 @@
 	let customObjectOrder = new Map(); // Maps parentId to array of ordered object IDs
 
 	function buildTreeStructure(objects) {
+
 		// Create a map of all objects for easy lookup
 		const objectMap = new Map();
 		objects.forEach(obj => {
@@ -72,10 +74,13 @@
 
 			// Recursively apply ordering to children and auto-expand containers
 			objects.forEach(obj => {
-				if (obj.isContainer && obj.children.length > 0) {
-					applyOrderingToLevel(obj.children, obj.id);
-					// Auto-expand containers that have children
-					expandedContainers.add(obj.id);
+				if (obj.isContainer) {
+					if (obj.children.length > 0) {
+						applyOrderingToLevel(obj.children, obj.id);
+						// Auto-expand containers that have children
+						expandedContainers.add(obj.id);
+					}
+					// Note: containers without children can still be manually expanded via toggle
 				}
 			});
 		}
@@ -526,8 +531,8 @@
 			role="button"
 			tabindex="0">
 
-			<!-- Expand/collapse button for containers with children -->
-			{#if object.isContainer && object.children && object.children.length > 0}
+			<!-- Expand/collapse button for containers (show even for empty containers) -->
+			{#if object.isContainer}
 				<button
 					class="flex-shrink-0 w-4 h-4 flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
 					on:click|stopPropagation={() => toggleContainer(object.id)}

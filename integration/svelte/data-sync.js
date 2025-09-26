@@ -35,9 +35,9 @@ class SvelteDataSync {
                 z: parseFloat(obj.position.z.toFixed(3))
             },
             rotation: {
-                x: parseFloat(obj.rotation.x.toFixed(3)),
-                y: parseFloat(obj.rotation.y.toFixed(3)),
-                z: parseFloat(obj.rotation.z.toFixed(3))
+                x: parseFloat((obj.rotation.x * 180 / Math.PI).toFixed(1)),
+                y: parseFloat((obj.rotation.y * 180 / Math.PI).toFixed(1)),
+                z: parseFloat((obj.rotation.z * 180 / Math.PI).toFixed(1))
             },
             scale: {
                 x: parseFloat(obj.scale.x.toFixed(3)),
@@ -72,8 +72,11 @@ class SvelteDataSync {
             serialized.autoLayout = objectData.autoLayout || null;
         }
 
-        // Add parent relationship
-        serialized.parent = objectData.parent || null;
+        // Add parent relationship - use consistent field name throughout system
+        // IMPORTANT: Always use 'parentContainer' not 'parent' for consistency
+        // Scene Controller stores as 'parentContainer', UI expects 'parentContainer'
+        serialized.parentContainer = objectData.parentContainer || null;
+
 
         return serialized;
     }
@@ -229,14 +232,15 @@ class SvelteDataSync {
             case 'rotation.z':
                 const rotAxis = property.split('.')[1];
                 const newRotation = mesh.rotation.clone();
-                newRotation[rotAxis] = parseFloat(value);
+                // Convert degrees to radians since Three.js uses radians internally
+                newRotation[rotAxis] = parseFloat(value) * Math.PI / 180;
 
                 // Use TransformationManager for centralized transforms
                 const rotationTransformationManager = window.modlerComponents?.transformationManager;
                 if (rotationTransformationManager) {
                     rotationTransformationManager.setRotation(mesh, newRotation, { source: 'svelte-ui' });
                 } else {
-                    mesh.rotation[rotAxis] = parseFloat(value);
+                    mesh.rotation[rotAxis] = parseFloat(value) * Math.PI / 180;
                 }
                 break;
 
