@@ -59,17 +59,20 @@ class ToolController {
         if (!this.tools.has(toolName)) {
             return false;
         }
-        
+
+        // Clear any active face highlights from previous tool
+        this.clearActiveToolHighlights();
+
         // Deactivate current tool if there is one
         if (this.activeTool && this.activeTool.deactivate) {
             this.activeTool.deactivate();
         }
-        
+
         // Update InputController's current tool
         this.inputController.currentTool = toolName;
         this.activeTool = this.tools.get(toolName);
         this.activeToolName = toolName;
-        
+
         // Activate new tool
         if (this.activeTool && this.activeTool.activate) {
             this.activeTool.activate();

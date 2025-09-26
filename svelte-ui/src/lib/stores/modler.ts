@@ -442,9 +442,9 @@ function handleDirectPropertyUpdate(components: any, objectId: string, property:
 						geometry.computeBoundingBox();
 
 						// Update support mesh geometries to match new main geometry
-						const supportMeshFactory = (window as any).SupportMeshFactory ? new (window as any).SupportMeshFactory() : null;
-						if (supportMeshFactory) {
-							supportMeshFactory.updateSupportMeshGeometries(mesh);
+						const geometryUtils = (window as any).GeometryUtils;
+						if (geometryUtils) {
+							geometryUtils.updateSupportMeshGeometries(mesh);
 						}
 
 						// Update userData for dimension tracking
@@ -475,10 +475,10 @@ function handleDirectPropertyUpdate(components: any, objectId: string, property:
  * Ensures selection boxes stay synchronized during real-time updates
  */
 function completeObjectModification(components: any, mesh: any, changeType: string = 'transform', immediateVisuals: boolean = false) {
-	const meshSynchronizer = components.meshSynchronizer;
-
-	if (meshSynchronizer) {
-		meshSynchronizer.syncAllRelatedMeshes(mesh, changeType, immediateVisuals);
+	// Use centralized GeometryUtils for support mesh synchronization
+	const geometryUtils = (window as any).GeometryUtils;
+	if (geometryUtils) {
+		geometryUtils.updateSupportMeshGeometries(mesh);
 	} else if ((window as any).CameraMathUtils) {
 		// Fallback to legacy sync method
 		(window as any).CameraMathUtils.syncSelectionWireframes(mesh);

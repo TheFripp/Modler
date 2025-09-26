@@ -818,9 +818,9 @@ class SceneController {
             }
         }
 
-        // Update related meshes (selection wireframes, etc.) but suppress container wireframes during container context
-        const meshSynchronizer = window.modlerComponents?.meshSynchronizer;
-        if (meshSynchronizer) {
+        // Update support meshes (wireframes, highlights, etc.) but suppress container wireframes during container context
+        const geometryUtils = window.GeometryUtils;
+        if (geometryUtils) {
             // Check if we're in container context and this is the container we're stepped into
             const navigationController = window.modlerComponents?.navigationController;
             const isInContainerContext = navigationController?.isInContainerContext() || false;
@@ -831,7 +831,7 @@ class SceneController {
                 return;
             }
 
-            meshSynchronizer.syncAllRelatedMeshes(obj.mesh, 'transform', true);
+            geometryUtils.updateSupportMeshGeometries(obj.mesh);
         }
     }
 

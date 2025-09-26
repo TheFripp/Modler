@@ -496,6 +496,13 @@
 		// Enable dark mode
 		document.documentElement.classList.add('dark');
 
+		// Debug: Log object hierarchy changes (only when meaningful)
+		objectHierarchy.subscribe(hierarchy => {
+			if (hierarchy.length > 0) {
+				console.log(`📋 Left Panel: Updated with ${hierarchy.length} objects`);
+			}
+		});
+
 		// Initialize the bridge with Three.js for real-time synchronization
 		initializeBridge();
 	});

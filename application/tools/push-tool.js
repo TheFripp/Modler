@@ -478,10 +478,10 @@ class PushTool {
         const meshToUpdate = this.actualPushedMesh || this.pushedObject;
 
         // Update support mesh geometries to match modified main geometry
-        const supportMeshFactory = window.modlerComponents?.supportMeshFactory;
-        if (supportMeshFactory && meshToUpdate) {
-            // Real-time updates: Update face highlights during push operations for immediate feedback
-            supportMeshFactory.updateSupportMeshGeometries(meshToUpdate, true);
+        const geometryUtils = window.GeometryUtils;
+        if (geometryUtils && meshToUpdate) {
+            // Real-time updates: Update support meshes centrally during push operations for immediate feedback
+            geometryUtils.updateSupportMeshGeometries(meshToUpdate);
         }
 
         // Update face highlighting to match new geometry
@@ -574,10 +574,10 @@ class PushTool {
 
         // Force final selection wireframe update to ensure proper alignment
         if (pushedObject && this.selectionController.isSelected(pushedObject)) {
-            const meshSynchronizer = window.modlerComponents?.meshSynchronizer;
-            if (meshSynchronizer) {
-                // Force immediate geometry update for selection wireframes
-                meshSynchronizer.syncAllRelatedMeshes(pushedObject, 'geometry', true);
+            const geometryUtils = window.GeometryUtils;
+            if (geometryUtils) {
+                // Update all support meshes (wireframes, highlights, etc.) after geometry change
+                geometryUtils.updateSupportMeshGeometries(pushedObject);
             }
 
             // Update SceneController object data dimensions for final state
@@ -666,6 +666,20 @@ class PushTool {
 
     hasActiveHighlight() {
         return this.faceToolBehavior.hasActiveHighlight();
+    }
+
+    /**
+     * Tool activation wrapper for ToolController compatibility
+     */
+    activate() {
+        this.onToolActivate();
+    }
+
+    /**
+     * Tool deactivation wrapper for ToolController compatibility
+     */
+    deactivate() {
+        this.onToolDeactivate();
     }
 
     onToolActivate() {

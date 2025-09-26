@@ -156,6 +156,7 @@
 	let dragStartTimeout: NodeJS.Timeout | null = null;
 	let startY = 0;
 	let startValue = 0;
+	let currentDragValue = 0; // Track the final dragged value
 	let dragDirection: 'up' | 'down' | null = null;
 
 	function getNumericValue(): number {
@@ -175,6 +176,7 @@
 			dragDirection = direction;
 			startY = event.clientY;
 			startValue = getNumericValue();
+			currentDragValue = startValue; // Initialize current drag value
 			document.addEventListener('mousemove', handleDrag);
 			document.addEventListener('mouseup', stopArrowInteraction);
 			document.addEventListener('mouseleave', stopArrowInteraction);
@@ -206,10 +208,9 @@
 			isDragging = false;
 			document.removeEventListener('mousemove', handleDrag);
 
-			// Apply final validated update when drag stops for accuracy
+			// Apply final validated update when drag stops - use the tracked drag value, not getNumericValue()
 			if (objectId && property) {
-				const finalValue = getNumericValue();
-				propertyController.updateProperty(objectId, property, finalValue, 'input');
+				propertyController.updateProperty(objectId, property, currentDragValue, 'input');
 			}
 		}
 
@@ -244,6 +245,9 @@
 		// Keep full precision for the actual value, but round display to 1 decimal
 		const actualValue = constrainedValue;
 		const displayValue = Math.round(constrainedValue * 10) / 10;
+
+		// Track the current dragged value for final update
+		currentDragValue = actualValue;
 
 		// Update input value immediately for visual feedback (1 decimal for display)
 		inputValue = displayValue;

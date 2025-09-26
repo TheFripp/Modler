@@ -68,6 +68,20 @@
 - `setParentContainer(objectId, parentId, updateLayout)` → `boolean` - Set parent relationship
 - `updateObject(objectId, updates)` → `boolean` - Update object metadata
 
+## GeometryUtils
+**File**: `interaction/geometry-utils.js`
+
+### Methods
+- `scaleGeometryAlongAxis(geometry, axis, newValue)` → `boolean` - CAD-style vertex manipulation
+- `updateSupportMeshGeometries(mesh)` → `void` - Update all support meshes centrally
+- `createSphereGeometry(radius, segments)` → `THREE.Geometry` - Pooled sphere creation
+- `createBoxGeometry(width, height, depth)` → `THREE.Geometry` - Pooled box creation
+
+### Key Principle
+- Geometry-based manipulation instead of transform scaling
+- Centralized support mesh synchronization
+- Memory-efficient geometry pooling system
+
 ## Support Mesh Architecture (Legacy MeshSynchronizer Removed)
 **File**: `interaction/support-mesh-factory.js`
 

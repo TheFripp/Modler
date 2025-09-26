@@ -17,7 +17,6 @@ class TransformationManager {
         // Integration with existing systems
         this.positionTransform = null;
         this.transformNotificationUtils = null;
-        this.meshSynchronizer = null;
 
         // Performance statistics
         this.stats = {
@@ -41,14 +40,12 @@ class TransformationManager {
         // Will be set when available
         this.positionTransform = window.PositionTransform || null;
         this.transformNotificationUtils = window.TransformNotificationUtils || null;
-        this.meshSynchronizer = window.modlerComponents?.meshSynchronizer || null;
 
         // Check again after a delay for late-loading components
-        if (!this.positionTransform || !this.transformNotificationUtils || !this.meshSynchronizer) {
+        if (!this.positionTransform || !this.transformNotificationUtils) {
             setTimeout(() => {
                 this.positionTransform = window.PositionTransform || this.positionTransform;
                 this.transformNotificationUtils = window.TransformNotificationUtils || this.transformNotificationUtils;
-                this.meshSynchronizer = window.modlerComponents?.meshSynchronizer || this.meshSynchronizer;
             }, 100);
         }
     }
@@ -479,9 +476,12 @@ class TransformationManager {
                 );
             }
 
-            // Direct mesh synchronization if notification utils unavailable
-            else if (this.meshSynchronizer) {
-                this.meshSynchronizer.syncAllRelatedMeshes(object, 'transform', false);
+            // Direct support mesh update if notification utils unavailable
+            else {
+                const geometryUtils = window.GeometryUtils;
+                if (geometryUtils) {
+                    geometryUtils.updateSupportMeshGeometries(object);
+                }
             }
 
         } catch (error) {
@@ -501,7 +501,7 @@ class TransformationManager {
             integrations: {
                 positionTransform: !!this.positionTransform,
                 transformNotificationUtils: !!this.transformNotificationUtils,
-                meshSynchronizer: !!this.meshSynchronizer
+                geometryUtils: !!window.GeometryUtils
             }
         };
     }

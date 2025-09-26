@@ -277,12 +277,19 @@ function setupPostMessageFallback() {
  * Handle data update from new integration system
  */
 function handleDataUpdate(data: any) {
-	// Processing data update from main application
+	// Only log object list updates (with deduplication)
+	if (['object-list-populate', 'object-list-clear'].includes(data.updateType)) {
+		// Only log once per update to avoid duplicate logs from multiple panels
+		if (!window._lastLoggedUpdate || window._lastLoggedUpdate !== `${data.updateType}-${data.timestamp}`) {
+			console.log(`📋 Bridge: ${data.updateType} (${data.selectedObjects?.length || 0} objects)`);
+			window._lastLoggedUpdate = `${data.updateType}-${data.timestamp}`;
+		}
+	}
 
-	// Update selection store
-	if (data.selectedObjects) {
+	// Update selection store (only for actual selection changes)
+	if (['selection-change', 'legacy-selection', 'legacy-clear-selection'].includes(data.updateType)) {
 		// Syncing selection with objects
-		syncSelectionFromIframe(data.selectedObjects);
+		syncSelectionFromIframe(data.selectedObjects || []);
 	}
 
 	// Update hierarchy store - for scene-objects updates, use selectedObjects as hierarchy
@@ -300,6 +307,29 @@ function handleDataUpdate(data: any) {
 	// Handle communication test
 	if (data.updateType === 'communication-test' && data.selectedObjects) {
 		// Communication test successful
+		syncHierarchyFromIframe(data.selectedObjects);
+	}
+
+	// Handle object list populate/clear updates
+	if (data.updateType === 'object-list-populate' && data.selectedObjects) {
+		// Syncing hierarchy (object-list-populate)
+		syncHierarchyFromIframe(data.selectedObjects);
+	}
+
+	if (data.updateType === 'object-list-clear') {
+		// Clearing hierarchy (object-list-clear)
+		syncHierarchyFromIframe([]);
+	}
+
+	// Handle hierarchy change with selection
+	if (data.updateType === 'hierarchy-change-selection' && data.selectedObjects) {
+		// Syncing hierarchy and selection (hierarchy-change)
+		syncHierarchyFromIframe(data.selectedObjects);
+	}
+
+	// Handle initial sync (on startup/component initialization)
+	if (data.updateType === 'initial-sync' && data.selectedObjects) {
+		// Syncing hierarchy (initial-sync)
 		syncHierarchyFromIframe(data.selectedObjects);
 	}
 
@@ -368,11 +398,11 @@ function syncSelectionFromIframe(serializedObjects: any[]) {
  * Sync object hierarchy data for the left panel
  */
 function syncHierarchyFromIframe(hierarchyObjects: any[]) {
-	// Updating hierarchy store
+	// Updating object hierarchy with ${hierarchyObjects.length} objects
+
 	// Import and update the object hierarchy store
 	import('$lib/stores/modler').then(({ objectHierarchy }) => {
 		objectHierarchy.set(hierarchyObjects);
-		// Hierarchy store updated successfully
 	}).catch(error => {
 		console.error('❌ Failed to update hierarchy store:', error);
 	});

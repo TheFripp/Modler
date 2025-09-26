@@ -81,6 +81,11 @@ class SvelteDataSync {
      * Send full data update to all Svelte panels
      */
     sendFullDataUpdate(selectedObjects, updateType = 'data-update') {
+        // Only log object list updates
+        if (['object-list-populate', 'object-list-clear'].includes(updateType)) {
+            console.log(`📋 DataSync: ${updateType} (${selectedObjects?.length || 0} objects)`);
+        }
+
         if (!selectedObjects) return;
 
         // Serialize all objects
@@ -187,8 +192,6 @@ class SvelteDataSync {
      * Handle property update from Svelte UI
      */
     handlePropertyUpdate(objectId, property, value, source = 'input') {
-        // Handling property update
-
         const sceneController = window.modlerComponents?.sceneController;
         if (!sceneController) {
             console.warn('❌ SceneController not available for property update');
@@ -266,8 +269,15 @@ class SvelteDataSync {
                 return;
         }
 
+        // Notify the system of geometry changes for visual updates (only for dimension changes)
+        if (property.startsWith('dimensions.') && window.notifyObjectModified) {
+            window.notifyObjectModified(mesh, 'geometry');
+        }
+
         // Complete the modification with visual updates
-        this.completeObjectModification(mesh, 'property-update', true);
+        // Skip throttled update for dimension changes to prevent feedback loop
+        const skipThrottledUpdate = property.startsWith('dimensions.');
+        this.completeObjectModification(mesh, 'property-update', skipThrottledUpdate);
     }
 
     /**
@@ -276,34 +286,13 @@ class SvelteDataSync {
     _updateObjectDimension(mesh, axis, newValue) {
         if (!mesh.geometry || !mesh.geometry.parameters) return;
 
-        const params = mesh.geometry.parameters;
-        const currentDimensions = {
-            x: params.width || 1,
-            y: params.height || 1,
-            z: params.depth || 1
-        };
-
-        // Update the specific dimension
-        currentDimensions[axis] = newValue;
-
-        // Create new geometry with updated dimensions
-        const geometryFactory = window.modlerComponents?.geometryFactory;
-        if (geometryFactory && mesh.geometry.type === 'BoxGeometry') {
-            const newGeometry = geometryFactory.createBoxGeometry(
-                currentDimensions.x,
-                currentDimensions.y,
-                currentDimensions.z
-            );
-
-            // Replace the geometry
-            const oldGeometry = mesh.geometry;
-            mesh.geometry = newGeometry;
-
-            // Return old geometry to factory for cleanup
-            if (geometryFactory.returnGeometry) {
-                geometryFactory.returnGeometry(oldGeometry, 'box');
-            } else {
-                oldGeometry.dispose();
+        // Use GeometryUtils for CAD-style vertex manipulation (no geometry recreation)
+        const geometryUtils = window.GeometryUtils;
+        if (geometryUtils) {
+            const success = geometryUtils.scaleGeometryAlongAxis(mesh.geometry, axis, newValue);
+            if (success) {
+                // Update all support meshes (wireframes, highlights, etc.) centrally
+                geometryUtils.updateSupportMeshGeometries(mesh);
             }
         }
     }
@@ -311,17 +300,17 @@ class SvelteDataSync {
     /**
      * Complete object modification with proper updates
      */
-    completeObjectModification(mesh, changeType = 'transform', immediateVisuals = false) {
+    completeObjectModification(mesh, changeType = 'transform', skipThrottledUpdate = false) {
         // Update object data in SceneController
         const sceneController = window.modlerComponents?.sceneController;
         if (sceneController && sceneController.updateObject) {
             sceneController.updateObject(mesh);
         }
 
-        // Handle visual updates (legacy meshSynchronizer removed - support meshes now self-contained children)
-
-        // Send updated data back to Svelte panels (throttled)
-        this._throttledPropertyUpdate(mesh, changeType);
+        // Send updated data back to Svelte panels (throttled) - skip for dimension changes to prevent feedback loops
+        if (!skipThrottledUpdate) {
+            this._throttledPropertyUpdate(mesh, changeType);
+        }
     }
 
     /**

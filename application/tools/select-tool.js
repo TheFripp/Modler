@@ -66,6 +66,20 @@ class SelectTool {
     }
     
     /**
+     * Tool activation wrapper for ToolController compatibility
+     */
+    activate() {
+        // No special activation needed for select tool
+    }
+
+    /**
+     * Tool deactivation wrapper for ToolController compatibility
+     */
+    deactivate() {
+        this.onToolDeactivate();
+    }
+
+    /**
      * Tool deactivation cleanup
      */
     onToolDeactivate() {

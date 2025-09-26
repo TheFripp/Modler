@@ -33,16 +33,16 @@ class TransformNotificationUtils {
             }
         }
 
-        // Sync related meshes (wireframes, highlights, etc.) if enabled
+        // Sync support meshes (wireframes, highlights, etc.) if enabled
         if (syncMeshes) {
-            const meshSynchronizer = window.modlerComponents?.meshSynchronizer;
-            if (meshSynchronizer) {
+            const geometryUtils = window.GeometryUtils;
+            if (geometryUtils) {
                 // Check container context suppression
                 if (suppressContainerWireframes && this.shouldSuppressContainerWireframes(mesh)) {
                     return;
                 }
 
-                meshSynchronizer.syncAllRelatedMeshes(mesh, modificationType, true);
+                geometryUtils.updateSupportMeshGeometries(mesh);
             }
         }
     }
@@ -86,14 +86,14 @@ class TransformNotificationUtils {
     static syncRelatedMeshes(mesh, modificationType = 'transform', suppressContainerWireframes = false) {
         if (!mesh) return;
 
-        const meshSynchronizer = window.modlerComponents?.meshSynchronizer;
-        if (meshSynchronizer) {
+        const geometryUtils = window.GeometryUtils;
+        if (geometryUtils) {
             // Check container context suppression
             if (suppressContainerWireframes && this.shouldSuppressContainerWireframes(mesh)) {
                 return;
             }
 
-            meshSynchronizer.syncAllRelatedMeshes(mesh, modificationType, true);
+            geometryUtils.updateSupportMeshGeometries(mesh);
         }
     }
 

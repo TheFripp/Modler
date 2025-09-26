@@ -9,7 +9,7 @@
 ## Project Overview
 CAD software with rule-based parametric design and intelligent 3D auto-layout system. Container-based hierarchies with automatic object distribution, gap management, and constraint-based positioning.
 
-**Architecture**: 3-layer selection flow with container-first logic, render-order wireframes, and centralized mesh synchronization.
+**Architecture**: 3-layer selection flow with container-first logic, render-order wireframes, and GeometryUtils-driven support mesh updates.
 
 ## Agents (Use Only When Explicitly Requested)
 - **Architecture Guardian**: Prevent complexity creep, review architectural decisions
@@ -46,6 +46,7 @@ See [`/documentation/README.md`](documentation/README.md) for all documentation.
 - **Selection**: `/interaction/` - Selection and visualization systems
 - **UI**: `/svelte-ui/` - Svelte components and panels
 - **Support**: `/interaction/support-mesh-factory.js` - Visualization mesh creation
+- **Geometry**: `/interaction/geometry-utils.js` - CAD geometry operations and support mesh synchronization
 
 ---
 

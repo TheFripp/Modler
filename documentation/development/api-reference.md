@@ -69,6 +69,19 @@ Key method signatures and concepts for Modler V2 components. For implementation 
 
 **File**: `interaction/selection-controller.js`
 
+### GeometryUtils
+**Purpose**: CAD-style geometry operations and centralized support mesh synchronization
+
+**Key Methods**:
+- `scaleGeometryAlongAxis(geometry, axis, newValue)` → boolean - Vertex-level dimension changes
+- `updateSupportMeshGeometries(mesh)` → void - Update all support meshes centrally
+- `createSphereGeometry(radius, segments)` → THREE.Geometry - Pooled sphere creation
+- `createBoxGeometry(width, height, depth)` → THREE.Geometry - Pooled box creation
+
+**Architecture**: Geometry-based manipulation instead of transform scaling for true CAD behavior
+
+**File**: `interaction/geometry-utils.js`
+
 ### Support Mesh Architecture (Legacy MeshSynchronizer Removed)
 **Purpose**: Support meshes are now self-contained children, inheriting transforms automatically
 

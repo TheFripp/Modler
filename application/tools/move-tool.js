@@ -317,10 +317,10 @@ class MoveTool {
                 draggedObject.userData.supportMeshes.interactiveMesh.visible = false;
             }
 
-            // Ensure final sync of all related meshes
-            const meshSynchronizer = window.modlerComponents?.meshSynchronizer;
-            if (meshSynchronizer) {
-                meshSynchronizer.syncAllRelatedMeshes(draggedObject, 'transform', true);
+            // Ensure final sync of all support meshes (wireframes, highlights, etc.)
+            const geometryUtils = window.GeometryUtils;
+            if (geometryUtils) {
+                geometryUtils.updateSupportMeshGeometries(draggedObject);
             }
 
             // Only trigger container repositioning when moving containers themselves
@@ -353,6 +353,20 @@ class MoveTool {
         this.checkForFaceHighlight();
     }
 
+
+    /**
+     * Tool activation wrapper for ToolController compatibility
+     */
+    activate() {
+        this.onToolActivate();
+    }
+
+    /**
+     * Tool deactivation wrapper for ToolController compatibility
+     */
+    deactivate() {
+        this.onToolDeactivate();
+    }
 
     /**
      * Tool activation using centralized event handler

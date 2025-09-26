@@ -606,9 +606,9 @@ class LayoutGeometry {
         newGeometry.computeBoundingSphere();
         
         // Update support mesh geometries to match new container geometry
-        const supportMeshFactory = window.modlerComponents?.supportMeshFactory;
-        if (supportMeshFactory) {
-            supportMeshFactory.updateSupportMeshGeometries(containerMesh);
+        const geometryUtils = window.GeometryUtils;
+        if (geometryUtils) {
+            geometryUtils.updateSupportMeshGeometries(containerMesh);
         }
 
         // Support meshes are now children and inherit geometry changes automatically

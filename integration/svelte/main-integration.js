@@ -57,6 +57,12 @@
             // Step 8: Show panels
             panelManager.showPanels();
 
+            // Step 9: Delayed initial sync to ensure iframes are ready
+            setTimeout(() => {
+                // Performing delayed initial object list sync...
+                window.populateObjectList();
+            }, 1000); // 1 second delay to ensure panels are loaded
+
             // showActivationNotification('Svelte UI Active'); // Disabled toast notification
 
         } catch (error) {
@@ -292,7 +298,7 @@
      * Create all Svelte panels
      */
     function createPanels() {
-        console.log('🎨 Creating Svelte panels...');
+        // Creating Svelte panels...
 
         panelManager.createLeftOverlay();
         panelManager.createRightOverlay();
@@ -325,6 +331,11 @@
     function initializeComponentSync() {
         const selectionController = window.modlerComponents?.selectionController;
         const toolController = window.modlerComponents?.toolController;
+
+        // Clear initial selection to ensure clean startup state
+        if (dataSync) {
+            dataSync.sendFullDataUpdate([], 'legacy-clear-selection');
+        }
 
         if (selectionController) {
             // Listen for selection changes using SelectionController's callback system
@@ -488,24 +499,29 @@
 
     // Bridge function: Populate object list in left panel
     window.populateObjectList = function() {
+        // populateObjectList() called
         if (!dataSync) return;
 
         const sceneController = window.modlerComponents?.sceneController;
-        if (!sceneController) return;
+        if (!sceneController) {
+            console.warn('📋 Main Integration: SceneController not available');
+            return;
+        }
 
         try {
             const allObjects = sceneController.getAllObjects();
+            // Found ${allObjects.length} objects from SceneController
 
             if (allObjects && allObjects.length > 0) {
                 const allMeshes = allObjects.map(obj => obj.mesh).filter(mesh => mesh);
                 if (allMeshes.length > 0) {
                     dataSync.sendFullDataUpdate(allMeshes, 'object-list-populate');
                 } else {
-                    // Send empty update to clear list
+                    console.log('📋 Main Integration: No meshes found, sending clear');
                     dataSync.sendFullDataUpdate([], 'object-list-clear');
                 }
             } else {
-                // Send empty update to clear list
+                console.log('📋 Main Integration: No objects found, sending clear');
                 dataSync.sendFullDataUpdate([], 'object-list-clear');
             }
         } catch (error) {
@@ -515,6 +531,7 @@
 
     // Bridge function: Notify object hierarchy changed (containers, parents, children)
     window.notifyObjectHierarchyChanged = function() {
+        console.log('📋 Main Integration: notifyObjectHierarchyChanged() called');
         if (!dataSync) return;
 
         // Update the full object list to reflect hierarchy changes
@@ -551,7 +568,7 @@
             }
 
             if (targetObject) {
-                console.log('🔄 Object modified:', targetObject.userData?.name || 'Unknown', 'Type:', modificationType);
+                // Support mesh updates (wireframes, highlights) are handled centrally by GeometryUtils
 
                 // Send specific update based on modification type
                 dataSync.sendFullDataUpdate([targetObject], `object-modified-${modificationType}`);
@@ -569,7 +586,7 @@
 
     // Bridge function: Update scene background from configuration
     window.updateSceneBackground = function(backgroundColor) {
-        console.log('🎨 Scene background update:', backgroundColor);
+        // Scene background update: ${backgroundColor}
 
         const scene = window.modlerComponents?.scene;
         if (!scene) return;
