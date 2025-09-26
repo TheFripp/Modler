@@ -695,7 +695,7 @@ class DeleteObjectCommand extends BaseCommand {
         if (!mesh) return;
 
         // Use the same SupportMeshFactory that SceneController uses
-        const supportMeshFactory = window.SupportMeshFactory ? new SupportMeshFactory() : null;
+        const supportMeshFactory = window.modlerComponents?.supportMeshFactory;
         if (supportMeshFactory) {
             // For containers, the wireframes are already created by LayoutGeometry as children
             // For regular objects, we need to create support meshes

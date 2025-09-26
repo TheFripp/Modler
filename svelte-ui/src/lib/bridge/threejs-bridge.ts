@@ -242,35 +242,35 @@ export function toggleSnapInScene() {
  */
 function setupPostMessageFallback() {
 	window.addEventListener('message', (event) => {
-		console.log('📨 Received PostMessage:', event.origin, event.data?.type);
+		// PostMessage received from main application
 
 		// Verify origin for security (allow any localhost port for development)
 		if (!event.origin.startsWith('http://localhost:')) {
-			console.log('❌ Message rejected - invalid origin:', event.origin);
+			// Message rejected - invalid origin
 			return;
 		}
 
 		// Handle both old and new message formats
 		if (event.data && event.data.type) {
-			console.log('📨 Processing message type:', event.data.type, 'with data:', event.data.data);
+			// Processing message from main application
 
 			try {
 				if (event.data.type === 'data-update') {
 					// New integration format - data is in event.data.data
-					console.log('📨 Handling data-update message');
+					// Handling data-update message
 					handleDataUpdate(event.data.data);
 				} else if (event.data.type === 'modler-data') {
 					// Legacy format - data is in event.data.data
-					console.log('📨 Handling modler-data message');
+					// Handling modler-data message
 					handleModlerData(event.data.data);
 				} else {
-					console.log('📨 Unknown message type:', event.data.type);
+					// Unknown message type
 				}
 			} catch (error) {
 				console.error('❌ Error processing message:', error);
 			}
 		} else {
-			console.log('📨 Message has no type or data:', event.data);
+			// Message has no type or data
 		}
 	});
 }
@@ -279,30 +279,29 @@ function setupPostMessageFallback() {
  * Handle data update from new integration system
  */
 function handleDataUpdate(data: any) {
-	console.log('🔄 Processing data update:', data.updateType, 'Objects:', data.selectedObjects?.length || 0);
-	console.log('🔄 Full data received:', JSON.stringify(data, null, 2));
+	// Processing data update from main application
 
 	// Update selection store
 	if (data.selectedObjects) {
-		console.log('🔄 Syncing selection with objects:', data.selectedObjects);
+		// Syncing selection with objects
 		syncSelectionFromIframe(data.selectedObjects);
 	}
 
 	// Update hierarchy store - for scene-objects updates, use selectedObjects as hierarchy
 	if (data.updateType === 'scene-objects' && data.selectedObjects) {
-		console.log('🔄 Syncing hierarchy (scene-objects) with objects:', data.selectedObjects.length);
+		// Syncing hierarchy (scene-objects)
 		syncHierarchyFromIframe(data.selectedObjects);
 	}
 
 	// Also sync hierarchy for manual-test updates
 	if (data.updateType === 'manual-test' && data.selectedObjects) {
-		console.log('🔄 Syncing hierarchy (manual-test) with objects:', data.selectedObjects.length);
+		// Syncing hierarchy (manual-test)
 		syncHierarchyFromIframe(data.selectedObjects);
 	}
 
 	// Handle communication test
 	if (data.updateType === 'communication-test' && data.selectedObjects) {
-		console.log('🧪 Communication test successful - syncing test objects to hierarchy:', data.selectedObjects.length);
+		// Communication test successful
 		syncHierarchyFromIframe(data.selectedObjects);
 	}
 
@@ -351,11 +350,11 @@ function handleModlerData(data: any) {
  * Sync selection data that's already serialized from iframe integration
  */
 function syncSelectionFromIframe(serializedObjects: any[]) {
-	console.log('🔄 Updating selection store with:', serializedObjects.length, 'objects', serializedObjects);
+	// Updating selection store
 	// Import and update the store
 	import('$lib/stores/modler').then(({ selectedObjects }) => {
 		selectedObjects.set(serializedObjects);
-		console.log('✅ Selection store updated successfully');
+		// Selection store updated successfully
 	}).catch(error => {
 		console.error('❌ Failed to update selection store:', error);
 	});
@@ -365,11 +364,11 @@ function syncSelectionFromIframe(serializedObjects: any[]) {
  * Sync object hierarchy data for the left panel
  */
 function syncHierarchyFromIframe(hierarchyObjects: any[]) {
-	console.log('🔄 Updating hierarchy store with:', hierarchyObjects.length, 'objects', hierarchyObjects);
+	// Updating hierarchy store
 	// Import and update the object hierarchy store
 	import('$lib/stores/modler').then(({ objectHierarchy }) => {
 		objectHierarchy.set(hierarchyObjects);
-		console.log('✅ Hierarchy store updated successfully');
+		// Hierarchy store updated successfully
 	}).catch(error => {
 		console.error('❌ Failed to update hierarchy store:', error);
 	});

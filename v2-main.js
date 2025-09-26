@@ -3,162 +3,6 @@
  * Streamlined initialization and component coordination
  */
 
-// PropertyManager class (embedded to ensure loading)
-class PropertyManager {
-    constructor() {
-        this.initialized = false;
-
-        // Component references
-        this.sceneController = null;
-        this.selectionController = null;
-        this.layoutEngine = null;
-        this.historyManager = null;
-
-        // Property update throttling
-        this.updateThrottles = new Map();
-        this.throttleDelay = 100; // ms
-    }
-
-    /**
-     * Initialize with required components
-     */
-    initialize() {
-        this.sceneController = window.modlerComponents?.sceneController;
-        this.selectionController = window.modlerComponents?.selectionController;
-        this.layoutEngine = window.LayoutEngine || null;
-        this.historyManager = window.modlerComponents?.historyManager;
-
-        this.initialized = true;
-        console.log('✅ PropertyManager initialized');
-    }
-
-    /**
-     * Check if object has fill enabled for specific axis
-     * @param {string} objectId - Object ID
-     * @param {string} axis - 'x', 'y', or 'z'
-     * @returns {boolean} True if fill is enabled
-     */
-    isAxisFilled(objectId, axis) {
-        if (!this.sceneController) return false;
-
-        const objectData = this.sceneController.getObject(objectId);
-        if (!objectData || !objectData.layoutProperties) return false;
-
-        const sizeProperty = `size${axis.toUpperCase()}`;
-        return objectData.layoutProperties[sizeProperty] === 'fill';
-    }
-
-    /**
-     * Check if object is in a layout-enabled container
-     * @param {string} objectId - Object ID
-     * @returns {boolean} True if in layout container
-     */
-    isInLayoutContainer(objectId) {
-        if (!this.sceneController) return false;
-
-        const objectData = this.sceneController.getObject(objectId);
-        if (!objectData || !objectData.parentContainer) return false;
-
-        const container = this.sceneController.getObject(objectData.parentContainer);
-        return container && container.autoLayout && container.autoLayout.enabled;
-    }
-
-    /**
-     * Toggle fill property for an axis
-     * @param {string} axis - 'x', 'y', or 'z'
-     */
-    toggleFillProperty(axis) {
-        if (!this.initialized) return;
-
-        const selectedObjects = this.selectionController?.getSelectedObjects();
-        if (!selectedObjects || selectedObjects.length === 0) return;
-
-        const mesh = selectedObjects[0]; // Handle first selected object
-        if (!mesh.userData?.id) return;
-
-        const objectData = this.sceneController?.getObject(mesh.userData.id);
-        if (!objectData) return;
-
-        // Check if object is in a layout container
-        if (!objectData.parentContainer) {
-            console.warn('PropertyManager: Object is not in a container, cannot toggle fill');
-            return;
-        }
-
-        const container = this.sceneController.getObject(objectData.parentContainer);
-        if (!container || !container.autoLayout || !container.autoLayout.enabled) {
-            console.warn('PropertyManager: Parent container does not have layout enabled');
-            return;
-        }
-
-        // Initialize layoutProperties if needed
-        if (!objectData.layoutProperties) {
-            objectData.layoutProperties = {
-                sizeX: 'fixed',
-                sizeY: 'fixed',
-                sizeZ: 'fixed'
-            };
-        }
-
-        // Toggle fill state for the axis
-        const sizeProperty = `size${axis.toUpperCase()}`;
-        const currentState = objectData.layoutProperties[sizeProperty];
-        const newState = currentState === 'fill' ? 'fixed' : 'fill';
-
-        objectData.layoutProperties[sizeProperty] = newState;
-
-        console.log(`PropertyManager: Toggled ${axis}-axis fill to ${newState} for object ${objectData.name}`);
-
-        // Apply layout update
-        if (this.sceneController) {
-            this.sceneController.updateLayout(container.id);
-        }
-
-        // Update property panel display
-        if (window.updatePropertyPanelFromObject) {
-            window.updatePropertyPanelFromObject(mesh);
-        }
-
-        // Support meshes are now self-contained children - no sync needed
-
-        // Notify SceneController
-        this.sceneController.notifyObjectModified(objectData.id);
-
-        // Trigger property panel refresh for all affected objects
-        this.refreshLayoutPropertyPanels(container);
-    }
-
-    /**
-     * Refresh property panels for all objects in a container when layout changes
-     * @param {Object} container - Container data
-     */
-    refreshLayoutPropertyPanels(container) {
-        if (!container || !this.sceneController) return;
-
-        const children = this.sceneController.getChildren(container.id);
-        if (!children || children.length === 0) return;
-
-        // Refresh property panel if any child is currently selected
-        const selectedObjects = this.selectionController?.getSelectedObjects();
-        if (!selectedObjects || selectedObjects.length === 0) return;
-
-        const selectedIds = selectedObjects.map(mesh => mesh.userData?.id).filter(Boolean);
-        const shouldRefresh = children.some(child => selectedIds.includes(child.id));
-
-        if (shouldRefresh) {
-            // Trigger property panel update
-            setTimeout(() => {
-                if (window.updatePropertyPanelFromObject) {
-                    window.updatePropertyPanelFromObject(selectedObjects[0]);
-                }
-            }, 100); // Small delay to allow layout calculations to complete
-        }
-    }
-}
-
-// Make PropertyManager available globally
-window.PropertyManager = PropertyManager;
-
 // System components registry
 let modlerV2Components = {};
     
@@ -174,11 +18,12 @@ async function initializeModlerV2(canvas) {
         initializeScene();
         initializeInteraction();
         initializeApplication();
+
+        // Expose components globally BEFORE creating content so SceneController can access them
+        window.modlerComponents = modlerV2Components;
+
         initializeContent();
         connectComponents();
-        
-        // Expose components globally
-        window.modlerComponents = modlerV2Components;
         setupObjectSystemIntegration();
         
         console.log('Modler V2 ready');
@@ -196,7 +41,22 @@ async function initializeModlerV2(canvas) {
  */
 function initializeFoundation(canvas) {
     modlerV2Components.sceneFoundation = new SceneFoundation(canvas);
-    
+
+    // Initialize centralized factory instances (Phase 1 - Factory Consolidation)
+    // These will be injected into components instead of each creating their own
+    modlerV2Components.geometryFactory = new GeometryFactory();
+    modlerV2Components.materialManager = new MaterialManager();
+    modlerV2Components.supportMeshFactory = new SupportMeshFactory(
+        modlerV2Components.geometryFactory,
+        modlerV2Components.materialManager
+    );
+
+    console.log('✅ Centralized factories initialized:', {
+        geometryFactory: !!modlerV2Components.geometryFactory,
+        materialManager: !!modlerV2Components.materialManager,
+        supportMeshFactory: !!modlerV2Components.supportMeshFactory
+    });
+
     // Consolidated input system - initialized after Scene components are ready
     // Replaces InputFoundation + InputHandler with unified InputController
 }
@@ -206,7 +66,14 @@ function initializeFoundation(canvas) {
  */
 function initializeScene() {
     modlerV2Components.sceneController = new SceneController(modlerV2Components.sceneFoundation.scene);
-    modlerV2Components.visualEffects = new VisualEffects(modlerV2Components.sceneFoundation.scene);
+
+    // Inject centralized factories (Phase 1 - Factory Consolidation)
+    modlerV2Components.visualEffects = new VisualEffects(
+        modlerV2Components.sceneFoundation.scene,
+        modlerV2Components.geometryFactory,
+        modlerV2Components.materialManager
+    );
+
     modlerV2Components.snapVisualizer = new SnapVisualizer(
         modlerV2Components.sceneFoundation.scene,
         modlerV2Components.sceneFoundation.camera,
@@ -443,12 +310,20 @@ function createFloorGrid() {
         planeGeometry = new THREE.PlaneGeometry(20, 20);
     }
 
-    // Keep manual creation due to unique transparency properties for invisible raycast plane
-    planeMaterial = new THREE.MeshBasicMaterial({
-        transparent: true,
-        opacity: 0.0,
-        side: THREE.DoubleSide
-    });
+    // Use MaterialManager for floor plane creation
+    if (materialManager) {
+        planeMaterial = materialManager.createMeshBasicMaterial({
+            transparent: true,
+            opacity: 0.0,
+            side: THREE.DoubleSide
+        });
+    } else {
+        planeMaterial = new THREE.MeshBasicMaterial({
+            transparent: true,
+            opacity: 0.0,
+            side: THREE.DoubleSide
+        });
+    }
 
     const floorPlane = new THREE.Mesh(planeGeometry, planeMaterial);
     floorPlane.rotation.x = -Math.PI / 2;

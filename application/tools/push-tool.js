@@ -478,7 +478,7 @@ class PushTool {
         const meshToUpdate = this.actualPushedMesh || this.pushedObject;
 
         // Update support mesh geometries to match modified main geometry
-        const supportMeshFactory = window.SupportMeshFactory ? new SupportMeshFactory() : null;
+        const supportMeshFactory = window.modlerComponents?.supportMeshFactory;
         if (supportMeshFactory && meshToUpdate) {
             // Real-time updates: Update face highlights during push operations for immediate feedback
             supportMeshFactory.updateSupportMeshGeometries(meshToUpdate, true);

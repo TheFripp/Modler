@@ -102,7 +102,7 @@ class SceneController {
 
         // UNIFIED ARCHITECTURE: Create support meshes for all objects
         // Support mesh factory handles containers and regular objects differently
-        const supportMeshFactory = window.SupportMeshFactory ? new SupportMeshFactory() : null;
+        const supportMeshFactory = window.modlerComponents?.supportMeshFactory;
         if (supportMeshFactory) {
             // Create support meshes for all objects (factory handles containers vs regular objects)
             supportMeshFactory.createObjectSupportMeshes(mesh);
@@ -130,7 +130,7 @@ class SceneController {
         }
         
         // Clean up support meshes first
-        const supportMeshFactory = window.SupportMeshFactory ? new SupportMeshFactory() : null;
+        const supportMeshFactory = window.modlerComponents?.supportMeshFactory;
         if (supportMeshFactory) {
             supportMeshFactory.cleanupSupportMeshes(objectData.mesh);
         }

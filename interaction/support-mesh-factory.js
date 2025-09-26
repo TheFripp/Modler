@@ -3,10 +3,11 @@
 // Implements "create once, show/hide only" architecture
 
 class SupportMeshFactory {
-    constructor() {
-        // New unified systems
-        this.geometryFactory = new GeometryFactory();
-        this.materialManager = new MaterialManager();
+    constructor(geometryFactory = null, materialManager = null) {
+        // Use injected factories (Phase 1 - Factory Consolidation)
+        // Fallback to new instances for backward compatibility during transition
+        this.geometryFactory = geometryFactory || new GeometryFactory();
+        this.materialManager = materialManager || new MaterialManager();
         this.resourcePool = new VisualizationResourcePool();
 
         // Material cache for reuse - now managed by MaterialManager
@@ -30,14 +31,10 @@ class SupportMeshFactory {
         this.materials.containerWireframe = this.materialManager.createContainerWireframeMaterial();
 
         // Container interactive material - specialized invisible raycasting material
-        // This is kept as manual creation due to its unique colorWrite:false property
-        this.materials.containerInteractive = new THREE.MeshBasicMaterial({
-            transparent: true,
-            opacity: 0.0, // Invisible but raycastable
+        // Using MaterialManager's invisible raycast material method for better resource management
+        this.materials.containerInteractive = this.materialManager.createInvisibleRaycastMaterial({
             side: THREE.DoubleSide,
-            depthTest: true, // Enable depth test for proper rendering
-            colorWrite: false, // Don't write to color buffer - purely for raycasting
-            color: 0x000000 // Doesn't matter since colorWrite is false
+            depthTest: true // Enable depth test for proper rendering
         });
     }
 
@@ -100,7 +97,6 @@ class SupportMeshFactory {
         // Store references for easy access
         mainMesh.userData.supportMeshes = supportMeshes;
 
-
         return supportMeshes;
     }
 
@@ -154,6 +150,10 @@ class SupportMeshFactory {
         }
 
         const edgeGeometry = this.geometryFactory.createEdgeGeometry(mainMesh.geometry);
+        if (!edgeGeometry) {
+            console.warn('❌ Failed to create edge geometry for selection wireframe:', mainMesh.name);
+            return null;
+        }
         const wireframe = new THREE.LineSegments(edgeGeometry, this.materials.selectionWireframe);
 
         // Position at (0,0,0) relative to parent - inherits parent transform
@@ -283,14 +283,14 @@ class SupportMeshFactory {
 
         // Update wireframes using GeometryFactory
         if (supportMeshes.selectionWireframe) {
-            const newEdgeGeometry = this.geometryFactory.createEdgeGeometry(mainMesh);
+            const newEdgeGeometry = this.geometryFactory.createEdgeGeometry(mainMesh.geometry);
             // Return old geometry to pool instead of disposing
             this.geometryFactory.returnGeometry(supportMeshes.selectionWireframe.geometry, 'edge');
             supportMeshes.selectionWireframe.geometry = newEdgeGeometry;
         }
 
         if (supportMeshes.containerWireframe) {
-            const newEdgeGeometry = this.geometryFactory.createEdgeGeometry(mainMesh);
+            const newEdgeGeometry = this.geometryFactory.createEdgeGeometry(mainMesh.geometry);
             // Return old geometry to pool instead of disposing
             this.geometryFactory.returnGeometry(supportMeshes.containerWireframe.geometry, 'edge');
             supportMeshes.containerWireframe.geometry = newEdgeGeometry;

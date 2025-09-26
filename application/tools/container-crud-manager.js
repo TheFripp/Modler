@@ -191,7 +191,9 @@ class ContainerCrudManager {
      * @returns {Object|null} Container object or null if failed
      */
     createAndRegisterContainer(sceneController, bounds) {
-        const containerData = LayoutGeometry.createContainerGeometry(bounds.size);
+        const geometryFactory = window.modlerComponents?.geometryFactory;
+        const materialManager = window.modlerComponents?.materialManager;
+        const containerData = LayoutGeometry.createContainerGeometry(bounds.size, geometryFactory, materialManager);
         const edgeContainer = containerData.mesh;
 
         // DEBUG: Log container creation positioning
@@ -321,7 +323,9 @@ class ContainerCrudManager {
         if (!sceneController) return null;
         
         const size = new THREE.Vector3(0.5, 0.5, 0.5);
-        const containerData = LayoutGeometry.createContainerGeometry(size);
+        const geometryFactory = window.modlerComponents?.geometryFactory;
+        const materialManager = window.modlerComponents?.materialManager;
+        const containerData = LayoutGeometry.createContainerGeometry(size, geometryFactory, materialManager);
         const edgeContainer = containerData.mesh;
         
         const containerObject = sceneController.addObject(edgeContainer, null, {
@@ -394,10 +398,7 @@ class ContainerCrudManager {
         // When adding objects to container, preserve container position to avoid moving child objects
         this.resizeContainerToFitChildren(containerData, null, true);
 
-        const meshSynchronizer = window.modlerComponents?.meshSynchronizer;
-        if (meshSynchronizer) {
-            meshSynchronizer.syncAllRelatedMeshes(obj, 'transform');
-        }
+        // Legacy meshSynchronizer removed - support meshes now self-contained children
 
         // Trigger hierarchy update for new Svelte UI
         if (window.notifyObjectHierarchyChanged) {
@@ -474,12 +475,7 @@ class ContainerCrudManager {
             this.resizeContainerToFitChildren(childContainerData, null, true);
         }
 
-        const meshSynchronizer = window.modlerComponents?.meshSynchronizer;
-        if (meshSynchronizer) {
-            // Sync both the nested container and its parent
-            meshSynchronizer.syncAllRelatedMeshes(childMesh, 'transform');
-            meshSynchronizer.syncAllRelatedMeshes(parentMesh, 'geometry');
-        }
+        // Legacy meshSynchronizer removed - support meshes now self-contained children
 
         // Update UI hierarchies
         if (window.notifyObjectHierarchyChanged) {
@@ -689,12 +685,16 @@ class ContainerCrudManager {
         const layoutDirection = containerData.autoLayout?.enabled && containerData.autoLayout?.direction ?
             containerData.autoLayout.direction : null;
 
+        const geometryFactory = window.modlerComponents?.geometryFactory;
+        const materialManager = window.modlerComponents?.materialManager;
         const success = LayoutGeometry.updateContainerGeometry(
             containerData.mesh,
             adjustedSize,
             targetWorldPosition,
             true, // Reposition container to center around child objects
-            layoutDirection // Layout direction for wireframe visualization
+            layoutDirection, // Layout direction for wireframe visualization
+            geometryFactory,
+            materialManager
         );
 
         if (success) {
@@ -744,12 +744,16 @@ class ContainerCrudManager {
 
         // SIMPLIFIED ARCHITECTURE: Container never moves during auto-layout, only resizes
         // This eliminates coordinate system mismatches and prevents object positioning breakage
+        const geometryFactory = window.modlerComponents?.geometryFactory;
+        const materialManager = window.modlerComponents?.materialManager;
         const success = LayoutGeometry.updateContainerGeometry(
             containerData.mesh,
             layoutBounds.size,
             containerData.mesh.position, // Keep current position
             false, // shouldReposition = false
-            layoutDirection // Layout direction for wireframe visualization
+            layoutDirection, // Layout direction for wireframe visualization
+            geometryFactory,
+            materialManager
         );
 
         return success;
@@ -771,12 +775,16 @@ class ContainerCrudManager {
         const layoutDirection = containerData.autoLayout?.enabled && containerData.autoLayout?.direction ?
             containerData.autoLayout.direction : null;
 
+        const geometryFactory = window.modlerComponents?.geometryFactory;
+        const materialManager = window.modlerComponents?.materialManager;
         return LayoutGeometry.updateContainerGeometry(
             containerData.mesh,
             size,
             containerData.mesh.position,
             false,
-            layoutDirection // Layout direction for wireframe visualization
+            layoutDirection, // Layout direction for wireframe visualization
+            geometryFactory,
+            materialManager
         );
     }
 

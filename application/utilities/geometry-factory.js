@@ -181,6 +181,12 @@ class GeometryFactory {
         }
 
         try {
+            // Validate source geometry
+            if (!sourceGeometry || !sourceGeometry.isBufferGeometry) {
+                console.warn('GeometryFactory: Invalid source geometry for edge creation:', sourceGeometry);
+                return null;
+            }
+
             // Generate cache key based on geometry characteristics
             const geometryKey = this.generateGeometryKey(sourceGeometry);
 
@@ -190,7 +196,13 @@ class GeometryFactory {
                 return pooledGeometry;
             }
 
-            // Create new edge geometry
+            // Ensure geometry is properly prepared for EdgesGeometry
+            if (!sourceGeometry.attributes.position) {
+                console.warn('GeometryFactory: Source geometry missing position attribute');
+                return null;
+            }
+
+            // Create new edge geometry with error handling
             const edgeGeometry = new THREE.EdgesGeometry(sourceGeometry, options.thresholdAngle);
 
             // Store in pool and track
@@ -763,8 +775,13 @@ class GeometryFactory {
         }
 
         // Final fallback: use vertex count
-        const position = geometry.getAttribute('position');
-        return `vertices_${position ? position.count : 0}`;
+        if (geometry && typeof geometry.getAttribute === 'function') {
+            const position = geometry.getAttribute('position');
+            return `vertices_${position ? position.count : 0}`;
+        }
+
+        // Ultimate fallback for non-BufferGeometry
+        return `geometry_${geometry.constructor.name}_${Date.now()}`;
     }
 
     /**

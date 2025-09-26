@@ -200,11 +200,11 @@ class ObjectVisualizer {
             }
 
             // Create edge geometry using GeometryFactory for pooling
-            const edgeGeometry = this.geometryFactory.createEdgeGeometry(object);
+            const edgeGeometry = this.geometryFactory.createEdgeGeometry(object.geometry);
             const edgeMesh = this.createThickLineGroup(edgeGeometry, this.edgeMaterial.lineWidth || 2, this.edgeMaterial);
 
             // Return geometry to pool for reuse
-            this.geometryFactory.returnEdgeGeometry(edgeGeometry);
+            this.geometryFactory.returnGeometry(edgeGeometry, 'edge');
 
             // Make non-raycastable
             edgeMesh.raycast = () => {};
@@ -439,7 +439,17 @@ class ObjectVisualizer {
      * Create offset copy of edge geometry
      */
     offsetEdgeGeometry(edgeGeometry, offset) {
+        if (!edgeGeometry) {
+            console.warn('ObjectVisualizer: Cannot offset null edgeGeometry');
+            return null;
+        }
+
         const geometry = edgeGeometry.clone();
+        if (!geometry) {
+            console.warn('ObjectVisualizer: Failed to clone edgeGeometry');
+            return null;
+        }
+
         const positions = geometry.getAttribute('position');
         const array = positions.array;
 

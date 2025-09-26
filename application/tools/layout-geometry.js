@@ -112,30 +112,37 @@ class LayoutGeometry {
      * @param {THREE.Vector3} size - Container size
      * @returns {Object} Object with visual mesh, collision mesh, and materials
      */
-    static createContainerGeometry(size) {
+    static createContainerGeometry(size, geometryFactory = null, materialManager = null) {
         console.log('LayoutGeometry.createContainerGeometry - NEW ARCHITECTURE: Creating solid-first container');
 
-        // Access centralized systems
-        const geometryFactory = window.GeometryFactory ? new GeometryFactory() : null;
-        const materialManager = window.MaterialManager ? new MaterialManager() : null;
-        const resourcePool = window.VisualizationResourcePool ? new VisualizationResourcePool() : null;
+        // Use injected factories (Phase 1 - Factory Consolidation) or access from global registry
+        const gFactory = geometryFactory || window.modlerComponents?.geometryFactory;
+        const mManager = materialManager || window.modlerComponents?.materialManager;
+        const resourcePool = window.modlerComponents?.resourcePool;
 
         // NEW ARCHITECTURE: Create solid BoxGeometry as main mesh (like regular objects)
         let containerGeometry;
-        if (geometryFactory) {
-            containerGeometry = geometryFactory.createBoxGeometry(size.x, size.y, size.z);
+        if (gFactory) {
+            containerGeometry = gFactory.createBoxGeometry(size.x, size.y, size.z);
         } else {
             containerGeometry = new THREE.BoxGeometry(size.x, size.y, size.z);
         }
 
-        // Create invisible material for main solid mesh - keep manual due to unique colorWrite property
-        const mainMaterial = new THREE.MeshBasicMaterial({
-            transparent: true,
-            opacity: 0.0,
-            colorWrite: false, // Don't write to color buffer - purely for raycasting
-            depthWrite: false, // Don't write to depth buffer - prevents visual artifacts
-            wireframe: false   // CRITICAL: Explicitly disable wireframe rendering to prevent triangle edges
-        });
+        // Create invisible material for main solid mesh using MaterialManager
+        let mainMaterial;
+        if (mManager) {
+            mainMaterial = mManager.createInvisibleRaycastMaterial({
+                wireframe: false   // CRITICAL: Explicitly disable wireframe rendering to prevent triangle edges
+            });
+        } else {
+            mainMaterial = new THREE.MeshBasicMaterial({
+                transparent: true,
+                opacity: 0.0,
+                colorWrite: false, // Don't write to color buffer - purely for raycasting
+                depthWrite: false, // Don't write to depth buffer - prevents visual artifacts
+                wireframe: false   // CRITICAL: Explicitly disable wireframe rendering to prevent triangle edges
+            });
+        }
 
         // TODO: Use resourcePool.getMesh when available
         const mainMesh = new THREE.Mesh(containerGeometry, mainMaterial);
@@ -159,16 +166,16 @@ class LayoutGeometry {
 
         // Create wireframe as CHILD of main mesh (consistent with objects)
         let edgeGeometry;
-        if (geometryFactory) {
-            edgeGeometry = geometryFactory.createEdgeGeometryFromSource(containerGeometry);
+        if (gFactory) {
+            edgeGeometry = gFactory.createEdgeGeometryFromSource(containerGeometry);
         } else {
             edgeGeometry = new THREE.EdgesGeometry(containerGeometry);
         }
 
         // Use MaterialManager for wireframe material if available
         let wireframeMaterial;
-        if (materialManager) {
-            wireframeMaterial = materialManager.createContainerWireframeMaterial({
+        if (mManager) {
+            wireframeMaterial = mManager.createContainerWireframeMaterial({
                 color: wireframeColor,
                 opacity: opacity
             });
@@ -268,15 +275,24 @@ class LayoutGeometry {
         // This eliminates the need for separate collision meshes and child object conflicts
         const faceGeometry = this.createInteractiveFacesFromWireframe(containerGeometry);
 
-        const interactiveMaterial = new THREE.MeshBasicMaterial({
-            transparent: true,
-            opacity: 0.0, // Invisible but raycastable
-            side: THREE.DoubleSide, // Ensure faces can be hit from both sides
-            depthTest: false, // Ensure it doesn't get occluded by child objects
-            color: 0x000000, // Doesn't matter since invisible
-            colorWrite: false, // Don't write to color buffer - purely for raycasting
-            wireframe: false // Solid faces for raycasting
-        });
+        let interactiveMaterial;
+        if (mManager) {
+            interactiveMaterial = mManager.createInvisibleRaycastMaterial({
+                side: THREE.DoubleSide, // Ensure faces can be hit from both sides
+                depthTest: false, // Ensure it doesn't get occluded by child objects
+                wireframe: false // Solid faces for raycasting
+            });
+        } else {
+            interactiveMaterial = new THREE.MeshBasicMaterial({
+                transparent: true,
+                opacity: 0.0, // Invisible but raycastable
+                side: THREE.DoubleSide, // Ensure faces can be hit from both sides
+                depthTest: false, // Ensure it doesn't get occluded by child objects
+                color: 0x000000, // Doesn't matter since invisible
+                colorWrite: false, // Don't write to color buffer - purely for raycasting
+                wireframe: false // Solid faces for raycasting
+            });
+        }
 
 
         const interactiveMesh = new THREE.Mesh(faceGeometry, interactiveMaterial);
@@ -367,7 +383,7 @@ class LayoutGeometry {
      * @param {THREE.Vector3} newCenter - New container center position
      * @param {boolean} shouldReposition - Whether to update container position (default: true)
      */
-    static updateContainerGeometry(containerMesh, newSize, newCenter, shouldReposition = true, layoutDirection = null) {
+    static updateContainerGeometry(containerMesh, newSize, newCenter, shouldReposition = true, layoutDirection = null, geometryFactory = null, materialManager = null) {
         if (!containerMesh) {
             console.error('Container mesh not found for geometry update');
             return false;
@@ -390,17 +406,17 @@ class LayoutGeometry {
         // Convert hex color to THREE.js color
         const color = new THREE.Color(wireframeColor).getHex();
 
-        // Access centralized systems for geometry creation
-        const geometryFactory = window.GeometryFactory ? new GeometryFactory() : null;
-        const materialManager = window.MaterialManager ? new MaterialManager() : null;
+        // Use injected factories (Phase 1 - Factory Consolidation) or access from global registry
+        const gFactory = geometryFactory || window.modlerComponents?.geometryFactory;
+        const mManager = materialManager || window.modlerComponents?.materialManager;
 
         // Try to create new wireframe using centralized function (prevents triangles)
         const visualEffects = window.modlerComponents?.visualEffects;
         let newEdgeGeometry, newMaterial;
 
         let newGeometry;
-        if (geometryFactory) {
-            newGeometry = geometryFactory.createBoxGeometry(newSize.x, newSize.y, newSize.z);
+        if (gFactory) {
+            newGeometry = gFactory.createBoxGeometry(newSize.x, newSize.y, newSize.z);
         } else {
             newGeometry = new THREE.BoxGeometry(newSize.x, newSize.y, newSize.z);
         }
@@ -445,15 +461,15 @@ class LayoutGeometry {
         } else {
             // Fallback to centralized systems or manual creation
             console.warn('VisualEffects not available, using fallback wireframe update');
-            if (geometryFactory) {
-                newEdgeGeometry = geometryFactory.createEdgeGeometryFromSource(newGeometry);
+            if (gFactory) {
+                newEdgeGeometry = gFactory.createEdgeGeometryFromSource(newGeometry);
             } else {
                 newEdgeGeometry = new THREE.EdgesGeometry(newGeometry);
             }
 
             // Use MaterialManager for wireframe material if available
-            if (materialManager) {
-                newMaterial = materialManager.createContainerWireframeMaterial({
+            if (mManager) {
+                newMaterial = mManager.createContainerWireframeMaterial({
                     color: wireframeColor,
                     opacity: opacity
                 });
@@ -590,7 +606,7 @@ class LayoutGeometry {
         newGeometry.computeBoundingSphere();
         
         // Update support mesh geometries to match new container geometry
-        const supportMeshFactory = window.SupportMeshFactory ? new SupportMeshFactory() : null;
+        const supportMeshFactory = window.modlerComponents?.supportMeshFactory;
         if (supportMeshFactory) {
             supportMeshFactory.updateSupportMeshGeometries(containerMesh);
         }
@@ -666,7 +682,7 @@ class LayoutGeometry {
      * @param {THREE.BoxGeometry} containerGeometry - Original container geometry
      * @returns {THREE.BufferGeometry} Face geometry for interaction
      */
-    static createInteractiveFacesFromWireframe(containerGeometry) {
+    static createInteractiveFacesFromWireframe(containerGeometry, geometryFactory = null) {
         // For box containers, create 6 faces that match the wireframe bounds
         if (containerGeometry.type === 'BoxGeometry' && containerGeometry.parameters) {
             const { width, height, depth } = containerGeometry.parameters;
@@ -674,9 +690,9 @@ class LayoutGeometry {
             // Create slightly larger box geometry for reliable raycasting without oversized selection
             // Minimal increase ensures interactive mesh is hit instead of child objects
             let faceGeometry;
-            const geometryFactory = window.GeometryFactory ? new GeometryFactory() : null;
-            if (geometryFactory) {
-                faceGeometry = geometryFactory.createBoxGeometry(
+            const gFactory = geometryFactory || window.modlerComponents?.geometryFactory;
+            if (gFactory) {
+                faceGeometry = gFactory.createBoxGeometry(
                     width * 1.01,  // 1% larger - enough for reliable raycasting, not user-noticeable
                     height * 1.01,
                     depth * 1.01

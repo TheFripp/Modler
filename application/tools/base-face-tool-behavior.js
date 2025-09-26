@@ -116,7 +116,7 @@ class BaseFaceToolBehavior {
             const supportMeshes = targetObject.userData.supportMeshes;
             if (supportMeshes?.faceHighlight) {
                 // ARCHITECTURE COMPLIANCE: Position once per hover session, then show
-                const supportMeshFactory = window.SupportMeshFactory ? new SupportMeshFactory() : null;
+                const supportMeshFactory = window.modlerComponents?.supportMeshFactory;
                 if (supportMeshFactory) {
                     supportMeshFactory.positionFaceHighlightForHit(supportMeshes.faceHighlight, hit);
                 }

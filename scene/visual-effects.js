@@ -2,7 +2,7 @@
 // Visual Effects - Face highlighting with minimal abstraction
 
 class VisualEffects {
-    constructor(scene) {
+    constructor(scene, geometryFactory = null, materialManager = null) {
         this.scene = scene;
 
         // Essential state - support mesh system handles materials
@@ -10,9 +10,10 @@ class VisualEffects {
         this.highlightMesh = null;
         this.rectanglePreview = null;
 
-        // New unified systems
-        this.geometryFactory = new GeometryFactory();
-        this.materialManager = new MaterialManager();
+        // Use injected factories (Phase 1 - Factory Consolidation)
+        // Fallback to new instances for backward compatibility during transition
+        this.geometryFactory = geometryFactory || new GeometryFactory();
+        this.materialManager = materialManager || new MaterialManager();
 
         // Material setup handled by support mesh system
         this.registerWithConfigurationManager();
@@ -113,7 +114,7 @@ class VisualEffects {
 
         const supportMeshes = targetObject.userData?.supportMeshes;
         if (supportMeshes?.faceHighlight) {
-            const supportMeshFactory = window.SupportMeshFactory ? new SupportMeshFactory() : null;
+            const supportMeshFactory = window.modlerComponents?.supportMeshFactory;
             if (supportMeshFactory) {
                 supportMeshFactory.positionFaceHighlightForHit(supportMeshes.faceHighlight, hit);
             }

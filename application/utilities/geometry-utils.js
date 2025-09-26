@@ -122,7 +122,7 @@ class GeometryUtils {
         }
 
         try {
-            const supportMeshFactory = window.SupportMeshFactory ? new SupportMeshFactory() : null;
+            const supportMeshFactory = window.modlerComponents?.supportMeshFactory;
             if (supportMeshFactory) {
                 supportMeshFactory.updateSupportMeshGeometries(mesh);
                 return true;
