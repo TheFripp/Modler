@@ -15,11 +15,6 @@
 		!obj.name?.toLowerCase().includes('interactive')
 	);
 
-	// Debug: Log hierarchy changes
-	$: if ($objectHierarchy) {
-		console.log('📋 Left panel objectHierarchy updated:', $objectHierarchy.length, 'objects', $objectHierarchy);
-		console.log('📋 Filtered hierarchy:', filteredHierarchy.length, 'objects', filteredHierarchy);
-	}
 
 	// Build tree structure from flat hierarchy with recursive nesting
 	$: treeStructure = buildTreeStructure(filteredHierarchy);

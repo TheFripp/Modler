@@ -327,7 +327,7 @@ class SnapVisualizer {
 
             // Return material to pool if it's not shared
             if (this.indicatorMesh.material && this.indicatorMesh.material !== this.snapMaterial) {
-                this.materialManager.returnMaterial(this.indicatorMesh.material);
+                this.materialManager.disposeMaterial(this.indicatorMesh.material);
             }
 
             this.indicatorMesh = null;
@@ -359,11 +359,11 @@ class SnapVisualizer {
         
         // Return shared materials to pool
         if (this.snapMaterial) {
-            this.materialManager.returnMaterial(this.snapMaterial);
+            this.materialManager.disposeMaterial(this.snapMaterial);
         }
 
         if (this.materials.edge) {
-            this.materialManager.returnMaterial(this.materials.edge);
+            this.materialManager.disposeMaterial(this.materials.edge);
         }
 
         // Return geometries to pool

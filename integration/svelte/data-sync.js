@@ -414,8 +414,35 @@ class SvelteDataSync {
     _handleToolActivation(toolName) {
         const toolController = window.modlerComponents?.toolController;
         if (toolController && toolController.switchToTool) {
-            toolController.switchToTool(toolName);
+            const success = toolController.switchToTool(toolName);
+
+            // Send tool state update if successful
+            if (success) {
+                this._sendToolStateUpdate(toolName);
+            }
         }
+    }
+
+    /**
+     * Send tool state update to all Svelte panels
+     */
+    _sendToolStateUpdate(toolName) {
+        // Get current snap state
+        const snapController = window.modlerComponents?.snapController;
+        const snapEnabled = snapController ? snapController.getEnabled() : false;
+
+        // Create tool state data
+        const toolStateData = {
+            activeTool: toolName,
+            snapEnabled: snapEnabled
+        };
+
+        // Send to all panels
+        this.sendDataToSveltePanels({
+            toolState: toolStateData,
+            timestamp: Date.now(),
+            updateType: 'tool-state-update'
+        });
     }
 }
 

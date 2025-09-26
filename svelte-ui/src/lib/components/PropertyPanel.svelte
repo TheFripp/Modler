@@ -132,7 +132,7 @@
 			<div class="space-y-4">
 				<!-- Position Sub-group -->
 				<div class="space-y-2">
-					<h4 class="text-xs font-medium text-foreground/80 uppercase tracking-wide">Position</h4>
+					<h4 class="text-xs font-medium text-foreground/80 uppercase tracking-wide text-right">Position</h4>
 					<XyzInput
 						values={$displayObject.position}
 						objectId={$displayObject.id}
@@ -142,7 +142,7 @@
 
 				<!-- Rotation Sub-group -->
 				<div class="space-y-2">
-					<h4 class="text-xs font-medium text-foreground/80 uppercase tracking-wide">Rotation</h4>
+					<h4 class="text-xs font-medium text-foreground/80 uppercase tracking-wide text-right">Rotation</h4>
 					<XyzInput
 						values={$displayObject.rotation}
 						objectId={$displayObject.id}
@@ -152,7 +152,7 @@
 
 				<!-- Dimensions Sub-group -->
 				<div class="space-y-2">
-					<h4 class="text-xs font-medium text-foreground/80 uppercase tracking-wide">Dimensions</h4>
+					<h4 class="text-xs font-medium text-foreground/80 uppercase tracking-wide text-right">Dimensions</h4>
 					<XyzInput
 						values={$displayObject.dimensions}
 						objectId={$displayObject.id}

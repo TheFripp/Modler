@@ -605,7 +605,7 @@ class SupportMeshFactory {
                 }
                 // Return material to pool if it's not shared
                 if (mesh.material && mesh.material !== this.materials.faceHighlight) {
-                    this.materialManager.returnMaterial(mesh.material);
+                    this.materialManager.disposeMaterial(mesh.material);
                 }
             }
         });

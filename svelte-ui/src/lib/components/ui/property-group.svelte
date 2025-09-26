@@ -28,7 +28,7 @@
 
 <div class={cn('property-group', className)} {...restProps}>
 	<div class="property-group-header mb-2">
-		<h3 class="text-xs font-medium text-muted-foreground mb-2">{title}</h3>
+		<h3 class="text-xs font-medium text-muted-foreground mb-2 text-right">{title}</h3>
 	</div>
 
 	{#if !isCollapsed}

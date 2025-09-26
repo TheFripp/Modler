@@ -59,7 +59,7 @@ export function initializeBridge() {
 		try {
 			const directComponents = (window as any)?.modlerComponents;
 			if (directComponents) {
-				bridge.initialize(directComponents);
+						bridge.initialize(directComponents);
 				setupDirectDataSync(directComponents);
 				clearInterval(pollInterval);
 			}
@@ -135,7 +135,6 @@ function syncHierarchyFromSceneController(sceneController: any) {
 			obj.name !== '(Interactive)' &&
 			!obj.name?.toLowerCase().includes('interactive')
 		);
-
 		syncHierarchyFromThreeJS(filteredObjects);
 	} catch (error) {
 		console.error('❌ Error syncing hierarchy:', error);
@@ -148,7 +147,7 @@ function syncHierarchyFromSceneController(sceneController: any) {
 function setupUIToSceneActions(components: any) {
 	// Make scene selection function globally available for UI
 	(window as any).selectObjectInSceneDirectly = (objectId: string) => {
-		if (!components.sceneController || !components.selectionController) {
+			if (!components.sceneController || !components.selectionController) {
 			console.error('❌ Components not available for object selection');
 			return false;
 		}
@@ -183,7 +182,7 @@ export function activateToolInScene(toolName: string) {
 	if (isInIframe) {
 		try {
 			window.parent.postMessage({
-				type: 'tool-activate',
+				type: 'tool-activation',
 				data: { toolName }
 			}, '*');
 		} catch (error) {
@@ -246,13 +245,11 @@ function setupPostMessageFallback() {
 
 		// Verify origin for security (allow any localhost port for development)
 		if (!event.origin.startsWith('http://localhost:')) {
-			// Message rejected - invalid origin
 			return;
 		}
 
 		// Handle both old and new message formats
 		if (event.data && event.data.type) {
-			// Processing message from main application
 
 			try {
 				if (event.data.type === 'data-update') {
@@ -263,8 +260,9 @@ function setupPostMessageFallback() {
 					// Legacy format - data is in event.data.data
 					// Handling modler-data message
 					handleModlerData(event.data.data);
-				} else {
-					// Unknown message type
+				} else if (event.data.type === 'tool-state-update') {
+					// Direct tool state update message
+					syncToolStateFromIframe(event.data.data.toolState);
 				}
 			} catch (error) {
 				console.error('❌ Error processing message:', error);
@@ -309,6 +307,11 @@ function handleDataUpdate(data: any) {
 	if (data.hasOwnProperty('containerContext')) {
 		syncContainerContextFromIframe(data.containerContext);
 	}
+
+	// Update tool state
+	if (data.toolState) {
+		syncToolStateFromIframe(data.toolState);
+	}
 }
 
 /**
@@ -342,6 +345,7 @@ function handleModlerData(data: any) {
 		syncHierarchyFromIframe(data.objectHierarchy || []);
 	} else if (data.type === 'tool-state-update') {
 		// Handle standalone tool state updates
+		console.log('🔧 Bridge: Received tool-state-update message:', data);
 		syncToolStateFromIframe(data.toolState);
 	}
 }

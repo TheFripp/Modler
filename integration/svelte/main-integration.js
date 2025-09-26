@@ -57,7 +57,6 @@
             // Step 8: Show panels
             panelManager.showPanels();
 
-            console.log('✅ Svelte integration initialized successfully');
             // showActivationNotification('Svelte UI Active'); // Disabled toast notification
 
         } catch (error) {
@@ -78,7 +77,6 @@
             }
 
             const { type, data } = event.data;
-            console.log('📨 Received message from Svelte panel:', type, data);
 
             try {
                 switch (type) {
@@ -93,6 +91,9 @@
                         break;
                     case 'container-create':
                         handleContainerCreate(data);
+                        break;
+                    case 'snap-toggle':
+                        handleSnapToggle();
                         break;
                     default:
                         console.warn('🤷 Unknown message type from Svelte panel:', type);
@@ -113,13 +114,69 @@
             return;
         }
 
-        console.log('🔧 Switching to tool:', toolName);
         const success = toolController.switchToTool(toolName);
 
         if (success) {
-            console.log('✅ Tool switched successfully to:', toolName);
+            // Send updated tool state to all panels
+            sendToolStateUpdate(toolName);
         } else {
             console.warn('❌ Failed to switch to tool:', toolName);
+        }
+    }
+
+    /**
+     * Send tool state update to all Svelte panels
+     */
+    function sendToolStateUpdate(toolName) {
+        if (!dataSync || !panelManager) return;
+
+        // Get current snap state
+        const snapController = window.modlerComponents?.snapController;
+        const snapEnabled = snapController ? snapController.getEnabled() : false;
+
+        // Create tool state data
+        const toolStateData = {
+            activeTool: toolName,
+            snapEnabled: snapEnabled
+        };
+
+
+        // Send tool state update via data sync
+        const iframes = panelManager.getIframes();
+
+        // Send to main toolbar
+        if (iframes.mainToolbar && iframes.mainToolbar.contentWindow) {
+            try {
+                iframes.mainToolbar.contentWindow.postMessage({
+                    type: 'tool-state-update',
+                    data: { toolState: toolStateData }
+                }, '*');
+            } catch (error) {
+                console.warn('Failed to send tool state to main toolbar:', error);
+            }
+        }
+
+        // Send to other panels for consistency
+        if (iframes.left && iframes.left.contentWindow) {
+            try {
+                iframes.left.contentWindow.postMessage({
+                    type: 'tool-state-update',
+                    data: { toolState: toolStateData }
+                }, '*');
+            } catch (error) {
+                console.warn('Failed to send tool state to left panel:', error);
+            }
+        }
+
+        if (iframes.right && iframes.right.contentWindow) {
+            try {
+                iframes.right.contentWindow.postMessage({
+                    type: 'tool-state-update',
+                    data: { toolState: toolStateData }
+                }, '*');
+            } catch (error) {
+                console.warn('Failed to send tool state to right panel:', error);
+            }
         }
     }
 
@@ -139,7 +196,6 @@
         const objectData = sceneController.getObjectById(objectId);
         if (objectData && objectData.mesh) {
             selectionController.select(objectData.mesh);
-            console.log('✅ Object selected from UI:', objectData.name);
         } else {
             console.warn('❌ Object not found for selection:', objectId);
         }
@@ -188,7 +244,6 @@
                 window.notifyObjectModified(objectData.mesh, 'property-change');
             }
 
-            console.log('✅ Property updated:', property, '=', value, 'for', objectData.name);
         } else {
             console.warn('❌ Object not found for property update:', objectId);
         }
@@ -208,6 +263,29 @@
         console.log('📦 Creating container from UI:', data);
         // Container creation logic would go here
         // This depends on the specific container creation API
+    }
+
+    /**
+     * Handle snap toggle from Svelte UI
+     */
+    function handleSnapToggle() {
+        const snapController = window.modlerComponents?.snapController;
+
+        if (!snapController) {
+            console.warn('❌ SnapController not available for snap toggle');
+            return;
+        }
+
+        // Toggle snap state
+        const currentState = snapController.getEnabled();
+        snapController.setEnabled(!currentState);
+
+        console.log('🧲 Snap toggled:', !currentState ? 'enabled' : 'disabled');
+
+        // Send updated tool state to all panels
+        const toolController = window.modlerComponents?.toolController;
+        const currentTool = toolController ? toolController.getActiveToolName() : 'select';
+        sendToolStateUpdate(currentTool);
     }
 
     /**
@@ -232,7 +310,6 @@
                 if (window.modlerComponents &&
                     window.modlerComponents.sceneController &&
                     window.modlerComponents.selectionController) {
-                    console.log('✅ Modler components ready');
                     resolve();
                 } else {
                     setTimeout(checkComponents, 100);
@@ -262,13 +339,11 @@
 
             if (sceneController && sceneController.getAllObjects) {
                 const allObjects = sceneController.getAllObjects();
-                console.log('📋 Found scene objects:', allObjects.length);
 
                 if (allObjects && allObjects.length > 0) {
                     const allMeshes = allObjects.map(obj => obj.mesh).filter(mesh => mesh);
 
                     if (allMeshes.length > 0) {
-                        console.log('📋 Sending scene objects to populate object list:', allMeshes.length);
                         dataSync.sendFullDataUpdate(allMeshes, 'scene-objects');
                     } else {
                         console.warn('❌ No scene objects with meshes found - objects without meshes:', allObjects.filter(obj => !obj.mesh));
@@ -285,43 +360,18 @@
             if (currentSelection.length > 0) {
                 dataSync.sendFullDataUpdate(currentSelection, 'initial-sync');
             }
+
+            // Send initial tool state
+            const currentTool = toolController ? toolController.getActiveToolName() : 'select';
+            sendToolStateUpdate(currentTool);
         }
 
         if (toolController) {
             // TODO: ToolController doesn't have event system yet
-            // For now, send initial tool state only
-            const currentTool = toolController.getCurrentTool ? toolController.getCurrentTool() : 'select';
-            sendToolStateUpdate(currentTool);
+            // Initial tool state already sent above
         }
     }
 
-    /**
-     * Send tool state update to Svelte panels
-     */
-    function sendToolStateUpdate(toolName) {
-        if (!dataSync || !panelManager) return;
-
-        const toolData = {
-            currentTool: toolName || 'select',
-            timestamp: Date.now()
-        };
-
-        const iframes = panelManager.getIframes();
-
-        // Send to all panels that need tool state
-        Object.values(iframes).forEach(iframe => {
-            if (iframe && iframe.contentWindow) {
-                try {
-                    iframe.contentWindow.postMessage({
-                        type: 'tool-state-update',
-                        data: toolData
-                    }, '*');
-                } catch (error) {
-                    console.warn('Failed to send tool state update:', error);
-                }
-            }
-        });
-    }
 
     /**
      * Show activation notification
@@ -433,7 +483,6 @@
 
     // Bridge function: Update object list selection (already handled by dataSync but keeping for compatibility)
     window.updateObjectListSelection = function(selectedNames) {
-        console.log('📋 Object list selection update:', selectedNames);
         // This is handled automatically by sendFullDataUpdate, but we can add specific logic if needed
     };
 
@@ -446,7 +495,6 @@
 
         try {
             const allObjects = sceneController.getAllObjects();
-            console.log('📋 Populating object list with', allObjects.length, 'objects');
 
             if (allObjects && allObjects.length > 0) {
                 const allMeshes = allObjects.map(obj => obj.mesh).filter(mesh => mesh);
@@ -468,8 +516,6 @@
     // Bridge function: Notify object hierarchy changed (containers, parents, children)
     window.notifyObjectHierarchyChanged = function() {
         if (!dataSync) return;
-
-        console.log('🌳 Object hierarchy changed - updating all panels');
 
         // Update the full object list to reflect hierarchy changes
         window.populateObjectList();
@@ -567,7 +613,6 @@
     window.updateConfigUIFromValues = function(configValues) {
         if (!dataSync || !panelManager) return;
 
-        console.log('⚙️ Config UI update:', Object.keys(configValues || {}).length, 'values');
 
         try {
             const configData = {
@@ -627,8 +672,6 @@
     window.updateSelectedObjectInfo = function(object) {
         if (!dataSync) return;
 
-        console.log('📋 Selected object info update:', object?.userData?.name || 'Unknown');
-
         try {
             if (object) {
                 dataSync.sendFullDataUpdate([object], 'creation-object-info');
@@ -636,6 +679,40 @@
         } catch (error) {
             console.warn('❌ Error updating selected object info:', error);
         }
+    };
+
+    // Bridge function: Notify tool state changed (for keyboard shortcuts)
+    window.notifyToolStateChanged = function(toolName) {
+        sendToolStateUpdate(toolName);
+    };
+
+    // Bridge function: Toggle snapping on/off
+    window.toggleSnapping = function() {
+        const snapController = window.modlerComponents?.snapController;
+
+        if (!snapController) {
+            console.warn('❌ SnapController not available for snap toggle');
+            return;
+        }
+
+        // Toggle snap state
+        const currentState = snapController.getEnabled();
+        snapController.setEnabled(!currentState);
+
+        console.log('🧲 Snapping toggled:', !currentState ? 'enabled' : 'disabled');
+        return !currentState;
+    };
+
+    // Bridge function: Activate tool by name
+    window.activateTool = function(toolName) {
+        const toolController = window.modlerComponents?.toolController;
+
+        if (!toolController) {
+            console.warn('❌ ToolController not available for tool activation');
+            return;
+        }
+
+        return toolController.switchToTool(toolName);
     };
 
     // Export for debugging/external access

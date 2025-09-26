@@ -10,7 +10,7 @@
 		{ id: 'select', label: 'Select', shortcut: 'Q', icon: MousePointer },
 		{ id: 'move', label: 'Move', shortcut: 'W', icon: Move },
 		{ id: 'push', label: 'Push', shortcut: 'E', icon: ArrowUp },
-		{ id: 'box-creation', label: 'Create Box', shortcut: 'T', icon: Box }
+		{ id: 'box-creation', label: 'Create Box', shortcut: 'R', icon: Box }
 	];
 
 	function handleToolClick(toolName: string) {
@@ -32,6 +32,7 @@
 	onMount(() => {
 		// Enable dark mode
 		document.documentElement.classList.add('dark');
+
 
 		// Initialize the bridge with Three.js for real-time synchronization
 		initializeBridge();
@@ -139,6 +140,10 @@
 	.toolbar-btn.active:hover {
 		background: radial-gradient(circle 20px at center, rgba(107, 182, 255, 0.2) 0%, rgba(107, 182, 255, 0) 100%);
 		color: #4a9eff; /* Keep light blue icon on active hover */
+	}
+
+	.toolbar-btn:focus {
+		outline: none; /* Remove default focus outline */
 	}
 
 	.separator {

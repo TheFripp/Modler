@@ -233,20 +233,16 @@ function convertThreeObjectToObjectData(threeObject: any): ObjectData {
 
 // Update Three.js from Svelte store changes
 export function updateThreeJSProperty(objectId: string, property: string, value: any, source: string = 'input') {
-	console.log('🔧 updateThreeJSProperty called:', { objectId, property, value, source });
-
 	// Check if we're in an iframe - use PostMessage for cross-origin communication
 	const isInIframe = window !== window.parent;
 
 	if (isInIframe) {
-		console.log('🔧 Using iframe PostMessage for property update');
 		// Use PostMessage for iframe communication (secure)
 		try {
 			window.parent.postMessage({
 				type: 'property-update',
 				data: { objectId, property, value, source }
 			}, '*');
-			console.log('✅ PostMessage property update sent successfully');
 			return;
 		} catch (error) {
 			console.error('❌ PostMessage property update failed:', error);

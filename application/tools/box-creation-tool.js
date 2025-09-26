@@ -315,7 +315,7 @@ class BoxCreationTool {
         } catch (error) {
             if (boxGeometry) this.geometryFactory.returnGeometry(boxGeometry, 'box');
             if (edgeGeometry) this.geometryFactory.returnGeometry(edgeGeometry, 'edge');
-            if (material) this.materialManager.returnMaterial(material);
+            if (material) this.materialManager.disposeMaterial(material);
             return;
         }
 
@@ -488,7 +488,7 @@ class BoxCreationTool {
                     this.geometryFactory.returnGeometry(this.previewBox.geometry, 'edge');
                 }
                 if (this.previewBox.material) {
-                    this.materialManager.returnMaterial(this.previewBox.material);
+                    this.materialManager.disposeMaterial(this.previewBox.material);
                 }
             } catch (error) {
             }

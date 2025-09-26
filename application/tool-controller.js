@@ -74,7 +74,12 @@ class ToolController {
         if (this.activeTool && this.activeTool.activate) {
             this.activeTool.activate();
         }
-        
+
+        // Notify tool state change for UI synchronization
+        if (window.notifyToolStateChanged) {
+            window.notifyToolStateChanged(toolName);
+        }
+
         return true;
     }
     
@@ -244,23 +249,16 @@ class ToolController {
         const containers = selectableObjectData.filter(obj => obj.isContainer);
         const regularObjects = selectableObjectData.filter(obj => !obj.isContainer);
 
-        console.log('📊 Scenario detection:', {
-            containers: containers.length,
-            containerNames: containers.map(c => c.name),
-            regularObjects: regularObjects.length,
-            regularObjectNames: regularObjects.map(o => o.name)
-        });
 
         // Scenario 1: Objects only - Create new container (existing behavior)
         if (containers.length === 0 && regularObjects.length > 0) {
-            console.log('📦 Creating new container from selected objects');
             const selectableMeshes = regularObjects.map(obj => obj.mesh);
             return this.executeContainerCreationCommand(selectableMeshes);
         }
 
         // Scenario 2: Container + objects - Create NEW container containing everything
         if (containers.length === 1 && regularObjects.length > 0) {
-            console.log(`🏗️ Creating new container from ${containers.length} container(s) and ${regularObjects.length} object(s)`);
+            ;
 
             // Combine all meshes (both containers and objects)
             const allMeshes = [
@@ -309,7 +307,7 @@ class ToolController {
 
         // Scenario 4: Multiple containers (2+ containers, no regular objects) - Create new container containing all
         if (containers.length >= 2 && regularObjects.length === 0) {
-            console.log(`🏗️ Creating new container from ${containers.length} selected containers`);
+            ;
 
             const allMeshes = containers.map(obj => obj.mesh);
             return this.executeContainerCreationCommand(allMeshes);
@@ -317,7 +315,7 @@ class ToolController {
 
         // Scenario 5: Mixed selection with multiple containers + objects - Create new container containing everything
         if (containers.length > 1 && regularObjects.length > 0) {
-            console.log(`🏗️ Creating new container from ${containers.length} container(s) and ${regularObjects.length} object(s)`);
+            ;
 
             // Combine all meshes (both containers and objects)
             const allMeshes = [
@@ -330,7 +328,6 @@ class ToolController {
 
         // Fallback: Single container selected
         if (containers.length === 1 && regularObjects.length === 0) {
-            console.log('ℹ️ Single container selected - no action needed');
             return false;
         }
 
@@ -358,7 +355,6 @@ class ToolController {
         const success = historyManager.executeCommand(command);
 
         if (success) {
-            console.log('✅ Container creation added to undo stack');
         } else {
             console.error('❌ Failed to execute container creation command');
         }

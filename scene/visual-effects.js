@@ -378,7 +378,7 @@ class VisualEffects {
                 this.geometryFactory.returnGeometry(this.rectanglePreview.geometry, 'wireframe');
             }
             if (this.rectanglePreview.material) {
-                this.materialManager.returnMaterial(this.rectanglePreview.material);
+                this.materialManager.disposeMaterial(this.rectanglePreview.material);
             }
             this.rectanglePreview = null;
         }
@@ -563,9 +563,9 @@ class VisualEffects {
                 if (child.geometry) this.geometryFactory.returnGeometry(child.geometry, 'edge');
                 if (child.material) {
                     if (Array.isArray(child.material)) {
-                        child.material.forEach(mat => this.materialManager.returnMaterial(mat));
+                        child.material.forEach(mat => this.materialManager.disposeMaterial(mat));
                     } else {
-                        this.materialManager.returnMaterial(child.material);
+                        this.materialManager.disposeMaterial(child.material);
                     }
                 }
             });

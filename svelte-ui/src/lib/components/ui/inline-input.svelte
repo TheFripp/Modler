@@ -90,7 +90,6 @@
 	function handleInputChange(event: Event) {
 		const target = event.target as HTMLInputElement;
 		const newValue = type === 'number' ? parseFloat(target.value) : target.value;
-		console.log('🔧 InlineInput handleInputChange:', { objectId, property, newValue, type });
 
 		if (objectId && property) {
 			// Use property controller for immediate update
@@ -120,13 +119,11 @@
 		// Ensure property controller gets the final value on blur (only place where updates happen)
 		if (objectId && property) {
 			const newValue = type === 'number' ? parseFloat(String(inputValue)) : inputValue;
-			console.log('🔧 InlineInput handleBlur:', { objectId, property, newValue, inputValue, type });
 
 			// Skip NaN values for number inputs
 			if (type === 'number' && isNaN(newValue)) {
 				// Reset to original value or 0 for mixed values
 				inputValue = (value === '' || value === undefined) ? 0 : value;
-				console.log('🔧 Reset NaN value to:', inputValue);
 			} else {
 				// Always update on blur regardless of whether value changed (handles mixed→single transitions)
 				propertyController.updateProperty(objectId, property, newValue, 'input');
