@@ -152,6 +152,89 @@ class GeometryUtils {
     }
 
     /**
+     * Push a face of geometry along an axis (move one face while keeping opposite face fixed)
+     * @param {THREE.BufferGeometry} geometry - Target geometry
+     * @param {string} axis - Axis to push along ('x', 'y', or 'z')
+     * @param {number} direction - Direction to push (1 for positive, -1 for negative)
+     * @param {number} delta - Amount to push in world units
+     * @returns {boolean} Success status
+     */
+    static pushGeometryFace(geometry, axis, direction, delta) {
+        if (!this.validateGeometryForManipulation(geometry)) {
+            console.warn('GeometryUtils: Invalid geometry for face pushing');
+            return false;
+        }
+
+        if (Math.abs(delta) < 0.0001) {
+            return true; // No change needed
+        }
+
+        try {
+            const positions = geometry.getAttribute('position');
+            const vertices = positions.array;
+            const axisIndex = this.getAxisIndex(axis);
+
+            if (axisIndex === null) {
+                console.warn('GeometryUtils: Invalid axis for face pushing:', axis);
+                return false;
+            }
+
+            // Calculate current geometry bounds
+            geometry.computeBoundingBox();
+            const bbox = geometry.boundingBox;
+            const minCoord = bbox.min[axis];
+            const maxCoord = bbox.max[axis];
+            const epsilon = 0.001;
+
+            // Determine which face we're pushing (max or min face)
+            const isPushingMaxFace = direction > 0;
+            const targetCoord = isPushingMaxFace ? maxCoord : minCoord;
+
+            // Calculate new bounds after the push
+            let newMinCoord, newMaxCoord;
+            if (isPushingMaxFace) {
+                newMinCoord = minCoord;
+                newMaxCoord = maxCoord + delta;
+            } else {
+                newMinCoord = minCoord + delta;
+                newMaxCoord = maxCoord;
+            }
+
+            // Validate that push doesn't create degenerate geometry
+            const newSize = newMaxCoord - newMinCoord;
+            if (newSize < 0.001 || newMinCoord >= newMaxCoord) {
+                console.warn('GeometryUtils: Push would create degenerate geometry');
+                return false;
+            }
+
+            // Move vertices on the target face
+            let verticesModified = 0;
+            for (let i = 0; i < vertices.length; i += 3) {
+                if (Math.abs(vertices[i + axisIndex] - targetCoord) < epsilon) {
+                    vertices[i + axisIndex] += delta;
+                    verticesModified++;
+                }
+            }
+
+            if (verticesModified === 0) {
+                console.warn('GeometryUtils: No vertices found on target face');
+                return false;
+            }
+
+            // Update geometry
+            positions.needsUpdate = true;
+            geometry.computeBoundingBox();
+            geometry.computeBoundingSphere();
+
+            return true;
+
+        } catch (error) {
+            console.error('GeometryUtils: Failed to push geometry face:', error);
+            return false;
+        }
+    }
+
+    /**
      * Get axis index for coordinate access
      * @param {string} axis - Axis name ('x', 'y', or 'z')
      * @returns {number|null} Index (0, 1, 2) or null if invalid

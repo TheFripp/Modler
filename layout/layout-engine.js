@@ -102,7 +102,7 @@ class LayoutEngine {
         });
 
         // Center the entire layout around the layout anchor (or origin if no anchor)
-        const centeredPositions = this.centerLayoutPositions(positions, axis, layoutAnchor);
+        const centeredPositions = this.centerLayoutPositions(positions, objectSizes, axis, layoutAnchor);
 
         // Apply padding after centering
         const finalPositions = this.applyPaddingToAxis(centeredPositions, axis, paddingOffset);
@@ -383,25 +383,42 @@ class LayoutEngine {
     }
     
     /**
-     * Center layout positions along the layout axis
+     * Center layout positions along the layout axis using actual bounds calculation
      * @param {Array} positions - Array of position vectors
+     * @param {Array} sizes - Array of size vectors corresponding to positions
      * @param {string} axis - Layout axis
      * @param {THREE.Vector3} layoutAnchor - Optional anchor point to center layout around (default: origin)
      * @returns {Array} Centered positions
      */
-    static centerLayoutPositions(positions, axis, layoutAnchor = null) {
-        if (positions.length === 0) return positions;
+    static centerLayoutPositions(positions, sizes, axis, layoutAnchor = null) {
+        if (positions.length === 0 || sizes.length === 0) return positions;
 
-        // Find the center of the layout
+        // Calculate actual layout bounds considering object sizes (not just positions)
         let min = Infinity, max = -Infinity;
 
-        positions.forEach(pos => {
-            const value = axis === 'x' ? pos.x : axis === 'y' ? pos.y : pos.z;
-            min = Math.min(min, value);
-            max = Math.max(max, value);
+        positions.forEach((pos, index) => {
+            const size = sizes[index];
+            if (!size) return;
+
+            // Calculate the actual bounds of this object
+            let objMin, objMax;
+            if (axis === 'x') {
+                objMin = pos.x - size.x / 2;
+                objMax = pos.x + size.x / 2;
+            } else if (axis === 'y') {
+                objMin = pos.y - size.y / 2;
+                objMax = pos.y + size.y / 2;
+            } else if (axis === 'z') {
+                objMin = pos.z - size.z / 2;
+                objMax = pos.z + size.z / 2;
+            }
+
+            min = Math.min(min, objMin);
+            max = Math.max(max, objMax);
         });
 
-        const center = (min + max) / 2;
+        // Calculate the center of the actual layout bounds
+        const boundsCenter = (min + max) / 2;
 
         // Determine target center: use layoutAnchor if provided, otherwise origin
         let targetCenter = 0;
@@ -411,8 +428,10 @@ class LayoutEngine {
             else if (axis === 'z') targetCenter = layoutAnchor.z;
         }
 
-        // Adjust all positions to center the layout around the target center
-        const offset = targetCenter - center;
+        // Debug: Layout centering with bounds-based calculation
+
+        // Calculate offset to center the layout bounds around the target center
+        const offset = targetCenter - boundsCenter;
         return positions.map(pos => {
             const centeredPos = pos.clone();
             if (axis === 'x') centeredPos.x += offset;

@@ -324,8 +324,7 @@ class PushTool {
     syncContainerUpdates() {
         if (this.isContainerPush) {
             // Container push: Full container repositioning and resizing
-            const newContainerSize = this.calculateContainerSizeForFillObjects();
-            MovementUtils.updateParentContainer(this.pushedObject, false, null, newContainerSize, true, false);
+            MovementUtils.updateParentContainer(this.pushedObject, false, null, null, true, false);
 
             // Trigger layout recalculation if pushing a container in layout mode
             const sceneController = window.modlerComponents?.sceneController;
@@ -387,7 +386,7 @@ class PushTool {
     }
 
     /**
-     * Modify regular object geometry with vertex manipulation
+     * Modify regular object geometry using centralized GeometryUtils
      * @param {number} delta - Incremental movement amount in world units
      */
     modifyRegularGeometry(delta) {
@@ -395,82 +394,25 @@ class PushTool {
         const meshToModify = this.actualPushedMesh || this.pushedObject;
         if (!meshToModify || !meshToModify.geometry) return;
 
-        // Work with current geometry (not original)
-        const geometry = meshToModify.geometry;
-        geometry.computeBoundingBox();
-        const bbox = geometry.boundingBox;
-
-        const positions = geometry.getAttribute('position');
-        const vertices = positions.array;
-
-        // Calculate current geometry bounds to determine which vertices to move
-        let minCoord, maxCoord, axisIndex;
-        if (this.pushAxis === 'x') {
-            minCoord = bbox.min.x;
-            maxCoord = bbox.max.x;
-            axisIndex = 0;
-        } else if (this.pushAxis === 'y') {
-            minCoord = bbox.min.y;
-            maxCoord = bbox.max.y;
-            axisIndex = 1;
-        } else if (this.pushAxis === 'z') {
-            minCoord = bbox.min.z;
-            maxCoord = bbox.max.z;
-            axisIndex = 2;
+        // Use centralized GeometryUtils for face-based pushing
+        const geometryUtils = window.GeometryUtils;
+        if (!geometryUtils) {
+            console.warn('PushTool: GeometryUtils not available');
+            return;
         }
 
-        // Calculate tolerance for vertex comparison
-        const epsilon = 0.001;
+        // Perform face push using centralized utility
+        const success = geometryUtils.pushGeometryFace(
+            meshToModify.geometry,
+            this.pushAxis,
+            this.pushDirection,
+            delta
+        );
 
-        // Calculate which face we're pushing (max or min face)
-        const isPushingMaxFace = this.pushDirection > 0;
-
-        // Calculate new bounds after the push
-        let newMinCoord, newMaxCoord;
-        if (isPushingMaxFace) {
-            // Pushing the max face outward: max moves, min stays
-            newMinCoord = minCoord;
-            newMaxCoord = maxCoord + delta;
-        } else {
-            // Pushing the min face inward: min moves, max stays
-            newMinCoord = minCoord + delta;
-            newMaxCoord = maxCoord;
+        if (success) {
+            // Refresh visual feedback - this will handle all mesh synchronization
+            this.refreshVisualFeedback();
         }
-
-        // Calculate resulting size
-        const newSize = newMaxCoord - newMinCoord;
-
-        // Prevent geometry from becoming too small (minimum 0.001 units for very flat cubes)
-        if (newSize < 0.001) {
-            return; // Skip this modification
-        }
-
-        // Prevent faces from crossing over (inside-out geometry)
-        if (newMinCoord >= newMaxCoord) {
-            return; // Skip this modification
-        }
-
-        // Modify vertices: move only vertices on the target face
-        const targetCoord = isPushingMaxFace ? maxCoord : minCoord;
-        let verticesModified = 0;
-
-        for (let i = 0; i < vertices.length; i += 3) {
-            if (Math.abs(vertices[i + axisIndex] - targetCoord) < epsilon) {
-                vertices[i + axisIndex] += delta;
-                verticesModified++;
-            }
-        }
-
-        // Early return if no vertices were modified
-        if (verticesModified === 0) return;
-
-        // Update geometry
-        positions.needsUpdate = true;
-        geometry.computeBoundingBox();
-        geometry.computeBoundingSphere();
-
-        // Refresh visual feedback - this will handle all mesh synchronization
-        this.refreshVisualFeedback();
     }
 
     refreshVisualFeedback() {
@@ -486,9 +428,6 @@ class PushTool {
 
         // Update face highlighting to match new geometry
         this.updateFaceHighlighting();
-
-        // Sync geometry changes for wireframes and highlighting through centralized system
-        MovementUtils.syncRelatedMeshes(meshToUpdate, 'geometry', true);
 
         // Update SceneController object data dimensions from modified geometry
         if (meshToUpdate?.userData?.id) {
@@ -572,35 +511,23 @@ class PushTool {
             canvas.style.cursor = 'default';
         }
 
-        // Force final selection wireframe update to ensure proper alignment
+        // Final updates for pushed object
         if (pushedObject && this.selectionController.isSelected(pushedObject)) {
-            const geometryUtils = window.GeometryUtils;
-            if (geometryUtils) {
-                // Update all support meshes (wireframes, highlights, etc.) after geometry change
-                geometryUtils.updateSupportMeshGeometries(pushedObject);
-            }
-
             // Update SceneController object data dimensions for final state
             if (pushedObject?.userData?.id) {
                 this.updateObjectDataDimensions(pushedObject.userData.id, pushedObject);
             }
 
-            // Notify centralized system of final geometry state for property panel updates
+            // Update support meshes and notify system - handles property panel updates automatically
+            const geometryUtils = window.GeometryUtils;
+            if (geometryUtils) {
+                geometryUtils.updateSupportMeshGeometries(pushedObject);
+            }
+
+            // Centralized notification handles property panel updates and data sync
             if (window.notifyObjectModified) {
                 window.notifyObjectModified(pushedObject, 'geometry');
             }
-        }
-
-        // Also force visualization refresh (only if object was selected)
-        if (pushedObject && this.selectionController.isSelected(pushedObject)) {
-            if (this.selectionController.visualizationManager) {
-                this.selectionController.visualizationManager.updateGeometry(pushedObject);
-            }
-        }
-
-        // Restore properties panel to show current selection state
-        if (this.selectionController.updatePropertyPanelForCurrentSelection) {
-            this.selectionController.updatePropertyPanelForCurrentSelection();
         }
 
         // Clear any existing highlights and hover states to ensure clean state
@@ -609,22 +536,16 @@ class PushTool {
         // Final container updates based on push type
         if (this.isContainerPush) {
             // Container push: Full container repositioning and resizing
-            const finalContainerSize = this.calculateContainerSizeForFillObjects();
-            MovementUtils.updateParentContainer(pushedObject, true, null, finalContainerSize, false, false);
+            MovementUtils.updateParentContainer(pushedObject, true, null, null, false, false);
         } else {
             // Individual object push: Final container update with directional adjustment
             this.updateContainerForObjectPush(true);
         }
     }
 
-    calculateContainerSizeForFillObjects() {
-        // Simple container size calculation - let MovementUtils handle the complexity
-        return null;
-    }
 
     /**
-     * Update SceneController object data dimensions from current geometry
-     * Ensures property panel sync after geometry modifications
+     * Update SceneController object data dimensions using centralized GeometryUtils
      */
     updateObjectDataDimensions(objectId, mesh) {
         if (!mesh || !mesh.geometry) return;
@@ -635,18 +556,9 @@ class PushTool {
         const objectData = sceneController.getObject(objectId);
         if (!objectData) return;
 
-        // Force geometry bounds recalculation
-        mesh.geometry.computeBoundingBox();
-        const box = mesh.geometry.boundingBox;
-
-        if (box) {
-            // Calculate actual dimensions from bounding box
-            const dimensions = {
-                x: Math.abs(box.max.x - box.min.x),
-                y: Math.abs(box.max.y - box.min.y),
-                z: Math.abs(box.max.z - box.min.z)
-            };
-
+        // Use centralized GeometryUtils for dimension calculation
+        const dimensions = window.GeometryUtils?.getGeometryDimensions(mesh.geometry);
+        if (dimensions) {
             // Update SceneController object data
             objectData.dimensions = dimensions;
 
@@ -654,9 +566,7 @@ class PushTool {
             if (!mesh.userData.dimensions) {
                 mesh.userData.dimensions = {};
             }
-            mesh.userData.dimensions.x = dimensions.x;
-            mesh.userData.dimensions.y = dimensions.y;
-            mesh.userData.dimensions.z = dimensions.z;
+            Object.assign(mesh.userData.dimensions, dimensions);
         }
     }
 
@@ -772,151 +682,24 @@ class PushTool {
     }
 
     /**
-     * Update container for individual object push with child position compensation
-     * Key insight: compensate for container movement by moving children back
+     * Update container for individual object push using centralized MovementUtils
      */
     updateContainerForObjectPush(isFinalUpdate = false, isRealTime = false) {
-        const sceneController = window.modlerComponents?.sceneController;
-        if (!sceneController || !this.pushedObject) return;
+        if (!this.pushedObject) return;
 
-        const objectData = sceneController.getObjectByMesh(this.pushedObject);
-        if (!objectData || !objectData.parentContainer) return;
-
-        const containerData = sceneController.getObject(objectData.parentContainer);
-        if (!containerData || !containerData.mesh) return;
-
-        if (isRealTime) {
-            // LIGHTWEIGHT REAL-TIME UPDATE: Just use cached calculations
-            this.updateContainerRealTime(containerData);
-        } else {
-            // FULL UPDATE: Complete recalculation for final positioning
-            this.updateContainerFull(containerData, isFinalUpdate);
-        }
-    }
-
-    updateContainerRealTime(containerData) {
-        if (!this.lastContainerCalculation) return;
-
-        const containerMesh = containerData.mesh;
-
-        // Calculate directional offset based on current push amount
-        const directionalOffset = this.cumulativeAmount * this.pushDirection * 0.5;
-        const newPosition = this.lastContainerCalculation.originalPosition.clone();
-
-        if (this.pushAxis === 'x') {
-            newPosition.x += directionalOffset;
-        } else if (this.pushAxis === 'y') {
-            newPosition.y += directionalOffset;
-        } else if (this.pushAxis === 'z') {
-            newPosition.z += directionalOffset;
-        }
-
-        // Just move the container using centralized transformation
-        if (this.transformationManager) {
-            this.transformationManager.setPosition(containerMesh, newPosition, { batchUpdate: true });
-        } else {
-            // Fallback to direct manipulation
-            containerMesh.position.copy(newPosition);
-        }
-    }
-
-    updateContainerFull(containerData, isFinalUpdate) {
-        const sceneController = window.modlerComponents?.sceneController;
-        const containerMesh = containerData.mesh;
-        const originalContainerPosition = containerMesh.position.clone();
-
-        // Cache this calculation for real-time updates
-        this.lastContainerCalculation = {
-            originalPosition: originalContainerPosition.clone()
-        };
-
-        // Calculate what the container bounds should be
-        const childObjects = sceneController.getChildObjects(containerData.id);
-        const childMeshes = childObjects
-            .map(child => child.mesh)
-            .filter(mesh => mesh && mesh.geometry && mesh.geometry.type !== 'EdgesGeometry');
-
-        if (childMeshes.length === 0) return;
-
-        // Calculate bounds of all children (includes the pushed object)
-        const bounds = PositionTransform.calculateObjectBounds(childMeshes, isFinalUpdate);
-        if (!bounds) return;
-
-        // Calculate directional position to keep fixed edge in place
-        const currentSize = this.getContainerSize(containerMesh);
-        const axisIndex = this.pushAxis === 'x' ? 0 : (this.pushAxis === 'y' ? 1 : 2);
-
-        // Calculate where the fixed edge should be (opposite to push direction)
-        const fixedEdgeOffset = (currentSize.getComponent(axisIndex) / 2) * -this.pushDirection;
-        const fixedEdgePosition = containerMesh.position.getComponent(axisIndex) + fixedEdgeOffset;
-
-        // Calculate new container center position to keep fixed edge in place
-        const newCenterPosition = containerMesh.position.clone();
-        const newFixedEdgeOffset = (bounds.size.getComponent(axisIndex) / 2) * -this.pushDirection;
-        const newCenterCoord = fixedEdgePosition - newFixedEdgeOffset;
-
-        if (this.pushAxis === 'x') {
-            newCenterPosition.x = newCenterCoord;
-        } else if (this.pushAxis === 'y') {
-            newCenterPosition.y = newCenterCoord;
-        } else if (this.pushAxis === 'z') {
-            newCenterPosition.z = newCenterCoord;
-        }
-
-        // Calculate container movement
-        const containerMovement = new THREE.Vector3().subVectors(newCenterPosition, originalContainerPosition);
-
-        // Move all child objects back to compensate for container movement
-        childObjects.forEach(childData => {
-            if (childData.mesh) {
-                if (this.transformationManager) {
-                    const newChildPosition = childData.mesh.position.clone().sub(containerMovement);
-                    this.transformationManager.setPosition(childData.mesh, newChildPosition, { batchUpdate: true });
-                } else {
-                    // Fallback to direct manipulation
-                    childData.mesh.position.sub(containerMovement);
-                }
-                sceneController.updateObject(childData.id, { position: childData.mesh.position });
-            }
-        });
-
-        // Full update for final positioning
-        LayoutGeometry.updateContainerGeometry(
-            containerMesh,
-            bounds.size,
-            newCenterPosition,
-            true, // shouldReposition = true
-            null // No layout direction visualization during push operations
+        // Use centralized MovementUtils for container updates
+        MovementUtils.updateParentContainer(
+            this.pushedObject,
+            isFinalUpdate, // realTime parameter
+            null, // throttleState (let MovementUtils handle)
+            null, // newContainerSize (let it calculate)
+            !isRealTime, // immediateVisuals (opposite of isRealTime)
+            false // preservePosition
         );
-
-        // Update SceneController with new container position
-        sceneController.updateObject(containerData.id, { position: newCenterPosition });
     }
 
     /**
-     * Update interactive mesh position to match container position
-     */
-    updateInteractiveMeshPosition(containerData) {
-        const scene = window.modlerComponents?.sceneFoundation?.scene;
-        if (!scene) return;
-
-        // Find interactive mesh linked to this container
-        scene.traverse((object) => {
-            if (object.userData.isContainerInteractive &&
-                object.userData.containerMesh === containerData.mesh) {
-                if (this.transformationManager) {
-                    this.transformationManager.setPosition(object, containerData.mesh.position, { batchUpdate: true });
-                } else {
-                    // Fallback to direct manipulation
-                    object.position.copy(containerData.mesh.position);
-                    object.updateMatrixWorld(true);
-                }
-            }
-        });
-    }
-
-    /**
-     * Get container size from mesh geometry
+     * Get container size using centralized GeometryUtils
      * @param {THREE.Object3D} containerMesh - Container mesh object
      * @returns {THREE.Vector3} Container size
      */
@@ -925,21 +708,14 @@ class PushTool {
             return new THREE.Vector3(1, 1, 1);
         }
 
-        // Force geometry bounds recalculation
-        containerMesh.geometry.computeBoundingBox();
-        const box = containerMesh.geometry.boundingBox;
-
-        if (box) {
-            return new THREE.Vector3(
-                box.max.x - box.min.x,
-                box.max.y - box.min.y,
-                box.max.z - box.min.z
-            );
+        const dimensions = window.GeometryUtils?.getGeometryDimensions(containerMesh.geometry);
+        if (dimensions) {
+            return new THREE.Vector3(dimensions.x, dimensions.y, dimensions.z);
         }
 
+        // Fallback
         return new THREE.Vector3(1, 1, 1);
     }
-
 
     /**
      * Tool deactivation using centralized event handler
@@ -961,11 +737,6 @@ class PushTool {
     /**
      * Clear hover state using shared behavior
      */
-    clearHover() {
-        this.faceToolBehavior.clearHover();
-    }
-
-
 }
 
 // Export for use in main application

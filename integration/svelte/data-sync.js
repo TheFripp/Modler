@@ -81,10 +81,7 @@ class SvelteDataSync {
      * Send full data update to all Svelte panels
      */
     sendFullDataUpdate(selectedObjects, updateType = 'data-update') {
-        // Only log object list updates
-        if (['object-list-populate', 'object-list-clear'].includes(updateType)) {
-            console.log(`📋 DataSync: ${updateType} (${selectedObjects?.length || 0} objects)`);
-        }
+        // Debug logging removed to reduce spam during normal operations
 
         if (!selectedObjects) return;
 
@@ -261,6 +258,39 @@ class SvelteDataSync {
                 if (mesh.material) {
                     mesh.material.opacity = parseFloat(value);
                     mesh.material.transparent = mesh.material.opacity < 1;
+                }
+                break;
+
+            case 'autoLayout.enabled':
+                // Handle auto layout mode changes for containers
+                if (objectData.isContainer) {
+                    const sceneController = window.modlerComponents?.sceneController;
+                    if (sceneController) {
+                        const enabled = value === true || value === 'true';
+                        if (enabled) {
+                            // Enable auto layout with current direction or default to 'x'
+                            // SceneController will handle container resizing automatically
+                            const direction = objectData.autoLayout?.direction || 'x';
+                            sceneController.enableAutoLayout(objectData.id, { direction });
+                        } else {
+                            sceneController.disableAutoLayout(objectData.id);
+                        }
+                    }
+                }
+                break;
+
+            case 'autoLayout.direction':
+                // Handle auto layout direction changes for containers
+                if (objectData.isContainer && objectData.autoLayout?.enabled) {
+                    const sceneController = window.modlerComponents?.sceneController;
+                    if (sceneController) {
+                        // Update layout with new direction (enableAutoLayout will handle container resizing)
+                        sceneController.enableAutoLayout(objectData.id, {
+                            direction: value,
+                            gap: objectData.autoLayout.gap || 0,
+                            padding: objectData.autoLayout.padding || { top: 0, bottom: 0, left: 0, right: 0, front: 0, back: 0 }
+                        });
+                    }
                 }
                 break;
 

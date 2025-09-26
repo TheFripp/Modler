@@ -499,7 +499,7 @@
 		// Debug: Log object hierarchy changes (only when meaningful)
 		objectHierarchy.subscribe(hierarchy => {
 			if (hierarchy.length > 0) {
-				console.log(`📋 Left Panel: Updated with ${hierarchy.length} objects`);
+				// Debug: Left Panel updated (removed to reduce log spam)
 			}
 		});
 

@@ -393,7 +393,16 @@ class SceneController {
             ...layoutConfig
         };
 
-        this.updateLayout(containerId);
+        const layoutResult = this.updateLayout(containerId);
+
+        // Resize container to fit the laid out objects
+        if (layoutResult && layoutResult.success && layoutResult.layoutBounds) {
+            const containerCrudManager = window.modlerComponents?.containerCrudManager;
+            if (containerCrudManager) {
+                containerCrudManager.resizeContainerToLayoutBounds(container, layoutResult.layoutBounds);
+            }
+        }
+
         return true;
     }
     
@@ -409,17 +418,12 @@ class SceneController {
         const container = this.objects.get(containerId);
         if (!container || !container.mesh) return;
 
-        // Calculate the size-weighted center of all child objects in world space
-        // This preserves the visual balance of different-sized objects during layout transitions
-        const originalCenter = this.calculateObjectsCenter(childObjects);
-
-        // Convert original center to container-relative coordinates
+        // Get container world position for coordinate conversion
         const containerWorldPosition = container.mesh.getWorldPosition(new THREE.Vector3());
-        const originalCenterRelative = originalCenter.clone().sub(containerWorldPosition);
 
-        // Store the original center as layout anchor for the layout engine
-        container.layoutAnchor = originalCenterRelative.clone();
-
+        // For newly created containers, objects are already properly centered
+        // Use origin as layout anchor to center the layout properly
+        container.layoutAnchor = new THREE.Vector3(0, 0, 0);
 
         // Convert each child to container-relative coordinates, preserving their relative positions
         childObjects.forEach((childData) => {

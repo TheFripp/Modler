@@ -659,7 +659,7 @@
     window.updatePropertyPanelDimensions = function(width, height, depth) {
         if (!dataSync || !panelManager) return;
 
-        console.log('📏 Property panel dimensions update:', { width, height, depth });
+        // Debug: Property panel dimensions update (removed to reduce log spam)
 
         try {
             const dimensionData = {

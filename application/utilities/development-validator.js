@@ -121,6 +121,13 @@ class DevelopmentValidator {
             'GeometryFactory',
             'MaterialManager',
             'VisualizationResourcePool',
+            'addObject',                // Allow main object creation in SceneController
+            'showRectanglePreview',     // Allow visual effects preview geometries
+            'createPreview',           // Allow tool preview creation
+            'showEdgeIndicator',       // Allow snap visualization edge indicators
+            'updateSnapIndicator',     // Allow snap visualization updates
+            'createLayoutAwareWireframe', // Allow layout wireframe creation
+            'updateContainerGeometry', // Allow container geometry updates
             'createFloorGrid',          // Allow floor grid creation
             'createDemoObjects',        // Allow demo object creation
             'restoreObjectFromSnapshot', // Allow object restoration

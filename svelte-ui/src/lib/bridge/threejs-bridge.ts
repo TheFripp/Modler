@@ -277,14 +277,7 @@ function setupPostMessageFallback() {
  * Handle data update from new integration system
  */
 function handleDataUpdate(data: any) {
-	// Only log object list updates (with deduplication)
-	if (['object-list-populate', 'object-list-clear'].includes(data.updateType)) {
-		// Only log once per update to avoid duplicate logs from multiple panels
-		if (!window._lastLoggedUpdate || window._lastLoggedUpdate !== `${data.updateType}-${data.timestamp}`) {
-			console.log(`📋 Bridge: ${data.updateType} (${data.selectedObjects?.length || 0} objects)`);
-			window._lastLoggedUpdate = `${data.updateType}-${data.timestamp}`;
-		}
-	}
+	// Debug logging removed to reduce spam during normal operations
 
 	// Update selection store (only for actual selection changes)
 	if (['selection-change', 'legacy-selection', 'legacy-clear-selection'].includes(data.updateType)) {
