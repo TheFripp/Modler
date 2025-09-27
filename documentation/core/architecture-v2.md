@@ -1,3 +1,10 @@
+---
+title: Modler Architecture V2 - Design Document
+version: 2.4.0
+last_updated: September 26, 2025
+maintained_by: Architecture Team
+---
+
 # Modler Architecture V2 - Design Document
 **Learning from V1's Over-Engineering to Build Right**
 
@@ -74,15 +81,52 @@ Version 1 taught us that 23,000+ lines for basic 3D interaction is unsustainable
 - **Maintainability**: Single source of truth for each resource type
 - **Development Velocity**: Unified APIs eliminate scattered THREE.js knowledge requirements
 
-## Total Impact
+## V2 Continued Consolidation (September 2025)
 
-**Overall Reduction**: ~11,200+ lines eliminated while enhancing functionality
+**Ongoing architectural refinement based on V2 foundation:**
+
+### Push Tool Consolidation: 23.7% Size Reduction
+- **Before**: 972 lines (486% over 200-line target)
+- **After**: 742 lines (230 lines eliminated)
+- **Enhanced**: GeometryUtils with `pushGeometryFace()` method (replaced 82 lines of manual vertex manipulation)
+- **Integrated**: MovementUtils for container management (eliminated duplication)
+- **Eliminated**: Dead code including `calculateContainerSizeForFillObjects()` and excessive debugging
+- **Result**: Full alignment with centralization patterns while maintaining functionality
+
+### Layout System Consolidation: "LayoutEngine Owns Everything" Pattern
+**Phase 1 - Core Consolidation (September 25, 2025)**:
+- **LayoutEngine Enhancement**: Added unified bounds calculation utilities (`calculateUnifiedBounds()`)
+- **LayoutGeometry Consolidation**: Moved `createLayoutAwareWireframe()` from VisualEffects, delegated bounds calculation
+- **ContainerCrudManager Simplification**: Replaced 40+ line custom bounds calculation with LayoutEngine delegation
+- **Result**: ~60 lines eliminated, clear separation of layout responsibilities
+
+**Phase 2 - Factory Access Cleanup (September 26, 2025)**:
+- **ContainerCrudManager Helper Methods**: Added `createContainerGeometryAtPosition()`, `updateContainerForPushTool()`, `getFactories()`
+- **Direct Call Elimination**: Updated 3 files to use centralized helpers instead of direct LayoutGeometry access
+- **LayoutGeometry Cleanup**: Removed fallback factory access patterns, made factory parameters required
+- **Result**: ~20 lines eliminated, single source of truth for all container operations
+
+### Data Sync & Property System Enhancement
+- **AutoLayout Properties**: Added 7 comprehensive property handlers for real-time layout configuration
+- **Svelte Integration**: Enhanced bidirectional communication with <50ms response times
+- **Layout Centering**: Fixed coordinate system mismatches using bounds-based centering
+- **Result**: Seamless UI integration with accurate layout positioning
+
+**September 2025 Total Impact**:
+- **Lines Eliminated**: ~310 lines across Push Tool and Layout System consolidations
+- **Architecture Quality**: Centralized patterns consistently applied
+- **Pattern Maturity**: "X Owns Everything" principles proven across multiple systems
+
+## Total Cumulative Impact
+
+**Overall Reduction**: ~11,510+ lines eliminated while enhancing functionality
 - Input system consolidation: 388 lines saved
 - Selection system refactor: 133 lines saved (plus better architecture)
 - Camera controller cleanup: 234 lines saved
 - Move gizmo removal: 500+ lines saved
 - Snapping system optimization: Performance gains + conflict resolution
 - **Centralized factory architecture: 8,796 lines net reduction** (major architectural advancement)
+- **September 2025 consolidations: 310+ lines saved** (Push Tool + Layout System architectural refinement)
 
 **Architectural Improvements**:
 - Eliminated circular dependencies
@@ -572,14 +616,20 @@ Modern UI layer built with Svelte provides real-time object hierarchy display, p
 - **Extensibility**: New panels added without touching core 3D code
 - **Performance**: Iframe isolation prevents UI bugs from crashing 3D scene
 
+## Documentation References
+
+For detailed tracking of architectural evolution:
+- **[Version Log](version-log.md)**: Complete timeline of all architectural changes with dates and metrics
+- **[Consolidation Metrics](../development/consolidation-metrics.md)**: Quantitative results from all consolidation efforts
+- **[Centralization Patterns](../development/centralization-patterns.md)**: Established patterns and their rationale
+- **[Feature Roadmap](feature-roadmap.md)**: Current development status and upcoming architectural work
+
 ## Document Evolution
 
-This document will evolve during V2 development. Key sections to update:
-- Add discovered patterns to component design rules
-- Update complexity budgets based on real measurements  
-- Add anti-patterns discovered during implementation
-- Refine layer boundaries based on practical experience
+This document will continue evolving as V2 matures. Key update areas:
+- Architecture pattern refinements based on consolidation results
+- Complexity budget adjustments from real-world measurements
+- Anti-pattern identification from implementation experience
+- Layer boundary optimization based on practical usage
 
-**Version**: 2.1
-**Last Updated**: September 22, 2025
-**Status**: ✅ Production System - Architecture Proven and Stable with Svelte UI Integration
+**Status**: ✅ Production System - Architecture Proven and Stable with Ongoing Consolidation Excellence

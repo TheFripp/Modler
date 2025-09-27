@@ -4,107 +4,16 @@
 
 class LayoutGeometry {
     /**
-     * Calculate bounding box of selected objects
+     * Calculate bounding box of selected objects (now delegates to LayoutEngine for consistency)
      * @param {Array} selectedObjects - Array of mesh objects
      * @returns {Object} Bounds object with center, size, min, max
      */
     static calculateSelectionBounds(selectedObjects) {
-        if (selectedObjects.length === 0) {
-            return {
-                center: new THREE.Vector3(0, 0, 0),
-                size: new THREE.Vector3(1, 1, 1),
-                min: new THREE.Vector3(0, 0, 0),
-                max: new THREE.Vector3(1, 1, 1)
-            };
-        }
-        
-        // Filter to only objects with valid geometry and compute bounding boxes
-        const validObjects = selectedObjects.filter(obj => {
-            if (!obj || !obj.geometry) return false;
-            
-            // Ensure bounding box is computed
-            obj.geometry.computeBoundingBox();
-            
-            // Check if bounding box was successfully computed
-            return obj.geometry.boundingBox !== null;
+        // Delegate to LayoutEngine's unified bounds calculation
+        return window.LayoutEngine.calculateUnifiedBounds(selectedObjects, {
+            type: 'selection',
+            useWorldSpace: true
         });
-        
-        if (validObjects.length === 0) {
-            console.warn('No valid objects with geometry found for bounds calculation');
-            console.warn('Original objects:', selectedObjects.map(obj => ({
-                name: obj.name || 'unnamed',
-                hasGeometry: !!obj.geometry,
-                geometryType: obj.geometry?.type || 'none',
-                boundingBox: obj.geometry?.boundingBox
-            })));
-            return {
-                center: new THREE.Vector3(0, 0, 0),
-                size: new THREE.Vector3(1, 1, 1),
-                min: new THREE.Vector3(0, 0, 0),
-                max: new THREE.Vector3(1, 1, 1)
-            };
-        }
-        
-        let minX = Infinity, minY = Infinity, minZ = Infinity;
-        let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
-        
-        validObjects.forEach(obj => {
-            // Calculate object's world bounding box
-            if (obj.geometry) {
-                obj.geometry.computeBoundingBox();
-                const box = obj.geometry.boundingBox;
-                
-                if (box) {
-                    // Transform bounding box points to world coordinates
-                    const corners = [
-                        new THREE.Vector3(box.min.x, box.min.y, box.min.z),
-                        new THREE.Vector3(box.max.x, box.min.y, box.min.z),
-                        new THREE.Vector3(box.min.x, box.max.y, box.min.z),
-                        new THREE.Vector3(box.max.x, box.max.y, box.min.z),
-                        new THREE.Vector3(box.min.x, box.min.y, box.max.z),
-                        new THREE.Vector3(box.max.x, box.min.y, box.max.z),
-                        new THREE.Vector3(box.min.x, box.max.y, box.max.z),
-                        new THREE.Vector3(box.max.x, box.max.y, box.max.z)
-                    ];
-                    
-                    corners.forEach(corner => {
-                        // CRITICAL FIX: Use world transform matrix instead of individual transforms
-                        // This ensures correct positioning regardless of object's parent hierarchy
-                        corner.applyMatrix4(obj.matrixWorld);
-                        
-                        // Update overall bounds
-                        minX = Math.min(minX, corner.x);
-                        minY = Math.min(minY, corner.y);
-                        minZ = Math.min(minZ, corner.z);
-                        maxX = Math.max(maxX, corner.x);
-                        maxY = Math.max(maxY, corner.y);
-                        maxZ = Math.max(maxZ, corner.z);
-                    });
-                }
-            }
-        });
-        
-        // Object bounds calculated without artificial padding for exact container-child alignment
-
-        // REMOVED: Hardcoded 0.1 padding that caused container-child offset issues
-        // Container should wrap objects exactly without artificial padding
-        // If padding is needed, it should come from layout config, not hardcoded values
-
-        const min = new THREE.Vector3(minX, minY, minZ);
-        const max = new THREE.Vector3(maxX, maxY, maxZ);
-        const center = new THREE.Vector3(
-            (minX + maxX) / 2,
-            (minY + maxY) / 2,
-            (minZ + maxZ) / 2
-        );
-        const size = new THREE.Vector3(
-            maxX - minX,
-            maxY - minY,
-            maxZ - minZ
-        );
-
-
-        return { center, size, min, max };
     }
     
     /**
@@ -112,12 +21,12 @@ class LayoutGeometry {
      * @param {THREE.Vector3} size - Container size
      * @returns {Object} Object with visual mesh, collision mesh, and materials
      */
-    static createContainerGeometry(size, geometryFactory = null, materialManager = null) {
+    static createContainerGeometry(size, geometryFactory, materialManager) {
         console.log('LayoutGeometry.createContainerGeometry - NEW ARCHITECTURE: Creating solid-first container');
 
-        // Use injected factories (Phase 1 - Factory Consolidation) or access from global registry
-        const gFactory = geometryFactory || window.modlerComponents?.geometryFactory;
-        const mManager = materialManager || window.modlerComponents?.materialManager;
+        // Use injected factories (factories are now required - no fallback access)
+        const gFactory = geometryFactory;
+        const mManager = materialManager;
         const resourcePool = window.modlerComponents?.resourcePool;
 
         // NEW ARCHITECTURE: Create solid BoxGeometry as main mesh (like regular objects)
@@ -383,7 +292,7 @@ class LayoutGeometry {
      * @param {THREE.Vector3} newCenter - New container center position
      * @param {boolean} shouldReposition - Whether to update container position (default: true)
      */
-    static updateContainerGeometry(containerMesh, newSize, newCenter, shouldReposition = true, layoutDirection = null, geometryFactory = null, materialManager = null) {
+    static updateContainerGeometry(containerMesh, newSize, newCenter, shouldReposition = true, layoutDirection = null, geometryFactory, materialManager) {
         if (!containerMesh) {
             console.error('Container mesh not found for geometry update');
             return false;
@@ -406,9 +315,9 @@ class LayoutGeometry {
         // Convert hex color to THREE.js color
         const color = new THREE.Color(wireframeColor).getHex();
 
-        // Use injected factories (Phase 1 - Factory Consolidation) or access from global registry
-        const gFactory = geometryFactory || window.modlerComponents?.geometryFactory;
-        const mManager = materialManager || window.modlerComponents?.materialManager;
+        // Use injected factories (factories are now required - no fallback access)
+        const gFactory = geometryFactory;
+        const mManager = materialManager;
 
         // Try to create new wireframe using centralized function (prevents triangles)
         const visualEffects = window.modlerComponents?.visualEffects;
@@ -426,12 +335,13 @@ class LayoutGeometry {
 
             // Use layout-aware wireframe if layout direction is specified
             if (layoutDirection && ['x', 'y', 'z'].includes(layoutDirection)) {
-                const layoutWireframe = visualEffects.createLayoutAwareWireframe(
+                const layoutWireframe = this.createLayoutAwareWireframe(
                     newSize.x, newSize.y, newSize.z,
                     new THREE.Vector3(0, 0, 0), // Position will be set below
                     color, // Use configured color
                     opacity, // Use configured opacity
-                    layoutDirection // Layout direction for opacity visualization
+                    layoutDirection, // Layout direction for opacity visualization
+                    mManager // Pass material manager
                 );
                 // For layout-aware wireframes, we'll replace the entire wireframe child
                 newEdgeGeometry = layoutWireframe;
@@ -569,7 +479,7 @@ class LayoutGeometry {
         if (interactiveMesh) {
 
             // Create new interactive face geometry
-            const newInteractiveGeometry = this.createInteractiveFacesFromWireframe(newGeometry);
+            const newInteractiveGeometry = this.createInteractiveFacesFromWireframe(newGeometry, gFactory);
             interactiveMesh.geometry = newInteractiveGeometry;
 
             // Ensure interactive mesh properties for reliable raycasting
@@ -677,12 +587,113 @@ class LayoutGeometry {
     }
 
     /**
+     * Create layout-aware wireframe with direction-specific opacity (moved from VisualEffects)
+     * @param {number} width - Container width
+     * @param {number} height - Container height
+     * @param {number} depth - Container depth
+     * @param {THREE.Vector3} position - Container position
+     * @param {number} color - Wireframe color
+     * @param {number} opacity - Base opacity
+     * @param {string} layoutDirection - Layout direction for opacity adjustment
+     * @param {object} materialManager - Material manager instance (required)
+     * @returns {THREE.Group} Layout-aware wireframe group
+     */
+    static createLayoutAwareWireframe(width, height, depth, position, color = 0x00ff00, opacity = 0.8, layoutDirection = null, materialManager) {
+        const configManager = window.modlerComponents?.configurationManager;
+        const lineWidth = configManager?.get('visual.effects.wireframe.lineWidth') || 1;
+
+        const group = new THREE.Group();
+        group.position.copy(position);
+
+        const halfWidth = width / 2;
+        const halfHeight = height / 2;
+        const halfDepth = depth / 2;
+
+        const vertices = [
+            [-halfWidth, -halfHeight, halfDepth],   // 0
+            [halfWidth, -halfHeight, halfDepth],    // 1
+            [halfWidth, halfHeight, halfDepth],     // 2
+            [-halfWidth, halfHeight, halfDepth],    // 3
+            [-halfWidth, -halfHeight, -halfDepth],  // 4
+            [halfWidth, -halfHeight, -halfDepth],   // 5
+            [halfWidth, halfHeight, -halfDepth],    // 6
+            [-halfWidth, halfHeight, -halfDepth]    // 7
+        ];
+
+        const edgesByDirection = {
+            x: [[0, 1], [2, 3], [4, 5], [6, 7]], // Horizontal edges
+            y: [[0, 3], [1, 2], [4, 7], [5, 6]], // Vertical edges
+            z: [[0, 4], [1, 5], [2, 6], [3, 7]]  // Depth edges
+        };
+
+        // Create materials with different opacities
+        let fullOpacityMaterial, reducedOpacityMaterial;
+
+        if (materialManager) {
+            fullOpacityMaterial = materialManager.createPreviewWireframeMaterial({
+                color: color,
+                linewidth: lineWidth,
+                opacity: opacity
+            });
+            reducedOpacityMaterial = materialManager.createPreviewWireframeMaterial({
+                color: color,
+                linewidth: lineWidth,
+                opacity: opacity * 0.5
+            });
+        } else {
+            // Fallback material creation
+            fullOpacityMaterial = new THREE.LineBasicMaterial({
+                color: color,
+                linewidth: lineWidth,
+                transparent: true,
+                opacity: opacity
+            });
+            reducedOpacityMaterial = new THREE.LineBasicMaterial({
+                color: color,
+                linewidth: lineWidth,
+                transparent: true,
+                opacity: opacity * 0.5
+            });
+        }
+
+        // Create wireframe segments for each direction
+        Object.keys(edgesByDirection).forEach(direction => {
+            const edges = edgesByDirection[direction];
+            const positions = [];
+
+            edges.forEach(([startIdx, endIdx]) => {
+                const start = vertices[startIdx];
+                const end = vertices[endIdx];
+                positions.push(start[0], start[1], start[2]);
+                positions.push(end[0], end[1], end[2]);
+            });
+
+            const geometry = new THREE.BufferGeometry();
+            geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+
+            // Use reduced opacity for layout direction to show emphasis
+            const material = (layoutDirection === direction) ? reducedOpacityMaterial : fullOpacityMaterial;
+            const lineSegments = new THREE.LineSegments(geometry, material);
+
+            lineSegments.userData.direction = direction;
+            lineSegments.userData.isLayoutDirection = (layoutDirection === direction);
+
+            group.add(lineSegments);
+        });
+
+        group.userData.layoutDirection = layoutDirection;
+        group.userData.isLayoutAwareWireframe = true;
+
+        return group;
+    }
+
+    /**
      * Create interactive face geometry from container wireframe
      * Converts box geometry into faces that can be raycast for interaction
      * @param {THREE.BoxGeometry} containerGeometry - Original container geometry
      * @returns {THREE.BufferGeometry} Face geometry for interaction
      */
-    static createInteractiveFacesFromWireframe(containerGeometry, geometryFactory = null) {
+    static createInteractiveFacesFromWireframe(containerGeometry, geometryFactory) {
         // For box containers, create 6 faces that match the wireframe bounds
         if (containerGeometry.type === 'BoxGeometry' && containerGeometry.parameters) {
             const { width, height, depth } = containerGeometry.parameters;
@@ -690,7 +701,7 @@ class LayoutGeometry {
             // Create slightly larger box geometry for reliable raycasting without oversized selection
             // Minimal increase ensures interactive mesh is hit instead of child objects
             let faceGeometry;
-            const gFactory = geometryFactory || window.modlerComponents?.geometryFactory;
+            const gFactory = geometryFactory;
             if (gFactory) {
                 faceGeometry = gFactory.createBoxGeometry(
                     width * 1.01,  // 1% larger - enough for reliable raycasting, not user-noticeable

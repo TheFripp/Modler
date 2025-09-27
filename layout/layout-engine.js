@@ -588,7 +588,7 @@ class LayoutEngine {
     static getLayoutDebugInfo(objects, layoutConfig) {
         const positions = this.calculateLayout(objects, layoutConfig);
         const bounds = this.calculateLayoutBounds(objects, positions);
-        
+
         return {
             objectCount: objects.length,
             layoutConfig: { ...layoutConfig },
@@ -599,6 +599,157 @@ class LayoutEngine {
                 size: { x: bounds.size.x, y: bounds.size.y, z: bounds.size.z }
             },
             calculationTime: performance.now() // For performance monitoring
+        };
+    }
+
+    // ====== UNIFIED BOUNDS CALCULATION UTILITIES ======
+
+    /**
+     * Unified bounds calculation utility for both layout and selection bounds
+     * @param {Array} items - Array of items (positions+sizes OR THREE.js meshes)
+     * @param {Object} options - Options {type: 'layout'|'selection', useWorldSpace: boolean}
+     * @returns {Object} Bounds object {min: Vector3, max: Vector3, size: Vector3, center: Vector3}
+     */
+    static calculateUnifiedBounds(items, options = {}) {
+        const { type = 'layout', useWorldSpace = false } = options;
+
+        if (!items || items.length === 0) {
+            return this._getEmptyBounds();
+        }
+
+        if (type === 'selection') {
+            return this._calculateSelectionBounds(items, useWorldSpace);
+        } else {
+            return this._calculatePositionBounds(items);
+        }
+    }
+
+    /**
+     * Calculate bounds for THREE.js mesh objects (replaces LayoutGeometry.calculateSelectionBounds)
+     * @param {Array} meshObjects - Array of THREE.js mesh objects
+     * @param {boolean} useWorldSpace - Whether to use world space transforms
+     * @returns {Object} Bounds object
+     */
+    static _calculateSelectionBounds(meshObjects, useWorldSpace = true) {
+        // Filter to only objects with valid geometry
+        const validObjects = meshObjects.filter(obj => {
+            if (!obj || !obj.geometry) return false;
+            obj.geometry.computeBoundingBox();
+            return obj.geometry.boundingBox !== null;
+        });
+
+        if (validObjects.length === 0) {
+            return this._getEmptyBounds();
+        }
+
+        let minX = Infinity, minY = Infinity, minZ = Infinity;
+        let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
+
+        validObjects.forEach(obj => {
+            if (obj.geometry) {
+                obj.geometry.computeBoundingBox();
+                const box = obj.geometry.boundingBox;
+
+                if (box) {
+                    // Transform bounding box points
+                    const corners = [
+                        new THREE.Vector3(box.min.x, box.min.y, box.min.z),
+                        new THREE.Vector3(box.max.x, box.min.y, box.min.z),
+                        new THREE.Vector3(box.min.x, box.max.y, box.min.z),
+                        new THREE.Vector3(box.max.x, box.max.y, box.min.z),
+                        new THREE.Vector3(box.min.x, box.min.y, box.max.z),
+                        new THREE.Vector3(box.max.x, box.min.y, box.max.z),
+                        new THREE.Vector3(box.min.x, box.max.y, box.max.z),
+                        new THREE.Vector3(box.max.x, box.max.y, box.max.z)
+                    ];
+
+                    corners.forEach(corner => {
+                        if (useWorldSpace && obj.matrixWorld) {
+                            corner.applyMatrix4(obj.matrixWorld);
+                        }
+
+                        minX = Math.min(minX, corner.x);
+                        minY = Math.min(minY, corner.y);
+                        minZ = Math.min(minZ, corner.z);
+                        maxX = Math.max(maxX, corner.x);
+                        maxY = Math.max(maxY, corner.y);
+                        maxZ = Math.max(maxZ, corner.z);
+                    });
+                }
+            }
+        });
+
+        return this._createBoundsObject(minX, minY, minZ, maxX, maxY, maxZ);
+    }
+
+    /**
+     * Calculate bounds for position+size pairs (layout bounds)
+     * @param {Array} items - Array of {position: Vector3, size: Vector3} or positions array with corresponding sizes
+     * @returns {Object} Bounds object
+     */
+    static _calculatePositionBounds(items) {
+        if (items.length === 0) return this._getEmptyBounds();
+
+        let minX = Infinity, minY = Infinity, minZ = Infinity;
+        let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
+
+        items.forEach(item => {
+            let pos, size;
+
+            if (item.position && item.size) {
+                // Item has position and size properties
+                pos = item.position;
+                size = item.size;
+            } else if (Array.isArray(item) && item.length >= 2) {
+                // Array format: [position, size]
+                pos = item[0];
+                size = item[1];
+            } else {
+                // Assume item is position, size needs to be provided separately
+                pos = item;
+                size = new THREE.Vector3(1, 1, 1); // Default size
+            }
+
+            const halfSize = size.clone().multiplyScalar(0.5);
+
+            minX = Math.min(minX, pos.x - halfSize.x);
+            maxX = Math.max(maxX, pos.x + halfSize.x);
+            minY = Math.min(minY, pos.y - halfSize.y);
+            maxY = Math.max(maxY, pos.y + halfSize.y);
+            minZ = Math.min(minZ, pos.z - halfSize.z);
+            maxZ = Math.max(maxZ, pos.z + halfSize.z);
+        });
+
+        return this._createBoundsObject(minX, minY, minZ, maxX, maxY, maxZ);
+    }
+
+    /**
+     * Create bounds object from min/max coordinates
+     * @private
+     */
+    static _createBoundsObject(minX, minY, minZ, maxX, maxY, maxZ) {
+        const min = new THREE.Vector3(minX, minY, minZ);
+        const max = new THREE.Vector3(maxX, maxY, maxZ);
+        const size = new THREE.Vector3(maxX - minX, maxY - minY, maxZ - minZ);
+        const center = new THREE.Vector3(
+            (minX + maxX) / 2,
+            (minY + maxY) / 2,
+            (minZ + maxZ) / 2
+        );
+
+        return { min, max, size, center };
+    }
+
+    /**
+     * Get empty bounds object
+     * @private
+     */
+    static _getEmptyBounds() {
+        return {
+            center: new THREE.Vector3(0, 0, 0),
+            size: new THREE.Vector3(1, 1, 1),
+            min: new THREE.Vector3(0, 0, 0),
+            max: new THREE.Vector3(1, 1, 1)
         };
     }
 }

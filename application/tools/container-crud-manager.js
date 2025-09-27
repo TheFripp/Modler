@@ -70,6 +70,100 @@ class ContainerCrudManager {
     }
 
     /**
+     * Get geometry factory and material manager instances
+     */
+    getFactories() {
+        return {
+            geometryFactory: window.modlerComponents?.geometryFactory,
+            materialManager: window.modlerComponents?.materialManager
+        };
+    }
+
+    /**
+     * Centralized container geometry creation
+     */
+    createContainerGeometryWithFactories(size) {
+        const { geometryFactory, materialManager } = this.getFactories();
+        return LayoutGeometry.createContainerGeometry(size, geometryFactory, materialManager);
+    }
+
+    /**
+     * Centralized container geometry update with factory handling
+     */
+    updateContainerGeometryWithFactories(containerData, size, newCenter = null, shouldReposition = true) {
+        const { geometryFactory, materialManager } = this.getFactories();
+
+        // Get layout direction for wireframe visualization
+        const layoutDirection = containerData.autoLayout?.enabled && containerData.autoLayout?.direction ?
+            containerData.autoLayout.direction : null;
+
+        return LayoutGeometry.updateContainerGeometry(
+            containerData.mesh,
+            size,
+            newCenter || containerData.mesh.position,
+            shouldReposition,
+            layoutDirection,
+            geometryFactory,
+            materialManager
+        );
+    }
+
+    /**
+     * Create container geometry at specific position with factory handling
+     * Used by delete-object-command.js and position-transform.js
+     * @param {THREE.Vector3} size - Container size
+     * @param {THREE.Vector3|object} transform - Position vector or transform object with {position, rotation, scale}
+     */
+    createContainerGeometryAtPosition(size, transform) {
+        const containerData = this.createContainerGeometryWithFactories(size);
+
+        if (containerData && containerData.mesh) {
+            if (transform.x !== undefined) {
+                // Simple position vector
+                containerData.mesh.position.copy(transform);
+            } else {
+                // Transform object with position, rotation, scale
+                if (transform.position) {
+                    containerData.mesh.position.copy(transform.position);
+                }
+                if (transform.rotation) {
+                    containerData.mesh.rotation.copy(transform.rotation);
+                }
+                if (transform.scale) {
+                    containerData.mesh.scale.copy(transform.scale);
+                }
+            }
+            containerData.mesh.updateMatrixWorld(true);
+        }
+
+        return containerData;
+    }
+
+    /**
+     * Update container geometry for push tool operations with factory handling
+     * Used by push-tool.js for container resizing during push operations
+     */
+    updateContainerForPushTool(containerMesh, newSize) {
+        if (!containerMesh) {
+            console.error('updateContainerForPushTool: Container mesh is required');
+            return false;
+        }
+
+        const { geometryFactory, materialManager } = this.getFactories();
+
+        // Push tool operations don't need layout direction visualization
+        return LayoutGeometry.updateContainerGeometry(
+            containerMesh,
+            newSize,
+            containerMesh.position,
+            false, // Don't reposition during push operations
+            null, // No layout direction visualization during push operations
+            geometryFactory,
+            materialManager
+        );
+    }
+
+    /**
      * Validate container and object data
      */
     validateContainerAndObject(containerData, objectData, methodName) {
@@ -191,9 +285,7 @@ class ContainerCrudManager {
      * @returns {Object|null} Container object or null if failed
      */
     createAndRegisterContainer(sceneController, bounds) {
-        const geometryFactory = window.modlerComponents?.geometryFactory;
-        const materialManager = window.modlerComponents?.materialManager;
-        const containerData = LayoutGeometry.createContainerGeometry(bounds.size, geometryFactory, materialManager);
+        const containerData = this.createContainerGeometryWithFactories(bounds.size);
         const edgeContainer = containerData.mesh;
 
         // DEBUG: Log container creation positioning
@@ -323,9 +415,7 @@ class ContainerCrudManager {
         if (!sceneController) return null;
         
         const size = new THREE.Vector3(0.5, 0.5, 0.5);
-        const geometryFactory = window.modlerComponents?.geometryFactory;
-        const materialManager = window.modlerComponents?.materialManager;
-        const containerData = LayoutGeometry.createContainerGeometry(size, geometryFactory, materialManager);
+        const containerData = this.createContainerGeometryWithFactories(size);
         const edgeContainer = containerData.mesh;
         
         const containerObject = sceneController.addObject(edgeContainer, null, {
@@ -619,82 +709,32 @@ class ContainerCrudManager {
         if (!bounds) return false;
 
         /**
-         * CONTAINER EXPANSION SOLUTION:
-         * 1. Calculate child object bounds in container's local coordinate space
-         * 2. Position container to center around those bounds
-         * 3. Compensate child positions to maintain their world positions
-         *
-         * This ensures the container "wraps around" objects without moving them
+         * SIMPLIFIED CONTAINER EXPANSION:
+         * Use LayoutEngine's unified bounds calculation instead of custom local bounds calculation
+         * This eliminates duplicate geometry logic and leverages the centralized bounds system
          */
 
-        // Calculate bounds of children in container's local coordinate space
+        // Use LayoutEngine's unified bounds calculation for consistency
         const childMeshes = childObjects.map(child => child.mesh);
-        let localMin = new THREE.Vector3(Infinity, Infinity, Infinity);
-        let localMax = new THREE.Vector3(-Infinity, -Infinity, -Infinity);
-
-        childMeshes.forEach((mesh) => {
-            if (mesh.geometry) {
-                mesh.geometry.computeBoundingBox();
-                const box = mesh.geometry.boundingBox;
-                if (box) {
-                    // Transform bounding box corners using the mesh's LOCAL transform (position, rotation, scale)
-                    const corners = [
-                        new THREE.Vector3(box.min.x, box.min.y, box.min.z),
-                        new THREE.Vector3(box.max.x, box.min.y, box.min.z),
-                        new THREE.Vector3(box.min.x, box.max.y, box.min.z),
-                        new THREE.Vector3(box.max.x, box.max.y, box.min.z),
-                        new THREE.Vector3(box.min.x, box.min.y, box.max.z),
-                        new THREE.Vector3(box.max.x, box.min.y, box.max.z),
-                        new THREE.Vector3(box.min.x, box.max.y, box.max.z),
-                        new THREE.Vector3(box.max.x, box.max.y, box.max.z)
-                    ];
-
-                    corners.forEach(corner => {
-                        // Apply the child's local transform (relative to container)
-                        corner.applyMatrix4(mesh.matrix);
-
-                        // Update local bounds
-                        localMin.min(corner);
-                        localMax.max(corner);
-                    });
-                }
-            }
+        const localBounds = window.LayoutEngine.calculateUnifiedBounds(childMeshes, {
+            type: 'layout',
+            useWorldSpace: false  // Local space calculation
         });
 
-        const localCenter = new THREE.Vector3(
-            (localMin.x + localMax.x) / 2,
-            (localMin.y + localMax.y) / 2,
-            (localMin.z + localMax.z) / 2
-        );
-        const localSize = new THREE.Vector3(
-            localMax.x - localMin.x,
-            localMax.y - localMin.y,
-            localMax.z - localMin.z
-        );
+        if (!localBounds) {
+            console.error('Failed to calculate unified bounds for container children');
+            return false;
+        }
 
         // Calculate the correct container position to center it around the child objects
-        // The container should be positioned so that its center aligns with the center of child bounds
         const currentContainerPosition = containerData.mesh.position.clone();
+        const targetWorldPosition = currentContainerPosition.clone().add(localBounds.center);
 
-        // Calculate world position where container should be centered
-        const targetWorldPosition = currentContainerPosition.clone().add(localCenter);
-
-        const adjustedSize = localSize;
-
-        // Get layout direction for wireframe visualization (for hug mode containers too)
-        const layoutDirection = containerData.autoLayout?.enabled && containerData.autoLayout?.direction ?
-            containerData.autoLayout.direction : null;
-
-        const geometryFactory = window.modlerComponents?.geometryFactory;
-        const materialManager = window.modlerComponents?.materialManager;
-        const success = LayoutGeometry.updateContainerGeometry(
-            containerData.mesh,
-            adjustedSize,
+        const success = this.updateContainerGeometryWithFactories(
+            containerData,
+            localBounds.size,
             targetWorldPosition,
-            true, // Reposition container to center around child objects
-            layoutDirection, // Layout direction for wireframe visualization
-            geometryFactory,
-            materialManager
+            true // Reposition container to center around child objects
         );
 
         if (success) {
@@ -718,7 +758,6 @@ class ContainerCrudManager {
             // Update container position to the calculated bounds center
             sceneController.updateObject(containerData.id, { position: targetWorldPosition });
             this.handleContainerVisibilityAfterResize(containerData, immediateUpdate);
-
         }
 
         return success;
@@ -738,22 +777,13 @@ class ContainerCrudManager {
 
         const sceneController = validation.sceneController;
 
-        // Get layout direction for wireframe visualization
-        const layoutDirection = containerData.autoLayout?.enabled && containerData.autoLayout?.direction ?
-            containerData.autoLayout.direction : null;
-
         // SIMPLIFIED ARCHITECTURE: Container never moves during auto-layout, only resizes
         // This eliminates coordinate system mismatches and prevents object positioning breakage
-        const geometryFactory = window.modlerComponents?.geometryFactory;
-        const materialManager = window.modlerComponents?.materialManager;
-        const success = LayoutGeometry.updateContainerGeometry(
-            containerData.mesh,
+        const success = this.updateContainerGeometryWithFactories(
+            containerData,
             layoutBounds.size,
             containerData.mesh.position, // Keep current position
-            false, // shouldReposition = false
-            layoutDirection, // Layout direction for wireframe visualization
-            geometryFactory,
-            materialManager
+            false // shouldReposition = false
         );
 
         return success;
@@ -771,20 +801,11 @@ class ContainerCrudManager {
             return false;
         }
 
-        // Get layout direction for wireframe visualization
-        const layoutDirection = containerData.autoLayout?.enabled && containerData.autoLayout?.direction ?
-            containerData.autoLayout.direction : null;
-
-        const geometryFactory = window.modlerComponents?.geometryFactory;
-        const materialManager = window.modlerComponents?.materialManager;
-        return LayoutGeometry.updateContainerGeometry(
-            containerData.mesh,
+        return this.updateContainerGeometryWithFactories(
+            containerData,
             size,
             containerData.mesh.position,
-            false,
-            layoutDirection, // Layout direction for wireframe visualization
-            geometryFactory,
-            materialManager
+            false // shouldReposition = false
         );
     }
 

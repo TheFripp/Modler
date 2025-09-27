@@ -46,14 +46,33 @@ class SvelteDataSync {
             }
         };
 
-        // Add dimensions for objects with geometry
-        if (obj.geometry && obj.geometry.parameters) {
-            const params = obj.geometry.parameters;
-            serialized.dimensions = {
-                x: parseFloat((params.width || 1).toFixed(3)),
-                y: parseFloat((params.height || 1).toFixed(3)),
-                z: parseFloat((params.depth || 1).toFixed(3))
-            };
+        // Add dimensions for objects with geometry using centralized GeometryUtils
+        if (obj.geometry) {
+            const geometryUtils = window.GeometryUtils;
+            if (geometryUtils) {
+                // Use GeometryUtils to get actual dimensions from bounding box (works for modified geometries)
+                const dimensions = geometryUtils.getGeometryDimensions(obj.geometry);
+                if (dimensions) {
+                    serialized.dimensions = {
+                        x: parseFloat(dimensions.x.toFixed(3)),
+                        y: parseFloat(dimensions.y.toFixed(3)),
+                        z: parseFloat(dimensions.z.toFixed(3))
+                    };
+                    console.log('📏 SERIALIZE: Calculated dimensions for', obj.userData?.id, ':', serialized.dimensions);
+                } else {
+                    console.warn('⚠️ SERIALIZE: GeometryUtils failed to get dimensions for', obj.userData?.id);
+                }
+            } else {
+                // Fallback to geometry parameters for basic geometries
+                if (obj.geometry.parameters) {
+                    const params = obj.geometry.parameters;
+                    serialized.dimensions = {
+                        x: parseFloat((params.width || 1).toFixed(3)),
+                        y: parseFloat((params.height || 1).toFixed(3)),
+                        z: parseFloat((params.depth || 1).toFixed(3))
+                    };
+                }
+            }
         }
 
         // Add material properties
@@ -85,9 +104,9 @@ class SvelteDataSync {
      * Send full data update to all Svelte panels
      */
     sendFullDataUpdate(selectedObjects, updateType = 'data-update') {
-        // Debug logging removed to reduce spam during normal operations
-
         if (!selectedObjects) return;
+
+        console.log('🚀 DATA-SYNC: sendFullDataUpdate called with:', selectedObjects.length, 'objects, updateType:', updateType);
 
         // Serialize all objects
         const serializedObjects = [];
@@ -123,7 +142,6 @@ class SvelteDataSync {
      */
     sendDataToSveltePanels(data) {
         const iframes = this.panelManager.getIframes();
-        // Sending data to Svelte panels
 
         // Send to property panel (right)
         if (iframes.right && iframes.right.contentWindow) {
@@ -132,7 +150,6 @@ class SvelteDataSync {
                     type: 'data-update',
                     data: data
                 }, '*');
-                // Sent to property panel
             } catch (error) {
                 console.warn('Failed to send data to property panel:', error);
             }

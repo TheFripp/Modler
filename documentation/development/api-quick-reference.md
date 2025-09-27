@@ -1,3 +1,10 @@
+---
+title: API Quick Reference
+version: 2.1.0
+last_updated: September 26, 2025
+maintained_by: Architecture Team
+---
+
 # API Quick Reference
 
 ## SelectionController
@@ -29,12 +36,22 @@
 ## ContainerCrudManager
 **File**: `application/tools/container-crud-manager.js`
 
-### Methods
+### Core Methods
 - `createContainerFromSelection(selectedObjects)` → `Object` - Create container around objects
 - `createEmptyContainer(position)` → `Object|null` - Create empty container
 - `addObjectToContainer(objectData, containerData)` → `boolean` - Add object to container
 - `removeObjectFromContainer(objectData)` → `boolean` - Remove object from container
 - `resizeContainerToFitChildren(containerData, repositionContainer)` → `boolean` - Resize container
+
+### Centralized Helper Methods (September 2025)
+- `createContainerGeometryAtPosition(size, transform)` → `Object` - Positioned container creation with factory handling
+- `updateContainerForPushTool(containerMesh, newSize)` → `boolean` - Push tool container updates with factory handling
+- `getFactories()` → `Object` - Centralized access to geometryFactory and materialManager
+
+### Helper Method Details
+- **createContainerGeometryAtPosition**: Supports both position vectors and transform objects {position, rotation, scale}
+- **updateContainerForPushTool**: Optimized for push operations (no layout direction visualization for performance)
+- **getFactories**: Returns `{geometryFactory, materialManager}` for consistent factory access
 
 ## ContainerInteractionManager
 **File**: `interaction/container-interaction-manager.js`
@@ -48,14 +65,35 @@
 ## LayoutGeometry
 **File**: `application/tools/layout-geometry.js`
 
-### Static Methods
-- `createContainerGeometry(size)` → `Object` - Create visual + collision meshes
-- `updateContainerGeometry(mesh, size, center, shouldReposition)` → `boolean` - Update container
-- `calculateSelectionBounds(objects)` → `Object` - Calculate bounding box
+### Static Methods (Updated September 2025)
+- `createContainerGeometry(size, geometryFactory, materialManager)` → `Object` - Create visual + collision meshes
+- `updateContainerGeometry(mesh, size, center, shouldReposition, layoutDirection, geometryFactory, materialManager)` → `boolean` - Update container
+- `calculateSelectionBounds(objects)` → `Object` - Calculate bounding box (delegates to LayoutEngine)
+- `createLayoutAwareWireframe(width, height, depth, position, color, opacity, layoutDirection, materialManager)` → `THREE.Group` - Layout-aware wireframe
+
+### Method Signature Changes
+- **Factory Parameters**: geometryFactory and materialManager are now required (no fallback access)
+- **Cleaner Architecture**: All factory access must be provided by calling system
+- **Delegation Pattern**: calculateSelectionBounds() now delegates to LayoutEngine.calculateUnifiedBounds()
 
 ### Return Objects
 - `createContainerGeometry()` returns: `{mesh, collisionMesh, geometry, material}`
 - `calculateSelectionBounds()` returns: `{center, size, min, max}`
+- `createLayoutAwareWireframe()` returns: `THREE.Group` with direction-specific opacity
+
+## LayoutEngine (Enhanced September 2025)
+**File**: `layout/layout-engine.js`
+
+### Static Methods
+- `calculateUnifiedBounds(items, options)` → `Object` - Unified bounds calculation for layout and selection
+- `calculateLinearLayout(objects, direction, gap, padding)` → `Object` - Linear layout with bounds
+- `calculateGridLayout(objects, rows, cols, gap, padding)` → `Object` - Grid layout with bounds
+- `centerLayoutPositions(objects, containerBounds)` → `void` - Center objects within container
+
+### Method Details
+- **calculateUnifiedBounds**: Handles both layout bounds (position+size) and selection bounds (THREE.js meshes)
+- **Options parameter**: `{type: 'layout'|'selection', useWorldSpace: boolean}`
+- **Return format**: `{center: Vector3, size: Vector3, min: Vector3, max: Vector3}`
 
 ## SceneController
 **File**: `scene/scene-controller.js`

@@ -1,3 +1,10 @@
+---
+title: Container System
+version: 2.1.0
+last_updated: September 26, 2025
+maintained_by: Architecture Team
+---
+
 # Container System
 
 Dual geometry containers (visual wireframes + collision meshes) with Three.js hierarchy management.
@@ -8,7 +15,9 @@ Dual geometry containers (visual wireframes + collision meshes) with Three.js hi
 - Container lifecycle management
 - Object addition/removal
 - Geometry resizing operations
-- 615 lines focused on data operations
+- Centralized helper methods for external systems
+- Factory access consolidation for consistent container creation
+- Focused on data operations with clear boundaries
 
 **ContainerInteractionManager**: Pure interaction state management
 - Step-into/step-out context
@@ -38,6 +47,24 @@ Dual geometry containers (visual wireframes + collision meshes) with Three.js hi
 ### Container Resizing (ContainerCrudManager)
 - **Fit to children**: `resizeContainerToFitChildren(containerData, preservePosition)`
 - **Layout bounds**: `resizeContainerToLayoutBounds(containerData, layoutBounds)`
+
+### Centralized Helper Methods (September 2025)
+**Purpose**: Eliminate direct LayoutGeometry access from external systems
+
+- **Positioned Creation**: `createContainerGeometryAtPosition(size, transform)`
+  - Used by: delete-object-command.js, position-transform.js
+  - Handles: Factory access, positioning, transform application
+  - Supports: Both simple position vectors and full transform objects
+
+- **Push Tool Updates**: `updateContainerForPushTool(containerMesh, newSize)`
+  - Used by: push-tool.js for container resizing during push operations
+  - Handles: Factory access, layout direction handling, error checking
+  - Optimized: No layout direction visualization during push (performance)
+
+- **Factory Access**: `getFactories()`
+  - Centralizes: geometryFactory and materialManager access
+  - Eliminates: Scattered `window.modlerComponents?.geometryFactory` patterns
+  - Ensures: Consistent factory access across all container operations
 
 ### Object Management (ContainerCrudManager)
 - **Add to container**: `addObjectToContainer(objectData, containerData)`

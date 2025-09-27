@@ -31,21 +31,19 @@ class BoxCreationTool {
 
     activate() {
         this.state = BoxCreationState.IDLE;
-        this.setupFieldNavigation();
     }
 
     deactivate() {
         this.cleanup();
-        this.cleanupFieldNavigation();
     }
 
-    onClick(hit, event) {
+    onClick(_hit, _event) {
         switch (this.state) {
             case BoxCreationState.IDLE:
-                this.startCreation(hit);
+                this.startCreation();
                 break;
             case BoxCreationState.SETTING_CORNER_1:
-                this.setSecondCorner(hit);
+                this.setSecondCorner();
                 break;
             case BoxCreationState.SETTING_HEIGHT:
                 this.finalizeBox();
@@ -53,7 +51,7 @@ class BoxCreationTool {
         }
     }
 
-    onHover(hit) {
+    onHover(_hit) {
         if (this.state === BoxCreationState.SETTING_CORNER_1 && this.startPosition) {
             const groundHit = this.getGroundPlaneIntersection();
             if (groundHit) {
@@ -72,7 +70,7 @@ class BoxCreationTool {
                 const verticalAxis = new THREE.Vector3(0, 1, 0);
                 snapController.updateSnapDetection('box-creation', [], verticalAxis);
             }
-            this.updateHeightFromMouse(event);
+            this.updateHeightFromMouse();
         }
     }
 
@@ -82,97 +80,12 @@ class BoxCreationTool {
             return true;
         }
 
-        // Let HTML field navigation handle Tab completely
-        // Only handle Tab when no dimension field is focused (to start navigation)
-        if (event.key === 'Tab') {
-            const activeElement = document.activeElement;
-            const isDimensionField = activeElement && ['dim-x', 'dim-z', 'dim-y'].includes(activeElement.id);
-
-            if (!isDimensionField) {
-                // Focus the appropriate starting field
-                if (this.state === BoxCreationState.SETTING_CORNER_1) {
-                    const widthField = document.getElementById('dim-x');
-                    if (widthField) {
-                        event.preventDefault();
-                        widthField.focus();
-                        widthField.select();
-                        return true;
-                    }
-                } else if (this.state === BoxCreationState.SETTING_HEIGHT) {
-                    const heightField = document.getElementById('dim-y');
-                    if (heightField) {
-                        event.preventDefault();
-                        heightField.focus();
-                        heightField.select();
-                        return true;
-                    }
-                }
-            }
-        }
-
         return false;
     }
 
-    /**
-     * Setup field navigation workflow for box creation
-     */
-    setupFieldNavigation() {
-        const fieldNavigationManager = window.modlerComponents?.fieldNavigationManager;
-        if (!fieldNavigationManager) {
-            return;
-        }
-
-        fieldNavigationManager.registerNavigationWorkflow('box-creation', {
-            fieldOrder: ['dim-x', 'dim-z', 'dim-y'], // W → D → H
-            onFieldFocus: (fieldId, index) => {
-                // Handle transitions when focusing height field (index 2)
-                if (fieldId === 'dim-y' && index === 2) {
-                    this.transitionToHeightMode();
-                }
-            },
-            onFieldApply: (fieldId, value) => {
-                // Apply dimension values from input fields
-                this.applyDimensionFromInput(fieldId, value);
-            },
-            onWorkflowComplete: () => {
-                // Complete box creation when workflow finishes
-                if (this.state === BoxCreationState.SETTING_HEIGHT) {
-                    this.finalizeBox();
-                }
-            }
-        });
-    }
-
-    /**
-     * Clean up field navigation workflow
-     */
-    cleanupFieldNavigation() {
-        const fieldNavigationManager = window.modlerComponents?.fieldNavigationManager;
-        if (!fieldNavigationManager) return;
-
-        fieldNavigationManager.unregisterNavigationWorkflow('box-creation');
-    }
-
-    /**
-     * Transition to height extraction mode
-     */
-    transitionToHeightMode() {
-        if (this.state === BoxCreationState.SETTING_CORNER_1) {
-            // Ensure we have a current position before switching to height mode
-            if (!this.currentPosition) {
-                this.currentPosition = this.startPosition.clone();
-                this.currentPosition.x += 1.0; // Default width
-                this.currentPosition.z += 1.0; // Default depth
-            }
-
-            this.state = BoxCreationState.SETTING_HEIGHT;
-            this.initializeHeightFromCurrentMouse();
-            this.createPreview(); // Show 3D preview
-        }
-    }
 
     // Core creation flow
-    startCreation(hit) {
+    startCreation() {
         // Clear any existing selection when starting box creation
         this.selectionController.clearSelection('normal');
 
@@ -188,7 +101,7 @@ class BoxCreationTool {
 
     }
 
-    setSecondCorner(hit) {
+    setSecondCorner() {
         if (!this.startPosition) return;
 
         // Set current position from hit if not already set (e.g., click without hover)
@@ -348,7 +261,7 @@ class BoxCreationTool {
         }
     }
 
-    updateHeightFromMouse(event) {
+    updateHeightFromMouse() {
         // Check for snap point first for precise height matching
         const snapController = window.modlerComponents?.snapController;
         let targetHeight = null;
@@ -504,9 +417,6 @@ class BoxCreationTool {
     cleanup() {
         this.cleanupVisuals();
 
-        // Disable dimension field interaction
-        this.disableDimensionFieldInteraction();
-
         // Remove invisible creation object if it exists
         if (this.creationObject) {
             const sceneController = window.modlerComponents?.sceneController;
@@ -556,9 +466,6 @@ class BoxCreationTool {
             // Select the invisible object to show properties panel
             this.selectionController.clearSelection('normal');
             this.selectionController.select(this.creationObject);
-
-            // Make dimension fields interactive during creation
-            this.enableDimensionFieldInteraction();
         }
     }
 
@@ -597,91 +504,43 @@ class BoxCreationTool {
             if (objectData) {
                 // Update the object data dimensions and position
                 objectData.position = this.creationObject.position.clone();
+
+                // Update dimensions object for property panel compatibility
+                if (!objectData.dimensions) {
+                    objectData.dimensions = {};
+                }
+                objectData.dimensions.x = Math.max(width, 0.01);
+                objectData.dimensions.y = Math.max(height, 0.01);
+                objectData.dimensions.z = Math.max(depth, 0.01);
+
+                // Also update legacy properties for backward compatibility
                 objectData.width = Math.max(width, 0.01);
                 objectData.height = Math.max(height, 0.01);
                 objectData.depth = Math.max(depth, 0.01);
             }
         }
 
-        // Update property panel dimensions in real-time
-        if (window.updatePropertyPanelDimensions) {
-            window.updatePropertyPanelDimensions(width, height, depth);
+        // NEW: Emit through unified notification system if available
+        const objectEventBus = window.unifiedNotificationSystem?.eventBus;
+        if (objectEventBus && this.creationObject?.userData?.id) {
+            // Emit geometry change event for real-time dimension updates during creation
+            objectEventBus.emit(objectEventBus.EVENT_TYPES.GEOMETRY, this.creationObject.userData.id, {
+                changeType: 'dimension',
+                operation: 'creation',
+                dimensions: { width, height, depth },
+                timestamp: Date.now()
+            }, {
+                source: 'BoxCreationTool',
+                throttle: true // Enable throttling for smooth real-time updates
+            });
         }
 
-        // Use centralized property panel update system
-        if (window.updateSelectedObjectInfo) {
-            window.updateSelectedObjectInfo(this.creationObject);
+        // LEGACY: Continue with legacy notification for compatibility
+        if (window.notifyObjectModified) {
+            window.notifyObjectModified(this.creationObject, 'property-change');
         }
     }
 
-    /** Enable dimension field interaction during box creation */
-    enableDimensionFieldInteraction() {
-        const dimFields = ['dim-x', 'dim-y', 'dim-z'];
-        dimFields.forEach(fieldId => {
-            const field = document.getElementById(fieldId);
-            if (field) {
-                field.removeAttribute('readonly');
-                // Use simple HTML attribute approach (same as position/rotation fields)
-                field.setAttribute('onchange', `applyDimensionFromInput('${fieldId}', this.value)`);
-                field.setAttribute('onkeydown', `handlePropertyInputKeydown(event, 'dimension', '${fieldId}', this)`);
-            }
-        });
-    }
-
-    /** Disable dimension field interaction and restore readonly */
-    disableDimensionFieldInteraction() {
-        const dimFields = ['dim-x', 'dim-y', 'dim-z'];
-        dimFields.forEach(fieldId => {
-            const field = document.getElementById(fieldId);
-            if (field) {
-                field.setAttribute('readonly', 'readonly');
-                field.removeAttribute('onchange');
-                field.removeAttribute('onkeydown');
-            }
-        });
-    }
-
-    /**
-     * Apply dimension from input field while maintaining center position
-     * @param {string} fieldId - The field ID ('dim-x', 'dim-z', 'dim-y')
-     * @param {string|number} value - The new dimension value
-     */
-    applyDimensionFromInput(fieldId, value) {
-        if (!this.creationObject || !this.startPosition) return;
-
-        const numValue = Math.max(parseFloat(value) || 0.01, 0.01);
-
-        // Calculate current center position for the box
-        const currentCenterX = this.currentPosition ? (this.startPosition.x + this.currentPosition.x) / 2 : this.startPosition.x;
-        const currentCenterZ = this.currentPosition ? (this.startPosition.z + this.currentPosition.z) / 2 : this.startPosition.z;
-
-        // Update internal dimensions based on field without moving the center
-        if (fieldId === 'dim-x') {
-            // Width - maintain center, update corner positions
-            const halfWidth = numValue / 2;
-            this.currentPosition = this.currentPosition || this.startPosition.clone();
-            this.startPosition.x = currentCenterX - halfWidth;
-            this.currentPosition.x = currentCenterX + halfWidth;
-        } else if (fieldId === 'dim-z') {
-            // Depth - maintain center, update corner positions
-            const halfDepth = numValue / 2;
-            this.currentPosition = this.currentPosition || this.startPosition.clone();
-            this.startPosition.z = currentCenterZ - halfDepth;
-            this.currentPosition.z = currentCenterZ + halfDepth;
-        } else if (fieldId === 'dim-y') {
-            // Height - update currentHeight
-            this.currentHeight = numValue;
-            // If we're setting height via input, switch to height mode
-            if (this.state === BoxCreationState.SETTING_CORNER_1 && this.currentPosition) {
-                this.state = BoxCreationState.SETTING_HEIGHT;
-                this.initializeHeightFromCurrentMouse();
-            }
-        }
-
-        // Update the invisible object and visual preview
-        this.updateInvisibleBoxDimensions();
-        this.updateExistingPreview();
-    }
 }
 
 // Export for use in main application

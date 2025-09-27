@@ -375,14 +375,13 @@ class PushTool {
             newSize.z = Math.max(0.1, this.originalContainerSize.z + sizeChange);
         }
 
-        // Delegate to centralized container service
-        LayoutGeometry.updateContainerGeometry(
-            this.pushedObject,
-            newSize,
-            this.pushedObject.position,
-            false,
-            null // No layout direction visualization during push operations
-        );
+        // Delegate to centralized container service via ContainerCrudManager
+        const containerCrudManager = window.modlerComponents?.containerCrudManager;
+        if (containerCrudManager) {
+            containerCrudManager.updateContainerForPushTool(this.pushedObject, newSize);
+        } else {
+            console.error('PushTool: ContainerCrudManager not available for container update');
+        }
     }
 
     /**
@@ -434,9 +433,29 @@ class PushTool {
             this.updateObjectDataDimensions(meshToUpdate.userData.id, meshToUpdate);
         }
 
-        // Notify centralized system for real-time property panel updates
+        // Sync geometry changes to pushedObject if they're different objects
+        if (meshToUpdate !== this.pushedObject && meshToUpdate?.geometry && this.pushedObject?.geometry) {
+            // Copy the modified geometry to the selected object for proper serialization
+            this.pushedObject.geometry = meshToUpdate.geometry;
+        }
+
+        // NEW: Emit through unified notification system if available
+        const objectEventBus = window.unifiedNotificationSystem?.eventBus;
+        if (objectEventBus && this.pushedObject?.userData?.id) {
+            // Emit geometry change event for real-time dimension updates
+            objectEventBus.emit(objectEventBus.EVENT_TYPES.GEOMETRY, this.pushedObject.userData.id, {
+                changeType: 'dimension',
+                axis: this.pushAxis,
+                timestamp: Date.now()
+            }, {
+                source: 'PushTool',
+                throttle: true // Enable throttling for smooth real-time updates
+            });
+        }
+
+        // LEGACY: Continue with legacy notification for compatibility
         if (window.notifyObjectModified) {
-            window.notifyObjectModified(meshToUpdate, 'geometry');
+            window.notifyObjectModified(this.pushedObject, 'geometry');
         }
     }
 

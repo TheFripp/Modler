@@ -688,7 +688,14 @@ class SceneController {
         // Update metadata
         obj.parentContainer = parentId;
 
-        
+        // Debug: verify parent relationship is set
+        console.log(`🔗 setParentContainer: "${obj.name}" (${objectId}) parent set to: ${parentId || 'null'}`);
+
+        // Notify UI of hierarchy change
+        if (window.notifyObjectModified) {
+            window.notifyObjectModified(obj.mesh, 'hierarchy');
+        }
+
         // Update layout of the new parent container only if requested
         if (parentId && updateLayout) {
             const container = this.objects.get(parentId);
@@ -697,7 +704,7 @@ class SceneController {
                 this.updateLayout(parentId);
             }
         }
-        
+
         return true;
     }
     

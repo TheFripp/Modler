@@ -18,6 +18,9 @@ class TransformationManager {
         this.positionTransform = null;
         this.transformNotificationUtils = null;
 
+        // Unified notification system integration
+        this.objectEventBus = null;
+
         // Performance statistics
         this.stats = {
             totalTransforms: 0,
@@ -41,11 +44,15 @@ class TransformationManager {
         this.positionTransform = window.PositionTransform || null;
         this.transformNotificationUtils = window.TransformNotificationUtils || null;
 
+        // Initialize unified notification system
+        this.objectEventBus = window.unifiedNotificationSystem?.eventBus || null;
+
         // Check again after a delay for late-loading components
-        if (!this.positionTransform || !this.transformNotificationUtils) {
+        if (!this.positionTransform || !this.transformNotificationUtils || !this.objectEventBus) {
             setTimeout(() => {
                 this.positionTransform = window.PositionTransform || this.positionTransform;
                 this.transformNotificationUtils = window.TransformNotificationUtils || this.transformNotificationUtils;
+                this.objectEventBus = window.unifiedNotificationSystem?.eventBus || this.objectEventBus;
             }, 100);
         }
     }
@@ -462,6 +469,38 @@ class TransformationManager {
             object.updateMatrix();
             object.updateMatrixWorld(true);
 
+            // NEW: Emit through unified notification system if available
+            if (this.objectEventBus && object.userData?.id) {
+                // Map transform types to standardized event types
+                let eventType;
+                switch (transformType) {
+                    case 'position':
+                    case 'rotation':
+                    case 'scale':
+                    case 'transform':
+                    case 'batch':
+                        eventType = this.objectEventBus.EVENT_TYPES.TRANSFORM;
+                        break;
+                    case 'hierarchy':
+                        eventType = this.objectEventBus.EVENT_TYPES.HIERARCHY;
+                        break;
+                    default:
+                        eventType = this.objectEventBus.EVENT_TYPES.TRANSFORM;
+                }
+
+                // Emit through unified system with transform data
+                this.objectEventBus.emit(eventType, object.userData.id, {
+                    transformType: transformType,
+                    position: object.position.toArray(),
+                    rotation: object.rotation.toArray(),
+                    scale: object.scale.toArray(),
+                    timestamp: Date.now()
+                }, {
+                    source: 'TransformationManager',
+                    throttle: true // Enable throttling for smooth real-time updates
+                });
+            }
+
             // Integrate with TransformNotificationUtils
             if (this.transformNotificationUtils) {
                 this.transformNotificationUtils.completeObjectModification(
@@ -484,6 +523,11 @@ class TransformationManager {
                 }
             }
 
+            // LEGACY: Continue with legacy notification for compatibility
+            if (window.notifyObjectModified) {
+                window.notifyObjectModified(object, transformType);
+            }
+
         } catch (error) {
             console.error('TransformationManager.completeTransformation error:', error);
         }
@@ -501,7 +545,8 @@ class TransformationManager {
             integrations: {
                 positionTransform: !!this.positionTransform,
                 transformNotificationUtils: !!this.transformNotificationUtils,
-                geometryUtils: !!window.GeometryUtils
+                geometryUtils: !!window.GeometryUtils,
+                objectEventBus: !!this.objectEventBus
             }
         };
     }

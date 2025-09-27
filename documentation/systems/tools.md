@@ -1,3 +1,10 @@
+---
+title: Tool System
+version: 2.1.0
+last_updated: September 26, 2025
+maintained_by: Architecture Team
+---
+
 # Tool System
 
 Modular tool architecture with centralized event coordination and shared selection behaviors.
@@ -30,12 +37,21 @@ Tools receive pre-coordinated events from InputController rather than direct DOM
 - **Real-time wireframe sync** during movement
 - **Face-based manipulation** for precise positioning
 
-### PushTool
-**Purpose**: Face extrusion and container resizing
+### PushTool (Consolidated September 2025)
+**Purpose**: Face extrusion and container resizing with centralized architecture
 - **Face highlighting** for push targets
 - **Face normal-based extrusion** with real-time preview
 - **Container sizing mode** switching (hug → fixed)
-- **Geometry vertex manipulation** for CAD accuracy
+- **Centralized geometry manipulation** via GeometryUtils.pushGeometryFace()
+- **Consolidated container management** via MovementUtils integration
+- **Architectural compliance** with centralization patterns
+
+**Consolidation Results**:
+- **Size Reduction**: 972 → 742 lines (23.7% reduction, 230 lines eliminated)
+- **GeometryUtils Integration**: Replaced 82 lines of manual vertex manipulation
+- **Dead Code Elimination**: Removed calculateContainerSizeForFillObjects() and excess debugging
+- **MovementUtils Integration**: Eliminated container management duplication
+- **Pattern Alignment**: Full compliance with established centralization patterns
 
 ### BoxCreationTool
 **Purpose**: Interactive 2D → 3D box creation

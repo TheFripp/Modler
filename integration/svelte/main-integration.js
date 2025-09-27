@@ -20,6 +20,11 @@
     let dataSync = null;
     let initializationInProgress = false;
 
+    // Unified notification system components
+    let objectEventBus = null;
+    let objectSerializer = null;
+    let propertyPanelSync = null;
+
     /**
      * Initialize the Svelte integration system
      */
@@ -52,8 +57,24 @@
             createPanels();
 
             // Step 5: Initialize data synchronization
+            console.log('📋 Initializing SvelteDataSync...');
+            console.log('📋 Available classes:', {
+                SvelteDataSync: typeof window.SvelteDataSync,
+                panelManager: !!panelManager
+            });
+
+            if (!window.SvelteDataSync) {
+                console.error('❌ SvelteDataSync class not available!');
+                showSvelteError('SvelteDataSync class not loaded');
+                return;
+            }
+
             dataSync = new SvelteDataSync(panelManager);
             dataSync.setupDataSync();
+            console.log('✅ SvelteDataSync initialized successfully');
+
+            // Step 5.5: Initialize unified notification system
+            initializeUnifiedNotificationSystem();
 
             // Step 6: Setup component synchronization
             initializeComponentSync();
@@ -83,7 +104,7 @@
                 console.log('🔄 Attempting one-time recovery initialization...');
                 setTimeout(() => {
                     if (!window.svelteIntegrationActive) {
-                        initializeSvelteIntegration();
+                        initialize();
                     }
                 }, 2000);
             }
@@ -392,6 +413,54 @@
     }
 
     /**
+     * Initialize unified notification system
+     */
+    function initializeUnifiedNotificationSystem() {
+        try {
+            console.log('🔄 Initializing unified notification system...');
+
+            // Step 1: Initialize ObjectEventBus
+            if (window.ObjectEventBus) {
+                objectEventBus = new window.ObjectEventBus();
+                console.log('✅ ObjectEventBus initialized');
+            } else {
+                console.warn('⚠️ ObjectEventBus class not available, skipping initialization');
+                return;
+            }
+
+            // Step 2: Initialize ObjectSerializer
+            if (window.ObjectSerializer) {
+                objectSerializer = new window.ObjectSerializer();
+                console.log('✅ ObjectSerializer initialized');
+            } else {
+                console.warn('⚠️ ObjectSerializer class not available, skipping initialization');
+                return;
+            }
+
+            // Step 3: Initialize PropertyPanelSync
+            if (window.PropertyPanelSync) {
+                propertyPanelSync = new window.PropertyPanelSync(objectEventBus, panelManager);
+                console.log('✅ PropertyPanelSync initialized');
+            } else {
+                console.warn('⚠️ PropertyPanelSync class not available, skipping initialization');
+                return;
+            }
+
+            // Step 4: Make global references available for tools
+            window.unifiedNotificationSystem = {
+                eventBus: objectEventBus,
+                serializer: objectSerializer,
+                panelSync: propertyPanelSync
+            };
+
+            console.log('🚀 Unified notification system fully initialized and ready');
+
+        } catch (error) {
+            console.error('❌ Failed to initialize unified notification system:', error);
+        }
+    }
+
+    /**
      * Initialize component synchronization
      */
     function initializeComponentSync() {
@@ -628,27 +697,77 @@
 
     // Bridge function: Notify object modified (properties, transforms, etc.)
     window.notifyObjectModified = function(objectOrId, modificationType = 'geometry') {
-        if (!dataSync) return;
+        console.log('📡 MAIN: notifyObjectModified called with:', objectOrId?.userData?.id || objectOrId, modificationType);
+
+        if (!dataSync) {
+            console.warn('❌ DataSync not available for notifyObjectModified');
+            return;
+        }
 
         const sceneController = window.modlerComponents?.sceneController;
-        if (!sceneController) return;
+        if (!sceneController) {
+            console.warn('❌ SceneController not available for notifyObjectModified');
+            return;
+        }
 
         try {
             let targetObject = null;
+            let objectId = null;
 
             // Handle both object and ID inputs
             if (typeof objectOrId === 'string' || typeof objectOrId === 'number') {
                 // ID passed - find the object
-                const objectData = sceneController.getObjectById(objectOrId);
+                objectId = objectOrId;
+                const objectData = sceneController.getObject(objectOrId);
                 targetObject = objectData ? objectData.mesh : null;
             } else {
                 // Object passed directly
                 targetObject = objectOrId;
+                objectId = targetObject?.userData?.id;
             }
 
-            if (targetObject) {
-                // Support mesh updates (wireframes, highlights) are handled centrally by GeometryUtils
+            if (targetObject && objectId) {
+                // NEW: Emit through unified notification system if available
+                if (objectEventBus) {
+                    // Map modification types to standardized event types
+                    let eventType;
+                    switch (modificationType) {
+                        case 'transform':
+                        case 'position':
+                        case 'rotation':
+                        case 'scale':
+                            eventType = objectEventBus.EVENT_TYPES.TRANSFORM;
+                            break;
+                        case 'geometry':
+                        case 'dimension':
+                        case 'dimensions':
+                            eventType = objectEventBus.EVENT_TYPES.GEOMETRY;
+                            break;
+                        case 'material':
+                        case 'color':
+                        case 'opacity':
+                            eventType = objectEventBus.EVENT_TYPES.MATERIAL;
+                            break;
+                        case 'hierarchy':
+                        case 'parent':
+                        case 'children':
+                            eventType = objectEventBus.EVENT_TYPES.HIERARCHY;
+                            break;
+                        default:
+                            eventType = objectEventBus.EVENT_TYPES.GEOMETRY; // Default fallback
+                    }
 
+                    // Emit through unified system
+                    objectEventBus.emit(eventType, objectId, {
+                        modificationType: modificationType,
+                        timestamp: Date.now()
+                    }, {
+                        source: 'legacy-bridge',
+                        throttle: true
+                    });
+                }
+
+                // LEGACY: Continue with existing legacy system for compatibility
                 // Handle hierarchy changes by refreshing the entire object hierarchy
                 if (modificationType === 'hierarchy') {
                     // Refresh the entire hierarchy when parent-child relationships change
@@ -829,7 +948,17 @@
         portDetector: () => portDetector,
         panelManager: () => panelManager,
         dataSync: () => dataSync,
-        reinitialize: initialize
+        // Unified notification system components
+        eventBus: () => objectEventBus,
+        serializer: () => objectSerializer,
+        panelSync: () => propertyPanelSync,
+        // Control functions
+        reinitialize: initialize,
+        getStats: () => ({
+            eventBus: objectEventBus?.getStats(),
+            serializer: objectSerializer?.getStats(),
+            panelSync: propertyPanelSync?.getStats()
+        })
     };
 
 })();

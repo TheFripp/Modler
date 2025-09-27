@@ -305,33 +305,28 @@ class DeleteObjectCommand extends BaseCommand {
      */
     restoreContainer(snapshot) {
         try {
-            // Use the same approach as normal container creation via LayoutGeometry
-            if (!window.LayoutGeometry) {
-                console.error('DeleteObjectCommand: LayoutGeometry not available for container restoration');
+            // Use centralized container creation via ContainerCrudManager
+            const containerCrudManager = window.modlerComponents?.containerCrudManager;
+            if (!containerCrudManager) {
+                console.error('DeleteObjectCommand: ContainerCrudManager not available for container restoration');
                 return false;
             }
 
-            // Create container geometry using the same method as normal creation
+            // Create container geometry using centralized method with positioning
             const size = new THREE.Vector3(
                 snapshot.dimensions?.width || 2,
                 snapshot.dimensions?.height || 2,
                 snapshot.dimensions?.depth || 2
             );
 
-            const containerResult = window.LayoutGeometry.createContainerGeometry(size);
+            const transform = snapshot.meshData || { position: new THREE.Vector3(0, 0, 0) };
+            const containerResult = containerCrudManager.createContainerGeometryAtPosition(size, transform);
             if (!containerResult || !containerResult.mesh) {
                 console.error('DeleteObjectCommand: Failed to create container geometry');
                 return false;
             }
 
             const containerMesh = containerResult.mesh;
-
-            // Position the container mesh
-            if (snapshot.meshData) {
-                containerMesh.position.copy(snapshot.meshData.position);
-                containerMesh.rotation.copy(snapshot.meshData.rotation);
-                containerMesh.scale.copy(snapshot.meshData.scale);
-            }
 
             // Add to scene
             const scene = window.modlerComponents?.sceneFoundation?.scene;

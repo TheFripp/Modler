@@ -287,19 +287,14 @@ class PositionTransform {
      * @returns {Object} Container data object
      */
     static createContainerAtPosition(size, position) {
-        if (!window.LayoutGeometry) {
-            console.error('PositionTransform: LayoutGeometry not available');
+        const containerCrudManager = window.modlerComponents?.containerCrudManager;
+        if (!containerCrudManager) {
+            console.error('PositionTransform: ContainerCrudManager not available');
             return null;
         }
-        
-        const containerData = window.LayoutGeometry.createContainerGeometry(size);
-        
-        if (containerData && containerData.mesh) {
-            containerData.mesh.position.copy(position);
-            containerData.mesh.updateMatrixWorld(true);
-        }
-        
-        return containerData;
+
+        // Use centralized container creation with positioning
+        return containerCrudManager.createContainerGeometryAtPosition(size, position);
     }
     
     /**

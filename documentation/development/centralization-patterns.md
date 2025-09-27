@@ -1,3 +1,10 @@
+---
+title: Centralization Patterns - Solo Development Reference
+version: 2.1.0
+last_updated: September 26, 2025
+maintained_by: Architecture Team
+---
+
 # Centralization Patterns - Solo Development Reference
 
 **Purpose**: Architectural decision rationale for maintaining consistency and preventing architectural regression.
@@ -36,6 +43,12 @@
 - **Architecture**: `setPosition()` → coordinate conversion → batch scheduling → notification integration
 - **Benefits**: Performance through batching, automatic mesh synchronization, coordinate space handling
 
+**LayoutEngine "Owns Everything" Pattern** (September 2025)
+- **Problem**: Scattered layout bounds calculations across LayoutEngine, SceneController, and ContainerCrudManager
+- **Solution**: Single system owns all layout-related calculations with specialized delegation
+- **Architecture**: `LayoutEngine.calculateUnifiedBounds()` → handles both layout and selection bounds → other systems delegate
+- **Benefits**: Eliminated duplicate bounds logic, consistent calculation methods, clear ownership boundaries
+
 ### 2. Integration Boundary Patterns
 
 **Seamless Integration Principle**
@@ -52,6 +65,12 @@
 - MaterialManager integrates with ConfigurationManager for visual settings
 - GeometryFactory uses configuration for optimization parameters
 - Clear boundary: Resource creation vs configuration management
+
+**ContainerCrudManager Centralization Pattern** (September 2025)
+- ContainerCrudManager provides centralized helper methods for common container operations
+- External systems (delete-object-command, position-transform, push-tool) use helpers instead of direct LayoutGeometry access
+- Helper methods handle factory access, positioning, and configuration internally
+- Clear boundary: Business logic operations vs geometry implementation details
 
 ### 3. Performance Optimization Patterns
 
