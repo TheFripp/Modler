@@ -53,6 +53,22 @@ class FieldNavigationManager {
      */
     handleKeyPress(event) {
         const activeElement = document.activeElement;
+
+        // Special case: Tab pressed during tool operation (not in input field)
+        if (event.key === 'Tab' && (!activeElement || activeElement.tagName !== 'INPUT')) {
+            // Check if any tool has an active workflow (like move-tool-drag)
+            for (const [toolName, handler] of this.navigationHandlers) {
+                if (toolName.includes('drag') || toolName.includes('tool')) {
+                    event.preventDefault();
+                    // Start the workflow from the first field
+                    this.startWorkflow(toolName, 0);
+                    return;
+                }
+            }
+            return;
+        }
+
+        // Regular input field navigation
         if (!activeElement || activeElement.tagName !== 'INPUT') return;
 
         // Find which tool workflow this field belongs to

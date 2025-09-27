@@ -256,7 +256,7 @@ class SveltePanelManager {
 
         this.panels.mainToolbar.style.cssText = `
             position: fixed;
-            top: 20px;
+            top: 24px;
             left: 50%;
             transform: translateX(-50%);
             width: 400px;

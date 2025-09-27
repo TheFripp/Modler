@@ -337,6 +337,33 @@ class CameraMathUtils {
     }
 
     /**
+     * Get the dominant axis from a face normal vector
+     * @param {THREE.Vector3} normal - Face normal vector
+     * @returns {string} Dominant axis ('x', 'y', or 'z')
+     */
+    static getDominantAxisFromNormal(normal) {
+        const absAxis = {
+            x: Math.abs(normal.x),
+            y: Math.abs(normal.y),
+            z: Math.abs(normal.z)
+        };
+
+        // Find the dominant axis (the one with highest absolute value)
+        let dominantAxis = 'x';
+        let maxValue = absAxis.x;
+
+        if (absAxis.y > maxValue) {
+            dominantAxis = 'y';
+            maxValue = absAxis.y;
+        }
+        if (absAxis.z > maxValue) {
+            dominantAxis = 'z';
+        }
+
+        return dominantAxis;
+    }
+
+    /**
      * Debug helper: Log dragging calculations
      * @param {string} operation - Name of operation being debugged
      * @param {Object} data - Data to log

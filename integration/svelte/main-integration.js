@@ -272,6 +272,86 @@
                     const scaleAxis = property.split('.')[1];
                     objectData.mesh.scale[scaleAxis] = parseFloat(value);
                     break;
+                case 'autoLayout.enabled':
+                    if (objectData.isContainer) {
+                        objectData.autoLayout = objectData.autoLayout || {};
+                        objectData.autoLayout.enabled = Boolean(value);
+                        console.log(`🔄 Setting autoLayout.enabled to ${value} for container ${objectData.id}`);
+
+                        // Set default direction if not already set when enabling layout
+                        if (objectData.autoLayout.enabled && !objectData.autoLayout.direction) {
+                            objectData.autoLayout.direction = 'x'; // Default to x-axis layout
+                            console.log(`🔄 Setting default autoLayout.direction to 'x' for container ${objectData.id}`);
+                        }
+
+                        // Trigger layout update if enabled
+                        if (objectData.autoLayout.enabled && window.modlerComponents?.sceneController) {
+                            const layoutResult = window.modlerComponents.sceneController.updateLayout(objectData.id);
+                            if (layoutResult && layoutResult.success) {
+                                console.log(`✅ Layout update successful for container ${objectData.id}`);
+                                console.log(`📐 Layout bounds:`, layoutResult.layoutBounds);
+
+                                // Resize container to fit layout bounds
+                                if (layoutResult.layoutBounds && window.modlerComponents?.containerCrudManager) {
+                                    console.log(`🔧 Resizing container ${objectData.id} to layout bounds`);
+                                    window.modlerComponents.containerCrudManager.resizeContainerToLayoutBounds(objectData, layoutResult.layoutBounds);
+                                }
+
+                                // Fire ObjectEventBus event for layout change
+                                if (window.objectEventBus) {
+                                    window.objectEventBus.emit(
+                                        window.objectEventBus.EVENT_TYPES.HIERARCHY,
+                                        objectData.id,
+                                        { changeType: 'layout-update', layoutEnabled: true },
+                                        { source: 'autoLayout-enabled', throttle: false }
+                                    );
+                                }
+                            } else {
+                                console.warn(`⚠️ Layout update failed for container ${objectData.id}:`, layoutResult?.reason);
+                            }
+                        } else if (!window.modlerComponents?.sceneController) {
+                            console.warn('⚠️ SceneController not available for layout update');
+                        }
+                    }
+                    break;
+                case 'autoLayout.direction':
+                    if (objectData.isContainer) {
+                        objectData.autoLayout = objectData.autoLayout || {};
+                        objectData.autoLayout.direction = String(value);
+                        console.log(`🔄 Setting autoLayout.direction to ${value} for container ${objectData.id}`);
+
+                        // Trigger layout update if layout is enabled
+                        if (objectData.autoLayout.enabled && window.modlerComponents?.sceneController) {
+                            const layoutResult = window.modlerComponents.sceneController.updateLayout(objectData.id);
+                            if (layoutResult && layoutResult.success) {
+                                console.log(`✅ Layout direction update successful for container ${objectData.id}`);
+                                console.log(`📐 Layout bounds:`, layoutResult.layoutBounds);
+
+                                // Resize container to fit layout bounds
+                                if (layoutResult.layoutBounds && window.modlerComponents?.containerCrudManager) {
+                                    console.log(`🔧 Resizing container ${objectData.id} to layout bounds`);
+                                    window.modlerComponents.containerCrudManager.resizeContainerToLayoutBounds(objectData, layoutResult.layoutBounds);
+                                }
+
+                                // Fire ObjectEventBus event for layout change
+                                if (window.objectEventBus) {
+                                    window.objectEventBus.emit(
+                                        window.objectEventBus.EVENT_TYPES.HIERARCHY,
+                                        objectData.id,
+                                        { changeType: 'layout-update', direction: value },
+                                        { source: 'autoLayout-direction', throttle: false }
+                                    );
+                                }
+                            } else {
+                                console.warn(`⚠️ Layout direction update failed for container ${objectData.id}:`, layoutResult?.reason);
+                            }
+                        } else if (!objectData.autoLayout.enabled) {
+                            console.log(`ℹ️ Layout not enabled for container ${objectData.id}, direction change stored but not applied`);
+                        } else if (!window.modlerComponents?.sceneController) {
+                            console.warn('⚠️ SceneController not available for layout update');
+                        }
+                    }
+                    break;
                 default:
                     console.warn('❌ Unknown property update:', property);
                     return;
@@ -404,17 +484,35 @@
     function initializeComponentSync() {
         const selectionController = window.modlerComponents?.selectionController;
         const toolController = window.modlerComponents?.toolController;
+        const sceneController = window.modlerComponents?.sceneController;
 
         // Clear initial selection to ensure clean startup state
         if (propertyPanelSync) {
             propertyPanelSync.sendToUI('clear-selection', []);
         }
 
+        // Connect SceneController events to hierarchy updates
+        if (sceneController) {
+            sceneController.on('objectAdded', (objectData) => {
+                console.log('🎯 objectAdded event:', objectData?.name || objectData?.id);
+                // Trigger hierarchy refresh when objects are added
+                window.populateObjectList();
+            });
+
+            sceneController.on('objectRemoved', (objectData) => {
+                console.log('🎯 objectRemoved event:', objectData?.name || objectData?.id);
+                // Trigger hierarchy refresh when objects are removed
+                window.populateObjectList();
+            });
+        }
+
         if (selectionController) {
             // Listen for selection changes using SelectionController's callback system
             selectionController.onSelectionChange((selectedObjects) => {
                 if (propertyPanelSync && selectedObjects) {
-                    propertyPanelSync.sendToUI('selection-change', selectedObjects);
+                    propertyPanelSync.sendToUI('selection-change', selectedObjects, {
+                        panels: ['left', 'right'] // Send to both object list (left) and properties (right)
+                    });
                 }
             });
 
@@ -607,11 +705,13 @@
                 // Serialize objects for hierarchy update
                 const serializedObjects = filteredObjects.map(obj => objectSerializer.serializeObject(obj.mesh)).filter(Boolean);
                 propertyPanelSync.sendToUI('hierarchy-changed', serializedObjects, {
-                    includeContext: false
+                    includeContext: false,
+                    panels: ['left'] // Send to left panel where object list is located
                 });
             } else {
                 propertyPanelSync.sendToUI('hierarchy-changed', [], {
-                    includeContext: false
+                    includeContext: false,
+                    panels: ['left'] // Send to left panel where object list is located
                 });
             }
         } catch (error) {

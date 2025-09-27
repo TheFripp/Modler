@@ -137,6 +137,7 @@
 						values={$displayObject.position}
 						objectId={$displayObject.id}
 						propertyBase="position"
+						idPrefix="pos"
 					/>
 				</div>
 

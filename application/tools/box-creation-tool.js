@@ -168,6 +168,12 @@ class BoxCreationTool {
         this.cleanup();
         this.state = BoxCreationState.IDLE;
 
+        // Switch to select tool after box creation
+        const toolController = window.modlerComponents?.toolController;
+        if (toolController) {
+            toolController.activateTool('select');
+        }
+
         // Properties panel will be updated automatically when the new box is selected
         // Reset the panel title back to normal
         const panelTitle = document.querySelector('.properties-panel h3');
@@ -537,7 +543,12 @@ class BoxCreationTool {
 
         // Emit direct ObjectEventBus event for unified notification system
         if (window.objectEventBus) {
-            window.objectEventBus.emitPropertyUpdate(this.creationObject.id, this.creationObject);
+            window.objectEventBus.emit(
+                window.objectEventBus.EVENT_TYPES.GEOMETRY,
+                this.creationObject.id,
+                { dimensions: this.creationObject.dimensions },
+                { source: 'box-creation-tool', throttle: true }
+            );
         }
     }
 

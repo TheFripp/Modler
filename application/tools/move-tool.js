@@ -95,6 +95,41 @@ class MoveTool {
     }
     
     /**
+     * Register field navigation for Tab key during dragging
+     */
+    registerFieldNavigation() {
+        if (!this.dragFaceNormal || !this.dragObject) return;
+
+        // Get dominant axis from face normal
+        const dominantAxis = window.CameraMathUtils.getDominantAxisFromNormal(this.dragFaceNormal);
+
+        // Get field navigation manager
+        const fieldNavigationManager = window.modlerComponents?.fieldNavigationManager;
+        if (!fieldNavigationManager) return;
+
+        // Define field order based on dominant axis
+        const axisOrder = {
+            'x': ['pos-x', 'pos-y', 'pos-z'],
+            'y': ['pos-y', 'pos-x', 'pos-z'],
+            'z': ['pos-z', 'pos-x', 'pos-y']
+        };
+
+        // Register navigation workflow starting with the axis being manipulated
+        fieldNavigationManager.registerNavigationWorkflow('move-tool-drag', {
+            fieldOrder: axisOrder[dominantAxis],
+            onFieldFocus: (fieldId, index) => {
+                // Focus on the selected field in property panel
+            },
+            onFieldApply: (fieldId, value, event) => {
+                // Apply value immediately during Tab navigation
+            },
+            onWorkflowComplete: () => {
+                // Navigation workflow completed
+            }
+        });
+    }
+
+    /**
      * Start face-based dragging operation
      */
     startFaceDrag(hit) {
@@ -120,6 +155,9 @@ class MoveTool {
 
         // Get face normal in world space using shared behavior (handles all container architectures)
         this.dragFaceNormal = this.faceToolBehavior.getWorldFaceNormal(hit);
+
+        // Register field navigation for Tab key during dragging
+        this.registerFieldNavigation();
 
         // Store snap attachment point if snapping is enabled
         this.snapAttachmentPoint = null;
@@ -242,7 +280,12 @@ class MoveTool {
         if (!this.transformationManager) {
             // Emit direct ObjectEventBus event for real-time property panel updates
             if (window.objectEventBus) {
-                window.objectEventBus.emitTransformUpdate(this.dragObject.id, this.dragObject);
+                window.objectEventBus.emit(
+                    window.objectEventBus.EVENT_TYPES.TRANSFORM,
+                    this.dragObject.id,
+                    { changeType: 'transform' },
+                    { source: 'move-tool', throttle: true }
+                );
             }
         }
         
@@ -297,6 +340,12 @@ class MoveTool {
         if (!this.isDragging) return;
 
         const draggedObject = this.dragObject; // Store reference before clearing
+
+        // Unregister field navigation
+        const fieldNavigationManager = window.modlerComponents?.fieldNavigationManager;
+        if (fieldNavigationManager) {
+            fieldNavigationManager.unregisterNavigationWorkflow('move-tool-drag');
+        }
 
         // Clear drag state
         this.isDragging = false;

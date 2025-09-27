@@ -11,7 +11,7 @@ class SnapController {
         this.inputController = inputController;
 
         // Centralized snap state
-        this.isEnabled = true; // Default on
+        this.isEnabled = false; // Default off
         this.snapThreshold = 16; // 16px screen space proximity for easier targeting
         this.currentSnapPoint = null;
         this.activeSnapType = null; // 'corner', 'edge', 'face'

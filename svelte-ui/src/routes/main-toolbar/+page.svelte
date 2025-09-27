@@ -89,7 +89,7 @@
 	}
 
 	.toolbar-container {
-		padding: 24px; /* Increased padding to prevent toolbar cutoff */
+		padding: 16px; /* Reduced padding by 8px (was 24px) */
 		display: flex;
 		justify-content: center;
 		background: transparent;
@@ -102,7 +102,7 @@
 		backdrop-filter: blur(10px);
 		border: 1px solid #2E2E2E;
 		border-radius: 24px;
-		padding: 8px 16px; /* Reduced vertical padding by 8px (was 16px) */
+		padding: 0px 8px; /* Reduced padding by 8px all around (was 8px 16px) */
 		display: flex;
 		align-items: center;
 		gap: 8px; /* Reduced gap for tighter square button layout */

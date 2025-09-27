@@ -77,11 +77,14 @@ class BaseFaceToolBehavior {
 
         // CHILD OBJECT TRANSPARENCY: If we hit a child object inside a selected container,
         // ignore the child hit but preserve existing container highlights
+        // EXCEPTION: When stepped into container context, child objects should be directly selectable
         if (!this.selectionController.isSelected(targetObject)) {
             const sceneController = window.modlerComponents?.sceneController;
+            const navigationController = window.modlerComponents?.navigationController;
+            const isInContainerContext = navigationController?.isInContainerContext() || false;
             const objectData = sceneController?.getObjectByMesh(hit.object);
 
-            if (objectData && objectData.parentContainer) {
+            if (objectData && objectData.parentContainer && !isInContainerContext) {
                 const parentContainer = sceneController.getObject(objectData.parentContainer);
                 if (parentContainer && this.selectionController.isSelected(parentContainer.mesh)) {
                     // Child object hit inside selected container - ignore it but preserve existing highlights

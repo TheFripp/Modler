@@ -88,11 +88,9 @@ function setupPostMessageFallback() {
 		// Handle data-update messages
 		if (event.data.type === 'data-update') {
 			const data = event.data.data;
-			console.log('📨 SVELTE: Received data-update, updateType:', data.updateType, 'selectedCount:', data.selectedObjects?.length);
 
 			// Update selected objects in store
 			if (data.selectedObjects) {
-				console.log('📋 SVELTE: Updating selectedObjects store with dimensions:', data.selectedObjects[0]?.dimensions);
 				syncSelectionFromThreeJS(data.selectedObjects);
 			}
 

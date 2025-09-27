@@ -465,24 +465,40 @@
 			const navigationController = (window as any).modlerComponents?.navigationController;
 
 			if (navigationController) {
-				// Use NavigationController for unified navigation
-				navigationController.navigateToObject(objectId);
+				// CONTAINER-FIRST BEHAVIOR:
+				if (selectedObject?.isContainer) {
+					// Case 1: Container selected → Select container in scene (stay at root level)
+					navigationController.navigateToRoot(); // Ensure we're at root level
+					navigationController.selectObject(objectId); // Select the container
+				} else if (selectedObject?.parentContainer) {
+					// Case 2: Child object selected → Step into container and select child
+					navigationController.navigateToObject(objectId); // This handles stepping in
+				} else {
+					// Case 3: Root-level object → Direct selection
+					navigationController.selectObject(objectId);
+				}
 				return;
 			}
 		}
 
 		// Fallback to legacy direct methods
 		if ((window as any).selectObjectInSceneDirectly) {
-			// If object is a child of a container, step into the container first
-			if (selectedObject?.parentContainer) {
-				// Step into the parent container
+			if (selectedObject?.isContainer) {
+				// Container selected: select directly without stepping in
+				const success = (window as any).selectObjectInSceneDirectly(objectId);
+				if (success) return;
+			} else if (selectedObject?.parentContainer) {
+				// Child object selected: step into container first
 				if ((window as any).stepIntoContainerById) {
 					(window as any).stepIntoContainerById(selectedObject.parentContainer);
 				}
+				const success = (window as any).selectObjectInSceneDirectly(objectId);
+				if (success) return;
+			} else {
+				// Root-level object: direct selection
+				const success = (window as any).selectObjectInSceneDirectly(objectId);
+				if (success) return;
 			}
-
-			const success = (window as any).selectObjectInSceneDirectly(objectId);
-			if (success) return;
 		}
 
 		// Iframe context or fallback: use PostMessage

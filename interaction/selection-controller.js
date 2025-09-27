@@ -78,10 +78,18 @@ class SelectionController {
             }
         } else if (objectData && objectData.parentContainer) {
             // CASE 3: NOT in container context, clicking child object
-            // → ARCHITECTURAL CHANGE: Direct child selection (no container-first)
-            // Container selection only happens via navigation (double-click)
-            targetObject = object; // Select the child object directly
-            shouldStepIntoContainer = false; // No automatic container entry
+            // → CONTAINER-FIRST: Select parent container instead of child
+            const sceneController = window.modlerComponents?.sceneController;
+            const parentContainer = sceneController?.getObject(objectData.parentContainer);
+
+            if (parentContainer && parentContainer.mesh) {
+                targetObject = parentContainer.mesh; // Select parent container first
+                shouldStepIntoContainer = false;
+            } else {
+                // Fallback to direct selection if parent not found
+                targetObject = object;
+                shouldStepIntoContainer = false;
+            }
         } else {
             // CASE 4: NOT in container context, clicking top-level object/container
             // → Direct selection

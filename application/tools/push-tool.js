@@ -455,7 +455,12 @@ class PushTool {
 
         // Emit direct ObjectEventBus event for unified notification system
         if (window.objectEventBus) {
-            window.objectEventBus.emitGeometryUpdate(this.pushedObject.id, this.pushedObject);
+            window.objectEventBus.emit(
+                window.objectEventBus.EVENT_TYPES.GEOMETRY,
+                this.pushedObject.id,
+                { changeType: 'geometry' },
+                { source: 'push-tool', throttle: true }
+            );
         }
     }
 
@@ -545,7 +550,12 @@ class PushTool {
 
             // Emit direct ObjectEventBus event for unified notification system
             if (window.objectEventBus) {
-                window.objectEventBus.emitGeometryUpdate(pushedObject.id, pushedObject);
+                window.objectEventBus.emit(
+                    window.objectEventBus.EVENT_TYPES.GEOMETRY,
+                    pushedObject.id,
+                    { changeType: 'geometry' },
+                    { source: 'push-tool', throttle: true }
+                );
             }
         }
 

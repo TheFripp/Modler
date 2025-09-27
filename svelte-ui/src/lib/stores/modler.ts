@@ -407,7 +407,15 @@ export function updateThreeJSProperty(objectId: string, property: string, value:
 
 // Sync Three.js selection changes to Svelte stores
 export function syncSelectionFromThreeJS(selectedThreeObjects: any[]) {
-	const objectDataArray = selectedThreeObjects.map(convertThreeObjectToObjectData);
+	// Check if objects are already serialized (have id, name, type fields) or raw Three.js objects
+	const objectDataArray = selectedThreeObjects.map(obj => {
+		// If object already has serialized structure, use it directly
+		if (obj && typeof obj === 'object' && obj.hasOwnProperty('id') && obj.hasOwnProperty('name') && obj.hasOwnProperty('type')) {
+			return obj; // Already serialized
+		}
+		// Otherwise convert from Three.js object
+		return convertThreeObjectToObjectData(obj);
+	});
 	selectedObjects.set(objectDataArray);
 }
 

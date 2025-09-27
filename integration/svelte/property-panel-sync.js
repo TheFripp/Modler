@@ -301,12 +301,18 @@ class PropertyPanelSync {
                 }).filter(Boolean);
             }
 
-            // Build complete data package
+            // Build complete data package with correct field names based on update type
             const data = {
-                selectedObjects: safeSerializedObjects,
                 updateType: updateType,
                 timestamp: Date.now()
             };
+
+            // Use correct field name based on update type
+            if (updateType === 'hierarchy-changed') {
+                data.objectHierarchy = safeSerializedObjects;
+            } else {
+                data.selectedObjects = safeSerializedObjects;
+            }
 
             // Add container context if requested
             if (includeContext) {

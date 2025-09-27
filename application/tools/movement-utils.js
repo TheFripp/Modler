@@ -204,9 +204,19 @@ class MovementUtils {
         // Emit direct ObjectEventBus event for unified notification system
         if (window.objectEventBus) {
             if (changeType === 'geometry') {
-                window.objectEventBus.emitGeometryUpdate(object.id, object);
+                window.objectEventBus.emit(
+                    window.objectEventBus.EVENT_TYPES.GEOMETRY,
+                    object.id,
+                    { changeType: 'geometry' },
+                    { source: 'movement-utils', throttle: true }
+                );
             } else {
-                window.objectEventBus.emitTransformUpdate(object.id, object);
+                window.objectEventBus.emit(
+                    window.objectEventBus.EVENT_TYPES.TRANSFORM,
+                    object.id,
+                    { changeType: 'transform' },
+                    { source: 'movement-utils', throttle: true }
+                );
             }
         }
 
