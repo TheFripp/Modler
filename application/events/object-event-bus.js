@@ -36,13 +36,29 @@ class ObjectEventBus {
 
         // Standardized event types
         this.EVENT_TYPES = {
+            // Core CAD events
             TRANSFORM: 'object:transform',     // Position, rotation, scale
             GEOMETRY: 'object:geometry',       // Dimensions, vertices
             MATERIAL: 'object:material',       // Color, opacity, texture
             HIERARCHY: 'object:hierarchy',     // Parent-child relationships
             LIFECYCLE: 'object:lifecycle',     // Create, delete operations
             SELECTION: 'object:selection',     // Selection state changes
-            TOOL_STATE: 'tool:state'          // Tool activation/deactivation
+            TOOL_STATE: 'tool:state',         // Tool activation/deactivation
+
+            // Parametric design events
+            PARAMETRIC_UPDATE: 'parametric:update',       // Parameter value changes
+            CONSTRAINT_CHANGE: 'parametric:constraint',   // Property constraints modified
+            FORMULA_UPDATE: 'parametric:formula',         // Formula-driven property changes
+            DEPENDENCY_UPDATE: 'parametric:dependency',   // Object dependency changes
+
+            // Component instancing events
+            INSTANCE_UPDATE: 'component:instance',        // Instance-specific changes
+            MASTER_CHANGE: 'component:master',           // Master component modifications
+            COMPONENT_SYNC: 'component:sync',            // Full synchronization events
+
+            // Meta-functionality events
+            METADATA_CHANGE: 'object:metadata',          // Extended property metadata
+            SYSTEM_STATE: 'system:state'                 // Global system state changes
         };
 
         // Batch processing queue

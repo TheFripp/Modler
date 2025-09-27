@@ -288,12 +288,6 @@ class ContainerCrudManager {
         const containerData = this.createContainerGeometryWithFactories(bounds.size);
         const edgeContainer = containerData.mesh;
 
-        // DEBUG: Log container creation positioning
-        console.log('ContainerCrudManager.createAndRegisterContainer - Creating container:', {
-            boundsCenter: bounds.center.clone(),
-            containerMeshPosition: edgeContainer.position.clone(),
-            boundsSizeInfo: bounds.size
-        });
 
         const containerObject = sceneController.addObject(edgeContainer, null, {
             name: sceneController.generateObjectName('container'),
@@ -305,13 +299,6 @@ class ContainerCrudManager {
             originalBounds: bounds // Store original bounds for interactive mesh creation
         });
 
-        // DEBUG: Log container after addObject
-        if (containerObject && containerObject.mesh) {
-            console.log('ContainerCrudManager.createAndRegisterContainer - After addObject:', {
-                containerMeshPosition: containerObject.mesh.position.clone(),
-                hasInteractiveMesh: !!containerObject.mesh.userData?.supportMeshes?.interactiveMesh
-            });
-        }
 
         if (!containerObject) {
             console.error('Failed to create container object');

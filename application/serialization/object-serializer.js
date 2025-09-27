@@ -19,6 +19,7 @@ class ObjectSerializer {
         // Component references (initialized lazily)
         this.geometryUtils = null;
         this.sceneController = null;
+        this.propertySchemaRegistry = null;
 
         // Cache for performance
         this.serializationCache = new Map();
@@ -29,7 +30,9 @@ class ObjectSerializer {
             serializations: 0,
             cacheHits: 0,
             errors: 0,
-            batchOperations: 0
+            batchOperations: 0,
+            parametricSerializations: 0,
+            instanceSerializations: 0
         };
 
         // Configuration
@@ -51,6 +54,9 @@ class ObjectSerializer {
         }
         if (!this.sceneController) {
             this.sceneController = window.modlerComponents?.sceneController;
+        }
+        if (!this.propertySchemaRegistry) {
+            this.propertySchemaRegistry = window.propertySchemaRegistry;
         }
     }
 
@@ -120,6 +126,12 @@ class ObjectSerializer {
             if (includeHierarchy) {
                 this.addHierarchyData(serialized, objectData);
             }
+
+            // Add parametric data if object has parametric properties
+            this.addParametricData(serialized, objectData);
+
+            // Add component instancing data if applicable
+            this.addInstanceData(serialized, objectData);
 
             // Cache the result
             if (useCache) {
@@ -394,12 +406,132 @@ class ObjectSerializer {
     }
 
     /**
+     * Add parametric data to serialized object
+     * @private
+     */
+    addParametricData(serialized, objectData) {
+        if (!this.propertySchemaRegistry) {
+            this.initializeComponents();
+        }
+
+        // Check if object has parametric properties
+        const parametricProperties = objectData.parametricProperties || {};
+
+        if (Object.keys(parametricProperties).length > 0) {
+            serialized.parametric = {
+                exposed: parametricProperties.exposed || {},
+                constraints: parametricProperties.constraints || {},
+                formulas: parametricProperties.formulas || {},
+                dependencies: parametricProperties.dependencies || []
+            };
+
+            this.stats.parametricSerializations++;
+        }
+
+        // Add constraint information for locked dimensions
+        if (parametricProperties.constraints) {
+            serialized.constraints = {};
+            for (const [property, constraint] of Object.entries(parametricProperties.constraints)) {
+                if (constraint === 'locked') {
+                    serialized.constraints[property] = 'locked';
+                } else if (constraint === 'formula') {
+                    serialized.constraints[property] = 'formula';
+                }
+            }
+        }
+    }
+
+    /**
+     * Add component instancing data to serialized object
+     * @private
+     */
+    addInstanceData(serialized, objectData) {
+        if (!this.propertySchemaRegistry) {
+            this.initializeComponents();
+        }
+
+        // Check if object is an instance
+        if (objectData.masterId) {
+            serialized.instance = {
+                masterId: objectData.masterId,
+                instanceType: objectData.instanceType || 'component',
+                canModify: objectData.canModify !== false, // Default true
+                inheritedProperties: objectData.inheritedProperties || []
+            };
+
+            this.stats.instanceSerializations++;
+        }
+
+        // Check if object is a master component
+        if (objectData.isMaster) {
+            const instances = this.propertySchemaRegistry?.masterInstances?.get(objectData.id) || new Set();
+            serialized.master = {
+                isMaster: true,
+                instanceCount: instances.size,
+                instances: Array.from(instances),
+                componentType: objectData.componentType || 'custom'
+            };
+        }
+    }
+
+    /**
+     * Serialize object with parametric property focus
+     * @param {THREE.Object3D} obj - Object to serialize
+     * @param {string} parameterName - Specific parameter that changed
+     * @returns {Object|null} Optimized serialized data for parametric updates
+     */
+    serializeForParametricUpdate(obj, parameterName) {
+        const serialized = this.serializeObject(obj, {
+            changeType: 'parametric',
+            includeGeometry: true, // Parametric changes may affect geometry
+            includeHierarchy: false,
+            useCache: false // Always fresh data for parametric updates
+        });
+
+        if (serialized) {
+            // Add specific parametric update metadata
+            serialized.parametricUpdate = {
+                changedParameter: parameterName,
+                timestamp: Date.now()
+            };
+        }
+
+        return serialized;
+    }
+
+    /**
+     * Serialize object with instance relationship focus
+     * @param {THREE.Object3D} obj - Object to serialize
+     * @param {string} changeType - Type of instance change
+     * @returns {Object|null} Optimized serialized data for instance updates
+     */
+    serializeForInstanceUpdate(obj, changeType) {
+        const serialized = this.serializeObject(obj, {
+            changeType: 'instance',
+            includeGeometry: changeType !== 'hierarchy_only',
+            includeHierarchy: true,
+            useCache: false // Instance updates need fresh data
+        });
+
+        if (serialized) {
+            // Add specific instance update metadata
+            serialized.instanceUpdate = {
+                changeType: changeType,
+                timestamp: Date.now()
+            };
+        }
+
+        return serialized;
+    }
+
+    /**
      * Dispose of the serializer and clean up resources
      */
     dispose() {
         this.reset();
         this.geometryUtils = null;
         this.sceneController = null;
+        this.propertySchemaRegistry = null;
     }
 }
 

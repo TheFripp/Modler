@@ -10,14 +10,13 @@
     const INTEGRATION_ENABLED = window.location.hostname === 'localhost' || window.location.protocol === 'file:';
 
     if (!INTEGRATION_ENABLED) {
-        console.log('🚫 Svelte integration disabled - not in development environment');
         return;
     }
 
     // Integration components
     let portDetector = null;
     let panelManager = null;
-    let dataSync = null;
+    // Legacy dataSync removed - using unified notification system
     let initializationInProgress = false;
 
     // Unified notification system components
@@ -30,13 +29,11 @@
      */
     async function initialize() {
         if (initializationInProgress) {
-            console.log('⏳ Svelte integration initialization already in progress, skipping...');
             return;
         }
 
         try {
             initializationInProgress = true;
-            console.log('🚀 Initializing Svelte integration...');
 
             // Step 1: Detect Svelte dev server
             portDetector = new SveltePortDetector();
@@ -56,24 +53,7 @@
             // Step 4: Create panels
             createPanels();
 
-            // Step 5: Initialize data synchronization
-            console.log('📋 Initializing SvelteDataSync...');
-            console.log('📋 Available classes:', {
-                SvelteDataSync: typeof window.SvelteDataSync,
-                panelManager: !!panelManager
-            });
-
-            if (!window.SvelteDataSync) {
-                console.error('❌ SvelteDataSync class not available!');
-                showSvelteError('SvelteDataSync class not loaded');
-                return;
-            }
-
-            dataSync = new SvelteDataSync(panelManager);
-            dataSync.setupDataSync();
-            console.log('✅ SvelteDataSync initialized successfully');
-
-            // Step 5.5: Initialize unified notification system
+            // Step 5: Initialize unified notification system
             initializeUnifiedNotificationSystem();
 
             // Step 6: Setup component synchronization
@@ -100,8 +80,7 @@
             showSvelteError(`Initialization failed: ${error.message}`);
 
             // Retry initialization once after a delay if critical components failed
-            if (!dataSync || !panelManager) {
-                console.log('🔄 Attempting one-time recovery initialization...');
+            if (!panelManager) {
                 setTimeout(() => {
                     if (!window.svelteIntegrationActive) {
                         initialize();
@@ -174,7 +153,7 @@
      * Send tool state update to all Svelte panels
      */
     function sendToolStateUpdate(toolName) {
-        if (!dataSync || !panelManager) return;
+        if (!propertyPanelSync || !panelManager) return;
 
         // Get current snap state
         const snapController = window.modlerComponents?.snapController;
@@ -187,42 +166,11 @@
         };
 
 
-        // Send tool state update via data sync
-        const iframes = panelManager.getIframes();
-
-        // Send to main toolbar
-        if (iframes.mainToolbar && iframes.mainToolbar.contentWindow) {
-            try {
-                iframes.mainToolbar.contentWindow.postMessage({
-                    type: 'tool-state-update',
-                    data: { toolState: toolStateData }
-                }, '*');
-            } catch (error) {
-                console.warn('Failed to send tool state to main toolbar:', error);
-            }
-        }
-
-        // Send to other panels for consistency
-        if (iframes.left && iframes.left.contentWindow) {
-            try {
-                iframes.left.contentWindow.postMessage({
-                    type: 'tool-state-update',
-                    data: { toolState: toolStateData }
-                }, '*');
-            } catch (error) {
-                console.warn('Failed to send tool state to left panel:', error);
-            }
-        }
-
-        if (iframes.right && iframes.right.contentWindow) {
-            try {
-                iframes.right.contentWindow.postMessage({
-                    type: 'tool-state-update',
-                    data: { toolState: toolStateData }
-                }, '*');
-            } catch (error) {
-                console.warn('Failed to send tool state to right panel:', error);
-            }
+        // Send tool state update via unified PropertyPanelSync
+        if (propertyPanelSync) {
+            propertyPanelSync.sendToolStateUpdate(toolName, { snapEnabled });
+        } else {
+            console.warn('⚠️ PropertyPanelSync not available for tool state update');
         }
     }
 
@@ -247,12 +195,10 @@
 
         // Handle container navigation if object has a parent container
         if (parentContainer) {
-            console.log('📁 Object is in container, handling container navigation first');
 
             // Check if we need to step into the parent container
             const currentContainer = navigationController?.getCurrentContainer();
             if (!currentContainer || currentContainer.id !== parentContainer) {
-                console.log('🔄 Stepping into parent container:', parentContainer);
 
                 // Step into the container first
                 if (window.stepIntoContainerById) {
@@ -286,7 +232,6 @@
 
         const objectData = sceneController.getObject(objectId);
         if (objectData && objectData.mesh) {
-            console.log('✅ Object found, selecting mesh:', objectData.name);
             selectionController.clearSelection('svelte-ui-selection');
             selectionController.select(objectData.mesh);
         } else {
@@ -353,7 +298,6 @@
             return;
         }
 
-        console.log('📦 Creating container from UI:', data);
         // Container creation logic would go here
         // This depends on the specific container creation API
     }
@@ -373,7 +317,6 @@
         const currentState = snapController.getEnabled();
         snapController.setEnabled(!currentState);
 
-        console.log('🧲 Snap toggled:', !currentState ? 'enabled' : 'disabled');
 
         // Send updated tool state to all panels
         const toolController = window.modlerComponents?.toolController;
@@ -417,12 +360,10 @@
      */
     function initializeUnifiedNotificationSystem() {
         try {
-            console.log('🔄 Initializing unified notification system...');
 
             // Step 1: Initialize ObjectEventBus
             if (window.ObjectEventBus) {
                 objectEventBus = new window.ObjectEventBus();
-                console.log('✅ ObjectEventBus initialized');
             } else {
                 console.warn('⚠️ ObjectEventBus class not available, skipping initialization');
                 return;
@@ -431,7 +372,6 @@
             // Step 2: Initialize ObjectSerializer
             if (window.ObjectSerializer) {
                 objectSerializer = new window.ObjectSerializer();
-                console.log('✅ ObjectSerializer initialized');
             } else {
                 console.warn('⚠️ ObjectSerializer class not available, skipping initialization');
                 return;
@@ -440,7 +380,6 @@
             // Step 3: Initialize PropertyPanelSync
             if (window.PropertyPanelSync) {
                 propertyPanelSync = new window.PropertyPanelSync(objectEventBus, panelManager);
-                console.log('✅ PropertyPanelSync initialized');
             } else {
                 console.warn('⚠️ PropertyPanelSync class not available, skipping initialization');
                 return;
@@ -453,7 +392,6 @@
                 panelSync: propertyPanelSync
             };
 
-            console.log('🚀 Unified notification system fully initialized and ready');
 
         } catch (error) {
             console.error('❌ Failed to initialize unified notification system:', error);
@@ -468,15 +406,15 @@
         const toolController = window.modlerComponents?.toolController;
 
         // Clear initial selection to ensure clean startup state
-        if (dataSync) {
-            dataSync.sendFullDataUpdate([], 'legacy-clear-selection');
+        if (propertyPanelSync) {
+            propertyPanelSync.sendToUI('clear-selection', []);
         }
 
         if (selectionController) {
             // Listen for selection changes using SelectionController's callback system
             selectionController.onSelectionChange((selectedObjects) => {
-                if (dataSync && selectedObjects) {
-                    dataSync.sendFullDataUpdate(selectedObjects, 'selection-change');
+                if (propertyPanelSync && selectedObjects) {
+                    propertyPanelSync.sendToUI('selection-change', selectedObjects);
                 }
             });
 
@@ -490,7 +428,7 @@
                     const allMeshes = allObjects.map(obj => obj.mesh).filter(mesh => mesh);
 
                     if (allMeshes.length > 0) {
-                        dataSync.sendFullDataUpdate(allMeshes, 'scene-objects');
+                        propertyPanelSync.sendToUI('scene-objects', allMeshes);
                     } else {
                         console.warn('❌ No scene objects with meshes found - objects without meshes:', allObjects.filter(obj => !obj.mesh));
                     }
@@ -504,7 +442,7 @@
             // Also sync current selection
             const currentSelection = Array.from(selectionController.selectedObjects || []);
             if (currentSelection.length > 0) {
-                dataSync.sendFullDataUpdate(currentSelection, 'initial-sync');
+                propertyPanelSync.sendToUI('initial-sync', currentSelection);
             }
 
             // Send initial tool state
@@ -616,33 +554,33 @@
 
     // Bridge function: Update property panel when object is selected/deselected
     window.updatePropertyPanelFromObject = function(selectedMesh) {
-        if (!dataSync) return;
+        if (!propertyPanelSync) return;
 
         if (selectedMesh) {
             // Send the selected object to Svelte panels
-            dataSync.sendFullDataUpdate([selectedMesh], 'legacy-selection');
+            propertyPanelSync.sendToUI('legacy-selection', [selectedMesh]);
         } else {
             // Clear property panel
-            dataSync.sendFullDataUpdate([], 'legacy-clear-selection');
+            propertyPanelSync.sendToUI('legacy-clear-selection', []);
         }
     };
 
-    // Bridge function: Update object list selection (already handled by dataSync but keeping for compatibility)
+    // Bridge function: Update object list selection (handled by unified notification system)
     window.updateObjectListSelection = function(selectedNames) {
         // This is handled automatically by sendFullDataUpdate, but we can add specific logic if needed
     };
 
     // Bridge function: Populate object list in left panel
     window.populateObjectList = function(retryCount = 0) {
-        if (!dataSync) {
+        if (!propertyPanelSync) {
             if (retryCount < 20) { // Max 2 seconds of retries (20 * 100ms)
                 setTimeout(() => {
                     window.populateObjectList(retryCount + 1);
                 }, 100);
                 return;
             } else {
-                console.error('❌ Main Integration: dataSync still not available after 2 seconds, giving up');
-                showSvelteError('Svelte data synchronization failed to initialize');
+                console.error('❌ Main Integration: PropertyPanelSync still not available after 2 seconds, giving up');
+                showSvelteError('Unified notification system failed to initialize');
                 return;
             }
         }
@@ -667,17 +605,13 @@
 
             if (filteredObjects && filteredObjects.length > 0) {
                 // Serialize objects for hierarchy update
-                const serializedObjects = filteredObjects.map(obj => dataSync.serializeThreeObject(obj.mesh)).filter(Boolean);
-                dataSync.sendDataToSveltePanels({
-                    updateType: 'hierarchy-changed',
-                    objectHierarchy: serializedObjects,
-                    timestamp: Date.now()
+                const serializedObjects = filteredObjects.map(obj => objectSerializer.serializeObject(obj.mesh)).filter(Boolean);
+                propertyPanelSync.sendToUI('hierarchy-changed', serializedObjects, {
+                    includeContext: false
                 });
             } else {
-                dataSync.sendDataToSveltePanels({
-                    updateType: 'hierarchy-changed',
-                    objectHierarchy: [],
-                    timestamp: Date.now()
+                propertyPanelSync.sendToUI('hierarchy-changed', [], {
+                    includeContext: false
                 });
             }
         } catch (error) {
@@ -688,7 +622,7 @@
     // Bridge function: Notify object hierarchy changed (containers, parents, children)
     // Simplified to only handle hierarchy updates, following 3-type system
     window.notifyObjectHierarchyChanged = function() {
-        if (!dataSync) return;
+        if (!propertyPanelSync) return;
 
         // Update the full object list to reflect hierarchy changes
         // This will send hierarchy-changed updateType automatically
@@ -697,10 +631,9 @@
 
     // Bridge function: Notify object modified (properties, transforms, etc.)
     window.notifyObjectModified = function(objectOrId, modificationType = 'geometry') {
-        console.log('📡 MAIN: notifyObjectModified called with:', objectOrId?.userData?.id || objectOrId, modificationType);
 
-        if (!dataSync) {
-            console.warn('❌ DataSync not available for notifyObjectModified');
+        if (!propertyPanelSync) {
+            console.warn('❌ PropertyPanelSync not available for notifyObjectModified');
             return;
         }
 
@@ -727,7 +660,7 @@
             }
 
             if (targetObject && objectId) {
-                // NEW: Emit through unified notification system if available
+                // UNIFIED SYSTEM: Emit through ObjectEventBus only
                 if (objectEventBus) {
                     // Map modification types to standardized event types
                     let eventType;
@@ -757,7 +690,7 @@
                             eventType = objectEventBus.EVENT_TYPES.GEOMETRY; // Default fallback
                     }
 
-                    // Emit through unified system
+                    // Emit through unified system - PropertyPanelSync handles UI updates
                     objectEventBus.emit(eventType, objectId, {
                         modificationType: modificationType,
                         timestamp: Date.now()
@@ -765,30 +698,12 @@
                         source: 'legacy-bridge',
                         throttle: true
                     });
-                }
-
-                // LEGACY: Continue with existing legacy system for compatibility
-                // Handle hierarchy changes by refreshing the entire object hierarchy
-                if (modificationType === 'hierarchy') {
-                    // Refresh the entire hierarchy when parent-child relationships change
-                    const allObjects = sceneController.getAllObjects();
-                    // Serialize objects to avoid DataCloneError when sending via postMessage
-                    const serializedObjects = allObjects.map(obj => dataSync.serializeThreeObject(obj.mesh)).filter(Boolean);
-                    dataSync.sendDataToSveltePanels({
-                        updateType: 'hierarchy-changed',
-                        objectHierarchy: serializedObjects,
-                        timestamp: Date.now()
-                    });
                 } else {
-                    // Send specific update based on modification type
-                    dataSync.sendFullDataUpdate([targetObject], `object-modified-${modificationType}`);
+                    console.warn('⚠️ ObjectEventBus not available - unified notification system not working');
                 }
 
-                // If this is the currently selected object, also update property panel
-                const selectionController = window.modlerComponents?.selectionController;
-                if (selectionController && selectionController.selectedObjects.has(targetObject)) {
-                    dataSync.sendFullDataUpdate([targetObject], 'property-update');
-                }
+                // PropertyPanelSync automatically handles updates for selected objects
+                // No additional calls needed - unified system handles everything
             }
         } catch (error) {
             console.warn('❌ Error notifying object modification:', error);
@@ -812,25 +727,22 @@
             }
 
             // Notify panels of background change if needed
-            if (dataSync) {
+            if (propertyPanelSync) {
                 const bgData = {
                     backgroundColor: backgroundColor,
                     timestamp: Date.now()
                 };
 
-                const iframes = panelManager.getIframes();
-                Object.values(iframes).forEach(iframe => {
-                    if (iframe && iframe.contentWindow) {
-                        try {
-                            iframe.contentWindow.postMessage({
-                                type: 'background-update',
-                                data: bgData
-                            }, '*');
-                        } catch (error) {
-                            console.warn('Failed to send background update:', error);
-                        }
-                    }
-                });
+                // Use unified PropertyPanelSync for system updates
+                if (propertyPanelSync) {
+                    propertyPanelSync.sendToUI('background-update', [], {
+                        throttle: false,
+                        panels: ['right', 'left', 'mainToolbar', 'systemToolbar'],
+                        includeContext: false
+                    });
+                } else {
+                    console.warn('⚠️ PropertyPanelSync not available for background update');
+                }
             }
         } catch (error) {
             console.warn('❌ Error updating scene background:', error);
@@ -839,7 +751,7 @@
 
     // Bridge function: Update config UI from values
     window.updateConfigUIFromValues = function(configValues) {
-        if (!dataSync || !panelManager) return;
+        if (!propertyPanelSync || !panelManager) return;
 
 
         try {
@@ -848,19 +760,16 @@
                 timestamp: Date.now()
             };
 
-            const iframes = panelManager.getIframes();
-            Object.values(iframes).forEach(iframe => {
-                if (iframe && iframe.contentWindow) {
-                    try {
-                        iframe.contentWindow.postMessage({
-                            type: 'config-update',
-                            data: configData
-                        }, '*');
-                    } catch (error) {
-                        console.warn('Failed to send config update:', error);
-                    }
-                }
-            });
+            // Use unified PropertyPanelSync for system updates
+            if (propertyPanelSync) {
+                propertyPanelSync.sendToUI('config-update', [], {
+                    throttle: false,
+                    panels: ['right', 'left', 'mainToolbar', 'systemToolbar'],
+                    includeContext: false
+                });
+            } else {
+                console.warn('⚠️ PropertyPanelSync not available for config update');
+            }
         } catch (error) {
             console.warn('❌ Error updating config UI:', error);
         }
@@ -868,28 +777,17 @@
 
     // Bridge function: Update property panel dimensions (for box creation tool)
     window.updatePropertyPanelDimensions = function(width, height, depth) {
-        if (!dataSync || !panelManager) return;
-
-        // Debug: Property panel dimensions update (removed to reduce log spam)
+        if (!propertyPanelSync) {
+            console.warn('⚠️ PropertyPanelSync not available for dimension update');
+            return;
+        }
 
         try {
-            const dimensionData = {
-                dimensions: { width, height, depth },
-                timestamp: Date.now()
-            };
-
-            const iframes = panelManager.getIframes();
-            Object.values(iframes).forEach(iframe => {
-                if (iframe && iframe.contentWindow) {
-                    try {
-                        iframe.contentWindow.postMessage({
-                            type: 'dimension-update',
-                            data: dimensionData
-                        }, '*');
-                    } catch (error) {
-                        console.warn('Failed to send dimension update:', error);
-                    }
-                }
+            // Use unified PropertyPanelSync for dimension updates
+            propertyPanelSync.sendToUI('dimension-update', [], {
+                throttle: true,
+                panels: ['right'],
+                includeContext: false
             });
         } catch (error) {
             console.warn('❌ Error updating property panel dimensions:', error);
@@ -898,11 +796,11 @@
 
     // Bridge function: Update selected object info (for creation tools)
     window.updateSelectedObjectInfo = function(object) {
-        if (!dataSync) return;
+        if (!propertyPanelSync) return;
 
         try {
             if (object) {
-                dataSync.sendFullDataUpdate([object], 'creation-object-info');
+                propertyPanelSync.sendToUI('creation-object-info', [object]);
             }
         } catch (error) {
             console.warn('❌ Error updating selected object info:', error);
@@ -927,7 +825,6 @@
         const currentState = snapController.getEnabled();
         snapController.setEnabled(!currentState);
 
-        console.log('🧲 Snapping toggled:', !currentState ? 'enabled' : 'disabled');
         return !currentState;
     };
 
@@ -947,7 +844,7 @@
     window.SvelteIntegration = {
         portDetector: () => portDetector,
         panelManager: () => panelManager,
-        dataSync: () => dataSync,
+        // Legacy dataSync removed - use propertyPanelSync instead
         // Unified notification system components
         eventBus: () => objectEventBus,
         serializer: () => objectSerializer,

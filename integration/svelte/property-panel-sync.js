@@ -103,6 +103,40 @@ class PropertyPanelSync {
                 { subscriberId: 'PropertyPanelSync_Hierarchy' }
             )
         );
+
+        // Subscribe to parametric design events
+        this.subscriptions.push(
+            this.eventBus.subscribe(
+                this.eventBus.EVENT_TYPES.PARAMETRIC_UPDATE,
+                this.handleParametricEvent.bind(this),
+                { subscriberId: 'PropertyPanelSync_Parametric' }
+            )
+        );
+
+        this.subscriptions.push(
+            this.eventBus.subscribe(
+                this.eventBus.EVENT_TYPES.CONSTRAINT_CHANGE,
+                this.handleConstraintEvent.bind(this),
+                { subscriberId: 'PropertyPanelSync_Constraint' }
+            )
+        );
+
+        // Subscribe to component instancing events
+        this.subscriptions.push(
+            this.eventBus.subscribe(
+                this.eventBus.EVENT_TYPES.INSTANCE_UPDATE,
+                this.handleInstanceEvent.bind(this),
+                { subscriberId: 'PropertyPanelSync_Instance' }
+            )
+        );
+
+        this.subscriptions.push(
+            this.eventBus.subscribe(
+                this.eventBus.EVENT_TYPES.MASTER_CHANGE,
+                this.handleMasterChangeEvent.bind(this),
+                { subscriberId: 'PropertyPanelSync_MasterChange' }
+            )
+        );
     }
 
     /**
@@ -251,9 +285,25 @@ class PropertyPanelSync {
         } = options;
 
         try {
+            // Ensure objects are properly serialized
+            let safeSerializedObjects = serializedObjects;
+            if (Array.isArray(serializedObjects)) {
+                safeSerializedObjects = serializedObjects.map(obj => {
+                    // If it's already a plain object, use it as is
+                    if (obj && typeof obj === 'object' && !obj.isObject3D && !obj.isMesh) {
+                        return obj;
+                    }
+                    // If it's a Three.js object, serialize it
+                    if (obj && (obj.isObject3D || obj.isMesh)) {
+                        return this.serializer ? this.serializer.serializeObject(obj) : null;
+                    }
+                    return obj;
+                }).filter(Boolean);
+            }
+
             // Build complete data package
             const data = {
-                selectedObjects: serializedObjects,
+                selectedObjects: safeSerializedObjects,
                 updateType: updateType,
                 timestamp: Date.now()
             };
@@ -315,10 +365,13 @@ class PropertyPanelSync {
                 }
 
                 if (iframe && iframe.contentWindow) {
-                    iframe.contentWindow.postMessage({
+                    // Create a safe data object that can be cloned for postMessage
+                    const safeData = JSON.parse(JSON.stringify({
                         type: 'data-update',
                         data: data
-                    }, '*');
+                    }));
+
+                    iframe.contentWindow.postMessage(safeData, '*');
                     this.stats.messagesSucceeded++;
                 }
 
@@ -490,6 +543,130 @@ class PropertyPanelSync {
             successRate: this.stats.messagesSucceeded + this.stats.messagesFailed > 0 ?
                 (this.stats.messagesSucceeded / (this.stats.messagesSucceeded + this.stats.messagesFailed) * 100).toFixed(1) + '%' : '0%'
         };
+    }
+
+    /**
+     * Handle parametric property events
+     */
+    handleParametricEvent(event) {
+        try {
+            this.stats.eventsProcessed++;
+
+            // Get the object from scene
+            const object = this.getObjectById(event.objectId);
+            if (!object) return;
+
+            // Serialize with parametric optimization
+            const serializedData = this.serializer.serializeForParametricUpdate(object, event.changeData.parameter);
+            if (!serializedData) return;
+
+            // Send to UI with parametric-specific update type
+            this.sendToUI('parametric-property-update', [serializedData], {
+                throttle: true,
+                panels: ['right']
+            });
+
+        } catch (error) {
+            console.error('PropertyPanelSync.handleParametricEvent error:', error);
+            this.stats.messagesFailed++;
+        }
+    }
+
+    /**
+     * Handle constraint change events
+     */
+    handleConstraintEvent(event) {
+        try {
+            this.stats.eventsProcessed++;
+
+            // Get the object from scene
+            const object = this.getObjectById(event.objectId);
+            if (!object) return;
+
+            // Check if object is currently selected
+            if (!this.isObjectSelected(object)) return;
+
+            // Serialize with constraint information
+            const serializedData = this.serializer.serializeObject(object, {
+                changeType: 'constraint',
+                includeGeometry: false,
+                useCache: false
+            });
+            if (!serializedData) return;
+
+            // Send to UI to update constraint display
+            this.sendToUI('constraint-change', [serializedData], {
+                throttle: false, // Constraint changes should be immediate
+                panels: ['right']
+            });
+
+        } catch (error) {
+            console.error('PropertyPanelSync.handleConstraintEvent error:', error);
+            this.stats.messagesFailed++;
+        }
+    }
+
+    /**
+     * Handle component instance events
+     */
+    handleInstanceEvent(event) {
+        try {
+            this.stats.eventsProcessed++;
+
+            // Get the object from scene
+            const object = this.getObjectById(event.objectId);
+            if (!object) return;
+
+            // Serialize with instance optimization
+            const serializedData = this.serializer.serializeForInstanceUpdate(object, event.changeData.action);
+            if (!serializedData) return;
+
+            // Send to UI with instance-specific update type
+            this.sendToUI('instance-update', [serializedData], {
+                throttle: true,
+                panels: ['right']
+            });
+
+        } catch (error) {
+            console.error('PropertyPanelSync.handleInstanceEvent error:', error);
+            this.stats.messagesFailed++;
+        }
+    }
+
+    /**
+     * Handle master component change events
+     */
+    handleMasterChangeEvent(event) {
+        try {
+            this.stats.eventsProcessed++;
+
+            // Master changes affect multiple objects
+            const affectedInstances = event.changeData.affectedInstances || [];
+
+            // Serialize all affected instances
+            const serializedObjects = [];
+            for (const instanceId of affectedInstances) {
+                const object = this.getObjectById(instanceId);
+                if (object) {
+                    const serialized = this.serializer.serializeForInstanceUpdate(object, 'master_change');
+                    if (serialized) {
+                        serializedObjects.push(serialized);
+                    }
+                }
+            }
+
+            if (serializedObjects.length > 0) {
+                // Send to UI with master change update type
+                this.sendToUI('master-component-change', serializedObjects, {
+                    throttle: false, // Master changes should be immediate
+                    panels: ['right', 'left'] // Both property and hierarchy panels
+                });
+            }
+
+        } catch (error) {
+            console.error('PropertyPanelSync.handleMasterChangeEvent error:', error);
+            this.stats.messagesFailed++;
+        }
     }
 
     /**

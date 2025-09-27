@@ -11,7 +11,6 @@ let modlerV2Components = {};
  */
 async function initializeModlerV2(canvas) {
     try {
-        console.log('Modler V2 initializing...');
         
         // Initialize in dependency order
         initializeFoundation(canvas);
@@ -26,7 +25,6 @@ async function initializeModlerV2(canvas) {
         connectComponents();
         setupObjectSystemIntegration();
         
-        console.log('Modler V2 ready');
         return true;
         
     } catch (error) {
@@ -51,11 +49,6 @@ function initializeFoundation(canvas) {
         modlerV2Components.materialManager
     );
 
-    console.log('✅ Centralized factories initialized:', {
-        geometryFactory: !!modlerV2Components.geometryFactory,
-        materialManager: !!modlerV2Components.materialManager,
-        supportMeshFactory: !!modlerV2Components.supportMeshFactory
-    });
 
     // Consolidated input system - initialized after Scene components are ready
     // Replaces InputFoundation + InputHandler with unified InputController
@@ -238,14 +231,12 @@ function connectComponents() {
     const { historyManager } = modlerV2Components;
     if (historyManager) {
         historyManager.initialize();
-        console.log('✅ HistoryManager initialized and connected');
     }
 
     // Initialize PropertyManager
     const { propertyManager } = modlerV2Components;
     if (propertyManager) {
         propertyManager.initialize();
-        console.log('✅ PropertyManager initialized and connected');
     }
 
     // Initialize NavigationController with required components
@@ -255,7 +246,6 @@ function connectComponents() {
         const containerViz = visualizationManager.containerVisualizer;
         if (containerViz) {
             navigationController.initialize(selectionController, visualizationManager, containerViz);
-            console.log('✅ NavigationController initialized and connected');
         }
     }
 
@@ -282,12 +272,93 @@ function setupObjectSystemIntegration() {
         window.populateObjectList();
     }
 }
-    
 /**
- * Create floor grid with invisible raycast plane
+ * Create hierarchical grid with center at (0,0) on major intersection
+ * - Major grid: 10-unit squares with thick lines
+ * - Mid grid: 5-unit half-divisions with medium lines
+ * - Minor grid: 0.5-unit subdivisions with thin lines
+ * @param {number} majorColor - Color of major grid lines (10-unit)
+ * @param {number} minorColor - Color of minor grid lines (0.5-unit)
+ * @returns {THREE.Group} Grid group with fade-out effect
+ */
+function createFadeOutGrid(majorColor, minorColor) {
+    const group = new THREE.Group();
+    const gridExtent = 25; // Grid extends from -25 to +25 in both directions
+
+    const positions = [];
+    const colors = [];
+
+    const majorGridColor = new THREE.Color(majorColor);
+    const midGridColor = new THREE.Color(majorColor).multiplyScalar(0.7); // 70% of major color
+    const minorGridColor = new THREE.Color(minorColor);
+    const backgroundColor = new THREE.Color(0x1a1a1a); // Scene background color
+
+    // Generate all grid lines with 0.5 unit spacing (200 lines total: -25 to +25 in 0.5 increments)
+    for (let i = -50; i <= 50; i++) {
+        const position = i * 0.5; // Convert to world position (-25 to +25)
+
+        // Calculate distance from center for fade-out effect
+        const distanceFromCenter = Math.abs(position) / gridExtent;
+        const fadeStrength = Math.max(0, 1 - Math.pow(distanceFromCenter * 1.1, 2));
+
+        // Only add lines that have some visibility
+        if (fadeStrength > 0.1) { // Increased threshold to reduce artifacts
+            let baseLineColor;
+
+            // Determine line type and color
+            if (i % 20 === 0) {
+                // Major grid lines (every 10 units: -20, -10, 0, +10, +20)
+                baseLineColor = majorGridColor;
+            } else if (i % 10 === 0) {
+                // Mid grid lines (every 5 units: -15, -5, +5, +15)
+                baseLineColor = midGridColor;
+            } else {
+                // Minor grid lines (every 0.5 units)
+                baseLineColor = minorGridColor;
+            }
+
+            // Apply fade-out effect by interpolating toward background color
+            const fadedColor = baseLineColor.clone().lerp(backgroundColor, 1 - fadeStrength);
+
+            // Lines running front to back (Z direction)
+            positions.push(position, 0, -gridExtent);
+            positions.push(position, 0, gridExtent);
+            colors.push(fadedColor.r, fadedColor.g, fadedColor.b);
+            colors.push(fadedColor.r, fadedColor.g, fadedColor.b);
+
+            // Lines running left to right (X direction)
+            positions.push(-gridExtent, 0, position);
+            positions.push(gridExtent, 0, position);
+            colors.push(fadedColor.r, fadedColor.g, fadedColor.b);
+            colors.push(fadedColor.r, fadedColor.g, fadedColor.b);
+        }
+    }
+
+    // Create the line geometry
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+
+    // Create material with vertex colors
+    const material = new THREE.LineBasicMaterial({
+        vertexColors: true,
+        transparent: true,
+        opacity: 0.8
+    });
+
+    // Create the grid mesh
+    const grid = new THREE.LineSegments(geometry, material);
+
+    group.add(grid);
+    return group;
+}
+
+/**
+ * Create floor grid with invisible raycast plane and fade-out effect
  */
 function createFloorGrid() {
-    const gridHelper = new THREE.GridHelper(20, 20, 0x444444, 0x222222);
+    // Create 5x5 grid with 10x10 subdivisions and fade-out effect
+    const gridHelper = createFadeOutGrid(0x444444, 0x222222);
 
     // Get grid renderOrder from configuration to ensure it renders behind wireframes
     const configManager = modlerV2Components?.configurationManager;
@@ -301,13 +372,13 @@ function createFloorGrid() {
     const geometryFactory = window.GeometryFactory ? new GeometryFactory() : null;
     const materialManager = window.MaterialManager ? new MaterialManager() : null;
 
-    // Floor plane creation using centralized systems where available
+    // Floor plane creation using centralized systems where available (50x50 to match grid)
     let planeGeometry, planeMaterial;
 
     if (geometryFactory) {
-        planeGeometry = geometryFactory.createPlaneGeometry(20, 20);
+        planeGeometry = geometryFactory.createPlaneGeometry(50, 50);
     } else {
-        planeGeometry = new THREE.PlaneGeometry(20, 20);
+        planeGeometry = new THREE.PlaneGeometry(50, 50);
     }
 
     // Use MaterialManager for floor plane creation
@@ -390,7 +461,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const canvas = document.getElementById('canvas');
     if (canvas) {
         initializeModlerV2(canvas).then(() => {
-            console.log('✅ Modler V2 auto-initialization complete');
         }).catch(error => {
             console.error('❌ Modler V2 auto-initialization failed:', error);
         });

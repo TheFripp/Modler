@@ -535,9 +535,9 @@ class BoxCreationTool {
             });
         }
 
-        // LEGACY: Continue with legacy notification for compatibility
-        if (window.notifyObjectModified) {
-            window.notifyObjectModified(this.creationObject, 'property-change');
+        // Emit direct ObjectEventBus event for unified notification system
+        if (window.objectEventBus) {
+            window.objectEventBus.emitPropertyUpdate(this.creationObject.id, this.creationObject);
         }
     }
 

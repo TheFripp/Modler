@@ -453,9 +453,9 @@ class PushTool {
             });
         }
 
-        // LEGACY: Continue with legacy notification for compatibility
-        if (window.notifyObjectModified) {
-            window.notifyObjectModified(this.pushedObject, 'geometry');
+        // Emit direct ObjectEventBus event for unified notification system
+        if (window.objectEventBus) {
+            window.objectEventBus.emitGeometryUpdate(this.pushedObject.id, this.pushedObject);
         }
     }
 
@@ -543,9 +543,9 @@ class PushTool {
                 geometryUtils.updateSupportMeshGeometries(pushedObject);
             }
 
-            // Centralized notification handles property panel updates and data sync
-            if (window.notifyObjectModified) {
-                window.notifyObjectModified(pushedObject, 'geometry');
+            // Emit direct ObjectEventBus event for unified notification system
+            if (window.objectEventBus) {
+                window.objectEventBus.emitGeometryUpdate(pushedObject.id, pushedObject);
             }
         }
 

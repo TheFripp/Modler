@@ -218,13 +218,6 @@ class ToolController {
         const selectableObjectData = [];
         for (const mesh of selectedObjects) {
             const objectData = sceneController.getObjectByMesh(mesh);
-            console.log('🔍 Checking object:', {
-                name: objectData?.name,
-                id: objectData?.id,
-                isContainer: objectData?.isContainer,
-                selectable: objectData?.selectable,
-                hasObjectData: !!objectData
-            });
 
             // Include containers even if selectable is not explicitly true
             // This is because containers might have different selectable logic
@@ -236,17 +229,6 @@ class ToolController {
         if (selectableObjectData.length === 0) {
             return false;
         }
-
-        // Debug: Log what we found
-        console.log('🔍 Selection analysis:', {
-            totalObjects: selectableObjectData.length,
-            objectDetails: selectableObjectData.map(obj => ({
-                id: obj.id,
-                name: obj.name,
-                isContainer: obj.isContainer,
-                type: obj.type
-            }))
-        });
 
         // Analyze selection to determine the appropriate action
         const containers = selectableObjectData.filter(obj => obj.isContainer);
@@ -282,11 +264,9 @@ class ToolController {
 
             if (canNestAIntoB && !canNestBIntoA) {
                 // Only A can go into B
-                console.log(`🏠 Nesting container ${containerA.name} into ${containerB.name}`);
                 return containerCrudManager.addContainerToContainer(containerA, containerB);
             } else if (canNestBIntoA && !canNestAIntoB) {
                 // Only B can go into A
-                console.log(`🏠 Nesting container ${containerB.name} into ${containerA.name}`);
                 return containerCrudManager.addContainerToContainer(containerB, containerA);
             } else if (canNestAIntoB && canNestBIntoA) {
                 // Both are possible - choose based on size or hierarchy
@@ -295,11 +275,9 @@ class ToolController {
 
                 if (depthA > depthB) {
                     // A is deeper, put A into B
-                    console.log(`🏠 Nesting deeper container ${containerA.name} (depth ${depthA}) into ${containerB.name} (depth ${depthB})`);
                     return containerCrudManager.addContainerToContainer(containerA, containerB);
                 } else {
                     // B is deeper or equal, put B into A
-                    console.log(`🏠 Nesting deeper container ${containerB.name} (depth ${depthB}) into ${containerA.name} (depth ${depthA})`);
                     return containerCrudManager.addContainerToContainer(containerB, containerA);
                 }
             } else {

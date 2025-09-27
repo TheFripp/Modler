@@ -251,7 +251,6 @@ class LayoutEngine {
      */
     static applySizingBehavior(obj, baseSize, layoutAxis, availableSpace = null, fillCount = 0, containerSize = null, padding = {}) {
         if (!obj.layoutProperties) {
-            console.log('🔍 SIZE DEBUG - No layout properties:', { objName: obj.name, baseSize: { x: baseSize.x, y: baseSize.y, z: baseSize.z } });
             return baseSize;
         }
 

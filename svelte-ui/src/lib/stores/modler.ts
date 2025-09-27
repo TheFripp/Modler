@@ -21,6 +21,42 @@ export interface ObjectData {
 	};
 	sizingMode?: 'hug' | 'fixed';
 	parentContainer?: string;
+
+	// Parametric design properties
+	parametric?: {
+		exposed: { [parameterName: string]: ParametricProperty };
+		constraints: { [propertyName: string]: 'locked' | 'formula' | 'free' };
+		formulas: { [propertyName: string]: string };
+		dependencies: string[];
+	};
+	constraints?: { [propertyName: string]: 'locked' | 'formula' };
+
+	// Component instancing properties
+	instance?: {
+		masterId: string;
+		instanceType: 'component' | 'parametric' | 'custom';
+		canModify: boolean;
+		inheritedProperties: string[];
+	};
+	master?: {
+		isMaster: boolean;
+		instanceCount: number;
+		instances: string[];
+		componentType: string;
+	};
+}
+
+export interface ParametricProperty {
+	value: number | string | boolean;
+	unit?: string;
+	drives: string[];
+	formula?: string;
+	exposed: boolean;
+	constraints?: {
+		min?: number;
+		max?: number;
+		options?: any[];
+	};
 }
 
 export interface ToolState {
@@ -173,12 +209,44 @@ export function getFieldStates(object: ObjectData | null): FieldStates {
 		};
 	}
 
+	// Parametric constraints - check for locked properties
+	if (object.constraints) {
+		for (const [property, constraint] of Object.entries(object.constraints)) {
+			if (constraint === 'locked') {
+				states[property] = {
+					disabled: true,
+					reason: 'parametric-locked',
+					tooltip: `${property} is locked by parametric constraints`
+				};
+			} else if (constraint === 'formula') {
+				states[property] = {
+					disabled: true,
+					reason: 'parametric-formula',
+					tooltip: `${property} is controlled by a parametric formula`
+				};
+			}
+		}
+	}
+
+	// Component instance restrictions
+	if (object.instance && !object.instance.canModify) {
+		// Instance cannot be modified - disable most properties
+		const restrictedProperties = ['dimensions.x', 'dimensions.y', 'dimensions.z', 'material.color'];
+		restrictedProperties.forEach(prop => {
+			if (!object.instance?.inheritedProperties.includes(prop)) {
+				states[prop] = {
+					disabled: true,
+					reason: 'instance-restricted',
+					tooltip: 'This property is inherited from the master component'
+				};
+			}
+		});
+	}
+
 	// Multi-selection - some fields might be disabled for mixed types
 	if (object.type === 'multi' || object.type === 'mixed') {
 		// Could add logic here for multi-selection field restrictions
 	}
-
-	// Add more state-based field disabling rules here as needed
 
 	return states;
 }

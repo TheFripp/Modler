@@ -600,18 +600,24 @@
 <!-- Standalone Left Panel for iframe integration -->
 <div class="standalone-left-panel w-full h-screen bg-background text-foreground flex flex-col">
 	<!-- Horizontal Tabs -->
-	<div class="flex border-b border-border bg-card">
+	<div class="flex bg-background">
 		<button
-			class="flex-1 px-4 py-3 text-sm font-medium transition-colors {activeTab === 'objects' ? 'bg-background text-foreground border-b-2 border-primary' : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'}"
+			class="relative flex-1 px-6 py-4 text-sm font-medium transition-all duration-200 {activeTab === 'objects' ? 'text-foreground' : 'text-muted-foreground hover:text-foreground'}"
 			on:click={() => activeTab = 'objects'}
 		>
 			Objects
+			{#if activeTab === 'objects'}
+				<div class="absolute bottom-0 left-1/2 transform -translate-x-1/2 h-0.5 bg-blue-500 rounded-full" style="width: calc(100% - 48px);"></div>
+			{/if}
 		</button>
 		<button
-			class="flex-1 px-4 py-3 text-sm font-medium transition-colors {activeTab === 'settings' ? 'bg-background text-foreground border-b-2 border-primary' : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'}"
+			class="relative flex-1 px-6 py-4 text-sm font-medium transition-all duration-200 {activeTab === 'settings' ? 'text-foreground' : 'text-muted-foreground hover:text-foreground'}"
 			on:click={() => activeTab = 'settings'}
 		>
 			Settings
+			{#if activeTab === 'settings'}
+				<div class="absolute bottom-0 left-1/2 transform -translate-x-1/2 h-0.5 bg-blue-500 rounded-full" style="width: calc(100% - 48px);"></div>
+			{/if}
 		</button>
 	</div>
 

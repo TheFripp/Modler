@@ -24,7 +24,11 @@ CAD software with rule-based parametric design and intelligent 3D auto-layout sy
 - **Container-First Selection**: Click child → selects parent container, double-click for direct selection
 - **CAD Geometry**: ALWAYS use geometry-based manipulation, NEVER visual transforms
 - **Support Mesh Architecture**: Create once as children at object creation, then only show/hide - master object is single source of truth
-- **UI ↔ 3D Communication**: Bi-directional selection system with NavigationController integration, PostMessage security via port detection
+- **Unified Notifications**: ALL property/transform changes MUST flow through ObjectEventBus → PropertyPanelSync
+- **NO Direct PostMessage**: Never bypass PropertyPanelSync with direct iframe.postMessage calls
+- **NO Legacy DataSync**: SvelteDataSync is deprecated - use ObjectSerializer only
+- **Event-First Pattern**: Tools emit ObjectEventBus events, never call notifyObjectModified directly
+- **UI ↔ 3D Communication**: Unified notification highway, PostMessage security via port detection
 - **Container Creation**: Direct command (Cmd+F) → ToolController → ContainerManager
 - **Layout Mode**: Property-panel driven, NOT tool-driven
 - **Mesh Synchronization**: Support meshes are self-contained children, inherit transforms automatically
@@ -48,6 +52,9 @@ See [`/documentation/README.md`](documentation/README.md) for all documentation.
 - **UI**: `/svelte-ui/` - Svelte components and panels
 - **Support**: `/interaction/support-mesh-factory.js` - Visualization mesh creation
 - **Geometry**: `/interaction/geometry-utils.js` - CAD geometry operations and support mesh synchronization
+- **Notifications**: `/application/events/object-event-bus.js` - Unified event system (REQUIRED)
+- **Serialization**: `/application/serialization/object-serializer.js` - Consistent data formatting
+- **UI Bridge**: `/integration/svelte/property-panel-sync.js` - UI communication (ONLY PostMessage source)
 
 ---
 

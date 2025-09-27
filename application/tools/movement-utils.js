@@ -201,9 +201,13 @@ class MovementUtils {
     static syncRelatedMeshes(object, changeType = 'transform', immediateVisuals = false) {
         if (!object) return;
 
-        // Update UI system
-        if (window.notifyObjectModified) {
-            window.notifyObjectModified(object, changeType);
+        // Emit direct ObjectEventBus event for unified notification system
+        if (window.objectEventBus) {
+            if (changeType === 'geometry') {
+                window.objectEventBus.emitGeometryUpdate(object.id, object);
+            } else {
+                window.objectEventBus.emitTransformUpdate(object.id, object);
+            }
         }
 
         // Support meshes are now children and inherit transforms automatically

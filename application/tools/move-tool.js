@@ -240,9 +240,9 @@ class MoveTool {
         // TransformationManager handles mesh synchronization and notifications automatically
         // Support meshes are now children - fallback sync no longer needed
         if (!this.transformationManager) {
-            // Notify centralized system for real-time property panel updates
-            if (window.notifyObjectModified) {
-                window.notifyObjectModified(this.dragObject, 'transform');
+            // Emit direct ObjectEventBus event for real-time property panel updates
+            if (window.objectEventBus) {
+                window.objectEventBus.emitTransformUpdate(this.dragObject.id, this.dragObject);
             }
         }
         

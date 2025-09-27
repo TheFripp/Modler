@@ -130,63 +130,37 @@ class PropertyUpdateHandler {
      * Handle general property changes - routes to appropriate handler
      */
     handlePropertyChange(objectId, property, value) {
-        console.log('🔧 PropertyUpdateHandler.handlePropertyChange called with:', { objectId, property, value });
-
         // CRITICAL FIX: Use the same SceneController instance as PropertyManager
         const sceneController = window.modlerComponents?.sceneController || this.sceneController;
         const objectData = sceneController?.getObject(objectId);
-        console.log('🔧 Object data found:', {
-            hasObjectData: !!objectData,
-            objectName: objectData?.name,
-            isContainer: objectData?.isContainer,
-            objectType: objectData?.type
-        });
-
         const isLayoutProp = this.isLayoutProperty(property);
-        console.log('🔧 Property classification:', {
-            property: property,
-            isLayoutProperty: isLayoutProp,
-            layoutProperties: ['direction', 'gap', 'padding.top', 'padding.bottom', 'padding.left', 'padding.right', 'padding.front', 'padding.back']
-        });
 
         // Check if this is a container layout property change
         if (objectData && objectData.isContainer && isLayoutProp) {
-            console.log('🔧 Routing to handleContainerLayoutPropertyChange with command pattern');
             return this.executeLayoutPropertyChangeCommand(objectId, property, value);
         }
 
         // Handle dimension property changes through centralized system
         if (property.startsWith('dimensions.')) {
-            console.log('🔧 Routing to handleObjectDimensionChange');
             return this.handleObjectDimensionChange(objectId, property, value);
         }
 
         // Handle transform property changes (position, rotation)
         if (property.startsWith('position.') || property.startsWith('rotation.')) {
-            console.log('🔧 Routing to handleObjectTransformChange');
             return this.handleObjectTransformChange(objectId, property, value);
         }
 
         // Handle material property changes
         if (property.startsWith('material.')) {
-            console.log('🔧 Routing to handleObjectMaterialChange');
             return this.handleObjectMaterialChange(objectId, property, value);
         }
 
         // Handle container sizing property changes
         if (objectData && objectData.isContainer && this.isContainerSizingProperty(property)) {
-            console.log('🔧 Routing to handleContainerSizingChange');
             return this.handleContainerSizingChange(objectId, property, value);
         }
 
         // Handle other property changes here in the future
-        console.log('🔧 Property change (unhandled):', { objectId, property, value, reason: {
-            hasObjectData: !!objectData,
-            isContainer: objectData?.isContainer,
-            isLayoutProperty: isLayoutProp,
-            isMaterial: property.startsWith('material.'),
-            isSizing: this.isContainerSizingProperty(property)
-        }});
         return true;
     }
 
@@ -210,7 +184,6 @@ class PropertyUpdateHandler {
             const success = this.sceneController.updateObjectDimensions(objectId, axis, value);
 
             if (success) {
-                console.log('✅ Dimension updated through centralized system:', { objectId, axis, value });
 
                 // Trigger container updates if object is in a container
                 const objectData = this.sceneController.getObject(objectId);
@@ -259,7 +232,6 @@ class PropertyUpdateHandler {
 
                     // Trigger transform notification for container updates
                     this.sceneController.notifyObjectTransformChanged(objectId);
-                    console.log('✅ Position updated through centralized system:', { objectId, axis, value });
                     return true;
                 }
             }
@@ -273,7 +245,6 @@ class PropertyUpdateHandler {
 
                     // Trigger transform notification
                     this.sceneController.notifyObjectTransformChanged(objectId);
-                    console.log('✅ Rotation updated through centralized system:', { objectId, axis, value });
                     return true;
                 }
             }
@@ -308,18 +279,9 @@ class PropertyUpdateHandler {
             if (materialProp === 'color') {
                 const colorValue = typeof value === 'string' ? value.replace('#', '0x') : value;
                 mesh.material.color.setHex(colorValue);
-                console.log('✅ Material color updated through centralized system:', { objectId, value });
             } else if (materialProp === 'opacity') {
-                console.log('🔧 PROPERTY SYSTEM OPACITY CHANGE:', {
-                    objectId,
-                    objectName: mesh.name || 'unnamed',
-                    oldOpacity: mesh.material.opacity,
-                    newOpacity: value,
-                    stackTrace: new Error().stack?.split('\n')[3]?.trim()
-                });
                 mesh.material.opacity = value;
                 mesh.material.transparent = value < 1;
-                console.log('✅ Material opacity updated through centralized system:', { objectId, value });
             } else {
                 console.error('Unknown material property:', materialProp);
                 return false;
@@ -367,7 +329,6 @@ class PropertyUpdateHandler {
                 if (objectData.mesh) {
                     const success = this.containerCrudManager.resizeContainerToFitChildren(objectData, false, true);
                     if (success) {
-                        console.log('✅ Container sizing mode updated through centralized system:', { objectId, value });
                         return true;
                     } else {
                         console.error('Failed to update container sizing:', { objectId, property, value });
@@ -422,7 +383,6 @@ class PropertyUpdateHandler {
                 const success = historyManager.executeCommand(command);
 
                 if (success) {
-                    console.log('✅ Layout property change added to undo stack:', { objectId, property, newValue, oldValue });
                     return true;
                 } else {
                     console.error('❌ Failed to execute layout property change command');
