@@ -56,6 +56,7 @@
     let directComponentManager = null;
     let propertyPanelSync = null;
     let splitPanelController = null;
+    let settingsHandler = null;
 
     /**
      * Show visual error message to user with enhanced debugging info
@@ -142,6 +143,13 @@
 
                 // Initialize Split.js panel resizing system
                 await initializeSplitPanels();
+            }
+
+            // Initialize settings handler
+            if (typeof window.SettingsHandler !== 'undefined') {
+                settingsHandler = new window.SettingsHandler();
+            } else {
+                console.warn('⚠️ SettingsHandler not loaded - settings management will be limited');
             }
 
             setupUnifiedEventHandlers();
@@ -920,186 +928,61 @@
         }
     }
 
-    /**
-     * Handle CAD wireframe settings update from Svelte toolbar
-     */
+    // ==================================================================================
+    // SETTINGS HANDLERS (Delegated to SettingsHandler class)
+    // ==================================================================================
+
     function handleCadWireframeSettingsUpdate(settings) {
-        console.log('⚙️ Updating CAD wireframe settings:', settings);
-
-        const configurationManager = window.modlerComponents?.configurationManager;
-        if (!configurationManager) {
-            console.warn('❌ ConfigurationManager not available for CAD wireframe settings');
-            return;
+        if (settingsHandler) {
+            settingsHandler.handleCadWireframeSettingsUpdate(settings);
         }
-
-        // Update configuration using proper ConfigurationManager methods
-        // The ConfigurationManager will handle persistence and notifications automatically
-        for (const [key, value] of Object.entries(settings)) {
-            configurationManager.set(key, value);
-        }
-
-        console.log('✅ CAD wireframe settings updated via ConfigurationManager');
     }
 
-    /**
-     * Handle request for current CAD wireframe settings
-     */
     function handleGetCadWireframeSettings(source) {
-        const configurationManager = window.modlerComponents?.configurationManager;
-        if (!configurationManager) {
-            console.warn('❌ ConfigurationManager not available for getting CAD wireframe settings');
-            return;
+        if (settingsHandler) {
+            settingsHandler.handleGetCadWireframeSettings(source);
         }
-
-        // Get current settings from ConfigurationManager
-        const currentSettings = {
-            color: configurationManager.get('visual.cad.wireframe.color') || '#666666',
-            opacity: configurationManager.get('visual.cad.wireframe.opacity') || 0.5,
-            lineWidth: configurationManager.get('visual.cad.wireframe.lineWidth') || 1
-        };
-
-        // Send response back to requesting iframe
-        source.postMessage({
-            type: 'cad-wireframe-settings-response',
-            settings: currentSettings
-        }, '*');
     }
 
-    /**
-     * Handle visual settings update from Svelte left panel
-     */
     function handleVisualSettingsUpdate(settings) {
-        const configurationManager = window.modlerComponents?.configurationManager;
-        if (!configurationManager) {
-            console.warn('❌ ConfigurationManager not available for visual settings');
-            return;
-        }
-
-        // Update configuration using proper ConfigurationManager methods
-        // The ConfigurationManager will handle persistence and notifications automatically
-        for (const [key, value] of Object.entries(settings)) {
-            configurationManager.set(key, value);
+        if (settingsHandler) {
+            settingsHandler.handleVisualSettingsUpdate(settings);
         }
     }
 
-    /**
-     * Handle scene settings update from Svelte left panel
-     */
     function handleSceneSettingsUpdate(settings) {
-        console.log('🔧 Main Integration: handleSceneSettingsUpdate called', settings);
-
-        const configurationManager = window.modlerComponents?.configurationManager;
-        if (!configurationManager) {
-            console.warn('❌ ConfigurationManager not available for scene settings');
-            return;
+        if (settingsHandler) {
+            settingsHandler.handleSceneSettingsUpdate(settings);
         }
-
-        console.log('🔧 Main Integration: ConfigurationManager found, updating settings');
-
-        // Update configuration using proper ConfigurationManager methods
-        // The ConfigurationManager will handle persistence and notifications automatically
-        for (const [key, value] of Object.entries(settings)) {
-            console.log('🔧 Main Integration: Setting', key, '=', value);
-            configurationManager.set(key, value);
-        }
-
-        console.log('🔧 Main Integration: All settings updated');
     }
 
-    /**
-     * Handle request for current scene settings
-     */
     function handleGetSceneSettings(source) {
-        const configurationManager = window.modlerComponents?.configurationManager;
-        if (!configurationManager) {
-            console.warn('❌ ConfigurationManager not available for getting scene settings');
-            return;
+        if (settingsHandler) {
+            settingsHandler.handleGetSceneSettings(source);
         }
-
-        // Get current settings from ConfigurationManager
-        const currentSettings = {
-            backgroundColor: configurationManager.get('scene.backgroundColor') || '#1a1a1a',
-            gridMainColor: configurationManager.get('scene.gridMainColor') || '#444444',
-            gridSubColor: configurationManager.get('scene.gridSubColor') || '#222222'
-        };
-
-        // Send response back to requesting iframe
-        source.postMessage({
-            type: 'scene-settings-response',
-            settings: currentSettings
-        }, '*');
     }
 
-    /**
-     * Handle interface settings update from Svelte left panel
-     */
     function handleInterfaceSettingsUpdate(settings) {
-        const configurationManager = window.modlerComponents?.configurationManager;
-        if (!configurationManager) {
-            console.warn('❌ ConfigurationManager not available for interface settings');
-            return;
-        }
-
-        // Update configuration using proper ConfigurationManager methods
-        // The ConfigurationManager will handle persistence and notifications automatically
-        for (const [key, value] of Object.entries(settings)) {
-            configurationManager.set(key, value);
+        if (settingsHandler) {
+            settingsHandler.handleInterfaceSettingsUpdate(settings);
         }
     }
 
-    /**
-     * Handle request for current interface settings
-     */
     function handleGetInterfaceSettings(source) {
-        const configurationManager = window.modlerComponents?.configurationManager;
-        if (!configurationManager) {
-            console.warn('❌ ConfigurationManager not available for getting interface settings');
-            return;
+        if (settingsHandler) {
+            settingsHandler.handleGetInterfaceSettings(source);
         }
-
-        // Get current settings from ConfigurationManager
-        const currentSettings = {
-            accentColor: configurationManager.get('interface.accentColor') || '#4a9eff',
-            toolbarOpacity: configurationManager.get('interface.toolbarOpacity') || 0.95
-        };
-
-        // Send response back to requesting iframe
-        source.postMessage({
-            type: 'interface-settings-response',
-            settings: currentSettings
-        }, '*');
     }
 
-    /**
-     * Handle request for current visual settings
-     */
     function handleGetVisualSettings(source) {
-        const configurationManager = window.modlerComponents?.configurationManager;
-        if (!configurationManager) {
-            console.warn('❌ ConfigurationManager not available for getting visual settings');
-            return;
+        if (settingsHandler) {
+            settingsHandler.handleGetVisualSettings(source);
         }
-
-        // Get current settings from ConfigurationManager
-        const currentSettings = {
-            selection: {
-                color: configurationManager.get('visual.selection.color') || '#ff6600',
-                lineWidth: configurationManager.get('visual.selection.lineWidth') || 2,
-                opacity: configurationManager.get('visual.selection.opacity') || 0.8
-            },
-            containers: {
-                wireframeColor: configurationManager.get('visual.containers.wireframeColor') || '#00ff00',
-                lineWidth: configurationManager.get('visual.containers.lineWidth') || 1,
-                opacity: configurationManager.get('visual.containers.opacity') || 0.8
-            }
-        };
-
-        // Send response back to requesting iframe
-        source.postMessage({
-            type: 'visual-settings-response',
-            settings: currentSettings
-        }, '*');
     }
+
+    // ==================================================================================
+    // SNAP TOGGLE HANDLER
+    // ==================================================================================
 
     /**
      * Handle snap toggle from Svelte toolbar
