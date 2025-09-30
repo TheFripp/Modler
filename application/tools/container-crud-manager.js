@@ -4,8 +4,6 @@
 
 class ContainerCrudManager {
     constructor() {
-        // ContainerManager initialized
-
         // Unified cache system with consistent 50ms expiration
         this.cache = new Map(); // containerId -> { type, data, timestamp }
         this.cacheExpiration = 50; // milliseconds - consistent across all cache types
@@ -1010,9 +1008,6 @@ class ContainerCrudManager {
                 }
             });
 
-            if (refreshed > 0) {
-                console.log(`✅ Refreshed materials for ${refreshed} containers`);
-            }
             return true;
         } catch (error) {
             console.error('Failed to refresh container materials:', error);
