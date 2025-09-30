@@ -652,12 +652,8 @@ class MaterialManager {
             }
         }
 
-        // Trigger geometry updates for lineWidth changes
-        if (needsGeometryUpdate && type === this.materialTypes.SELECTION_EDGE) {
-            this.refreshSelectionVisualizations();
-        } else if (needsGeometryUpdate && type === this.materialTypes.CONTAINER_WIREFRAME) {
-            this.refreshContainerVisualizations();
-        }
+        // Note: ConfigurationManager handles visualization refresh via its subscribe callbacks
+        // No need to trigger refresh here as it would create duplicate refreshes
 
         if (updatedCount > 0) {
             this.stats.configUpdates++;
@@ -951,46 +947,6 @@ class MaterialManager {
         }
 
         // MaterialManager cleared cached materials (logging removed to reduce console noise)
-    }
-
-    /**
-     * Refresh selection visualizations when lineWidth changes
-     * Triggers geometry rebuild for thick line groups
-     */
-    refreshSelectionVisualizations() {
-        const geometryUtils = window.GeometryUtils;
-        const sceneController = window.modlerComponents?.sceneController;
-
-        if (!geometryUtils || !sceneController) return;
-
-        // Get all selected objects and refresh their wireframes
-        const selectedObjects = sceneController.getAllObjects().filter(obj =>
-            obj.mesh && obj.mesh.userData?.isSelected
-        );
-
-        selectedObjects.forEach(objData => {
-            geometryUtils.updateSupportMeshGeometries(objData.mesh);
-        });
-    }
-
-    /**
-     * Refresh container visualizations when lineWidth changes
-     * Triggers geometry rebuild for container wireframes
-     */
-    refreshContainerVisualizations() {
-        const geometryUtils = window.GeometryUtils;
-        const sceneController = window.modlerComponents?.sceneController;
-
-        if (!geometryUtils || !sceneController) return;
-
-        // Get all container objects and refresh their wireframes
-        const containers = sceneController.getAllObjects().filter(obj =>
-            obj.isContainer && obj.mesh
-        );
-
-        containers.forEach(container => {
-            geometryUtils.updateSupportMeshGeometries(container.mesh);
-        });
     }
 }
 
