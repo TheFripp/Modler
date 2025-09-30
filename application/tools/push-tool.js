@@ -509,6 +509,13 @@ class PushTool {
     endFacePush() {
         const pushedObject = this.pushedObject; // Store reference before clearing
 
+        // Record which axis was manipulated for Tab key focus
+        if (this.pushFaceNormal && pushedObject && window.inputFocusManager) {
+            const dominantAxis = this.getDominantAxisFromNormal(this.pushFaceNormal);
+            const objectId = pushedObject.userData?.objectId || pushedObject.userData?.id || pushedObject.id;
+            window.inputFocusManager.recordManipulation(objectId, `dimensions.${dominantAxis}`);
+        }
+
         this.resetPushState();
         this.resetMovementState();
         // Reset visual state
@@ -760,6 +767,21 @@ class PushTool {
     /**
      * Clear hover state using shared behavior
      */
+
+    /**
+     * Get dominant axis from face normal vector
+     * @param {THREE.Vector3} normal - Face normal vector
+     * @returns {string} - 'x', 'y', or 'z'
+     */
+    getDominantAxisFromNormal(normal) {
+        const absX = Math.abs(normal.x);
+        const absY = Math.abs(normal.y);
+        const absZ = Math.abs(normal.z);
+
+        if (absX > absY && absX > absZ) return 'x';
+        if (absY > absZ) return 'y';
+        return 'z';
+    }
 }
 
 // Export for use in main application

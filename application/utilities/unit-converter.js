@@ -16,8 +16,8 @@ class UnitConverter {
         // Internal standard unit is always meters
         this.INTERNAL_UNIT = 'meters';
 
-        // Current user preference (default to millimeters for CAD work)
-        this.userUnit = 'mm';
+        // Current user preference (default to meters)
+        this.userUnit = 'm';
 
         // Conversion factors TO meters (internal standard)
         this.conversionToMeters = {
@@ -275,8 +275,20 @@ class UnitConverter {
     loadUserPreferences() {
         try {
             const stored = localStorage.getItem('modler-unit-preference');
-            if (stored && this.isValidUnit(stored)) {
+
+            // If no stored preference, initialize with current default
+            if (!stored) {
+                this.saveUserPreferences();
+                return;
+            }
+
+            // Only load stored preference if it's valid
+            if (this.isValidUnit(stored)) {
                 this.setUserUnit(stored);
+            } else {
+                // Invalid stored value, reset to default
+                console.warn(`UnitConverter: Invalid stored unit '${stored}', resetting to '${this.userUnit}'`);
+                this.saveUserPreferences();
             }
         } catch (error) {
             console.warn('UnitConverter: Failed to load user preferences:', error);
@@ -297,6 +309,18 @@ class UnitConverter {
 
 // Export singleton instance
 const unitConverter = new UnitConverter();
+
+// One-time migration: Reset cached 'mm' to new default 'm'
+// This ensures users with old cached values get the new default
+try {
+    const stored = localStorage.getItem('modler-unit-preference');
+    if (stored === 'mm') {
+        localStorage.setItem('modler-unit-preference', 'm');
+        console.log('UnitConverter: Migrated unit preference from mm to m');
+    }
+} catch (error) {
+    console.warn('UnitConverter: Migration check failed:', error);
+}
 
 // Load user preferences on startup
 unitConverter.loadUserPreferences();

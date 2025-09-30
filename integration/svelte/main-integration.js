@@ -402,9 +402,25 @@
         // Setup ObjectEventBus listeners for complete data flow
         setupObjectEventBusListeners(objectStateManager);
 
+        // Track if we're currently in a drag operation
+        let isDraggingProperty = false;
+        window.objectEventBus.subscribe('object:property-changed', (evt) => {
+            if (evt.changeData?.source === 'drag') {
+                isDraggingProperty = true;
+                // Clear flag after a short delay (drag updates are continuous)
+                setTimeout(() => { isDraggingProperty = false; }, 100);
+            }
+        });
+
         // Listen to unified state changes
         objectStateManager.addEventListener('objects-changed', (event) => {
             const { objects, hierarchy, selection } = event.detail;
+
+            // Skip full object updates during drag operations to prevent flickering
+            // Individual property updates are still sent via object:property-changed
+            if (isDraggingProperty) {
+                return;
+            }
 
             // Get PostMessage-ready data
             const postMessageSelection = selection.map(objectId =>
@@ -571,24 +587,26 @@
 
         // Listen to property change events for comprehensive UI updates
         window.objectEventBus.subscribe('object:property-changed', (event) => {
+            // Skip UI updates during drag operations to prevent flickering
+            // Drag updates happen at 60fps and should only update 3D scene
+            // Final value will be synced when drag ends
+            const updateSource = event.changeData.source || 'unknown';
+            if (updateSource === 'drag') {
+                return; // Skip UI notification during drag
+            }
 
             // Send property update to UI systems using standard format
-            const objectData = event.changeData.objectData;
-            if (objectData) {
-                const postMessageObjectData = objectStateManager.getObjectForPostMessage ?
-                    objectStateManager.getObjectForPostMessage(event.objectId) : objectData;
-
-                notifyUISystems({
-                    type: 'property-update',
-                    data: {
-                        objectId: event.objectId,
-                        property: event.changeData.property,
-                        value: event.changeData.value,
-                        updatedObject: postMessageObjectData,
-                        updateSource: event.changeData.source || 'unknown'
-                    }
-                });
-            }
+            // NOTE: Don't send updatedObject during property updates - causes flickering
+            // The UI already has the object data and can update locally
+            notifyUISystems({
+                type: 'property-update',
+                data: {
+                    objectId: event.objectId,
+                    property: event.changeData.property,
+                    value: event.changeData.value,
+                    updateSource: updateSource
+                }
+            });
         });
 
         // ObjectEventBus listeners setup complete
@@ -601,7 +619,7 @@
     /**
      * REVOLUTIONARY SIMPLIFICATION: All property updates in ~10 lines
      */
-    function handlePropertyUpdate(objectId, property, value) {
+    function handlePropertyUpdate(objectId, property, value, source = 'input') {
         const objectStateManager = window.modlerComponents?.objectStateManager;
         if (!objectStateManager) {
             console.warn('❌ ObjectStateManager not available');
@@ -635,48 +653,9 @@
         // Property updates are frequent during tools - only log errors
 
         // SINGLE CALL DOES EVERYTHING: Updates 3D scene, triggers layout, notifies UI
-        objectStateManager.updateObject(objectId, updates);
-
-        // UNIFIED ARCHITECTURE: Emit ObjectEventBus events for property changes
-        if (window.objectEventBus) {
-            // Determine event type based on property
-            let eventType = 'object:transform';
-            if (property.startsWith('dimensions')) {
-                eventType = window.objectEventBus.EVENT_TYPES?.GEOMETRY || 'object:geometry';
-            } else if (property.startsWith('material')) {
-                eventType = window.objectEventBus.EVENT_TYPES?.MATERIAL || 'object:material';
-            } else if (property.startsWith('autoLayout') || property === 'parentContainer') {
-                eventType = window.objectEventBus.EVENT_TYPES?.HIERARCHY || 'object:hierarchy';
-            } else if (property.startsWith('position') || property.startsWith('rotation') || property.startsWith('scale')) {
-                eventType = window.objectEventBus.EVENT_TYPES?.TRANSFORM || 'object:transform';
-            }
-
-            window.objectEventBus.emit(
-                eventType,
-                objectId,
-                {
-                    property: property,
-                    value: value,
-                    updates: updates,
-                    source: 'UI'
-                },
-                { immediate: true, source: 'main-integration.handlePropertyUpdate' }
-            );
-        }
-
-        // Also emit a comprehensive property-changed event for UI synchronization
-        if (window.objectEventBus) {
-            window.objectEventBus.emit(
-                'object:property-changed',
-                objectId,
-                {
-                    property: property,
-                    value: value,
-                    objectData: objectStateManager.getObject(objectId)
-                },
-                { immediate: true, source: 'main-integration.handlePropertyUpdate' }
-            );
-        }
+        // ObjectStateManager.propagateChanges() handles ALL event emissions automatically
+        // ARCHITECTURAL FIX: Removed duplicate event emissions (was causing 4x updates and lag)
+        objectStateManager.updateObject(objectId, updates, source);
     }
 
     // ==================================================================================
@@ -697,7 +676,7 @@
 
             switch (type) {
                 case 'property-update':
-                    handlePropertyUpdate(data.objectId, data.property, data.value);
+                    handlePropertyUpdate(data.objectId, data.property, data.value, data.source);
                     break;
                 case 'tool-activation':
                     activateTool(data.toolName);

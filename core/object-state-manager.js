@@ -35,7 +35,7 @@ class ObjectStateManager extends EventTarget {
         this.objectDataFormat = null; // Central format standardization
 
         // Change tracking for efficient updates
-        this.pendingChanges = new Set();
+        this.pendingChanges = new Map(); // objectId -> source
         this.updateScheduled = false;
     }
 
@@ -259,7 +259,7 @@ class ObjectStateManager extends EventTarget {
     /**
      * UNIFIED UPDATE API: Single method to update any property
      */
-    updateObject(objectId, updates) {
+    updateObject(objectId, updates, source = 'input') {
         let object = this.objects.get(objectId);
 
         // Auto-create object if it doesn't exist (handles timing issues)
@@ -303,8 +303,8 @@ class ObjectStateManager extends EventTarget {
         // Update lastModified timestamp
         object.lastModified = Date.now();
 
-        // Track this object for propagation
-        this.pendingChanges.add(objectId);
+        // Track this object for propagation with source
+        this.pendingChanges.set(objectId, source);
         this.scheduleUpdate();
 
         return true;
@@ -314,6 +314,13 @@ class ObjectStateManager extends EventTarget {
      * Apply nested property updates (e.g., "position.x", "autoLayout.enabled")
      */
     applyUpdates(object, updates) {
+        // Check if any dimension updates are coming - save previous state
+        const hasDimensionUpdate = Object.keys(updates).some(key => key.startsWith('dimensions.'));
+        if (hasDimensionUpdate && object.dimensions) {
+            // Save a copy of current dimensions before updating
+            object._previousDimensions = { ...object.dimensions };
+        }
+
         Object.entries(updates).forEach(([path, value]) => {
             if (path.includes('.')) {
                 // Nested property (e.g., "position.x")
@@ -346,7 +353,14 @@ class ObjectStateManager extends EventTarget {
     propagateChanges() {
         if (this.pendingChanges.size === 0) return;
 
-        const changedObjects = Array.from(this.pendingChanges).map(id => this.objects.get(id));
+        // Build array of {object, source} pairs
+        const changedItems = Array.from(this.pendingChanges.entries()).map(([id, source]) => ({
+            object: this.objects.get(id),
+            source
+        }));
+
+        // Extract objects for methods that don't need source
+        const changedObjects = changedItems.map(item => item.object);
 
         // Update 3D scene
         this.updateSceneController(changedObjects);
@@ -354,8 +368,8 @@ class ObjectStateManager extends EventTarget {
         // Update UI systems
         this.updateUISystems(changedObjects);
 
-        // Emit unified events
-        this.emitChangeEvents(changedObjects);
+        // Emit unified events with source information
+        this.emitChangeEvents(changedItems);
 
         // Clear pending changes
         this.pendingChanges.clear();
@@ -379,6 +393,27 @@ class ObjectStateManager extends EventTarget {
 
             if (object.rotation) {
                 sceneObject.mesh.rotation.set(object.rotation.x, object.rotation.y, object.rotation.z);
+            }
+
+            // CRITICAL FIX: Update geometry when dimensions change
+            // Note: object._previousDimensions is set in applyUpdates() before the update
+            if (object.dimensions && object._previousDimensions && this.sceneController.updateObjectDimensions) {
+                const oldDims = object._previousDimensions;
+                const newDims = object.dimensions;
+
+                // Update each axis that changed
+                if (oldDims.x !== newDims.x) {
+                    this.sceneController.updateObjectDimensions(object.id, 'x', newDims.x);
+                }
+                if (oldDims.y !== newDims.y) {
+                    this.sceneController.updateObjectDimensions(object.id, 'y', newDims.y);
+                }
+                if (oldDims.z !== newDims.z) {
+                    this.sceneController.updateObjectDimensions(object.id, 'z', newDims.z);
+                }
+
+                // Clean up the previous dimensions marker
+                delete object._previousDimensions;
             }
 
             // Update container layout if needed
@@ -415,10 +450,10 @@ class ObjectStateManager extends EventTarget {
     /**
      * Emit ObjectEventBus events for backward compatibility
      */
-    emitChangeEvents(changedObjects) {
+    emitChangeEvents(changedItems) {
         if (!window.objectEventBus) return;
 
-        changedObjects.forEach(object => {
+        changedItems.forEach(({ object, source }) => {
             // Skip objects without valid IDs (e.g., during creation)
             if (!object || !object.id) {
                 return;
@@ -430,7 +465,7 @@ class ObjectStateManager extends EventTarget {
             window.objectEventBus.emit(
                 eventType,
                 object.id,
-                { changeType: 'unified-update' },
+                { changeType: 'unified-update', source: source },
                 { source: 'ObjectStateManager', throttle: false }
             );
         });

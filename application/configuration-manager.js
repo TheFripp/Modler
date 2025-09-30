@@ -728,13 +728,10 @@ class ConfigurationManager {
      * Refresh selection visualization when configuration changes
      */
     refreshSelectionVisualization() {
-        const materialManager = window.modlerComponents?.materialManager;
         const selectionController = window.modlerComponents?.selectionController;
 
-        if (materialManager) {
-            // Clear selection material cache to force recreation with new settings
-            materialManager.clearMaterialCache('SELECTION_WIREFRAME');
-        }
+        // MaterialManager already updates materials automatically via its config callbacks
+        // No need to clear cache - that would remove materials from active tracking
 
         if (selectionController) {
             // Refresh current selection visualization

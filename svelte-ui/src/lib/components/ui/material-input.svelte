@@ -94,10 +94,10 @@
 				value={formattedColor}
 				onchange={handleColorChange}
 				onfocus={handleColorFocus}
-				class="flex-1 bg-transparent border-none outline-none text-xs text-foreground px-1 py-1 font-mono"
+				class="flex-1 bg-transparent border-none outline-none text-xs text-foreground pl-1 pr-0 py-1 font-mono min-w-0"
 				placeholder="#ffffff"
 			/>
-			<div class="border-l border-[#2E2E2E] px-1">
+			<div class="border-l border-[#2E2E2E] px-1 flex-shrink-0">
 				<input
 					type="color"
 					value={formattedColor}

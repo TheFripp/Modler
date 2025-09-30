@@ -221,7 +221,7 @@ class PropertyFormatConverter {
     }
 
     /**
-     * Convert angle to internal degrees
+     * Convert angle from degrees (UI) to radians (Three.js internal)
      * @private
      */
     convertAngleToInternal(value) {
@@ -230,19 +230,30 @@ class PropertyFormatConverter {
         }
 
         const numValue = parseFloat(value);
+        if (isNaN(numValue)) {
+            return {
+                value: 0,
+                isValid: false,
+                error: 'Invalid angle value'
+            };
+        }
+
+        // Convert degrees to radians for Three.js
+        const radians = (numValue * Math.PI) / 180;
         return {
-            value: isNaN(numValue) ? 0 : numValue,
-            isValid: !isNaN(numValue),
-            error: isNaN(numValue) ? 'Invalid angle value' : undefined
+            value: radians,
+            isValid: true
         };
     }
 
     /**
-     * Convert internal degrees to display format
+     * Convert angle from radians (Three.js internal) to degrees (UI display)
      * @private
      */
-    convertAngleFromInternal(degreeValue, formatted = false) {
-        const rounded = Math.round(degreeValue * 10) / 10; // 1 decimal place
+    convertAngleFromInternal(radianValue, formatted = false) {
+        // Convert radians to degrees for display
+        const degrees = (radianValue * 180) / Math.PI;
+        const rounded = Math.round(degrees * 10) / 10; // 1 decimal place
         return formatted ? `${rounded}°` : rounded;
     }
 

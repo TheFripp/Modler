@@ -237,6 +237,12 @@ class PropertyPanelSync {
                 return;
             }
 
+            // Skip transform updates during drag operations to prevent flickering
+            // Drag operations update the 3D scene directly via updatePropertyImmediate
+            if (event.changeData?.source === 'drag') {
+                return;
+            }
+
             // Check serializer availability
             if (!this.serializer) {
                 console.warn('PropertyPanelSync: Serializer not available, skipping transform event');

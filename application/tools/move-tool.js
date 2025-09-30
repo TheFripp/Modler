@@ -367,6 +367,14 @@ class MoveTool {
 
         const draggedObject = this.dragObject; // Store reference before clearing
 
+        // Record which axis was manipulated for Tab key focus
+        if (this.dragFaceNormal && draggedObject && window.inputFocusManager) {
+            const dominantAxis = this.getDominantAxisFromNormal(this.dragFaceNormal);
+            // Try multiple ways to get the object ID
+            const objectId = draggedObject.userData?.objectId || draggedObject.userData?.id || draggedObject.id;
+            window.inputFocusManager.recordManipulation(objectId, `position.${dominantAxis}`);
+        }
+
         // Unregister field navigation
         const fieldNavigationManager = window.modlerComponents?.fieldNavigationManager;
         if (fieldNavigationManager) {
@@ -537,6 +545,21 @@ class MoveTool {
                 }
             }
         }, delay);
+    }
+
+    /**
+     * Get dominant axis from face normal vector
+     * @param {THREE.Vector3} normal - Face normal vector
+     * @returns {string} - 'x', 'y', or 'z'
+     */
+    getDominantAxisFromNormal(normal) {
+        const absX = Math.abs(normal.x);
+        const absY = Math.abs(normal.y);
+        const absZ = Math.abs(normal.z);
+
+        if (absX > absY && absX > absZ) return 'x';
+        if (absY > absZ) return 'y';
+        return 'z';
     }
 
 }

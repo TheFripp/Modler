@@ -11,7 +11,7 @@
 	import { cn } from '$lib/utils';
 
 	// Unit system state
-	let currentUnit = 'mm';
+	let currentUnit = 'm';
 	let unitConverter: any = null;
 
 	// Update current unit from UnitConverter or unit change events
@@ -126,11 +126,23 @@
 			};
 		}
 	});
+
+	// Debug: Log when displayObject changes
+	$effect(() => {
+		if ($displayObject) {
+			console.log('📋 PropertyPanel displayObject:', {
+				id: $displayObject.id,
+				name: $displayObject.name,
+				dimensions: $displayObject.dimensions
+			});
+		}
+	});
 </script>
 
 <div class="property-panel h-full bg-[#171717] border-l border-[#2E2E2E] p-4 overflow-y-auto">
 
 	{#if $displayObject}
+		{#key $displayObject.id}
 		<!-- Object Name and Type -->
 		<div class="flex items-center justify-between mb-6">
 			<h3 class="text-lg font-semibold text-foreground">{$displayObject.name}</h3>
@@ -288,6 +300,7 @@
 				</div>
 			</PropertyGroup>
 		{/if}
+		{/key}
 	{:else}
 		<div class="text-center text-muted-foreground py-8">
 			<div class="text-lg mb-2">No object selected</div>

@@ -633,7 +633,7 @@ class MaterialManager {
 
         if (updatedCount > 0) {
             this.stats.configUpdates++;
-            // Updated ${updatedCount} materials of type ${type}
+            console.log(`MaterialManager: Updated ${updatedCount} materials of type ${type}, property: ${property}, value: ${value}`);
         }
     }
 

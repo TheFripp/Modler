@@ -343,11 +343,14 @@ class SelectionController {
     // Configuration updates
     refreshSelectionVisualization() {
         // Refresh visualization for all currently selected objects
+        // MaterialManager has already updated the materials, now we need to force visual refresh
         const selectedObjects = Array.from(this.selectedObjects);
 
         if (this.visualizationManager && selectedObjects.length > 0) {
             selectedObjects.forEach(object => {
-                // Force refresh of selection visualization
+                // Force refresh by toggling state: normal -> selected
+                // This ensures new material properties are applied to visible wireframes
+                this.visualizationManager.setState(object, 'normal');
                 this.visualizationManager.setState(object, 'selected');
             });
         }

@@ -180,17 +180,32 @@ function serializeForPostMessage(objectData) {
     if (!objectData) return null;
 
     try {
-        // Create a deep copy and remove non-serializable properties
-        const serialized = JSON.parse(JSON.stringify(objectData));
-
-        // Remove internal properties that shouldn't be transmitted
-        delete serialized.mesh;
-        delete serialized._sceneObjectData;
-        delete serialized._internalState;
-
-        // Ensure format version is included
-        serialized.formatVersion = OBJECT_DATA_FORMAT_VERSION;
-        serialized.lastModified = Date.now();
+        // Manual serialization to avoid circular references
+        const serialized = {
+            id: objectData.id,
+            name: objectData.name,
+            type: objectData.type,
+            isContainer: objectData.isContainer,
+            position: objectData.position ? { ...objectData.position } : undefined,
+            rotation: objectData.rotation ? { ...objectData.rotation } : undefined,
+            scale: objectData.scale ? { ...objectData.scale } : undefined,
+            dimensions: objectData.dimensions ? { ...objectData.dimensions } : undefined,
+            material: objectData.material ? { ...objectData.material } : undefined,
+            visible: objectData.visible,
+            locked: objectData.locked,
+            selectable: objectData.selectable,
+            children: objectData.children ? [...objectData.children] : [],
+            parent: objectData.parent,
+            layoutMode: objectData.layoutMode,
+            gap: objectData.gap,
+            padding: objectData.padding,
+            constraints: objectData.constraints ? { ...objectData.constraints } : undefined,
+            userData: objectData.userData ? { ...objectData.userData } : {},
+            createdAt: objectData.createdAt,
+            modifiedAt: objectData.modifiedAt,
+            formatVersion: OBJECT_DATA_FORMAT_VERSION,
+            lastModified: Date.now()
+        };
 
         return serialized;
 

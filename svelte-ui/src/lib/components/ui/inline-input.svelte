@@ -49,8 +49,11 @@
 	let inputValue = $state(value);
 
 	// Update internal state when external value changes
+	// BUT: Don't update during drag to prevent flickering from other objects
 	$effect(() => {
-		inputValue = value;
+		if (!isDragging) {
+			inputValue = value;
+		}
 	});
 
 	function handleIncrease() {
@@ -160,6 +163,9 @@
 	let startValue = 0;
 	let currentDragValue = 0; // Track the final dragged value
 	let dragDirection: 'up' | 'down' | null = null;
+	// Capture objectId and property at drag start to prevent switching objects mid-drag
+	let dragObjectId: string | undefined = undefined;
+	let dragProperty: PropertyPath | undefined = undefined;
 
 	function getNumericValue(): number {
 		if (typeof value === 'number') return value;
@@ -171,14 +177,21 @@
 	function startArrowInteraction(event: MouseEvent, direction: 'up' | 'down') {
 		if (type !== 'number') return;
 
+		// Capture the current objectId, property, and starting value immediately
+		// This prevents reactive updates from changing what we're dragging
+		dragObjectId = objectId;
+		dragProperty = property;
+		const capturedStartValue = getNumericValue();
+		console.log('🎯 Drag start:', { objectId: dragObjectId, property: dragProperty, startValue: capturedStartValue });
+
 		// Start a timeout to distinguish between click and drag
 		dragStartTimeout = setTimeout(() => {
 			// This is a drag operation
 			isDragging = true;
 			dragDirection = direction;
 			startY = event.clientY;
-			startValue = getNumericValue();
-			currentDragValue = startValue; // Initialize current drag value
+			startValue = capturedStartValue; // Use the captured value
+			currentDragValue = capturedStartValue; // Initialize current drag value
 			document.addEventListener('mousemove', handleDrag);
 			document.addEventListener('mouseup', stopArrowInteraction);
 			document.addEventListener('mouseleave', stopArrowInteraction);
@@ -210,15 +223,18 @@
 			isDragging = false;
 			document.removeEventListener('mousemove', handleDrag);
 
-			// Apply final validated update when drag stops - use the tracked drag value, not getNumericValue()
-			if (objectId && property) {
-				propertyController?.updateProperty(objectId, property, currentDragValue, 'input');
+			// Apply final validated update when drag stops - use captured objectId/property
+			if (dragObjectId && dragProperty) {
+				propertyController?.updateProperty(dragObjectId, dragProperty, currentDragValue, 'input');
 			}
 		}
 
 		document.removeEventListener('mouseup', stopArrowInteraction);
 		document.removeEventListener('mouseleave', stopArrowInteraction);
 		dragDirection = null;
+		// Clear captured values
+		dragObjectId = undefined;
+		dragProperty = undefined;
 	}
 
 	function handleDrag(event: MouseEvent) {
@@ -252,22 +268,37 @@
 		currentDragValue = actualValue;
 
 		// Update input value immediately for visual feedback (1 decimal for display)
+		// This only updates the local input field, preventing UI flickering
 		inputValue = displayValue;
 
-		if (objectId && property) {
-			// Use immediate update for real-time 60fps drag operations (bypasses debouncing)
-			propertyController?.updatePropertyImmediate(objectId, property, actualValue, 'drag');
+		// Use captured objectId/property to prevent switching objects mid-drag
+		if (dragObjectId && dragProperty) {
+			// Throttled immediate update for smooth 3D scene feedback without UI flickering
+			// Updates 3D scene directly without triggering UI property panel updates
+			propertyController?.updatePropertyImmediate(dragObjectId, dragProperty, actualValue, 'drag');
 		} else {
 			// Fallback direct update with full precision
 			value = actualValue;
 		}
 	}
+
+	// DEBUG: Log when objectId changes during render
+	$effect(() => {
+		if (isDragging && objectId !== dragObjectId) {
+			console.warn('⚠️ ObjectId changed during drag!', {
+				was: dragObjectId,
+				now: objectId,
+				property: dragProperty,
+				isDragging
+			});
+		}
+	});
 </script>
 
 <div class={cn('inline-input-container', className)}>
 	<div class="relative flex items-center bg-[#212121]/50 rounded-md h-8 border border-[#2E2E2E]/50 focus-within:border-[#6b7280] transition-colors">
 		<!-- Label -->
-		<span class="text-xs text-muted-foreground px-2 py-1 flex-shrink-0 min-w-0 truncate">
+		<span class="text-xs text-muted-foreground px-1.5 py-1 flex-shrink-0">
 			{label}
 		</span>
 
@@ -286,18 +317,18 @@
 			onblur={handleBlur}
 			onfocus={handleInputFocus}
 			onkeydown={handleKeyDown}
-			class="flex-1 bg-transparent border-none outline-none text-xs text-foreground px-1 py-1 w-12 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+			class="flex-1 bg-transparent border-none outline-none text-xs text-foreground pl-0.5 pr-1 py-1 min-w-0 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
 			{...restProps}
 		/>
 
 		<!-- Interactive Controls -->
 		{#if showArrows && type === 'number'}
-			<div class="flex flex-col border-l border-[#2E2E2E]">
+			<div class="flex flex-col border-l border-[#2E2E2E] flex-shrink-0">
 				<button
 					type="button"
 					tabindex="-1"
 					onmousedown={(e) => startArrowInteraction(e, 'up')}
-					class="flex items-center justify-center w-5 h-3 text-xs text-gray-400 hover:text-gray-200 hover:bg-[#171717] transition-colors cursor-ns-resize"
+					class="flex items-center justify-center w-5 h-4 text-xs text-gray-400 hover:text-gray-200 hover:bg-[#171717] transition-colors cursor-ns-resize"
 					disabled={disabled}
 				>
 					▲
@@ -306,7 +337,7 @@
 					type="button"
 					tabindex="-1"
 					onmousedown={(e) => startArrowInteraction(e, 'down')}
-					class="flex items-center justify-center w-5 h-3 text-xs text-gray-400 hover:text-gray-200 hover:bg-[#171717] transition-colors cursor-ns-resize"
+					class="flex items-center justify-center w-5 h-4 text-xs text-gray-400 hover:text-gray-200 hover:bg-[#171717] transition-colors cursor-ns-resize"
 					disabled={disabled}
 				>
 					▼

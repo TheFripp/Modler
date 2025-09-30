@@ -53,40 +53,9 @@ class ObjectVisualizer {
      * Register for configuration change callbacks
      */
     registerConfigurationCallbacks() {
-        const configManager = this.getConfigManager();
-        if (!configManager) return;
-
-        // Subscribe to selection configuration changes
-        configManager.subscribe('visual.selection.color', (newValue) => {
-            this.updateMaterialProperty('color', newValue);
-        });
-
-        configManager.subscribe('visual.selection.lineWidth', (newValue) => {
-            this.updateMaterialProperty('linewidth', newValue);
-        });
-
-        configManager.subscribe('visual.selection.opacity', (newValue) => {
-            this.updateMaterialProperty('opacity', newValue);
-        });
-    }
-
-    /**
-     * Update material property and refresh highlights
-     */
-    updateMaterialProperty(property, value) {
-        if (!this.edgeMaterial) return;
-
-        if (property === 'color') {
-            const colorHex = parseInt(value.replace('#', ''), 16);
-            this.edgeMaterial.color.setHex(colorHex);
-        } else if (property === 'linewidth') {
-            this.edgeMaterial.lineWidth = value;
-        } else {
-            this.edgeMaterial[property] = value;
-        }
-
-        this.edgeMaterial.needsUpdate = true;
-        this.refreshAllHighlights();
+        // MaterialManager handles material updates automatically via its own callbacks
+        // No need for duplicate callbacks here - support meshes use MaterialManager materials
+        // This prevents conflicts between legacy edgeMaterial and MaterialManager system
     }
 
     /**

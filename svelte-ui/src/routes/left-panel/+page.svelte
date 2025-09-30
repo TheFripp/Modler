@@ -27,7 +27,7 @@
 	};
 
 	// System settings state (from system toolbar)
-	let currentUnit = 'mm';
+	let currentUnit = 'm';
 	let unitConverter: any = null;
 
 	// CAD wireframe settings

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
 	import { cn } from '$lib/utils';
 	import InlineInput from './inline-input.svelte';
 	import type { PropertyPath } from '$lib/services/property-controller';
@@ -77,6 +78,46 @@
 			onFillHover(axis);
 		}
 	}
+
+	// Listen for focus requests from tools (Tab key)
+	onMount(() => {
+		const focusInput = (requestedObjectId: any, property: string) => {
+			// Check if this is our object and property base matches
+			// Use loose equality (==) to handle string vs number comparison
+			if (String(requestedObjectId) === String(objectId) && property.startsWith(`${propertyBase}.`)) {
+				const axis = property.split('.')[1] as 'x' | 'y' | 'z';
+				const inputId = idPrefix ? `${idPrefix}-${axis}` : `${propertyBase}-${axis}`;
+				const inputElement = document.getElementById(inputId);
+
+				if (inputElement) {
+					inputElement.focus();
+					(inputElement as HTMLInputElement).select();
+				}
+			}
+		};
+
+		// Listen for CustomEvent (for same-window communication)
+		const handleCustomEvent = (event: CustomEvent) => {
+			const { objectId: requestedObjectId, property } = event.detail;
+			focusInput(requestedObjectId, property);
+		};
+
+		// Listen for PostMessage (for iframe communication)
+		const handlePostMessage = (event: MessageEvent) => {
+			if (event.data?.type === 'focus-input') {
+				const { objectId: requestedObjectId, property } = event.data.data;
+				focusInput(requestedObjectId, property);
+			}
+		};
+
+		window.addEventListener('modler:focus-input', handleCustomEvent as EventListener);
+		window.addEventListener('message', handlePostMessage);
+
+		return () => {
+			window.removeEventListener('modler:focus-input', handleCustomEvent as EventListener);
+			window.removeEventListener('message', handlePostMessage);
+		};
+	});
 </script>
 
 <div class={cn('xyz-input-group', className)} {...restProps}>
@@ -88,9 +129,9 @@
 			{@const fieldState = property ? $fieldStates[property] : undefined}
 			{@const isDisabled = fieldState?.disabled || false}
 			{@const isFilled = fillStates[axis] || false}
-			<div class="flex-1">
+			<div class="flex-1 min-w-0">
 				<div class="flex items-center gap-1">
-					<div class="flex-1">
+					<div class="flex-1 min-w-0">
 						<InlineInput
 							id={idPrefix ? `${idPrefix}-${axis}` : undefined}
 							label={labels[axis]}
@@ -114,7 +155,7 @@
 						<button
 							type="button"
 							class={cn(
-								'w-6 h-6 rounded border text-xs font-medium transition-colors',
+								'w-6 h-6 rounded border text-xs font-medium transition-colors flex-shrink-0',
 								'hover:bg-[#212121] border-[#2E2E2E]',
 								isFilled
 									? 'bg-[#212121] text-white border-[#2E2E2E]'
