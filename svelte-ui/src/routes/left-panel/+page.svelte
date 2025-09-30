@@ -677,36 +677,41 @@
 	}
 
 	function loadSettingsFromConfig() {
-		// Access ConfigurationManager directly from parent window
-		const configManager = (window.parent as any)?.modlerComponents?.configurationManager;
-		if (!configManager) {
-			console.warn('ConfigurationManager not available yet, will retry...');
-			setTimeout(loadSettingsFromConfig, 100);
-			return;
-		}
+		// Use PostMessage to request settings from parent window (avoids cross-origin issues)
+		// Send requests for all setting types
+		window.parent.postMessage({ type: 'get-visual-settings' }, '*');
+		window.parent.postMessage({ type: 'get-cad-wireframe-settings' }, '*');
+		window.parent.postMessage({ type: 'get-scene-settings' }, '*');
+		window.parent.postMessage({ type: 'get-interface-settings' }, '*');
 
-		// Load visual settings
-		visualSettings.selection.color = configManager.get('visual.selection.color') || '#ff6600';
-		visualSettings.selection.lineWidth = configManager.get('visual.selection.lineWidth') || 2;
-		visualSettings.selection.opacity = (configManager.get('visual.selection.opacity') || 0.8) * 100;
+		// Listen for responses
+		const handleSettingsResponse = (event: MessageEvent) => {
+			if (event.data.type === 'visual-settings-response') {
+				const settings = event.data.settings;
+				visualSettings.selection.color = settings.selection.color;
+				visualSettings.selection.lineWidth = settings.selection.lineWidth;
+				visualSettings.selection.opacity = settings.selection.opacity * 100;
+				visualSettings.containers.wireframeColor = settings.containers.wireframeColor;
+				visualSettings.containers.lineWidth = settings.containers.lineWidth;
+				visualSettings.containers.opacity = settings.containers.opacity * 100;
+			} else if (event.data.type === 'cad-wireframe-settings-response') {
+				const settings = event.data.settings;
+				cadWireframeSettings.color = settings.color;
+				cadWireframeSettings.lineWidth = settings.lineWidth;
+				cadWireframeSettings.opacity = settings.opacity * 100;
+			} else if (event.data.type === 'scene-settings-response') {
+				const settings = event.data.settings;
+				sceneSettings.backgroundColor = settings.backgroundColor;
+				sceneSettings.gridMainColor = settings.gridMainColor;
+				sceneSettings.gridSubColor = settings.gridSubColor;
+			} else if (event.data.type === 'interface-settings-response') {
+				const settings = event.data.settings;
+				interfaceSettings.accentColor = settings.accentColor;
+				interfaceSettings.toolbarOpacity = settings.toolbarOpacity * 100;
+			}
+		};
 
-		visualSettings.containers.wireframeColor = configManager.get('visual.containers.wireframeColor') || '#00ff00';
-		visualSettings.containers.lineWidth = configManager.get('visual.containers.lineWidth') || 1;
-		visualSettings.containers.opacity = (configManager.get('visual.containers.opacity') || 0.8) * 100;
-
-		// Load CAD wireframe settings
-		cadWireframeSettings.color = configManager.get('visual.cad.wireframe.color') || '#888888';
-		cadWireframeSettings.lineWidth = configManager.get('visual.cad.wireframe.lineWidth') || 1;
-		cadWireframeSettings.opacity = (configManager.get('visual.cad.wireframe.opacity') || 0.8) * 100;
-
-		// Load scene settings
-		sceneSettings.backgroundColor = configManager.get('scene.background.color') || '#1a1a1a';
-		sceneSettings.gridMainColor = configManager.get('scene.grid.mainColor') || '#444444';
-		sceneSettings.gridSubColor = configManager.get('scene.grid.subColor') || '#222222';
-
-		// Load interface settings
-		interfaceSettings.accentColor = configManager.get('interface.accentColor') || '#4a9eff';
-		interfaceSettings.toolbarOpacity = (configManager.get('interface.toolbarOpacity') || 0.95) * 100;
+		window.addEventListener('message', handleSettingsResponse);
 	}
 
 	onMount(() => {
