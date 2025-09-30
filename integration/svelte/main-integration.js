@@ -1,9 +1,45 @@
 /**
- * UNIFIED Main Integration - Simplified with ObjectStateManager
+ * UNIFIED Main Integration - Centralized State & Communication Hub
  *
- * ELIMINATES: 100+ lines of manual property handling, scattered state updates
- * REPLACES: Complex switch statements, manual ObjectEventBus calls, fragmented logic
- * PROVIDES: Single, simple integration layer using ObjectStateManager
+ * ARCHITECTURAL OVERVIEW:
+ * This file is the INTEGRATION LAYER that connects:
+ * - ObjectStateManager (data/state management)
+ * - PropertyPanelSync (UI communication)
+ * - Svelte UI panels (user interface)
+ *
+ * THREE-LAYER ARCHITECTURE:
+ * ┌─────────────────────────────────────────────────────────────┐
+ * │ Layer 1: DATA LAYER (ObjectStateManager)                    │
+ * │ - Single source of truth for all object state               │
+ * │ - Handles state updates, validation, propagation            │
+ * │ - Emits 'objects-changed' and 'selection-changed' events    │
+ * └─────────────────────────────────────────────────────────────┘
+ *                              ↓
+ * ┌─────────────────────────────────────────────────────────────┐
+ * │ Layer 2: INTEGRATION LAYER (this file)                      │
+ * │ - Listens to ObjectStateManager events                      │
+ * │ - Routes transform/selection updates via unified-update     │
+ * │ - Handles PostMessage from UI → ObjectStateManager          │
+ * │ - Coordinates PropertyPanelSync for specialized events      │
+ * └─────────────────────────────────────────────────────────────┘
+ *                              ↓
+ * ┌─────────────────────────────────────────────────────────────┐
+ * │ Layer 3: COMMUNICATION LAYER (PropertyPanelSync)            │
+ * │ - Translates ObjectEventBus events → PostMessage format     │
+ * │ - Handles iframe communication complexity                   │
+ * │ - Routes to specific panels (left, right, toolbars)         │
+ * │ - Handles geometry, material, selection, hierarchy events   │
+ * └─────────────────────────────────────────────────────────────┘
+ *
+ * DATA FLOW FOR PROPERTY UPDATES:
+ * UI Input → PostMessage → handlePropertyUpdate() → ObjectStateManager.updateObject()
+ *   → propagateChanges() → emits events → main-integration catches events
+ *   → notifyUISystems() → PropertyPanelSync.sendToUI() → PostMessage → UI Update
+ *
+ * WHY TWO PATHS (ObjectStateManager + PropertyPanelSync)?
+ * - ObjectStateManager: Handles transform/selection (complete object data)
+ * - PropertyPanelSync: Handles geometry/material/hierarchy (event-specific data)
+ * - This division prevents data conflicts and optimizes network traffic
  */
 
 (function() {

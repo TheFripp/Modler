@@ -1,16 +1,36 @@
 /**
- * PropertyPanelSync - Unified UI Communication Bridge
+ * PropertyPanelSync - UI Communication Bridge
  *
- * Bridges the ObjectEventBus with Svelte UI panels through PostMessage communication.
- * Replaces multiple scattered PostMessage calls with a centralized, reliable system.
+ * ARCHITECTURAL ROLE:
+ * PropertyPanelSync is the COMMUNICATION LAYER between the main app and Svelte UI panels.
+ * It translates ObjectEventBus events into PostMessage format for iframe communication.
  *
- * Features:
- * - Subscribes to ObjectEventBus events
- * - Uses ObjectSerializer for consistent data preparation
- * - Handles PostMessage delivery to all Svelte panels
- * - Event type routing and optimization
- * - Error handling and recovery
- * - Maintains compatibility with existing Svelte bridge
+ * RELATIONSHIP WITH ObjectStateManager:
+ * - ObjectStateManager = Single Source of Truth for object state (DATA layer)
+ * - PropertyPanelSync = Communication bridge to UI panels (COMMUNICATION layer)
+ * - These are COMPLEMENTARY, not redundant
+ *
+ * DATA FLOW:
+ * 1. ObjectStateManager updates state → fires 'objects-changed' event
+ * 2. main-integration.js catches event → sends 'unified-update' (for transform/selection)
+ * 3. PropertyPanelSync catches ObjectEventBus events → sends specialized messages:
+ *    - GEOMETRY events → 'object-modified-geometry' (dimension changes)
+ *    - MATERIAL events → 'object-modified-material' (color/opacity changes)
+ *    - SELECTION events → 'selection-change' (selection state)
+ *    - HIERARCHY events → hierarchy refresh (parent-child changes)
+ *    - TRANSFORM events → NOT HANDLED (ObjectStateManager handles via unified-update)
+ *
+ * WHY TRANSFORM IS NOT HANDLED:
+ * Transform updates (position, rotation, scale) go through ObjectStateManager's
+ * 'objects-changed' event which sends complete object data. PropertyPanelSync's
+ * transform handler was sending incomplete data causing UI flickering.
+ *
+ * RESPONSIBILITIES:
+ * - PostMessage abstraction for iframe communication
+ * - Event-specific serialization and optimization
+ * - Multi-panel routing (left, right, toolbars)
+ * - Throttling and error handling
+ * - JSON serialization for PostMessage compatibility
  */
 
 class PropertyPanelSync {
@@ -141,17 +161,10 @@ class PropertyPanelSync {
     setupEventSubscriptions() {
         // Subscribe to all relevant event types
 
-        // DISABLED: TRANSFORM event subscription causes flickering due to incomplete object data
-        // Transform updates are already handled by ObjectStateManager → 'unified-update' path
-        // which sends complete object data. This redundant subscription was sending minimal
-        // "Object" data that conflicted with the complete "Demo Cube" data.
-        // this.subscriptions.push(
-        //     this.eventBus.subscribe(
-        //         this.eventBus.EVENT_TYPES.TRANSFORM,
-        //         this.handleTransformEvent.bind(this),
-        //         { subscriberId: 'PropertyPanelSync_Transform' }
-        //     )
-        // );
+        // NOTE: TRANSFORM events are NOT subscribed here.
+        // Transform updates (position, rotation, scale) are handled by:
+        // ObjectStateManager → 'objects-changed' → main-integration → 'unified-update'
+        // This ensures complete object data is sent, preventing flickering issues.
 
         this.subscriptions.push(
             this.eventBus.subscribe(
@@ -226,58 +239,6 @@ class PropertyPanelSync {
                 { subscriberId: 'PropertyPanelSync_MasterChange' }
             )
         );
-    }
-
-    /**
-     * Handle transform events (position, rotation, scale changes)
-     */
-    handleTransformEvent(event) {
-        try {
-            this.stats.eventsProcessed++;
-            this.stats.transformEvents++;
-
-            // Check initialization before processing
-            if (!this.initialized) {
-                console.warn('PropertyPanelSync: Not initialized, skipping transform event');
-                return;
-            }
-
-            // Skip transform updates during drag operations to prevent flickering
-            // Drag operations update the 3D scene directly via updatePropertyImmediate
-            if (event.changeData?.source === 'drag') {
-                return;
-            }
-
-            // Check serializer availability
-            if (!this.serializer) {
-                console.warn('PropertyPanelSync: Serializer not available, skipping transform event');
-                return;
-            }
-
-            // Get the object from scene
-            const object = this.getObjectById(event.objectId);
-            if (!object) return;
-
-            // Check if object is currently selected
-            if (!this.isObjectSelected(object)) return;
-
-            // Serialize with transform optimization for PostMessage
-            const serializedData = this.serializer.serializeForPostMessage(object, {
-                changeType: 'transform',
-                includeGeometry: false
-            });
-            if (!serializedData) return;
-
-            // Send to UI with transform-specific update type
-            this.sendToUI('object-modified-transform', [serializedData], {
-                throttle: true,
-                panels: ['right'] // Property panel only for real-time updates
-            });
-
-        } catch (error) {
-            console.error('PropertyPanelSync.handleTransformEvent error:', error);
-            this.stats.messagesFailed++;
-        }
     }
 
     /**
