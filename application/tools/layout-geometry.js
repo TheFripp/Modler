@@ -53,7 +53,6 @@ class LayoutGeometry {
             });
         }
 
-        // TODO: Use resourcePool.getMesh when available
         const mainMesh = new THREE.Mesh(containerGeometry, mainMaterial);
         // NOTE: Material-based invisibility (opacity: 0.0, colorWrite: false, depthWrite: false)
         // makes the container invisible while keeping child objects visible
@@ -96,7 +95,6 @@ class LayoutGeometry {
             });
         }
 
-        // TODO: Use resourcePool.getLineMesh when available
         const wireframeChild = new THREE.LineSegments(edgeGeometry, wireframeMaterial);
         wireframeChild.position.set(0, 0.001, 0); // Small Y offset to prevent z-fighting
         wireframeChild.renderOrder = renderOrder;

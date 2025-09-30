@@ -367,8 +367,7 @@ class ContainerCrudManager {
         if (selectionController) {
             selectionController.clearSelection('container-creation');
 
-            // Make container temporarily selectable for selection, then restore
-            const wasSelectable = containerObject.selectable;
+            // Make container temporarily selectable for selection
             containerObject.selectable = true;
             selectionController.select(containerObject.mesh);
 
@@ -649,7 +648,7 @@ class ContainerCrudManager {
     /**
      * Resize container to fit its child objects with fill-aware layout support
      */
-    resizeContainerToFitChildren(containerData, newContainerSize = null, preservePosition = false, immediateUpdate = false) {
+    resizeContainerToFitChildren(containerData, newContainerSize = null, immediateUpdate = false) {
         const validation = this.validateContainer(containerData, 'resizeContainerToFitChildren');
         if (!validation.success) return false;
 
@@ -745,8 +744,6 @@ class ContainerCrudManager {
             console.error('resizeContainerToLayoutBounds: layoutBounds is required');
             return false;
         }
-
-        const sceneController = validation.sceneController;
 
         // SIMPLIFIED ARCHITECTURE: Container never moves during auto-layout, only resizes
         // This eliminates coordinate system mismatches and prevents object positioning breakage
@@ -844,7 +841,7 @@ class ContainerCrudManager {
     /**
      * Show container wireframe
      */
-    showContainer(containerId, force = false) {
+    showContainer(containerId) {
         const sceneController = window.modlerComponents?.sceneController;
         if (!sceneController) return false;
 
@@ -878,7 +875,7 @@ class ContainerCrudManager {
     /**
      * Hide container wireframe (but keep contents visible)
      */
-    hideContainer(containerId, force = false) {
+    hideContainer(containerId) {
         const sceneController = window.modlerComponents?.sceneController;
         if (!sceneController) return false;
 
