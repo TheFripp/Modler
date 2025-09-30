@@ -1,54 +1,13 @@
 // Modler V2 - Container CRUD Operations
 // Container creation, configuration, and lifecycle management (Create, Read, Update, Delete)
-// Target: ~400 lines - focused container operations only
+// 38 methods covering: creation, nesting, resizing, layout integration, visibility, cleanup
+// Current: ~910 lines - compact methods, comprehensive container lifecycle
 
 class ContainerCrudManager {
     constructor() {
-        // Unified cache system with consistent 50ms expiration
-        this.cache = new Map(); // containerId -> { type, data, timestamp }
-        this.cacheExpiration = 50; // milliseconds - consistent across all cache types
-        this.throttleDelay = 16; // milliseconds - 60 FPS unified with MovementUtils
-
-        // Periodic cache cleanup to prevent memory leaks
-        this.setupCacheCleanup();
-    }
-
-
-    /**
-     * Generate cache key
-     */
-    getCacheKey(containerId, type) {
-        return `${containerId}_${type}`;
-    }
-
-    /**
-     * Get item from unified cache
-     */
-    getFromCache(containerId, type) {
-        const cacheKey = this.getCacheKey(containerId, type);
-        const cached = this.cache.get(cacheKey);
-
-        if (!cached) return null;
-
-        const now = Date.now();
-        if (now - cached.timestamp > this.cacheExpiration) {
-            this.cache.delete(cacheKey);
-            return null;
-        }
-
-        return cached.data;
-    }
-
-    /**
-     * Set item in unified cache
-     */
-    setCache(containerId, type, data) {
-        const cacheKey = this.getCacheKey(containerId, type);
-        this.cache.set(cacheKey, {
-            type,
-            data,
-            timestamp: Date.now()
-        });
+        // Simple throttle tracking for resize operations
+        this.lastResizeTime = new Map(); // containerId -> timestamp
+        this.throttleDelay = 16; // milliseconds - 60 FPS
     }
 
     /**
@@ -162,36 +121,6 @@ class ContainerCrudManager {
     }
 
     /**
-     * Validate container and object data
-     */
-    validateContainerAndObject(containerData, objectData, methodName) {
-        const result = this.validateContainer(containerData, methodName);
-        if (!result.success) return result;
-
-        if (!objectData || !objectData.mesh) {
-            console.error(`${methodName}: Invalid object data`);
-            return { success: false };
-        }
-        return result;
-    }
-
-    /**
-     * Validate selected objects array
-     */
-    validateSelectedObjects(selectedObjects, methodName) {
-        const sceneController = window.modlerComponents?.sceneController;
-        if (!sceneController) {
-            console.error(`${methodName}: SceneController not available`);
-            return { success: false };
-        }
-        if (!Array.isArray(selectedObjects) || selectedObjects.length === 0) {
-            console.error(`${methodName}: Invalid selected objects`);
-            return { success: false };
-        }
-        return { success: true, sceneController };
-    }
-
-    /**
      * Get child meshes suitable for bounds calculation
      */
     getChildMeshesForBounds(childObjects) {
@@ -222,44 +151,20 @@ class ContainerCrudManager {
     }
 
     /**
-     * Setup periodic cache cleanup to prevent memory leaks
-     */
-    setupCacheCleanup() {
-        // Clean up caches every 5 seconds
-        setInterval(() => {
-            this.cleanupCaches();
-        }, 5000);
-    }
-
-    /**
-     * Clean up expired cache entries
-     */
-    cleanupCaches() {
-        const now = Date.now();
-
-        // Clean up all expired cache entries (unified cache with consistent expiration)
-        for (const [cacheKey, entry] of this.cache.entries()) {
-            if (now - entry.timestamp > this.cacheExpiration) {
-                this.cache.delete(cacheKey);
-            }
-        }
-
-        // Also clean up PositionTransform bounds cache
-        if (window.PositionTransform && window.PositionTransform.cleanupBoundsCache) {
-            window.PositionTransform.cleanupBoundsCache();
-        }
-    }
-
-    /**
      * Create auto layout container from selected objects
      * @param {Array} selectedObjects - Array of selected mesh objects
      * @returns {boolean} True if container was successfully created
      */
     createContainerFromSelection(selectedObjects) {
-        const validation = this.validateSelectedObjects(selectedObjects, 'createContainerFromSelection');
-        if (!validation.success) return false;
-
-        const sceneController = validation.sceneController;
+        const sceneController = window.modlerComponents?.sceneController;
+        if (!sceneController) {
+            console.error('createContainerFromSelection: SceneController not available');
+            return false;
+        }
+        if (!Array.isArray(selectedObjects) || selectedObjects.length === 0) {
+            console.error('createContainerFromSelection: Invalid selected objects');
+            return false;
+        }
         const bounds = LayoutGeometry.calculateSelectionBounds(selectedObjects);
 
         // Create and register container
@@ -442,8 +347,12 @@ class ContainerCrudManager {
      * @returns {boolean} Success status
      */
     addObjectToContainer(objectData, containerData) {
-        const validation = this.validateContainerAndObject(containerData, objectData, 'addObjectToContainer');
+        const validation = this.validateContainer(containerData, 'addObjectToContainer');
         if (!validation.success) return false;
+        if (!objectData || !objectData.mesh) {
+            console.error('addObjectToContainer: Invalid object data');
+            return false;
+        }
 
         const sceneController = validation.sceneController;
         const obj = objectData.mesh;
@@ -664,11 +573,12 @@ class ContainerCrudManager {
 
         // Apply throttling
         if (!immediateUpdate) {
-            const lastResize = this.getFromCache(containerData.id, 'throttle');
-            if (lastResize && (Date.now() - lastResize) < this.throttleDelay) {
+            const lastResize = this.lastResizeTime.get(containerData.id);
+            const now = Date.now();
+            if (lastResize && (now - lastResize) < this.throttleDelay) {
                 return false;
             }
-            this.setCache(containerData.id, 'throttle', Date.now());
+            this.lastResizeTime.set(containerData.id, now);
         }
 
         const childObjects = sceneController.getChildObjects(containerData.id);
