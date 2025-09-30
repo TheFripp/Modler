@@ -113,52 +113,6 @@ class SupportMeshFactory {
     }
 
     /**
-     * Create all support meshes for a container
-     */
-    createContainerSupportMeshes(mainMesh) {
-        // Create single wireframe mesh used for both selection and context states
-        const wireframeMesh = this.createContainerWireframe(mainMesh);
-
-        const supportMeshes = {
-            selectionWireframe: wireframeMesh,  // For ObjectVisualizer compatibility
-            wireframeMesh: wireframeMesh,       // Single unified wireframe
-            faceHighlight: this.createFaceHighlight(mainMesh),
-            interactiveMesh: this.createContainerInteractiveMesh(mainMesh),
-            cadWireframe: this.createCadWireframe(mainMesh) // CAD wireframes for better edge visibility
-        };
-
-        // Add as children of main mesh (only if they were created successfully)
-        if (supportMeshes.selectionWireframe) {
-            mainMesh.add(supportMeshes.selectionWireframe);
-            supportMeshes.selectionWireframe.visible = false;
-        }
-        if (supportMeshes.faceHighlight) {
-            mainMesh.add(supportMeshes.faceHighlight);
-            supportMeshes.faceHighlight.visible = false;
-        }
-        if (supportMeshes.interactiveMesh) {
-
-            mainMesh.add(supportMeshes.interactiveMesh);
-            supportMeshes.interactiveMesh.visible = false; // Hidden by default, shown only during tool operations
-
-            // POTENTIAL FIX: Force matrix update to ensure proper transform inheritance
-            mainMesh.updateMatrixWorld(true);
-            supportMeshes.interactiveMesh.updateMatrixWorld(true);
-
-        }
-        if (supportMeshes.cadWireframe) {
-            mainMesh.add(supportMeshes.cadWireframe);
-            supportMeshes.cadWireframe.visible = true; // Visible by default for CAD wireframes
-        }
-        // contextHighlight removed - using single wireframeMesh for all states
-
-        // Store references for easy access
-        mainMesh.userData.supportMeshes = supportMeshes;
-
-        return supportMeshes;
-    }
-
-    /**
      * Create selection wireframe for regular objects
      */
     createSelectionWireframe(mainMesh) {
@@ -238,32 +192,7 @@ class SupportMeshFactory {
     }
 
     /**
-     * Create interactive mesh for containers (NEW UNIFIED ARCHITECTURE)
-     */
-    createInteractiveMesh(mainMesh) {
-        if (!mainMesh.geometry) return null;
-
-
-        // Create interactive mesh from solid geometry (already available from main mesh)
-        const interactiveMesh = new THREE.Mesh(
-            mainMesh.geometry.clone(),
-            this.materials.containerInteractive
-        );
-
-        interactiveMesh.position.set(0, 0, 0); // Child position relative to parent
-        interactiveMesh.renderOrder = 1000; // High render order for raycasting priority
-        interactiveMesh.visible = false; // Hidden by default
-        interactiveMesh.userData.isContainerInteractive = true;
-        interactiveMesh.userData.isContainerCollision = true;
-        interactiveMesh.userData.containerMesh = mainMesh; // Reference to parent
-        interactiveMesh.userData.supportMeshType = 'interactiveMesh';
-
-
-        return interactiveMesh;
-    }
-
-    /**
-     * Create container interactive mesh for tool interaction (OLD COMPLEX VERSION)
+     * Create container interactive mesh for tool interaction
      */
     createContainerInteractiveMesh(mainMesh) {
         if (!mainMesh.geometry) return null;
