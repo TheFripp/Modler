@@ -729,37 +729,8 @@
 			currentUnit = unitConverter.userUnit;
 		}
 
-		// Listen for settings responses
-		const handleMessage = (event) => {
-			if (event.data.type === 'visual-settings-response') {
-				// Update local state with current settings
-				if (event.data.settings.selection) {
-					visualSettings.selection = { ...visualSettings.selection, ...event.data.settings.selection };
-				}
-				if (event.data.settings.containers) {
-					visualSettings.containers = { ...visualSettings.containers, ...event.data.settings.containers };
-				}
-			} else if (event.data.type === 'cad-wireframe-settings-response') {
-				// Update CAD wireframe settings
-				cadWireframeSettings = { ...cadWireframeSettings, ...event.data.settings };
-			} else if (event.data.type === 'scene-settings-response') {
-				// Update scene settings
-				sceneSettings = { ...sceneSettings, ...event.data.settings };
-			} else if (event.data.type === 'interface-settings-response') {
-				// Update interface settings
-				interfaceSettings = { ...interfaceSettings, ...event.data.settings };
-			}
-		};
-
-		window.addEventListener('message', handleMessage);
-
 		// Initialize the bridge with Three.js for real-time synchronization
 		initializeBridge();
-
-		// Cleanup message listener on component destroy
-		return () => {
-			window.removeEventListener('message', handleMessage);
-		};
 	});
 
 </script>
