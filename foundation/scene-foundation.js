@@ -9,7 +9,7 @@ class SceneFoundation {
         this.scene = new THREE.Scene();
         
         // Get container dimensions with robust fallback
-        const container = this.canvas.parentElement;
+        const container = this.canvas?.parentElement;
         let width = container ? container.clientWidth : 0;
         let height = container ? container.clientHeight : 0;
         
@@ -44,9 +44,9 @@ class SceneFoundation {
     
     setupRenderer() {
         // Simple approach - use container size
-        const container = this.canvas.parentElement;
-        const width = container.clientWidth || 800;
-        const height = container.clientHeight || 600;
+        const container = this.canvas?.parentElement;
+        const width = container?.clientWidth || 800;
+        const height = container?.clientHeight || 600;
         
         // Set renderer size - let it handle canvas sizing
         this.renderer.setSize(width, height);
@@ -67,9 +67,9 @@ class SceneFoundation {
     
     setupResizeHandler() {
         this.resizeHandler = () => {
-            const container = this.canvas.parentElement;
-            const width = container.clientWidth || 800;
-            const height = container.clientHeight || 600;
+            const container = this.canvas?.parentElement;
+            const width = container?.clientWidth || 800;
+            const height = container?.clientHeight || 600;
             
             this.camera.aspect = width / height;
             this.camera.updateProjectionMatrix();

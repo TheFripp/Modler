@@ -5,14 +5,14 @@
 
 class SveltePortDetector {
     constructor() {
-        this.COMMON_PORTS = [5173, 5174, 5175, 5176, 5177];
+        this.COMMON_PORTS = [5173, 5174, 5175, 5176, 5177, 5178, 5179, 5180, 5181, 5182];
         this.CACHE_KEY = 'svelte-dev-port';
         this.baseUrl = null;
         this.urls = {
             propertyPanel: null,
             leftPanel: null,
-            mainToolbar: null,
-            systemToolbar: null
+            mainToolbar: null
+            // systemToolbar removed - functionality integrated into leftPanel Settings tab
         };
     }
 
@@ -22,10 +22,11 @@ class SveltePortDetector {
     async detectPort() {
         // Try cached port first for instant loading
         const cachedPort = localStorage.getItem(this.CACHE_KEY);
+        console.log('🔍 Cached port check:', cachedPort);
         if (cachedPort && this.COMMON_PORTS.includes(parseInt(cachedPort))) {
             try {
                 const controller = new AbortController();
-                const timeoutId = setTimeout(() => controller.abort(), 100);
+                const timeoutId = setTimeout(() => controller.abort(), 1000);
 
                 const response = await fetch(`http://localhost:${cachedPort}/`, {
                     method: 'GET',
@@ -47,6 +48,7 @@ class SveltePortDetector {
 
         // Parallel port detection for fastest discovery
         try {
+            console.log('🔍 Testing ports:', this.COMMON_PORTS);
             const portPromises = this.COMMON_PORTS.map(port => this._testPort(port));
             const results = await Promise.allSettled(portPromises);
 
@@ -60,7 +62,24 @@ class SveltePortDetector {
                 }
             }
 
-            console.log('❌ No Svelte server found on common ports');
+            // Fallback: Try to detect any running server on wider port range
+            console.log('🔍 Fallback: Scanning extended port range...');
+            const extendedPorts = [5170, 5171, 5172, 5183, 5184, 5185, 5186, 5187, 5188, 5189, 5190];
+            const extendedPromises = extendedPorts.map(port => this._testPort(port));
+            const extendedResults = await Promise.allSettled(extendedPromises);
+
+            for (let i = 0; i < extendedResults.length; i++) {
+                if (extendedResults[i].status === 'fulfilled' && extendedResults[i].value) {
+                    const port = extendedPorts[i];
+                    this._setUrls(port);
+                    localStorage.setItem(this.CACHE_KEY, port.toString());
+                    console.log('🚀 Svelte server detected on extended range:', this.baseUrl);
+                    return true;
+                }
+            }
+
+            // No Svelte server found on any tested ports
+            console.warn('⚠️ No Svelte dev server found on tested ports');
             return false;
         } catch (error) {
             console.error('❌ Port detection failed:', error);

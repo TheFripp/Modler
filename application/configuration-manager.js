@@ -46,6 +46,13 @@ class ConfigurationManager {
                     lineWidth: 1,
                     renderOrder: 998
                 },
+                cad: {
+                    wireframe: {
+                        color: '#666666',
+                        opacity: 0.5,
+                        lineWidth: 1
+                    }
+                },
                 grid: {
                     renderOrder: -100  // Render behind all wireframes to prevent z-fighting
                 },
@@ -146,6 +153,31 @@ class ConfigurationManager {
             }
         });
 
+        // Subscribe to grid color changes
+        this.subscribe('scene.gridMainColor', (newValue) => {
+            if (window.updateGridMainColor) {
+                window.updateGridMainColor(newValue);
+            }
+        });
+
+        this.subscribe('scene.gridSubColor', (newValue) => {
+            if (window.updateGridSubColor) {
+                window.updateGridSubColor(newValue);
+            }
+        });
+
+        // Subscribe to interface settings changes
+        this.subscribe('interface.accentColor', (newValue) => {
+            if (window.updateAccentColor) {
+                window.updateAccentColor(newValue);
+            }
+        });
+        this.subscribe('interface.toolbarOpacity', (newValue) => {
+            if (window.updateToolbarOpacity) {
+                window.updateToolbarOpacity(newValue);
+            }
+        });
+
         // Subscribe to container visual changes for real-time updates
         // Only update existing containers if the system is fully initialized
         this.subscribe('visual.containers.wireframeColor', () => {
@@ -170,6 +202,36 @@ class ConfigurationManager {
             if (window.LayoutGeometry && window.modlerComponents?.sceneController?.getAllObjects) {
                 window.LayoutGeometry.updateAllContainerMaterials();
             }
+        });
+
+        // Subscribe to selection visual changes for real-time updates
+        this.subscribe('visual.selection.color', () => {
+            this.refreshSelectionVisualization();
+        });
+
+        this.subscribe('visual.selection.lineWidth', () => {
+            this.refreshSelectionVisualization();
+        });
+
+        this.subscribe('visual.selection.opacity', () => {
+            this.refreshSelectionVisualization();
+        });
+
+        this.subscribe('visual.selection.renderOrder', () => {
+            this.refreshSelectionVisualization();
+        });
+
+        // Subscribe to CAD wireframe visual changes for real-time updates
+        this.subscribe('visual.cad.wireframe.color', () => {
+            this.refreshCadWireframes();
+        });
+
+        this.subscribe('visual.cad.wireframe.opacity', () => {
+            this.refreshCadWireframes();
+        });
+
+        this.subscribe('visual.cad.wireframe.lineWidth', () => {
+            this.refreshCadWireframes();
         });
 
         // Subscribe to VisualEffects configuration changes
@@ -251,7 +313,6 @@ class ConfigurationManager {
         // Initial sync
         syncConfigToVisualEffects();
 
-        console.log('VisualEffects configuration integration established');
     }
 
     /**
@@ -309,7 +370,6 @@ class ConfigurationManager {
         // Notify subscribers
         this.notifySubscribers(keyPath, value, oldValue);
         
-        console.log(`Config updated: ${keyPath} = ${value}`);
         return true;
     }
     
@@ -376,7 +436,6 @@ class ConfigurationManager {
             });
         });
         
-        console.log(`Registered component for config keys:`, configKeys);
         return true;
     }
     
@@ -411,7 +470,6 @@ class ConfigurationManager {
                 
                 // Version check and migration
                 if (parsedConfig.version !== this.configVersion) {
-                    console.log('Config version mismatch, migrating...');
                     this.migrateConfig(parsedConfig);
                 } else {
                     // Merge stored config with defaults to ensure all keys exist
@@ -422,14 +480,12 @@ class ConfigurationManager {
                 // Apply configuration to systems after loading
                 this.applyConfigurationToSystems();
             } else {
-                console.log('No stored configuration found, using defaults');
                 
                 // Apply default configuration to systems
                 this.applyConfigurationToSystems();
             }
         } catch (error) {
             console.error('Failed to load configuration from storage:', error);
-            console.log('Using default configuration');
             this.config = JSON.parse(JSON.stringify(this.defaultConfig));
         }
     }
@@ -441,7 +497,6 @@ class ConfigurationManager {
         try {
             const configToSave = JSON.stringify(this.config, null, 2);
             localStorage.setItem(this.storageKey, configToSave);
-            console.log('Configuration saved to storage');
             return true;
         } catch (error) {
             console.error('Failed to save configuration to storage:', error);
@@ -462,7 +517,6 @@ class ConfigurationManager {
                 // Notify subscribers for this category
                 this.notifySubscribersForCategory(category, this.config[category], oldConfig);
                 
-                console.log(`Reset ${category} configuration to defaults`);
             }
         } else {
             // Reset all configuration
@@ -472,7 +526,6 @@ class ConfigurationManager {
             // Notify all subscribers
             this.notifyAllSubscribers(this.config, oldConfig);
             
-            console.log('Reset all configuration to defaults');
         }
         
         this.saveToStorage();
@@ -574,26 +627,17 @@ class ConfigurationManager {
      * Notify subscribers of configuration changes
      */
     notifySubscribers(keyPath, newValue, oldValue) {
-        console.log('🔧 ConfigurationManager: notifySubscribers called', {
-            keyPath,
-            newValue,
-            oldValue,
-            hasSubscribers: this.subscribers.has(keyPath),
-            subscriberCount: this.subscribers.has(keyPath) ? this.subscribers.get(keyPath).length : 0
-        });
 
         if (this.subscribers.has(keyPath)) {
             const callbacks = this.subscribers.get(keyPath);
             callbacks.forEach((callback, index) => {
                 try {
-                    console.log(`🔧 ConfigurationManager: calling subscriber ${index} for ${keyPath}`);
                     callback(newValue, oldValue);
                 } catch (error) {
                     console.error(`Error in config subscriber for ${keyPath}:`, error);
                 }
             });
         } else {
-            console.log(`🔧 ConfigurationManager: No subscribers found for ${keyPath}`);
         }
     }
     
@@ -643,7 +687,6 @@ class ConfigurationManager {
         this.config = JSON.parse(JSON.stringify(this.defaultConfig));
         
         // Add migration logic here as needed for future versions
-        console.log(`Migrated configuration from version ${oldConfig.version || 'unknown'} to ${this.configVersion}`);
     }
     
     /**
@@ -662,14 +705,49 @@ class ConfigurationManager {
         
         return true;
     }
-    
+
+    /**
+     * Refresh CAD wireframes when configuration changes
+     */
+    refreshCadWireframes() {
+        const materialManager = window.modlerComponents?.materialManager;
+        const sceneController = window.modlerComponents?.sceneController;
+
+        if (materialManager) {
+            // Clear CAD wireframe material cache to force recreation with new settings
+            materialManager.clearMaterialCache('CAD_WIREFRAME');
+        }
+
+        if (sceneController) {
+            // Refresh all existing CAD wireframes
+            sceneController.refreshCadWireframes();
+        }
+    }
+
+    /**
+     * Refresh selection visualization when configuration changes
+     */
+    refreshSelectionVisualization() {
+        const materialManager = window.modlerComponents?.materialManager;
+        const selectionController = window.modlerComponents?.selectionController;
+
+        if (materialManager) {
+            // Clear selection material cache to force recreation with new settings
+            materialManager.clearMaterialCache('SELECTION_WIREFRAME');
+        }
+
+        if (selectionController) {
+            // Refresh current selection visualization
+            selectionController.refreshSelectionVisualization();
+        }
+    }
+
     /**
      * Cleanup
      */
     destroy() {
         this.subscribers.clear();
         this.components.clear();
-        console.log('ConfigurationManager destroyed');
     }
 }
 

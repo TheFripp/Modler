@@ -55,6 +55,33 @@ class PropertyController {
 
 	constructor() {
 		this.setupConstraints();
+
+		// Initialize format converter integration
+		this.formatConverter = null;
+		this.initializeFormatConverter();
+	}
+
+	private formatConverter: any;
+
+	private initializeFormatConverter() {
+		// Access format converter from global scope (browser only)
+		if (typeof window !== 'undefined') {
+			// First try local window
+			this.formatConverter = (window as any).propertyFormatConverter || null;
+
+			// If not found and we're in an iframe, try parent window
+			if (!this.formatConverter && window !== window.parent) {
+				try {
+					this.formatConverter = (window.parent as any).propertyFormatConverter || null;
+				} catch (error) {
+					// Cross-origin access blocked, continue with local fallback
+				}
+			}
+
+			if (!this.formatConverter) {
+				// PropertyFormatConverter not available - using basic validation only (logging removed to reduce console noise)
+			}
+		}
 	}
 
 	private setupConstraints() {
@@ -129,22 +156,22 @@ class PropertyController {
 	}
 
 	/**
-	 * Validate a property value against constraints
+	 * Validate a property value against constraints with PropertyFormatConverter integration
 	 */
 	private validateValue(property: PropertyPath, value: any, skipStepRounding: boolean = false): { valid: boolean; value: any; error?: string } {
+		// First, use PropertyFormatConverter for type conversion and basic validation
+		if (this.formatConverter) {
+			const formatResult = this.formatConverter.convertToInternal(property, value);
+			if (!formatResult.isValid) {
+				return { valid: false, value: formatResult.value, error: formatResult.error };
+			}
+			value = formatResult.value; // Use converted value for further validation
+		}
+
 		const constraints = this.constraints.get(property);
 		if (!constraints) return { valid: true, value };
 
-		// Type validation
-		if (constraints.type === 'number' && typeof value !== 'number') {
-			const numValue = parseFloat(value);
-			if (isNaN(numValue)) {
-				return { valid: false, value, error: 'Invalid number' };
-			}
-			value = numValue;
-		}
-
-		// Range validation
+		// Range validation for numeric values
 		if (typeof value === 'number') {
 			if (constraints.min !== undefined && value < constraints.min) {
 				value = constraints.min;
@@ -510,5 +537,5 @@ class PropertyController {
 	}
 }
 
-// Global singleton instance
-export const propertyController = new PropertyController();
+// Global singleton instance (browser only)
+export const propertyController = typeof window !== 'undefined' ? new PropertyController() : null;

@@ -118,11 +118,24 @@ class CreateContainerCommand extends BaseCommand {
                         childData.mesh.position.copy(this.originalPositions[childData.id]);
                     }
 
-                    // Update object data with final state
-                    sceneController.updateObject(childData.id, {
-                        position: childData.mesh.position,
-                        parentContainer: originalParent
-                    });
+                    // Update object data using ObjectStateManager
+                    const objectStateManager = window.modlerComponents?.objectStateManager;
+                    if (objectStateManager) {
+                        objectStateManager.updateObject(childData.id, {
+                            position: {
+                                x: childData.mesh.position.x,
+                                y: childData.mesh.position.y,
+                                z: childData.mesh.position.z
+                            },
+                            parentContainer: originalParent
+                        });
+                    } else {
+                        // Fallback to direct update
+                        sceneController.updateObject(childData.id, {
+                            position: childData.mesh.position,
+                            parentContainer: originalParent
+                        });
+                    }
                 }
             });
 

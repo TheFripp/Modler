@@ -11,24 +11,63 @@ let modlerV2Components = {};
  */
 async function initializeModlerV2(canvas) {
     try {
-        
+        // Expose components globally IMMEDIATELY so they're available even if initialization fails
+        window.modlerComponents = modlerV2Components;
+
+        // Check that required classes are loaded
+        const requiredClasses = ['GeometryFactory', 'MaterialManager', 'SupportMeshFactory'];
+        for (const className of requiredClasses) {
+            if (typeof window[className] === 'undefined') {
+                throw new Error(`Required class ${className} is not loaded. Check script loading order.`);
+            }
+        }
+
         // Initialize in dependency order
         initializeFoundation(canvas);
         initializeScene();
         initializeInteraction();
         initializeApplication();
 
-        // Expose components globally BEFORE creating content so SceneController can access them
-        window.modlerComponents = modlerV2Components;
-
         initializeContent();
         connectComponents();
         setupObjectSystemIntegration();
-        
+
+        // Validate component creation
+        validateInitialization();
+
+        // Emit success event for integration systems
+        // Modler V2 initialization completed successfully
+        window.dispatchEvent(new CustomEvent('modlerV2Ready', {
+            detail: {
+                success: true,
+                components: Object.keys(modlerV2Components),
+                timestamp: Date.now()
+            }
+        }));
+
+        // CRITICAL: Trigger explicit hierarchy sync after all initialization complete
+        // This ensures Svelte UI receives initial object data including demo cube
+        setTimeout(() => {
+            if (window.notifyObjectHierarchyChanged) {
+                window.notifyObjectHierarchyChanged();
+                console.log('✅ Initial hierarchy sync triggered for UI');
+            }
+        }, 100); // Small delay to ensure UI listeners are registered
+
         return true;
-        
+
     } catch (error) {
         console.error('V2 System initialization failed:', error.message);
+
+        // Emit failure event for integration systems
+        window.dispatchEvent(new CustomEvent('modlerV2Ready', {
+            detail: {
+                success: false,
+                error: error.message,
+                timestamp: Date.now()
+            }
+        }));
+
         alert(`Modler V2 failed to start: ${error.message}\n\nCheck console for details.`);
         return false;
     }
@@ -78,6 +117,9 @@ function initializeScene() {
  * Initialize Interaction Layer components
  */
 function initializeInteraction() {
+    // UNIFIED STATE MANAGEMENT: Single source of truth for all object state
+    modlerV2Components.objectStateManager = new ObjectStateManager();
+
     // CONTAINER CRUD MANAGER: Container creation, configuration, and lifecycle operations
     modlerV2Components.containerCrudManager = new ContainerCrudManager();
     modlerV2Components.transformationManager = new TransformationManager();
@@ -161,8 +203,13 @@ function initializeApplication() {
     ];
     tools.forEach(([name, tool]) => modlerV2Components.toolController.registerTool(name, tool));
     modlerV2Components.toolController.switchToTool('select');
-    
+
     registerSnapBehaviors();
+
+    // Initialize ObjectStateManager with all systems ready
+    modlerV2Components.objectStateManager.initialize({
+        sceneController: modlerV2Components.sceneController
+    });
 }
 
 /**
@@ -264,13 +311,79 @@ function connectComponents() {
 
 /**
  * Setup object system integration between SceneController and UI
+ * UNIFIED SYSTEM: Bridge SceneController events to ObjectEventBus for consistent notification
  */
 function setupObjectSystemIntegration() {
-    if (modlerV2Components.sceneController && window.populateObjectList) {
-        modlerV2Components.sceneController.on('objectAdded', window.populateObjectList);
-        modlerV2Components.sceneController.on('objectRemoved', window.populateObjectList);
+    const { sceneController, objectStateManager } = modlerV2Components;
+
+    // Legacy UI support (if present)
+    if (sceneController && window.populateObjectList) {
+        sceneController.on('objectAdded', window.populateObjectList);
+        sceneController.on('objectRemoved', window.populateObjectList);
         window.populateObjectList();
     }
+
+    // CRITICAL: Bridge SceneController events to ObjectEventBus for UI notification
+    // ObjectStateManager already imports objects, we just need to ensure UI gets notified
+    if (sceneController && window.objectEventBus) {
+        sceneController.on('objectAdded', (objectData) => {
+            // ObjectStateManager.importObjectFromScene() already emits HIERARCHY event
+            // This is handled by SceneController → syncObjectToStateManager → importObjectFromScene
+            console.log('🔗 Object added - unified system notified:', objectData.id);
+        });
+
+        sceneController.on('objectRemoved', (objectData) => {
+            // Emit HIERARCHY event to trigger UI refresh for deletions
+            window.objectEventBus.emit(
+                window.objectEventBus.EVENT_TYPES.HIERARCHY,
+                objectData.id,
+                { action: 'delete', objectName: objectData.name },
+                { immediate: true, source: 'v2-main.setupObjectSystemIntegration' }
+            );
+            console.log('🔗 Object removed - unified system notified:', objectData.id);
+        });
+
+        console.log('✅ SceneController events bridged to ObjectEventBus');
+    }
+}
+
+/**
+ * Validate that all critical components were created successfully
+ */
+function validateInitialization() {
+    const requiredComponents = [
+        'sceneFoundation',
+        'sceneController',
+        'objectStateManager',
+        'selectionController',
+        'inputController',
+        'toolController'
+    ];
+
+    const missing = [];
+    const created = [];
+
+    for (const componentName of requiredComponents) {
+        if (modlerV2Components[componentName]) {
+            created.push(componentName);
+        } else {
+            missing.push(componentName);
+        }
+    }
+
+    // Components created successfully
+
+    if (missing.length > 0) {
+        console.error(`❌ Missing components: ${missing.length} - [${missing.join(', ')}]`);
+        throw new Error(`Critical components missing: ${missing.join(', ')}`);
+    }
+
+    // Verify window.modlerComponents is properly exposed
+    if (!window.modlerComponents || Object.keys(window.modlerComponents).length === 0) {
+        throw new Error('window.modlerComponents not properly exposed');
+    }
+
+    // Initialization validation successful - components ready
 }
 /**
  * Create hierarchical grid with center at (0,0) on major intersection
@@ -415,35 +528,48 @@ function createFloorGrid() {
 
 /**
  * Create demo objects for testing
+ * UNIFIED SYSTEM: Uses ObjectStateManager to ensure proper notification pipeline
  */
 function createDemoObjects() {
-    // Access centralized systems for geometry and material creation
+    // Access centralized systems
     const geometryFactory = window.GeometryFactory ? new GeometryFactory() : null;
     const materialManager = window.MaterialManager ? new MaterialManager() : null;
+    const objectStateManager = modlerV2Components.objectStateManager;
     const sc = modlerV2Components.sceneController;
 
-    // Create a simple demonstration scene with centralized systems
+    if (!objectStateManager) {
+        console.error('ObjectStateManager not available for demo object creation');
+        return;
+    }
+
+    // Create geometry and material
     let material, geometry;
 
     if (materialManager) {
-        material = materialManager.createMeshLambertMaterial({ color: 0x888888 });
+        material = materialManager.createMeshLambertMaterial({ color: 0x894784 });
     } else {
-        material = new THREE.MeshLambertMaterial({ color: 0x888888 });
+        material = new THREE.MeshLambertMaterial({ color: 0x894784 });
     }
 
-    // Create a single test cube using centralized systems where available
     if (geometryFactory) {
         geometry = geometryFactory.createBoxGeometry(2, 2, 2);
     } else {
         geometry = new THREE.BoxGeometry(2, 2, 2);
     }
 
-    sc.addObject(geometry, material, {
+    // Use SceneController.addObject for proper integration
+    // This ensures selectable: true by default and triggers all necessary events
+    const objectData = sc.addObject(geometry, material, {
         name: 'Demo Cube',
         type: 'cube',
         position: new THREE.Vector3(0, 1, 0)
     });
 
+    if (objectData) {
+        console.log('✅ Demo Cube created through unified system');
+    } else {
+        console.error('❌ Failed to create Demo Cube');
+    }
 }
 
 /**
@@ -460,11 +586,35 @@ function getModlerV2Status() {
 document.addEventListener('DOMContentLoaded', () => {
     const canvas = document.getElementById('canvas');
     if (canvas) {
-        initializeModlerV2(canvas).then(() => {
+        // Starting Modler V2 auto-initialization...
+        initializeModlerV2(canvas).then((success) => {
+            if (success) {
+                console.log('✅ Auto-initialization completed successfully');
+            } else {
+                console.error('❌ Auto-initialization completed with errors');
+            }
         }).catch(error => {
             console.error('❌ Modler V2 auto-initialization failed:', error);
+
+            // Emit failure event for integration systems
+            window.dispatchEvent(new CustomEvent('modlerV2Ready', {
+                detail: {
+                    success: false,
+                    error: error.message || 'Auto-initialization exception',
+                    timestamp: Date.now()
+                }
+            }));
         });
     } else {
         console.error('❌ Canvas element not found - Modler V2 initialization skipped');
+
+        // Emit failure event for missing canvas
+        window.dispatchEvent(new CustomEvent('modlerV2Ready', {
+            detail: {
+                success: false,
+                error: 'Canvas element not found',
+                timestamp: Date.now()
+            }
+        }));
     }
 });

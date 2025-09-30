@@ -75,9 +75,18 @@ class DeleteObjectCommand extends BaseCommand {
                 return false;
             }
 
-            // Notify UI of changes
-            if (window.notifyObjectModified) {
-                this.objectIds.forEach(id => window.notifyObjectModified(id));
+            // Notify UI of changes through ObjectStateManager
+            const objectStateManager = window.modlerComponents?.objectStateManager;
+            if (objectStateManager) {
+                // Use ObjectStateManager to trigger deletion notifications
+                this.objectIds.forEach(id => {
+                    objectStateManager.notifyObjectDeleted(id);
+                });
+            } else {
+                // BYPASS ELIMINATED: ObjectStateManager must be available - no fallback bypasses
+                console.error('❌ DeleteObjectCommand: ObjectStateManager not available - this is an architectural error');
+                console.error('❌ window.notifyObjectModified fallback eliminated to prevent race conditions');
+                return false;
             }
 
             return true;
@@ -116,9 +125,18 @@ class DeleteObjectCommand extends BaseCommand {
                 return false;
             }
 
-            // Notify UI of changes
-            if (window.notifyObjectModified) {
-                this.deletedObjects.forEach(snapshot => window.notifyObjectModified(snapshot.id));
+            // Notify UI of changes through ObjectStateManager
+            const objectStateManager = window.modlerComponents?.objectStateManager;
+            if (objectStateManager) {
+                // Use ObjectStateManager to sync restored objects
+                this.deletedObjects.forEach(snapshot => {
+                    objectStateManager.syncRestoredObject(snapshot.id);
+                });
+            } else {
+                // BYPASS ELIMINATED: ObjectStateManager must be available for undo - no fallback bypasses
+                console.error('❌ DeleteObjectCommand: ObjectStateManager not available for undo - this is an architectural error');
+                console.error('❌ window.notifyObjectModified fallback eliminated to prevent race conditions');
+                return false;
             }
 
             return true;

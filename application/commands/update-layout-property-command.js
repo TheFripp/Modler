@@ -99,8 +99,15 @@ class UpdateLayoutPropertyCommand extends BaseCommand {
                 }
             }
 
-            // Trigger UI updates
-            if (window.modlerComponents?.propertyManager) {
+            // Trigger unified state updates through ObjectStateManager
+            const objectStateManager = window.modlerComponents?.objectStateManager;
+            if (objectStateManager) {
+                // Use ObjectStateManager to sync all layout state changes
+                objectStateManager.updateObject(this.containerId, {
+                    layout: containerData.autoLayout
+                });
+            } else if (window.modlerComponents?.propertyManager) {
+                // Fallback to direct notification
                 window.modlerComponents.propertyManager.notifyObjectModified(containerData);
             }
 

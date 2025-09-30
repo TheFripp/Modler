@@ -10,7 +10,7 @@ class DevelopmentValidator {
         this.originalMethods = new Map();
 
         if (this.enabled) {
-            console.log('🔍 DevelopmentValidator: Monitoring THREE.js object creation');
+            // DevelopmentValidator: Monitoring THREE.js (logging removed to reduce console noise)
             this.initializeValidation();
         }
     }
@@ -243,4 +243,4 @@ window.checkThreeJSValidation = () => developmentValidator.printReport();
 // Export for module usage
 window.DevelopmentValidator = DevelopmentValidator;
 
-console.log('🔍 DevelopmentValidator loaded and ready');
+// DevelopmentValidator loaded and ready (logging removed to reduce console noise)

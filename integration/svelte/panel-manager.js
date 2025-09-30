@@ -270,7 +270,7 @@ class SveltePanelManager {
     }
 
     /**
-     * Create system toolbar
+     * Create system toolbar (floating overlay - legacy)
      */
     createSystemToolbar() {
         if (!this.panels.systemToolbar) {
@@ -289,6 +289,33 @@ class SveltePanelManager {
         `;
 
         this._loadPanelContent('systemToolbar');
+    }
+
+    /**
+     * Create integrated system toolbar (inline in main toolbar)
+     */
+    createIntegratedSystemToolbar() {
+        const container = document.getElementById('system-toolbar-container');
+        if (!container) {
+            console.warn('⚠️ system-toolbar-container not found - falling back to floating toolbar');
+            return this.createSystemToolbar();
+        }
+
+        if (!this.panels.systemToolbar) {
+            this.panels.systemToolbar = document.createElement('div');
+            this.panels.systemToolbar.id = 'svelte-system-toolbar-integrated';
+            container.appendChild(this.panels.systemToolbar);
+        }
+
+        this.panels.systemToolbar.style.cssText = `
+            width: 100%;
+            height: 100%;
+            background: transparent;
+            pointer-events: auto;
+        `;
+
+        this._loadPanelContent('systemToolbar');
+        console.log('✅ System toolbar integrated into main toolbar');
     }
 
     /**

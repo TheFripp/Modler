@@ -11,6 +11,7 @@
 
 class InputController {
     constructor(canvas, camera, scene, sceneController, visualEffects, selectionController) {
+
         // Core 3D components
         this.canvas = canvas;
         this.camera = camera;
@@ -52,6 +53,7 @@ class InputController {
     }
 
     setupEventListeners() {
+
         // Mouse events
         this.canvas.addEventListener('mousemove', this.handleMouseMove, false);
         this.canvas.addEventListener('mousedown', this.handleMouseDown, false);

@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Debug Selection Flow</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; background: #1a1a1a; color: #fff; }
+        .debug-section { margin: 15px 0; padding: 15px; background: #2d2d2d; border-radius: 8px; }
+        .status { padding: 8px; margin: 5px 0; border-radius: 4px; }
+        .success { background: #0f5132; color: #d1e7dd; }
+        .error { background: #842029; color: #f8d7da; }
+        .warning { background: #664d03; color: #fff3cd; }
+        .info { background: #055160; color: #cff4fc; }
+        button { padding: 10px 20px; margin: 5px; background: #0d6efd; color: white; border: none; border-radius: 4px; cursor: pointer; }
+        button:hover { background: #0b5ed7; }
+        pre { background: #000; padding: 10px; border-radius: 4px; overflow-x: auto; }
+    </style>
+</head>
+<body>
+    <h1>🔍 Modler V2 Selection Flow Debug</h1>
+
+    <div class="debug-section">
+        <h2>1. Component Availability Check</h2>
+        <div id="components-status"></div>
+        <button onclick="checkComponents()">🔄 Refresh Component Status</button>
+    </div>
+
+    <div class="debug-section">
+        <h2>2. ObjectStateManager Status</h2>
+        <div id="osm-status"></div>
+        <button onclick="checkObjectStateManager()">🔍 Check ObjectStateManager</button>
+    </div>
+
+    <div class="debug-section">
+        <h2>3. Selection Event Test</h2>
+        <div id="selection-test"></div>
+        <button onclick="testSelectionEvents()">🧪 Test Selection Events</button>
+        <button onclick="simulateSelection()">⚡ Simulate Selection</button>
+    </div>
+
+    <div class="debug-section">
+        <h2>4. Objects in Scene</h2>
+        <div id="scene-objects"></div>
+        <button onclick="listSceneObjects()">📋 List Scene Objects</button>
+    </div>
+
+    <div class="debug-section">
+        <h2>5. Manual Selection Test</h2>
+        <div id="manual-test"></div>
+        <button onclick="manualSelectFirst()">👆 Manually Select First Object</button>
+    </div>
+
+    <script>
+        function addStatus(containerId, message, type = 'info') {
+            const container = document.getElementById(containerId);
+            const div = document.createElement('div');
+            div.className = `status ${type}`;
+            div.textContent = message;
+            container.appendChild(div);
+        }
+
+        function clearStatus(containerId) {
+            document.getElementById(containerId).innerHTML = '';
+        }
+
+        function checkComponents() {
+            clearStatus('components-status');
+
+            const components = window.modlerComponents || {};
+            const expectedComponents = [
+                'sceneController',
+                'selectionController',
+                'objectStateManager',
+                'inputController',
+                'toolController'
+            ];
+
+            addStatus('components-status', `🔍 Checking ${expectedComponents.length} expected components...`, 'info');
+
+            expectedComponents.forEach(name => {
+                if (components[name]) {
+                    addStatus('components-status', `✅ ${name} - Available`, 'success');
+                } else {
+                    addStatus('components-status', `❌ ${name} - Missing`, 'error');
+                }
+            });
+
+            addStatus('components-status', `📊 Total available components: ${Object.keys(components).length}`, 'info');
+        }
+
+        function checkObjectStateManager() {
+            clearStatus('osm-status');
+
+            const osm = window.modlerComponents?.objectStateManager;
+            if (!osm) {
+                addStatus('osm-status', '❌ ObjectStateManager not found', 'error');
+                return;
+            }
+
+            addStatus('osm-status', '✅ ObjectStateManager found', 'success');
+
+            // Check if it has objects
+            const objectCount = osm.objects ? osm.objects.size : 0;
+            addStatus('osm-status', `📊 Objects in ObjectStateManager: ${objectCount}`, 'info');
+
+            // Check current selection
+            const selection = osm.getSelection ? osm.getSelection() : [];
+            addStatus('osm-status', `🎯 Current selection: ${selection.length} objects`, 'info');
+
+            // Check if SelectionController is connected
+            const selectionController = window.modlerComponents?.selectionController;
+            if (selectionController) {
+                addStatus('osm-status', '✅ SelectionController is available', 'success');
+
+                // Check if SelectionController has event listeners
+                if (selectionController.addEventListener) {
+                    addStatus('osm-status', '✅ SelectionController supports events', 'success');
+                } else {
+                    addStatus('osm-status', '⚠️ SelectionController missing addEventListener', 'warning');
+                }
+            } else {
+                addStatus('osm-status', '❌ SelectionController not found', 'error');
+            }
+        }
+
+        function testSelectionEvents() {
+            clearStatus('selection-test');
+
+            const osm = window.modlerComponents?.objectStateManager;
+            const selectionController = window.modlerComponents?.selectionController;
+
+            if (!osm || !selectionController) {
+                addStatus('selection-test', '❌ Missing required components', 'error');
+                return;
+            }
+
+            // Add a test listener to ObjectStateManager
+            addStatus('selection-test', '🔗 Adding test listener to ObjectStateManager...', 'info');
+
+            osm.addEventListener('selection-changed', (event) => {
+                addStatus('selection-test', `📢 ObjectStateManager selection-changed: ${JSON.stringify(event.detail)}`, 'success');
+            });
+
+            // Add a test listener to SelectionController
+            addStatus('selection-test', '🔗 Adding test listener to SelectionController...', 'info');
+
+            selectionController.addEventListener('selectionChanged', (event) => {
+                addStatus('selection-test', `📢 SelectionController selectionChanged: ${JSON.stringify(event.detail)}`, 'success');
+            });
+
+            addStatus('selection-test', '✅ Event listeners added. Try selecting an object now!', 'success');
+        }
+
+        function simulateSelection() {
+            clearStatus('selection-test');
+
+            const selectionController = window.modlerComponents?.selectionController;
+            if (!selectionController) {
+                addStatus('selection-test', '❌ SelectionController not found', 'error');
+                return;
+            }
+
+            addStatus('selection-test', '⚡ Simulating SelectionController event...', 'info');
+
+            // Create a fake mesh object
+            const fakeMesh = {
+                userData: { id: 'test-object-1' },
+                uuid: 'test-uuid-123'
+            };
+
+            // Manually trigger a selection event
+            const event = new CustomEvent('selectionChanged', {
+                detail: {
+                    selectedObjects: [fakeMesh]
+                }
+            });
+
+            selectionController.dispatchEvent(event);
+            addStatus('selection-test', '📡 Simulated selection event dispatched', 'success');
+        }
+
+        function listSceneObjects() {
+            clearStatus('scene-objects');
+
+            const sceneController = window.modlerComponents?.sceneController;
+            if (!sceneController) {
+                addStatus('scene-objects', '❌ SceneController not found', 'error');
+                return;
+            }
+
+            const objects = sceneController.getAllObjects ? sceneController.getAllObjects() : [];
+            addStatus('scene-objects', `📊 Found ${objects.length} objects in scene`, 'info');
+
+            objects.forEach((obj, index) => {
+                const name = obj.name || 'Unnamed';
+                const id = obj.id || 'No ID';
+                const type = obj.type || 'Unknown';
+                addStatus('scene-objects', `${index + 1}. ${name} (ID: ${id}, Type: ${type})`, 'info');
+            });
+
+            if (objects.length === 0) {
+                addStatus('scene-objects', '⚠️ No objects found in scene! This explains why selection isn\'t working.', 'warning');
+            }
+        }
+
+        function manualSelectFirst() {
+            clearStatus('manual-test');
+
+            const sceneController = window.modlerComponents?.sceneController;
+            const selectionController = window.modlerComponents?.selectionController;
+
+            if (!sceneController || !selectionController) {
+                addStatus('manual-test', '❌ Required components not found', 'error');
+                return;
+            }
+
+            const objects = sceneController.getAllObjects ? sceneController.getAllObjects() : [];
+            if (objects.length === 0) {
+                addStatus('manual-test', '❌ No objects to select', 'error');
+                return;
+            }
+
+            const firstObject = objects[0];
+            addStatus('manual-test', `👆 Manually selecting: ${firstObject.name || 'Unnamed'} (ID: ${firstObject.id})`, 'info');
+
+            // Try to manually call selection
+            if (selectionController.selectObject) {
+                selectionController.selectObject(firstObject.mesh || firstObject);
+                addStatus('manual-test', '✅ Called selectObject method', 'success');
+            } else if (selectionController.setSelection) {
+                selectionController.setSelection([firstObject.mesh || firstObject]);
+                addStatus('manual-test', '✅ Called setSelection method', 'success');
+            } else {
+                addStatus('manual-test', '❌ No selection method found on SelectionController', 'error');
+            }
+        }
+
+        // Auto-run component check on load
+        window.addEventListener('load', () => {
+            setTimeout(() => {
+                checkComponents();
+                checkObjectStateManager();
+                listSceneObjects();
+            }, 1000);
+        });
+    </script>
+</body>
+</html>

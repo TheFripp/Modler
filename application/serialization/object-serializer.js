@@ -1,17 +1,17 @@
 /**
  * ObjectSerializer - Unified Object Serialization System
  *
- * Single source of truth for converting Three.js objects to serialized data
- * for transmission to Svelte UI. Consolidates all serialization logic that
- * was previously scattered across multiple files.
+ * UPDATED: Now uses central ObjectDataFormat for consistency
+ * Single source of truth for converting Three.js objects to standardized data
+ * for transmission to Svelte UI.
  *
  * Features:
+ * - Uses ObjectDataFormat.standardizeObjectData() for consistency
  * - GeometryUtils integration for accurate dimensions
- * - Consistent field naming throughout system
  * - Robust error handling and fallbacks
  * - Support for all object types (regular, containers)
  * - Performance optimization for batch operations
- * - Extensible for future object properties
+ * - Format validation and versioning
  */
 
 class ObjectSerializer {
@@ -20,6 +20,7 @@ class ObjectSerializer {
         this.geometryUtils = null;
         this.sceneController = null;
         this.propertySchemaRegistry = null;
+        this.objectDataFormat = null;
 
         // Cache for performance
         this.serializationCache = new Map();
@@ -57,6 +58,9 @@ class ObjectSerializer {
         }
         if (!this.propertySchemaRegistry) {
             this.propertySchemaRegistry = window.propertySchemaRegistry;
+        }
+        if (!this.objectDataFormat) {
+            this.objectDataFormat = window.ObjectDataFormat;
         }
     }
 
@@ -106,32 +110,42 @@ class ObjectSerializer {
                 return null;
             }
 
-            // Build core serialized object
-            const serialized = this.buildCoreData(obj, objectData);
+            // Use central ObjectDataFormat for standardization
+            let serialized;
+            if (this.objectDataFormat) {
+                // Create source data for standardization
+                const sourceData = this.prepareSourceData(obj, objectData, {
+                    includeGeometry,
+                    includeHierarchy
+                });
 
-            // Add geometry data if requested
-            if (includeGeometry) {
-                this.addGeometryData(serialized, obj);
+                // Standardize using central format module
+                serialized = this.objectDataFormat.standardizeObjectData(sourceData);
+
+                // Validate the result
+                const validation = this.objectDataFormat.validateObjectData(serialized);
+                if (!validation.isValid) {
+                    console.warn('ObjectSerializer: Generated invalid data:', validation.errors);
+                }
+            } else {
+                // Fallback to legacy method if ObjectDataFormat not available
+                console.warn('ObjectSerializer: ObjectDataFormat not available, using legacy method');
+                serialized = this.buildCoreDataLegacy(obj, objectData);
+
+                // Add additional data using legacy methods
+                if (includeGeometry) {
+                    this.addGeometryData(serialized, obj);
+                }
+                this.addMaterialData(serialized, obj);
+                if (objectData.isContainer) {
+                    this.addContainerData(serialized, objectData);
+                }
+                if (includeHierarchy) {
+                    this.addHierarchyData(serialized, objectData);
+                }
+                this.addParametricData(serialized, objectData);
+                this.addInstanceData(serialized, objectData);
             }
-
-            // Add material data
-            this.addMaterialData(serialized, obj);
-
-            // Add container-specific data
-            if (objectData.isContainer) {
-                this.addContainerData(serialized, objectData);
-            }
-
-            // Add hierarchy data if requested
-            if (includeHierarchy) {
-                this.addHierarchyData(serialized, objectData);
-            }
-
-            // Add parametric data if object has parametric properties
-            this.addParametricData(serialized, objectData);
-
-            // Add component instancing data if applicable
-            this.addInstanceData(serialized, objectData);
 
             // Cache the result
             if (useCache) {
@@ -184,10 +198,87 @@ class ObjectSerializer {
     }
 
     /**
-     * Build core object data (always included)
+     * Prepare source data for ObjectDataFormat standardization
      * @private
      */
-    buildCoreData(obj, objectData) {
+    prepareSourceData(obj, objectData, options = {}) {
+        const { includeGeometry = true, includeHierarchy = true } = options;
+
+        // Prepare Three.js object with enhanced data for standardization
+        const sourceData = {
+            // Copy the Three.js object properties for format detection
+            position: obj.position,
+            rotation: obj.rotation,
+            scale: obj.scale,
+            material: obj.material,
+            geometry: obj.geometry,
+            userData: obj.userData,
+
+            // Enhanced data from SceneController
+            id: objectData.id,
+            name: objectData.name,
+            type: objectData.type,
+            isContainer: objectData.isContainer,
+            parentContainer: objectData.parentContainer,
+
+            // Add computed dimensions if geometry is requested
+            dimensions: includeGeometry ? this.computeDimensions(obj) : objectData.dimensions,
+
+            // Add hierarchy data if requested
+            children: includeHierarchy ? objectData.children : undefined,
+            layout: includeHierarchy ? objectData.layout : undefined,
+            autoLayout: objectData.autoLayout,
+
+            // Add parametric and instance data
+            parametricProperties: objectData.parametricProperties,
+            masterId: objectData.masterId,
+            isMaster: objectData.isMaster,
+            instanceType: objectData.instanceType,
+            canModify: objectData.canModify,
+            inheritedProperties: objectData.inheritedProperties,
+            componentType: objectData.componentType
+        };
+
+        return sourceData;
+    }
+
+    /**
+     * Compute dimensions using GeometryUtils or fallback
+     * @private
+     */
+    computeDimensions(obj) {
+        if (!obj.geometry) return { x: 1, y: 1, z: 1 };
+
+        // Try GeometryUtils first (handles modified geometries correctly)
+        if (this.geometryUtils) {
+            const dimensions = this.geometryUtils.getGeometryDimensions(obj.geometry);
+            if (dimensions) {
+                return {
+                    x: parseFloat(dimensions.x.toFixed(this.PRECISION.dimensions)),
+                    y: parseFloat(dimensions.y.toFixed(this.PRECISION.dimensions)),
+                    z: parseFloat(dimensions.z.toFixed(this.PRECISION.dimensions))
+                };
+            }
+        }
+
+        // Fallback to geometry parameters for basic geometries
+        if (obj.geometry.parameters) {
+            const params = obj.geometry.parameters;
+            return {
+                x: parseFloat((params.width || 1).toFixed(this.PRECISION.dimensions)),
+                y: parseFloat((params.height || 1).toFixed(this.PRECISION.dimensions)),
+                z: parseFloat((params.depth || 1).toFixed(this.PRECISION.dimensions))
+            };
+        }
+
+        return { x: 1, y: 1, z: 1 };
+    }
+
+    /**
+     * Build core object data (legacy method for fallback)
+     * @private
+     */
+    buildCoreDataLegacy(obj, objectData) {
         return {
             id: objectData.id,
             name: objectData.name,
@@ -250,7 +341,7 @@ class ObjectSerializer {
         if (!obj.material) return;
 
         serialized.material = {
-            color: obj.material.color ? obj.material.color.getHexString() : 'ffffff',
+            color: obj.material.color ? '#' + obj.material.color.getHexString() : '#ffffff',
             opacity: obj.material.opacity !== undefined ? obj.material.opacity : 1,
             transparent: obj.material.transparent || false
         };
@@ -525,6 +616,57 @@ class ObjectSerializer {
     }
 
     /**
+     * Serialize object for PostMessage transmission using standard format
+     * @param {THREE.Object3D} obj - Object to serialize
+     * @param {Object} options - Serialization options
+     * @returns {Object|null} PostMessage-safe standard format
+     */
+    serializeForPostMessage(obj, options = {}) {
+        try {
+            const standardData = this.serializeObject(obj, options);
+
+            if (!standardData || !this.objectDataFormat) {
+                return standardData; // Return as-is if ObjectDataFormat not available
+            }
+
+            // Use ObjectDataFormat for PostMessage serialization
+            return this.objectDataFormat.serializeForPostMessage(standardData);
+
+        } catch (error) {
+            console.error('ObjectSerializer.serializeForPostMessage error:', error);
+            return null;
+        }
+    }
+
+    /**
+     * Batch serialize objects for PostMessage transmission
+     * @param {Array<THREE.Object3D>} objects - Objects to serialize
+     * @param {Object} options - Serialization options
+     * @returns {Array<Object>} Array of PostMessage-safe objects
+     */
+    serializeBatchForPostMessage(objects, options = {}) {
+        try {
+            if (!Array.isArray(objects) || objects.length === 0) {
+                return [];
+            }
+
+            const results = [];
+            for (const obj of objects) {
+                const serialized = this.serializeForPostMessage(obj, options);
+                if (serialized) {
+                    results.push(serialized);
+                }
+            }
+
+            return results;
+
+        } catch (error) {
+            console.error('ObjectSerializer.serializeBatchForPostMessage error:', error);
+            return [];
+        }
+    }
+
+    /**
      * Dispose of the serializer and clean up resources
      */
     dispose() {
@@ -532,6 +674,7 @@ class ObjectSerializer {
         this.geometryUtils = null;
         this.sceneController = null;
         this.propertySchemaRegistry = null;
+        this.objectDataFormat = null;
     }
 }
 

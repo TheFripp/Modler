@@ -21,6 +21,7 @@ class MaterialManager {
             AXIS_HIGHLIGHT: 'axis-highlight',
             PADDING_VISUALIZATION: 'padding-viz',
             PREVIEW_WIREFRAME: 'preview-wireframe',
+            CAD_WIREFRAME: 'cad-wireframe',
             LAYOUT_GUIDE: 'layout-guide',
             HOVER_EFFECT: 'hover-effect'
         };
@@ -394,6 +395,50 @@ class MaterialManager {
         });
 
         return this.cacheMaterial(key, material, this.materialTypes.PREVIEW_WIREFRAME);
+    }
+
+    /**
+     * Create CAD edge wireframe material (always visible, 50% opacity)
+     * @param {Object} options - Material options
+     * @returns {THREE.LineBasicMaterial} CAD wireframe material
+     */
+    createCadEdgeMaterial(options = {}) {
+        const configManager = this.getConfigManager();
+
+        // Build configuration for CAD wireframe
+        const config = {
+            color: options.color || configManager?.get('visual.cad.wireframe.color') || '#666666',
+            lineWidth: options.lineWidth || configManager?.get('visual.cad.wireframe.lineWidth') || 1,
+            opacity: options.opacity !== undefined ? options.opacity : (configManager?.get('visual.cad.wireframe.opacity') !== undefined ? configManager.get('visual.cad.wireframe.opacity') : 0.5),
+            transparent: true,
+            ...options
+        };
+
+        // Generate cache key
+        const key = this.generateMaterialKey(this.materialTypes.CAD_WIREFRAME, config);
+
+        // Check cache
+        const cached = this.getMaterialFromCache(key);
+        if (cached) return cached;
+
+        // Create new material
+        let colorHex;
+        if (typeof config.color === 'string') {
+            colorHex = parseInt(config.color.replace('#', ''), 16);
+        } else if (typeof config.color === 'number') {
+            colorHex = config.color;
+        } else {
+            colorHex = 0x666666; // Default to gray
+        }
+
+        const material = new THREE.LineBasicMaterial({
+            color: colorHex,
+            transparent: config.transparent,
+            opacity: config.opacity,
+            linewidth: config.lineWidth
+        });
+
+        return this.cacheMaterial(key, material, this.materialTypes.CAD_WIREFRAME);
     }
 
     /**
@@ -862,6 +907,33 @@ class MaterialManager {
         };
 
         console.log('MaterialManager: Destroyed and cleaned up');
+    }
+
+    /**
+     * Clear material cache for specific material type
+     * @param {string} materialType - Material type to clear from cache
+     */
+    clearMaterialCache(materialType) {
+        if (!materialType) {
+            console.warn('MaterialManager: No material type specified for cache clear');
+            return;
+        }
+
+        let clearedCount = 0;
+
+        // Clear materials from cache that match the type
+        for (const [key, material] of this.materialCache) {
+            if (key.includes(materialType)) {
+                // Dispose of the material
+                if (material && typeof material.dispose === 'function') {
+                    material.dispose();
+                }
+                this.materialCache.delete(key);
+                clearedCount++;
+            }
+        }
+
+        // MaterialManager cleared cached materials (logging removed to reduce console noise)
     }
 }
 

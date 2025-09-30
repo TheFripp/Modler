@@ -27,12 +27,25 @@
 </script>
 
 <div class={cn('property-group', className)} {...restProps}>
-	<div class="property-group-header mb-2">
-		<h3 class="text-xs font-medium text-muted-foreground mb-2 text-right">{title}</h3>
+	<div
+		class={cn(
+			"property-group-header mb-2",
+			collapsible && "cursor-pointer select-none hover:text-foreground transition-colors pb-2 border-b border-[#2E2E2E]"
+		)}
+		onclick={toggleCollapse}
+		role={collapsible ? "button" : undefined}
+		tabindex={collapsible ? 0 : undefined}
+	>
+		<div class="flex items-center justify-between">
+			<h3 class="text-xs font-medium text-muted-foreground text-left">{title}</h3>
+			{#if collapsible}
+				<span class="text-xs text-muted-foreground transition-transform" style="transform: rotate({isCollapsed ? -90 : 0}deg)">▼</span>
+			{/if}
+		</div>
 	</div>
 
 	{#if !isCollapsed}
-		<div class="property-group-content">
+		<div class="property-group-content pt-3 pb-2">
 			{@render children?.()}
 		</div>
 	{/if}

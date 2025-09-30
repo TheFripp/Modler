@@ -18,8 +18,17 @@ class PropertyPanelSync {
         this.eventBus = eventBus;
         this.panelManager = panelManager;
 
-        // Initialize serializer
-        this.serializer = new ObjectSerializer();
+        // Support both legacy PanelManager and new DirectComponentManager
+        // DirectComponentManager is passed as panelManager in new architecture
+        this.componentManager = panelManager;
+
+        // Initialize serializer with error handling
+        try {
+            this.serializer = new ObjectSerializer();
+        } catch (error) {
+            console.error('PropertyPanelSync: Failed to initialize ObjectSerializer:', error);
+            this.serializer = null;
+        }
 
         // Component references
         this.sceneController = null;
@@ -44,19 +53,86 @@ class PropertyPanelSync {
         this.uiThrottleMap = new Map(); // eventType+objectId -> timeout
         this.UI_THROTTLE_DELAY = 33; // ~30fps for UI updates (smoother than 60fps for UI)
 
-        // Initialize subscriptions
+        // Initialization state tracking
+        this.initialized = false;
+        this.initializationRetries = 0;
+        this.maxInitializationRetries = 3;
+
+        // Initialize subscriptions and components
         this.setupEventSubscriptions();
         this.initializeComponents();
+
+        // Initialize communication architecture guards
+        this.setupArchitectureGuards();
     }
 
     /**
-     * Initialize component references
+     * Initialize component references with validation
      */
     initializeComponents() {
-        this.sceneController = window.modlerComponents?.sceneController;
-        this.selectionController = window.modlerComponents?.selectionController;
-        this.snapController = window.modlerComponents?.snapController;
-        this.navigationController = window.modlerComponents?.navigationController;
+        try {
+            this.sceneController = window.modlerComponents?.sceneController;
+            this.selectionController = window.modlerComponents?.selectionController;
+            this.snapController = window.modlerComponents?.snapController;
+            this.navigationController = window.modlerComponents?.navigationController;
+
+            // Validate initialization
+            this.initialized = this.validateInitialization();
+
+            if (!this.initialized) {
+                console.warn(`PropertyPanelSync: Initialization incomplete (attempt ${this.initializationRetries + 1}/${this.maxInitializationRetries})`);
+                this.initializationRetries++;
+
+                // Retry initialization after a delay if components aren't ready
+                if (this.initializationRetries < this.maxInitializationRetries) {
+                    setTimeout(() => this.initializeComponents(), 500);
+                }
+            } else {
+                console.log('PropertyPanelSync: Successfully initialized with all components');
+                this.initializationRetries = 0;
+            }
+        } catch (error) {
+            console.error('PropertyPanelSync: Component initialization failed:', error);
+            this.initialized = false;
+        }
+    }
+
+    /**
+     * Validate that all critical components are available
+     */
+    validateInitialization() {
+        const critical = {
+            eventBus: this.eventBus,
+            componentManager: this.componentManager,
+            sceneController: this.sceneController,
+            selectionController: this.selectionController
+        };
+
+        const missing = Object.entries(critical)
+            .filter(([name, component]) => !component)
+            .map(([name]) => name);
+
+        if (missing.length > 0) {
+            console.warn('PropertyPanelSync: Missing critical components:', missing.join(', '));
+            return false;
+        }
+
+        // Optional components (warn but don't fail initialization)
+        const optional = {
+            snapController: this.snapController,
+            navigationController: this.navigationController,
+            serializer: this.serializer
+        };
+
+        const missingOptional = Object.entries(optional)
+            .filter(([name, component]) => !component)
+            .map(([name]) => name);
+
+        if (missingOptional.length > 0) {
+            console.warn('PropertyPanelSync: Missing optional components:', missingOptional.join(', '));
+        }
+
+        return true;
     }
 
     /**
@@ -104,6 +180,14 @@ class PropertyPanelSync {
             )
         );
 
+        this.subscriptions.push(
+            this.eventBus.subscribe(
+                this.eventBus.EVENT_TYPES.LIFECYCLE,
+                this.handleLifecycleEvent.bind(this),
+                { subscriberId: 'PropertyPanelSync_Lifecycle' }
+            )
+        );
+
         // Subscribe to parametric design events
         this.subscriptions.push(
             this.eventBus.subscribe(
@@ -147,6 +231,18 @@ class PropertyPanelSync {
             this.stats.eventsProcessed++;
             this.stats.transformEvents++;
 
+            // Check initialization before processing
+            if (!this.initialized) {
+                console.warn('PropertyPanelSync: Not initialized, skipping transform event');
+                return;
+            }
+
+            // Check serializer availability
+            if (!this.serializer) {
+                console.warn('PropertyPanelSync: Serializer not available, skipping transform event');
+                return;
+            }
+
             // Get the object from scene
             const object = this.getObjectById(event.objectId);
             if (!object) return;
@@ -154,8 +250,11 @@ class PropertyPanelSync {
             // Check if object is currently selected
             if (!this.isObjectSelected(object)) return;
 
-            // Serialize with transform optimization
-            const serializedData = this.serializer.serializeForChangeType(object, 'transform');
+            // Serialize with transform optimization for PostMessage
+            const serializedData = this.serializer.serializeForPostMessage(object, {
+                changeType: 'transform',
+                includeGeometry: false
+            });
             if (!serializedData) return;
 
             // Send to UI with transform-specific update type
@@ -185,8 +284,11 @@ class PropertyPanelSync {
             // Check if object is currently selected
             if (!this.isObjectSelected(object)) return;
 
-            // Serialize with geometry optimization (forces fresh calculation)
-            const serializedData = this.serializer.serializeForChangeType(object, 'geometry');
+            // Serialize with geometry optimization for PostMessage (forces fresh calculation)
+            const serializedData = this.serializer.serializeForPostMessage(object, {
+                changeType: 'geometry',
+                useCache: false
+            });
             if (!serializedData) return;
 
             // Send to UI with geometry-specific update type
@@ -215,8 +317,12 @@ class PropertyPanelSync {
             // Check if object is currently selected
             if (!this.isObjectSelected(object)) return;
 
-            // Serialize with material optimization
-            const serializedData = this.serializer.serializeForChangeType(object, 'material');
+            // Serialize with material optimization for PostMessage
+            const serializedData = this.serializer.serializeForPostMessage(object, {
+                changeType: 'material',
+                includeGeometry: false,
+                includeHierarchy: false
+            });
             if (!serializedData) return;
 
             // Send to UI with material-specific update type
@@ -239,9 +345,21 @@ class PropertyPanelSync {
             this.stats.eventsProcessed++;
             this.stats.selectionEvents++;
 
+            // Check initialization before processing
+            if (!this.initialized) {
+                console.warn('PropertyPanelSync: Not initialized, skipping selection event');
+                return;
+            }
+
+            // Check serializer availability
+            if (!this.serializer) {
+                console.warn('PropertyPanelSync: Serializer not available, skipping selection event');
+                return;
+            }
+
             // Selection events need different handling
             const selectedObjects = this.getCurrentSelection();
-            const serializedObjects = this.serializer.serializeBatch(selectedObjects);
+            const serializedObjects = this.serializer.serializeBatchForPostMessage(selectedObjects);
 
             // Send to all relevant panels
             this.sendToUI('selection-change', serializedObjects, {
@@ -267,6 +385,24 @@ class PropertyPanelSync {
 
         } catch (error) {
             console.error('PropertyPanelSync.handleHierarchyEvent error:', error);
+            this.stats.messagesFailed++;
+        }
+    }
+
+    /**
+     * Handle lifecycle events (object create/delete operations)
+     */
+    handleLifecycleEvent(event) {
+        try {
+            this.stats.eventsProcessed++;
+
+            // Lifecycle events (create/delete) require full hierarchy refresh
+            this.refreshCompleteHierarchy();
+
+            console.log('🔄 PropertyPanelSync: Lifecycle event handled -', event.changeData?.action, event.objectId);
+
+        } catch (error) {
+            console.error('PropertyPanelSync.handleLifecycleEvent error:', error);
             this.stats.messagesFailed++;
         }
     }
@@ -350,7 +486,22 @@ class PropertyPanelSync {
             return;
         }
 
-        const iframes = this.panelManager.getIframes();
+        // Support both legacy PanelManager and DirectComponentManager
+        let iframes;
+        if (typeof this.panelManager.getIframes === 'function') {
+            // Legacy PanelManager
+            iframes = this.panelManager.getIframes();
+        } else if (this.panelManager.componentInstances) {
+            // DirectComponentManager - convert to iframe format
+            iframes = {
+                left: this.panelManager.componentInstances.leftPanel?.iframe,
+                right: this.panelManager.componentInstances.propertyPanel?.iframe,
+                mainToolbar: this.panelManager.componentInstances.mainToolbar?.iframe
+            };
+        } else {
+            console.warn('PropertyPanelSync: Unable to get iframes from panel manager');
+            return;
+        }
 
         for (const panelName of panels) {
             try {
@@ -393,13 +544,20 @@ class PropertyPanelSync {
      * @private
      */
     getObjectById(objectId) {
-        if (!this.sceneController) {
-            this.initializeComponents();
-            if (!this.sceneController) return null;
+        if (!this.initialized || !this.sceneController) {
+            if (!this.initialized) {
+                console.warn('PropertyPanelSync: Not fully initialized, cannot get object');
+            }
+            return null;
         }
 
-        const objectData = this.sceneController.getObject(objectId);
-        return objectData?.mesh || null;
+        try {
+            const objectData = this.sceneController.getObject(objectId);
+            return objectData?.mesh || null;
+        } catch (error) {
+            console.error('PropertyPanelSync.getObjectById error:', error);
+            return null;
+        }
     }
 
     /**
@@ -407,12 +565,19 @@ class PropertyPanelSync {
      * @private
      */
     isObjectSelected(object) {
-        if (!this.selectionController) {
-            this.initializeComponents();
-            if (!this.selectionController) return false;
+        if (!this.initialized || !this.selectionController) {
+            if (!this.initialized) {
+                console.warn('PropertyPanelSync: Not fully initialized, cannot check selection');
+            }
+            return false;
         }
 
-        return this.selectionController.selectedObjects.has(object);
+        try {
+            return this.selectionController.selectedObjects.has(object);
+        } catch (error) {
+            console.error('PropertyPanelSync.isObjectSelected error:', error);
+            return false;
+        }
     }
 
     /**
@@ -420,12 +585,19 @@ class PropertyPanelSync {
      * @private
      */
     getCurrentSelection() {
-        if (!this.selectionController) {
-            this.initializeComponents();
-            if (!this.selectionController) return [];
+        if (!this.initialized || !this.selectionController) {
+            if (!this.initialized) {
+                console.warn('PropertyPanelSync: Not fully initialized, cannot get selection');
+            }
+            return [];
         }
 
-        return Array.from(this.selectionController.selectedObjects);
+        try {
+            return Array.from(this.selectionController.selectedObjects);
+        } catch (error) {
+            console.error('PropertyPanelSync.getCurrentSelection error:', error);
+            return [];
+        }
     }
 
     /**
@@ -433,17 +605,23 @@ class PropertyPanelSync {
      * @private
      */
     getContainerContext() {
+        // Navigation controller is optional - don't fail if not available
         if (!this.navigationController) {
-            this.initializeComponents();
+            return null;
         }
 
-        const containerContext = this.navigationController?.getCurrentContainer() || null;
+        try {
+            const containerContext = this.navigationController.getCurrentContainer() || null;
 
-        return containerContext ? {
-            id: containerContext.id,
-            name: containerContext.name,
-            mesh: containerContext.mesh ? 'present' : null
-        } : null;
+            return containerContext ? {
+                id: containerContext.id,
+                name: containerContext.name,
+                mesh: containerContext.mesh ? 'present' : null
+            } : null;
+        } catch (error) {
+            console.error('PropertyPanelSync.getContainerContext error:', error);
+            return null;
+        }
     }
 
     /**
@@ -451,9 +629,11 @@ class PropertyPanelSync {
      * @private
      */
     refreshCompleteHierarchy() {
-        if (!this.sceneController) {
-            this.initializeComponents();
-            if (!this.sceneController) return;
+        if (!this.initialized || !this.sceneController) {
+            if (!this.initialized) {
+                console.warn('PropertyPanelSync: Not fully initialized, cannot refresh hierarchy');
+            }
+            return;
         }
 
         try {
@@ -468,9 +648,26 @@ class PropertyPanelSync {
                 !obj.name?.toLowerCase().includes('interactive')
             );
 
-            const serializedObjects = filteredObjects.map(objData =>
-                this.serializer.serializeObject(objData.mesh)
-            ).filter(Boolean);
+            // Serialize objects safely for PostMessage transmission
+            const serializedObjects = [];
+            if (this.serializer) {
+                for (const objData of filteredObjects) {
+                    try {
+                        const serialized = this.serializer.serializeForPostMessage(objData.mesh, {
+                            includeHierarchy: true,
+                            changeType: 'hierarchy'
+                        });
+                        if (serialized) {
+                            serializedObjects.push(serialized);
+                        }
+                    } catch (error) {
+                        console.error('PropertyPanelSync: Failed to serialize object:', objData.name, error);
+                    }
+                }
+            } else {
+                console.warn('PropertyPanelSync: Serializer not available, cannot serialize hierarchy');
+                return;
+            }
 
             // Send hierarchy update
             this.sendToUI('hierarchy-changed', serializedObjects, {
@@ -525,7 +722,7 @@ class PropertyPanelSync {
         try {
             const selectedObjects = this.getCurrentSelection();
             if (selectedObjects.length > 0) {
-                const serializedObjects = this.serializer.serializeBatch(selectedObjects);
+                const serializedObjects = this.serializer.serializeBatchForPostMessage(selectedObjects);
                 this.sendToUI('property-refresh', serializedObjects, {
                     throttle: false,
                     panels: ['right']
@@ -675,6 +872,370 @@ class PropertyPanelSync {
         }
     }
 
+    // ===========================
+    // UNIFIED COMMUNICATION METHODS
+    // These methods replace direct PostMessage calls from Svelte components
+    // ===========================
+
+    /**
+     * Send object movement/reordering commands through unified system
+     * Replaces direct PostMessage calls from left-panel drag & drop operations
+     */
+    sendObjectMovement(operation, data) {
+        try {
+            // Validate operation type
+            const validOperations = ['move-to-container', 'move-to-root', 'reorder-container', 'reorder-root'];
+            if (!validOperations.includes(operation)) {
+                console.error('PropertyPanelSync.sendObjectMovement: Invalid operation:', operation);
+                return false;
+            }
+
+            // Get all panel iframes
+            const iframes = this.panelManager.getIframes();
+
+            // Create unified message format
+            const message = {
+                type: `object-${operation}`,
+                data: data,
+                timestamp: Date.now(),
+                source: 'PropertyPanelSync'
+            };
+
+            // Send to main window (integration layer will handle the operation)
+            if (window.parent && window.parent !== window) {
+                // Authorize this message before sending
+                this.authorizePostMessage(message);
+                window.parent.postMessage(message, '*');
+                this.stats.messagesSucceeded++;
+                return true;
+            }
+
+            // Direct mode: send to integration handler
+            if (window.handleUnifiedObjectMovement) {
+                window.handleUnifiedObjectMovement(operation, data);
+                this.stats.messagesSucceeded++;
+                return true;
+            }
+
+            console.warn('PropertyPanelSync.sendObjectMovement: No handler available');
+            return false;
+
+        } catch (error) {
+            console.error('PropertyPanelSync.sendObjectMovement error:', error);
+            this.stats.messagesFailed++;
+            return false;
+        }
+    }
+
+    /**
+     * Send tool activation commands through unified system
+     * Replaces direct PostMessage calls from threejs-bridge
+     */
+    sendToolActivation(toolName, additionalData = {}) {
+        try {
+            // Create unified message format
+            const message = {
+                type: 'tool-activation',
+                data: {
+                    toolName: toolName,
+                    ...additionalData
+                },
+                timestamp: Date.now(),
+                source: 'PropertyPanelSync'
+            };
+
+            // Send to main window
+            if (window.parent && window.parent !== window) {
+                // Authorize this message before sending
+                this.authorizePostMessage(message);
+                window.parent.postMessage(message, '*');
+                this.stats.messagesSucceeded++;
+                return true;
+            }
+
+            // Direct mode: use existing tool activation if available
+            if (window.activateTool) {
+                window.activateTool(toolName);
+                this.stats.messagesSucceeded++;
+                return true;
+            }
+
+            console.warn('PropertyPanelSync.sendToolActivation: No handler available');
+            return false;
+
+        } catch (error) {
+            console.error('PropertyPanelSync.sendToolActivation error:', error);
+            this.stats.messagesFailed++;
+            return false;
+        }
+    }
+
+    /**
+     * Send snap toggle commands through unified system
+     * Replaces direct PostMessage calls from threejs-bridge
+     */
+    sendSnapToggle() {
+        try {
+            // Create unified message format
+            const message = {
+                type: 'snap-toggle',
+                data: {},
+                timestamp: Date.now(),
+                source: 'PropertyPanelSync'
+            };
+
+            // Send to main window
+            if (window.parent && window.parent !== window) {
+                // Authorize this message before sending
+                this.authorizePostMessage(message);
+                window.parent.postMessage(message, '*');
+                this.stats.messagesSucceeded++;
+                return true;
+            }
+
+            // Direct mode: use existing snap toggle if available
+            if (window.toggleSnapping) {
+                window.toggleSnapping();
+                this.stats.messagesSucceeded++;
+                return true;
+            }
+
+            console.warn('PropertyPanelSync.sendSnapToggle: No handler available');
+            return false;
+
+        } catch (error) {
+            console.error('PropertyPanelSync.sendSnapToggle error:', error);
+            this.stats.messagesFailed++;
+            return false;
+        }
+    }
+
+    /**
+     * Send visual settings updates through unified system
+     * Replaces direct PostMessage calls from left-panel and system-toolbar
+     */
+    sendVisualSettings(settingsType, settings) {
+        try {
+            // Validate settings type
+            const validTypes = ['selection', 'containers', 'cad-wireframe', 'visual', 'scene', 'interface'];
+            if (!validTypes.includes(settingsType)) {
+                console.error('PropertyPanelSync.sendVisualSettings: Invalid settings type:', settingsType);
+                return false;
+            }
+
+            // Create unified message format
+            const message = {
+                type: `${settingsType}-settings-changed`,
+                settings: settings,
+                timestamp: Date.now(),
+                source: 'PropertyPanelSync'
+            };
+
+            // Send to main window
+            if (window.parent && window.parent !== window) {
+                // Authorize this message before sending
+                this.authorizePostMessage(message);
+                window.parent.postMessage(message, '*');
+                this.stats.messagesSucceeded++;
+                return true;
+            }
+
+            // Direct mode: trigger local event
+            window.dispatchEvent(new CustomEvent(`${settingsType}-settings-changed`, {
+                detail: { settings }
+            }));
+            this.stats.messagesSucceeded++;
+            return true;
+
+        } catch (error) {
+            console.error('PropertyPanelSync.sendVisualSettings error:', error);
+            this.stats.messagesFailed++;
+            return false;
+        }
+    }
+
+    /**
+     * Send navigation/selection commands through unified system
+     * Replaces direct PostMessage calls from left-panel object selection
+     */
+    sendNavigationCommand(commandType, data) {
+        try {
+            // Validate command type
+            const validCommands = ['object-select', 'get-visual-settings', 'get-cad-wireframe-settings', 'property-update'];
+            if (!validCommands.includes(commandType)) {
+                console.error('PropertyPanelSync.sendNavigationCommand: Invalid command type:', commandType);
+                return false;
+            }
+
+            // Create unified message format
+            const message = {
+                type: commandType,
+                data: data,
+                timestamp: Date.now(),
+                source: 'PropertyPanelSync'
+            };
+
+            // Send to main window
+            if (window.parent && window.parent !== window) {
+                // Authorize this message before sending
+                this.authorizePostMessage(message);
+                window.parent.postMessage(message, '*');
+                this.stats.messagesSucceeded++;
+                return true;
+            }
+
+            // Direct mode: handle specific commands
+            if (commandType === 'object-select' && data.objectId) {
+                // Use NavigationController if available
+                const navigationController = window.modlerComponents?.navigationController;
+                if (navigationController && data.useNavigationController) {
+                    if (data.parentContainer) {
+                        navigationController.navigateToObject(data.objectId);
+                    } else {
+                        navigationController.selectObject(data.objectId);
+                    }
+                    this.stats.messagesSucceeded++;
+                    return true;
+                }
+
+                // Fallback to direct selection
+                if (window.selectObjectInSceneDirectly) {
+                    window.selectObjectInSceneDirectly(data.objectId);
+                    this.stats.messagesSucceeded++;
+                    return true;
+                }
+            }
+
+            console.warn('PropertyPanelSync.sendNavigationCommand: No handler available for command:', commandType);
+            return false;
+
+        } catch (error) {
+            console.error('PropertyPanelSync.sendNavigationCommand error:', error);
+            this.stats.messagesFailed++;
+            return false;
+        }
+    }
+
+    /**
+     * Send settings request commands through unified system
+     * For requesting current settings from main application
+     */
+    sendSettingsRequest(requestType) {
+        try {
+            // Validate request type
+            const validRequests = ['get-visual-settings', 'get-cad-wireframe-settings'];
+            if (!validRequests.includes(requestType)) {
+                console.error('PropertyPanelSync.sendSettingsRequest: Invalid request type:', requestType);
+                return false;
+            }
+
+            // Create unified message format
+            const message = {
+                type: requestType,
+                timestamp: Date.now(),
+                source: 'PropertyPanelSync'
+            };
+
+            // Send to main window
+            if (window.parent && window.parent !== window) {
+                // Authorize this message before sending
+                this.authorizePostMessage(message);
+                window.parent.postMessage(message, '*');
+                this.stats.messagesSucceeded++;
+                return true;
+            }
+
+            console.warn('PropertyPanelSync.sendSettingsRequest: No parent window available');
+            return false;
+
+        } catch (error) {
+            console.error('PropertyPanelSync.sendSettingsRequest error:', error);
+            this.stats.messagesFailed++;
+            return false;
+        }
+    }
+
+    /**
+     * Setup communication architecture guards to prevent bypasses
+     * Monitors and warns about direct PostMessage usage that bypasses the unified system
+     */
+    setupArchitectureGuards() {
+        // Guard against direct PostMessage usage
+        this.setupPostMessageGuard();
+
+        // Guard against unauthorized communication patterns
+        this.setupCommunicationPatternGuards();
+
+        console.log('✅ PropertyPanelSync: Communication architecture guards enabled');
+    }
+
+    /**
+     * Monitor window.postMessage calls to detect bypasses
+     */
+    setupPostMessageGuard() {
+        // Store original postMessage for authorized use
+        const originalPostMessage = window.postMessage.bind(window);
+
+        // Track authorized PropertyPanelSync usage
+        this.authorizedPostMessages = new Set();
+
+        // Override window.postMessage to monitor usage
+        window.postMessage = (message, targetOrigin, transfer) => {
+            // Check if this is an authorized PropertyPanelSync call
+            const isAuthorized = this.authorizedPostMessages.has(JSON.stringify(message));
+
+            if (!isAuthorized && typeof message === 'object' && message.type) {
+                console.warn(
+                    '⚠️ ARCHITECTURE VIOLATION: Direct PostMessage detected!',
+                    '\n📍 Message:', message.type,
+                    '\n🔧 Use PropertyPanelSync unified communication instead',
+                    '\n📋 Available methods: sendObjectMovement, sendToolActivation, sendSnapToggle, sendVisualSettings, sendNavigationCommand, sendSettingsRequest'
+                );
+
+                // Log stack trace to help identify the source
+                console.trace('Direct PostMessage call stack:');
+            }
+
+            // Always allow the call to proceed (monitoring only, not blocking)
+            return originalPostMessage(message, targetOrigin, transfer);
+        };
+    }
+
+    /**
+     * Setup guards for communication patterns
+     */
+    setupCommunicationPatternGuards() {
+        // Monitor iframe.postMessage calls from parent context
+        if (window.parent && window.parent !== window) {
+            // Guard against direct iframe.postMessage bypasses
+            const originalParentPostMessage = window.parent.postMessage;
+            if (originalParentPostMessage) {
+                window.parent.postMessage = (...args) => {
+                    console.warn(
+                        '⚠️ ARCHITECTURE VIOLATION: Direct iframe.postMessage detected!',
+                        '\n🔧 Use PropertyPanelSync unified communication instead'
+                    );
+                    console.trace('Direct iframe PostMessage call stack:');
+                    return originalParentPostMessage.apply(window.parent, args);
+                };
+            }
+        }
+    }
+
+    /**
+     * Mark a PostMessage as authorized (called internally by PropertyPanelSync methods)
+     */
+    authorizePostMessage(message) {
+        if (this.authorizedPostMessages) {
+            this.authorizedPostMessages.add(JSON.stringify(message));
+
+            // Clean up authorization after a short delay
+            setTimeout(() => {
+                this.authorizedPostMessages.delete(JSON.stringify(message));
+            }, 100);
+        }
+    }
+
     /**
      * Dispose of the sync system and clean up resources
      */
@@ -694,9 +1255,12 @@ class PropertyPanelSync {
             this.serializer.dispose();
         }
 
+        // Clear architecture guards
+        this.authorizedPostMessages?.clear();
+
         // Clear references
         this.eventBus = null;
-        this.panelManager = null;
+        this.componentManager = null;
         this.serializer = null;
     }
 }

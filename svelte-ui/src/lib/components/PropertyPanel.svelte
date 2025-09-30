@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
 	import { selectedObject, selectedObjects, multiSelection, displayObject, updateThreeJSProperty, getPropertyMixedState, fieldStates } from '$lib/stores/modler';
 	import { propertyController } from '$lib/services/property-controller';
 	import PropertyGroup from '$lib/components/ui/property-group.svelte';
@@ -8,6 +9,17 @@
 	import MaterialInput from '$lib/components/ui/material-input.svelte';
 	import Badge from '$lib/components/ui/badge.svelte';
 	import { cn } from '$lib/utils';
+
+	// Unit system state
+	let currentUnit = 'mm';
+	let unitConverter: any = null;
+
+	// Update current unit from UnitConverter or unit change events
+	function updateCurrentUnit() {
+		if (unitConverter) {
+			currentUnit = unitConverter.userUnit;
+		}
+	}
 
 
 	// All property updates now handled by PropertyController
@@ -98,6 +110,22 @@
 			visualEffects.clearHighlight();
 		}
 	}
+
+	// Initialize unit system on mount
+	onMount(() => {
+		// Get unit converter instance
+		unitConverter = typeof window !== 'undefined' && window.UnitConverter ? new UnitConverter() : null;
+		updateCurrentUnit();
+
+		// Listen for unit changes from settings
+		if (typeof window !== 'undefined') {
+			window.addEventListener('unit-changed', updateCurrentUnit);
+
+			return () => {
+				window.removeEventListener('unit-changed', updateCurrentUnit);
+			};
+		}
+	});
 </script>
 
 <div class="property-panel h-full bg-[#171717] border-l border-[#2E2E2E] p-4 overflow-y-auto">
@@ -132,7 +160,7 @@
 			<div class="space-y-4">
 				<!-- Position Sub-group -->
 				<div class="space-y-2">
-					<h4 class="text-xs font-medium text-foreground/80 uppercase tracking-wide text-right">Position</h4>
+					<h4 class="text-xs font-medium text-foreground/80 uppercase tracking-wide text-right">Position ({currentUnit})</h4>
 					<XyzInput
 						values={$displayObject.position}
 						objectId={$displayObject.id}
@@ -153,7 +181,7 @@
 
 				<!-- Dimensions Sub-group -->
 				<div class="space-y-2">
-					<h4 class="text-xs font-medium text-foreground/80 uppercase tracking-wide text-right">Dimensions</h4>
+					<h4 class="text-xs font-medium text-foreground/80 uppercase tracking-wide text-right">Dimensions ({currentUnit})</h4>
 					<XyzInput
 						values={$displayObject.dimensions}
 						objectId={$displayObject.id}

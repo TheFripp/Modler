@@ -2,9 +2,62 @@
 	import { onMount } from 'svelte';
 	import { initializeBridge } from '$lib/bridge/threejs-bridge';
 	import { selectedObjects, objectHierarchy, toolState, containerContext } from '$lib/stores/modler';
+	import PropertyGroup from '$lib/components/ui/property-group.svelte';
+	import InlineInput from '$lib/components/ui/inline-input.svelte';
+	import ColorInput from '$lib/components/ui/color-input.svelte';
+	import { unifiedCommunication } from '$lib/services/unified-communication';
+	import { toggleSnapInScene } from '$lib/bridge/threejs-bridge';
+	import { cn } from '$lib/utils';
 
 	// Tab state
 	let activeTab: 'objects' | 'settings' = 'objects';
+
+	// Visual settings state
+	let visualSettings = {
+		selection: {
+			color: '#ff6600',
+			lineWidth: 2,
+			opacity: 80
+		},
+		containers: {
+			wireframeColor: '#00ff00',
+			lineWidth: 1,
+			opacity: 80
+		}
+	};
+
+	// System settings state (from system toolbar)
+	let currentUnit = 'mm';
+	let unitConverter: any = null;
+
+	// CAD wireframe settings
+	let cadWireframeSettings = {
+		color: '#666666',
+		opacity: 50,
+		lineWidth: 1
+	};
+
+	// Scene settings state
+	let sceneSettings = {
+		backgroundColor: '#1a1a1a',
+		gridMainColor: '#444444',
+		gridSubColor: '#222222'
+	};
+
+	// Interface settings state
+	let interfaceSettings = {
+		accentColor: '#4a9eff',
+		toolbarOpacity: 95
+	};
+
+	// Units list
+	const units = [
+		{ value: 'm', label: 'Meters (m)' },
+		{ value: 'cm', label: 'Centimeters (cm)' },
+		{ value: 'mm', label: 'Millimeters (mm)' },
+		{ value: 'in', label: 'Inches (in)' },
+		{ value: 'ft', label: 'Feet (ft)' }
+	];
 
 	// Filter out floor grid, interactive support objects, and other utility objects from hierarchy
 	$: filteredHierarchy = $objectHierarchy.filter(obj =>
@@ -279,67 +332,60 @@
 	}
 
 	function moveObjectToContainer(objectToMove, targetContainer) {
-		// Use different message types for objects vs containers
-		const messageType = objectToMove.isContainer ?
-			'container-move-to-container' :
-			'object-move-to-container';
-
-		const messageData = {
-			type: messageType,
-			data: {
-				objectId: objectToMove.id,
-				targetContainerId: targetContainer.id
-			}
+		// Use unified communication system instead of direct PostMessage
+		const operation = objectToMove.isContainer ? 'container-move-to-container' : 'move-to-container';
+		const data = {
+			objectId: objectToMove.id,
+			targetContainerId: targetContainer.id
 		};
 
-		window.parent.postMessage(messageData, '*');
+		unifiedCommunication.sendObjectMovement(operation, data).catch(error => {
+			console.error('Failed to send object movement command:', error);
+		});
 	}
 
 	function moveObjectToRoot(objectToMove) {
-		// Use postMessage to communicate with parent window
-		const messageData = {
-			type: 'object-move-to-root',
-			data: {
-				objectId: objectToMove.id
-			}
+		// Use unified communication system instead of direct PostMessage
+		const data = {
+			objectId: objectToMove.id
 		};
 
-		window.parent.postMessage(messageData, '*');
+		unifiedCommunication.sendObjectMovement('move-to-root', data).catch(error => {
+			console.error('Failed to send move to root command:', error);
+		});
 	}
 
 	function reorderObjectAtRoot(draggedObj, targetObj, position) {
 		// Update local ordering state
 		updateLocalObjectOrder('root', draggedObj.id, targetObj.id, position);
 
-		// Use postMessage to communicate reordering at root level
-		const messageData = {
-			type: 'object-reorder-root',
-			data: {
-				draggedObjectId: draggedObj.id,
-				targetObjectId: targetObj.id,
-				position: position // 'before' or 'after'
-			}
+		// Use unified communication system instead of direct PostMessage
+		const data = {
+			draggedObjectId: draggedObj.id,
+			targetObjectId: targetObj.id,
+			position: position // 'before' or 'after'
 		};
 
-		window.parent.postMessage(messageData, '*');
+		unifiedCommunication.sendObjectMovement('reorder-root', data).catch(error => {
+			console.error('Failed to send reorder at root command:', error);
+		});
 	}
 
 	function reorderObjectInContainer(draggedObj, targetObj, position) {
 		// Update local ordering state
 		updateLocalObjectOrder(targetObj.parentContainer, draggedObj.id, targetObj.id, position);
 
-		// Use postMessage to communicate reordering within container
-		const messageData = {
-			type: 'object-reorder-container',
-			data: {
-				draggedObjectId: draggedObj.id,
-				targetObjectId: targetObj.id,
-				containerId: targetObj.parentContainer,
-				position: position // 'before' or 'after'
-			}
+		// Use unified communication system instead of direct PostMessage
+		const data = {
+			draggedObjectId: draggedObj.id,
+			targetObjectId: targetObj.id,
+			containerId: targetObj.parentContainer,
+			position: position // 'before' or 'after'
 		};
 
-		window.parent.postMessage(messageData, '*');
+		unifiedCommunication.sendObjectMovement('reorder-container', data).catch(error => {
+			console.error('Failed to send reorder in container command:', error);
+		});
 	}
 
 	/**
@@ -501,17 +547,155 @@
 			}
 		}
 
-		// Iframe context or fallback: use PostMessage
-		const messageData = {
-			type: 'object-select',
-			data: {
-				objectId,
-				parentContainer: selectedObject?.parentContainer || null,
-				useNavigationController: true
-			}
+		// Iframe context or fallback: use unified communication system
+		const data = {
+			objectId,
+			parentContainer: selectedObject?.parentContainer || null,
+			useNavigationController: true
 		};
 
-		window.parent.postMessage(messageData, '*');
+		unifiedCommunication.sendNavigationCommand('object-select', data).catch(error => {
+			console.error('Failed to send object selection command:', error);
+		});
+	}
+
+	// Visual settings functions
+	function updateVisualSettings(category: 'selection' | 'containers', property: string, value: any) {
+		visualSettings[category][property] = value;
+
+		// Map to proper config path
+		const configPath = category === 'selection'
+			? `visual.selection.${property}`
+			: `visual.containers.${property}`;
+
+		// Convert percentage to decimal for opacity
+		const actualValue = property === 'opacity' ? value / 100 : value;
+
+		// Send individual setting update through unified communication system
+		const settings = {
+			[configPath]: actualValue
+		};
+
+		// Use unified communication system instead of direct PostMessage
+		unifiedCommunication.sendVisualSettings('visual', settings).catch(error => {
+			console.error('Failed to send visual settings update:', error);
+		});
+
+		// Also trigger local event for immediate feedback
+		window.dispatchEvent(new CustomEvent('visual-settings-changed', {
+			detail: { settings }
+		}));
+	}
+
+	// System toolbar functionality (consolidated)
+	function handleSnapToggle() {
+		try {
+			toggleSnapInScene();
+		} catch (error) {
+			console.error('❌ Snap toggle failed:', error);
+		}
+	}
+
+	function selectUnit(unit: string) {
+		currentUnit = unit;
+		if (unitConverter) {
+			unitConverter.setUserUnit(unit);
+			// Trigger property panel refresh
+			window.dispatchEvent(new CustomEvent('unit-changed', { detail: { unit } }));
+		}
+	}
+
+	function updateCadWireframeSettings(property: string, value: any) {
+		cadWireframeSettings[property] = value;
+
+		// Map property to proper config path
+		const configPath = `visual.cad.wireframe.${property}`;
+
+		// Convert percentage to decimal for opacity
+		const actualValue = property === 'opacity' ? value / 100 : value;
+
+		// Send individual setting update through unified communication system
+		const settings = {
+			[configPath]: actualValue
+		};
+
+		// Use unified communication system instead of direct PostMessage
+		unifiedCommunication.sendVisualSettings('cad-wireframe', settings).catch(error => {
+			console.error('Failed to send CAD wireframe settings update:', error);
+		});
+
+		// Also trigger local event for immediate feedback
+		window.dispatchEvent(new CustomEvent('cad-wireframe-settings-changed', {
+			detail: { settings }
+		}));
+	}
+
+	function updateSceneSettings(property: string, value: any) {
+		sceneSettings[property] = value;
+
+		// Map property to proper config path
+		const configPath = `scene.${property}`;
+
+		// Send individual setting update through unified communication system
+		const settings = {
+			[configPath]: value
+		};
+
+		// Use unified communication system for scene settings
+		unifiedCommunication.sendVisualSettings('scene', settings).catch(error => {
+			console.error('Failed to send scene settings update:', error);
+		});
+
+		// Also trigger local event for immediate feedback
+		window.dispatchEvent(new CustomEvent('scene-settings-changed', {
+			detail: { settings }
+		}));
+	}
+
+	function updateInterfaceSettings(property: string, value: any) {
+		interfaceSettings[property] = value;
+		// Map property to proper config path
+		const configPath = `interface.${property}`;
+
+		// Convert percentage to decimal for toolbarOpacity
+		const actualValue = property === 'toolbarOpacity' ? value / 100 : value;
+
+		// Send individual setting update through unified communication system
+		const settings = {
+			[configPath]: actualValue
+		};
+		// Use unified communication system for interface settings
+		unifiedCommunication.sendVisualSettings('interface', settings).catch(error => {
+			console.error('Failed to send interface settings update:', error);
+		});
+	}
+
+	function requestCurrentCadWireframeSettings() {
+		// Request current CAD wireframe settings through unified communication system
+		unifiedCommunication.sendSettingsRequest('get-cad-wireframe-settings').catch(error => {
+			console.error('Failed to request CAD wireframe settings:', error);
+		});
+	}
+
+	function requestCurrentSceneSettings() {
+		// Request current scene settings through unified communication system
+		unifiedCommunication.sendSettingsRequest('get-scene-settings').catch(error => {
+			console.error('Failed to request scene settings:', error);
+		});
+	}
+
+	function requestCurrentVisualSettings() {
+		// Request current visual settings through unified communication system
+		unifiedCommunication.sendSettingsRequest('get-visual-settings').catch(error => {
+			console.error('Failed to request visual settings:', error);
+		});
+	}
+
+	function requestCurrentInterfaceSettings() {
+		// Request current interface settings through unified communication system
+		unifiedCommunication.sendSettingsRequest('get-interface-settings').catch(error => {
+			console.error('Failed to request interface settings:', error);
+		});
 	}
 
 	onMount(() => {
@@ -525,8 +709,49 @@
 			}
 		});
 
+		// Initialize visual settings
+		requestCurrentVisualSettings();
+		requestCurrentCadWireframeSettings();
+		requestCurrentSceneSettings();
+		requestCurrentInterfaceSettings();
+
+		// Get unit converter instance
+		unitConverter = (window as any).UnitConverter ? new (window as any).UnitConverter() : null;
+		if (unitConverter) {
+			currentUnit = unitConverter.userUnit;
+		}
+
+		// Listen for settings responses
+		const handleMessage = (event) => {
+			if (event.data.type === 'visual-settings-response') {
+				// Update local state with current settings
+				if (event.data.settings.selection) {
+					visualSettings.selection = { ...visualSettings.selection, ...event.data.settings.selection };
+				}
+				if (event.data.settings.containers) {
+					visualSettings.containers = { ...visualSettings.containers, ...event.data.settings.containers };
+				}
+			} else if (event.data.type === 'cad-wireframe-settings-response') {
+				// Update CAD wireframe settings
+				cadWireframeSettings = { ...cadWireframeSettings, ...event.data.settings };
+			} else if (event.data.type === 'scene-settings-response') {
+				// Update scene settings
+				sceneSettings = { ...sceneSettings, ...event.data.settings };
+			} else if (event.data.type === 'interface-settings-response') {
+				// Update interface settings
+				interfaceSettings = { ...interfaceSettings, ...event.data.settings };
+			}
+		};
+
+		window.addEventListener('message', handleMessage);
+
 		// Initialize the bridge with Three.js for real-time synchronization
 		initializeBridge();
+
+		// Cleanup message listener on component destroy
+		return () => {
+			window.removeEventListener('message', handleMessage);
+		};
 	});
 
 </script>
@@ -638,7 +863,7 @@
 	</div>
 
 	<!-- Tab Content -->
-	<div class="flex-1 p-4 overflow-y-auto">
+	<div class="flex-1 p-2 sm:p-4 pt-4 overflow-y-auto min-w-0">
 		{#if activeTab === 'objects'}
 			<!-- Objects Tab Content -->
 			<div class="space-y-4">
@@ -674,118 +899,155 @@
 			</div>
 		{:else if activeTab === 'settings'}
 			<!-- Settings Tab Content -->
-			<div class="space-y-4">
-				<h3 class="text-sm font-medium text-foreground mb-4">Application Settings</h3>
+			<div class="space-y-3 sm:space-y-4 min-w-0">
 
-				<!-- Visual Settings -->
-				<div class="space-y-3">
-					<h4 class="text-xs font-medium text-foreground border-b border-border pb-2">Visual</h4>
+				<!-- Visual Settings Accordion -->
+				<PropertyGroup title="Visuals" collapsible={true} collapsed={false}>
+					<div class="space-y-4">
+						<!-- Selection Sub-group -->
+						<div class="space-y-2">
+							<h4 class="text-xs font-medium text-foreground/80 uppercase tracking-wide text-left">Selection</h4>
+							<div class="space-y-2">
+								<ColorInput
+									label="Color"
+									value={visualSettings.selection.color}
+									onchange={(value) => updateVisualSettings('selection', 'color', value)}
+								/>
+								<div class="grid grid-cols-2 gap-2">
+									<InlineInput
+										label="Line"
+										type="number"
+										bind:value={visualSettings.selection.lineWidth}
+										onchange={() => updateVisualSettings('selection', 'lineWidth', visualSettings.selection.lineWidth)}
+									/>
+									<InlineInput
+										label="Opacity"
+										type="number"
+										bind:value={visualSettings.selection.opacity}
+										onchange={() => updateVisualSettings('selection', 'opacity', visualSettings.selection.opacity)}
+									/>
+								</div>
+							</div>
+						</div>
 
-					<!-- Selection Settings -->
+						<!-- Container Sub-group -->
+						<div class="space-y-2">
+							<h4 class="text-xs font-medium text-foreground/80 uppercase tracking-wide text-left">Containers</h4>
+							<div class="space-y-2">
+								<ColorInput
+									label="Color"
+									value={visualSettings.containers.wireframeColor}
+									onchange={(value) => updateVisualSettings('containers', 'wireframeColor', value)}
+								/>
+								<div class="grid grid-cols-2 gap-2">
+									<InlineInput
+										label="Line"
+										type="number"
+										bind:value={visualSettings.containers.lineWidth}
+										onchange={() => updateVisualSettings('containers', 'lineWidth', visualSettings.containers.lineWidth)}
+									/>
+									<InlineInput
+										label="Opacity"
+										type="number"
+										bind:value={visualSettings.containers.opacity}
+										onchange={() => updateVisualSettings('containers', 'opacity', visualSettings.containers.opacity)}
+									/>
+								</div>
+							</div>
+						</div>
+
+						<!-- Snapping Sub-group -->
+						<div class="space-y-2">
+							<h4 class="text-xs font-medium text-foreground/80 uppercase tracking-wide text-left">Snapping</h4>
+							<div class="space-y-2">
+								<ColorInput
+									label="Color"
+									value="#ffffff"
+									onchange={(value) => console.log('Snapping color:', value)}
+								/>
+								<InlineInput
+									label="Corner Size"
+									type="number"
+									value={0.1}
+									onchange={() => console.log('Corner size changed')}
+								/>
+							</div>
+						</div>
+
+						<!-- CAD Wireframes Sub-group -->
+						<div class="space-y-2">
+							<h4 class="text-xs font-medium text-foreground/80 uppercase tracking-wide text-left">CAD Wireframes</h4>
+							<div class="space-y-2">
+								<ColorInput
+									label="Color"
+									value={cadWireframeSettings.color}
+									onchange={(value) => updateCadWireframeSettings('color', value)}
+								/>
+								<div class="grid grid-cols-2 gap-2">
+									<InlineInput
+										label="Thickness"
+										type="number"
+										bind:value={cadWireframeSettings.lineWidth}
+										onchange={() => updateCadWireframeSettings('lineWidth', cadWireframeSettings.lineWidth)}
+									/>
+									<InlineInput
+										label="Opacity"
+										type="number"
+										bind:value={cadWireframeSettings.opacity}
+										onchange={() => updateCadWireframeSettings('opacity', cadWireframeSettings.opacity)}
+									/>
+								</div>
+							</div>
+						</div>
+					</div>
+				</PropertyGroup>
+
+				<!-- Scene Settings Accordion -->
+				<PropertyGroup title="Scene" collapsible={true} collapsed={false}>
 					<div class="space-y-2">
-						<h5 class="text-xs font-medium text-muted-foreground">Selection</h5>
-						<div class="space-y-2 pl-2">
-							<div class="flex items-center justify-between">
-								<label class="text-xs text-foreground">Color</label>
-								<input type="color" class="w-8 h-6 rounded border border-border" value="#ff6600" />
-							</div>
-							<div class="flex items-center justify-between">
-								<label class="text-xs text-foreground">Line Width</label>
-								<div class="flex items-center gap-2">
-									<input type="range" min="1" max="5" step="1" value="2" class="w-16 h-1" />
-									<span class="text-xs text-muted-foreground w-6">2</span>
-								</div>
-							</div>
-							<div class="flex items-center justify-between">
-								<label class="text-xs text-foreground">Opacity</label>
-								<div class="flex items-center gap-2">
-									<input type="range" min="0.1" max="1.0" step="0.1" value="0.8" class="w-16 h-1" />
-									<span class="text-xs text-muted-foreground w-6">0.8</span>
-								</div>
-							</div>
-						</div>
+						<ColorInput
+							label="Background"
+							value={sceneSettings.backgroundColor}
+							onchange={(value) => updateSceneSettings('backgroundColor', value)}
+						/>
+						<ColorInput
+							label="Grid Main"
+							value={sceneSettings.gridMainColor}
+							onchange={(value) => updateSceneSettings('gridMainColor', value)}
+						/>
+						<ColorInput
+							label="Grid Sub"
+							value={sceneSettings.gridSubColor}
+							onchange={(value) => updateSceneSettings('gridSubColor', value)}
+						/>
+						<ColorInput
+							label="Accent Color"
+							value={interfaceSettings.accentColor}
+							onchange={(value) => updateInterfaceSettings('accentColor', value)}
+						/>
+						<InlineInput
+							label="Toolbar Opacity"
+							type="number"
+							bind:value={interfaceSettings.toolbarOpacity}
+							onchange={() => updateInterfaceSettings('toolbarOpacity', interfaceSettings.toolbarOpacity)}
+						/>
 					</div>
+				</PropertyGroup>
 
-					<!-- Container Settings -->
+				<!-- Units Settings Accordion -->
+				<PropertyGroup title="Units" collapsible={true} collapsed={false}>
 					<div class="space-y-2">
-						<h5 class="text-xs font-medium text-muted-foreground">Containers</h5>
-						<div class="space-y-2 pl-2">
-							<div class="flex items-center justify-between">
-								<label class="text-xs text-foreground">Color</label>
-								<input type="color" class="w-8 h-6 rounded border border-border" value="#00ff00" />
-							</div>
-							<div class="flex items-center justify-between">
-								<label class="text-xs text-foreground">Line Width</label>
-								<div class="flex items-center gap-2">
-									<input type="range" min="1" max="5" step="1" value="1" class="w-16 h-1" />
-									<span class="text-xs text-muted-foreground w-6">1</span>
-								</div>
-							</div>
-							<div class="flex items-center justify-between">
-								<label class="text-xs text-foreground">Opacity</label>
-								<div class="flex items-center gap-2">
-									<input type="range" min="0.1" max="1.0" step="0.1" value="0.8" class="w-16 h-1" />
-									<span class="text-xs text-muted-foreground w-6">0.8</span>
-								</div>
-							</div>
-						</div>
+						<select
+							class="w-full bg-[#212121]/50 border border-[#2E2E2E]/50 rounded-md px-3 py-2 text-xs text-foreground focus:border-[#6b7280] transition-colors cursor-pointer"
+							bind:value={currentUnit}
+							on:change={() => selectUnit(currentUnit)}
+						>
+							{#each units as unit}
+								<option value={unit.value}>{unit.label}</option>
+							{/each}
+						</select>
 					</div>
-
-					<!-- Snapping Settings -->
-					<div class="space-y-2">
-						<h5 class="text-xs font-medium text-muted-foreground">Snapping</h5>
-						<div class="space-y-2 pl-2">
-							<div class="flex items-center justify-between">
-								<label class="text-xs text-foreground">Color</label>
-								<input type="color" class="w-8 h-6 rounded border border-border" value="#ffffff" />
-							</div>
-							<div class="flex items-center justify-between">
-								<label class="text-xs text-foreground">Corner Size</label>
-								<div class="flex items-center gap-2">
-									<input type="range" min="0.05" max="0.3" step="0.05" value="0.1" class="w-16 h-1" />
-									<span class="text-xs text-muted-foreground w-6">0.1</span>
-								</div>
-							</div>
-						</div>
-					</div>
-				</div>
-
-				<!-- Scene Settings -->
-				<div class="space-y-3">
-					<h4 class="text-xs font-medium text-foreground border-b border-border pb-2">Scene</h4>
-					<div class="space-y-2 pl-2">
-						<div class="flex items-center justify-between">
-							<label class="text-xs text-foreground">Background</label>
-							<input type="color" class="w-8 h-6 rounded border border-border" value="#1a1a1a" />
-						</div>
-						<div class="flex items-center justify-between">
-							<label class="text-xs text-foreground">Grid Main</label>
-							<input type="color" class="w-8 h-6 rounded border border-border" value="#444444" />
-						</div>
-						<div class="flex items-center justify-between">
-							<label class="text-xs text-foreground">Grid Sub</label>
-							<input type="color" class="w-8 h-6 rounded border border-border" value="#222222" />
-						</div>
-					</div>
-				</div>
-
-				<!-- Interface Settings -->
-				<div class="space-y-3">
-					<h4 class="text-xs font-medium text-foreground border-b border-border pb-2">Interface</h4>
-					<div class="space-y-2 pl-2">
-						<div class="flex items-center justify-between">
-							<label class="text-xs text-foreground">Accent Color</label>
-							<input type="color" class="w-8 h-6 rounded border border-border" value="#4a9eff" />
-						</div>
-						<div class="flex items-center justify-between">
-							<label class="text-xs text-foreground">Toolbar Opacity</label>
-							<div class="flex items-center gap-2">
-								<input type="range" min="0.5" max="1.0" step="0.05" value="0.95" class="w-16 h-1" />
-								<span class="text-xs text-muted-foreground w-8">0.95</span>
-							</div>
-						</div>
-					</div>
-				</div>
+				</PropertyGroup>
 			</div>
 		{/if}
 	</div>

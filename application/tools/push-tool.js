@@ -26,12 +26,12 @@ class PushTool {
         this.lastPushDelta = undefined;
         this.originalGeometry = null;
 
-        // Centralized transformation system
-        this.transformationManager = null;
+        // Unified state management system
+        this.objectStateManager = null;
 
-        // Initialize transformation manager after components are loaded
+        // Initialize ObjectStateManager after components are loaded
         setTimeout(() => {
-            this.transformationManager = window.modlerComponents?.transformationManager;
+            this.objectStateManager = window.modlerComponents?.objectStateManager;
         }, 50);
 
 
@@ -439,28 +439,18 @@ class PushTool {
             this.pushedObject.geometry = meshToUpdate.geometry;
         }
 
-        // NEW: Emit through unified notification system if available
-        const objectEventBus = window.unifiedNotificationSystem?.eventBus;
-        if (objectEventBus && this.pushedObject?.userData?.id) {
-            // Emit geometry change event for real-time dimension updates
-            objectEventBus.emit(objectEventBus.EVENT_TYPES.GEOMETRY, this.pushedObject.userData.id, {
-                changeType: 'dimension',
-                axis: this.pushAxis,
-                timestamp: Date.now()
-            }, {
-                source: 'PushTool',
-                throttle: true // Enable throttling for smooth real-time updates
-            });
-        }
-
-        // Emit direct ObjectEventBus event for unified notification system
-        if (window.objectEventBus) {
-            window.objectEventBus.emit(
-                window.objectEventBus.EVENT_TYPES.GEOMETRY,
-                this.pushedObject.id,
-                { changeType: 'geometry' },
-                { source: 'push-tool', throttle: true }
-            );
+        // Update dimensions through unified state management
+        if (this.objectStateManager && this.pushedObject?.userData?.id) {
+            const dimensions = window.GeometryUtils?.getGeometryDimensions(meshToUpdate.geometry);
+            if (dimensions) {
+                this.objectStateManager.updateObject(this.pushedObject.userData.id, {
+                    dimensions: {
+                        x: dimensions.x,
+                        y: dimensions.y,
+                        z: dimensions.z
+                    }
+                });
+            }
         }
     }
 
@@ -548,14 +538,18 @@ class PushTool {
                 geometryUtils.updateSupportMeshGeometries(pushedObject);
             }
 
-            // Emit direct ObjectEventBus event for unified notification system
-            if (window.objectEventBus) {
-                window.objectEventBus.emit(
-                    window.objectEventBus.EVENT_TYPES.GEOMETRY,
-                    pushedObject.id,
-                    { changeType: 'geometry' },
-                    { source: 'push-tool', throttle: true }
-                );
+            // Final dimension update through unified state management
+            if (this.objectStateManager && pushedObject.userData?.id) {
+                const dimensions = window.GeometryUtils?.getGeometryDimensions(pushedObject.geometry);
+                if (dimensions) {
+                    this.objectStateManager.updateObject(pushedObject.userData.id, {
+                        dimensions: {
+                            x: dimensions.x,
+                            y: dimensions.y,
+                            z: dimensions.z
+                        }
+                    });
+                }
             }
         }
 

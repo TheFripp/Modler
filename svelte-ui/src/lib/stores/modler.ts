@@ -1,74 +1,10 @@
 import { writable, derived, get, type Writable } from 'svelte/store';
 
-// Type definitions matching the Modler V2 architecture
-export interface ObjectData {
-	id: string;
-	name: string;
-	type: string;
-	isContainer?: boolean;
-	position: { x: number; y: number; z: number };
-	rotation: { x: number; y: number; z: number };
-	dimensions: { x: number; y: number; z: number };
-	material?: {
-		color: string;
-		opacity: number;
-	};
-	autoLayout?: {
-		enabled: boolean;
-		direction: string | null;
-		gap: number;
-		padding: { top: number; bottom: number; left: number; right: number; front: number; back: number };
-	};
-	sizingMode?: 'hug' | 'fixed';
-	parentContainer?: string;
+// UPDATED: Use centralized type definitions
+import type { ObjectData, ToolState, ContainerContext } from '$lib/types/object-data';
+// Dynamic import for unifiedCommunication to avoid SSR issues
 
-	// Parametric design properties
-	parametric?: {
-		exposed: { [parameterName: string]: ParametricProperty };
-		constraints: { [propertyName: string]: 'locked' | 'formula' | 'free' };
-		formulas: { [propertyName: string]: string };
-		dependencies: string[];
-	};
-	constraints?: { [propertyName: string]: 'locked' | 'formula' };
-
-	// Component instancing properties
-	instance?: {
-		masterId: string;
-		instanceType: 'component' | 'parametric' | 'custom';
-		canModify: boolean;
-		inheritedProperties: string[];
-	};
-	master?: {
-		isMaster: boolean;
-		instanceCount: number;
-		instances: string[];
-		componentType: string;
-	};
-}
-
-export interface ParametricProperty {
-	value: number | string | boolean;
-	unit?: string;
-	drives: string[];
-	formula?: string;
-	exposed: boolean;
-	constraints?: {
-		min?: number;
-		max?: number;
-		options?: any[];
-	};
-}
-
-export interface ToolState {
-	activeTool: 'select' | 'move' | 'push' | 'box-creation';
-	snapEnabled: boolean;
-}
-
-export interface ContainerContext {
-	containerId: string;
-	containerName: string;
-	steppedIntoAt: number;
-}
+// All type definitions are now imported from centralized types
 
 // Core Svelte stores
 export const selectedObjects: Writable<ObjectData[]> = writable([]);
@@ -260,163 +196,279 @@ export const fieldStates = derived(displayObject, ($displayObject) =>
 export function initializeModlerBridge(components: any) {
 	modlerComponentsBridge = components;
 
-	// Set up initial state sync
-	if (components.selectionController) {
-		const initialSelection = components.selectionController.getSelectedObjects();
-		selectedObjects.set(initialSelection.map(convertThreeObjectToObjectData));
-	}
+	// UNIFIED COMMUNICATION: All UI updates now flow through PropertyPanelSync → PostMessage
+	// Direct ObjectStateManager listeners removed to eliminate race conditions
+	// Selection and hierarchy updates handled by threejs-bridge.ts via PostMessage
 
-	if (components.sceneController) {
-		const allObjects = components.sceneController.getAllObjects();
-		objectHierarchy.set(allObjects);
+	const objectStateManager = components.objectStateManager;
+	if (objectStateManager) {
+		// Set up initial state sync from ObjectStateManager (one-time only)
+		const initialHierarchy = objectStateManager.getHierarchy();
+		objectHierarchy.set(initialHierarchy);
+
+		const initialSelection = objectStateManager.getSelection();
+		const initialSelectedObjects = initialSelection.map((objectId: string) =>
+			objectStateManager.getObject(objectId)
+		).filter(Boolean);
+		selectedObjects.set(initialSelectedObjects);
+	} else {
+		// Fallback to legacy sync methods if ObjectStateManager not available
+		if (components.selectionController) {
+			const initialSelection = components.selectionController.getSelectedObjects();
+			selectedObjects.set(initialSelection.map(convertThreeObjectToObjectData));
+		}
+
+		if (components.sceneController) {
+			const allObjects = components.sceneController.getAllObjects();
+			objectHierarchy.set(allObjects);
+		}
 	}
 }
 
-// Convert Three.js object to ObjectData for Svelte stores
-function convertThreeObjectToObjectData(threeObject: any): ObjectData {
-	const userData = threeObject.userData || {};
-	const sceneController = modlerComponentsBridge?.sceneController;
-	const objectData = sceneController?.getObjectByMesh?.(threeObject);
+// SIMPLIFIED: Expect standard format data from ObjectStateManager
+function validateAndNormalizeObjectData(objectData: any): ObjectData {
+	// Data should already be in standard format from ObjectStateManager
+	// This function just validates and provides fallbacks for edge cases
 
+	if (!objectData || typeof objectData !== 'object') {
+		console.warn('validateAndNormalizeObjectData: Invalid object data, creating fallback');
+		return createFallbackObjectData();
+	}
+
+	// Check if data is already in standard format
+	if (objectData.formatVersion === '1.0.0' ||
+		(objectData.position && typeof objectData.position === 'object' &&
+		 objectData.rotation && typeof objectData.rotation === 'object')) {
+		return objectData as ObjectData;
+	}
+
+	// Handle legacy flat format as fallback (should not happen with new system)
+	if (objectData.hasOwnProperty('position.x')) {
+		console.warn('validateAndNormalizeObjectData: Received legacy flat format, converting');
+		return convertLegacyFlatFormat(objectData);
+	}
+
+	// If format is unknown, try to normalize
+	return normalizeUnknownFormat(objectData);
+}
+
+// Helper: Convert legacy flat format (fallback only)
+function convertLegacyFlatFormat(flatObj: any): ObjectData {
 	return {
-		id: userData.id || threeObject.uuid,
-		name: objectData?.name || 'Object',
-		type: objectData?.type || 'object',
-		isContainer: objectData?.isContainer || false,
+		id: flatObj.id || 'unknown',
+		name: flatObj.name || 'Object',
+		type: flatObj.type || 'object',
+
+		parentContainer: flatObj.parentContainer || null,
+		childIds: flatObj.childIds || [],
+
 		position: {
-			x: threeObject.position.x,
-			y: threeObject.position.y,
-			z: threeObject.position.z
+			x: flatObj['position.x'] || flatObj.position?.x || 0,
+			y: flatObj['position.y'] || flatObj.position?.y || 0,
+			z: flatObj['position.z'] || flatObj.position?.z || 0
 		},
 		rotation: {
-			x: Math.round((threeObject.rotation.x * 180 / Math.PI) * 10) / 10,
-			y: Math.round((threeObject.rotation.y * 180 / Math.PI) * 10) / 10,
-			z: Math.round((threeObject.rotation.z * 180 / Math.PI) * 10) / 10
+			x: flatObj['rotation.x'] || flatObj.rotation?.x || 0,
+			y: flatObj['rotation.y'] || flatObj.rotation?.y || 0,
+			z: flatObj['rotation.z'] || flatObj.rotation?.z || 0
 		},
-		dimensions: objectData?.dimensions || { x: 1, y: 1, z: 1 },
-		material: objectData?.material || { color: '#ff0000', opacity: 1 },
-		autoLayout: objectData?.autoLayout,
-		sizingMode: objectData?.sizingMode,
-		parentContainer: objectData?.parentContainer
+		scale: {
+			x: flatObj['scale.x'] || flatObj.scale?.x || 1,
+			y: flatObj['scale.y'] || flatObj.scale?.y || 1,
+			z: flatObj['scale.z'] || flatObj.scale?.z || 1
+		},
+		dimensions: {
+			x: flatObj['dimensions.x'] || flatObj.dimensions?.x || 1,
+			y: flatObj['dimensions.y'] || flatObj.dimensions?.y || 1,
+			z: flatObj['dimensions.z'] || flatObj.dimensions?.z || 1
+		},
+		material: {
+			color: flatObj['material.color'] || flatObj.material?.color || '#888888',
+			opacity: flatObj['material.opacity'] || flatObj.material?.opacity || 1,
+			transparent: flatObj['material.transparent'] || flatObj.material?.transparent || false
+		},
+
+		isContainer: flatObj.isContainer || false,
+		layoutMode: flatObj.layoutMode || null,
+		autoLayout: {
+			enabled: flatObj['autoLayout.enabled'] || flatObj.autoLayout?.enabled || false,
+			direction: flatObj['autoLayout.direction'] || flatObj.autoLayout?.direction || null,
+			gap: flatObj['autoLayout.gap'] || flatObj.autoLayout?.gap || 0,
+			padding: flatObj['autoLayout.padding'] || flatObj.autoLayout?.padding || { top: 0, bottom: 0, left: 0, right: 0, front: 0, back: 0 }
+		},
+
+		selected: flatObj.selected || false,
+		locked: flatObj.locked || false,
+		visible: flatObj.visible !== false,
+
+		formatVersion: '1.0.0',
+		lastModified: Date.now()
 	};
 }
 
-// Update Three.js from Svelte store changes
+// Helper: Normalize unknown format (fallback)
+function normalizeUnknownFormat(obj: any): ObjectData {
+	return {
+		id: obj.id || obj.uuid || 'unknown',
+		name: obj.name || 'Object',
+		type: obj.type || 'object',
+
+		parentContainer: obj.parentContainer || null,
+		childIds: obj.childIds || obj.children || [],
+
+		position: obj.position || { x: 0, y: 0, z: 0 },
+		rotation: obj.rotation || { x: 0, y: 0, z: 0 },
+		scale: obj.scale || { x: 1, y: 1, z: 1 },
+		dimensions: obj.dimensions || { x: 1, y: 1, z: 1 },
+
+		material: obj.material || { color: '#888888', opacity: 1, transparent: false },
+
+		isContainer: !!obj.isContainer,
+		layoutMode: obj.layoutMode || null,
+		autoLayout: obj.autoLayout || { enabled: false, direction: null, gap: 0, padding: { top: 0, bottom: 0, left: 0, right: 0, front: 0, back: 0 } },
+
+		selected: !!obj.selected,
+		locked: !!obj.locked,
+		visible: obj.visible !== false,
+
+		formatVersion: '1.0.0',
+		lastModified: Date.now()
+	};
+}
+
+// Helper: Create fallback object when data is corrupted
+function createFallbackObjectData(id?: string): ObjectData {
+	return {
+		id: id || `fallback-${Date.now()}`,
+		name: 'Unknown Object',
+		type: 'object',
+
+		parentContainer: null,
+		childIds: [],
+
+		position: { x: 0, y: 0, z: 0 },
+		rotation: { x: 0, y: 0, z: 0 },
+		scale: { x: 1, y: 1, z: 1 },
+		dimensions: { x: 1, y: 1, z: 1 },
+
+		material: { color: '#ff0000', opacity: 1, transparent: false },
+
+		isContainer: false,
+		layoutMode: null,
+		autoLayout: { enabled: false, direction: null, gap: 0, padding: { top: 0, bottom: 0, left: 0, right: 0, front: 0, back: 0 } },
+
+		selected: false,
+		locked: false,
+		visible: true,
+
+		formatVersion: '1.0.0',
+		lastModified: Date.now()
+	};
+}
+
+// Update Three.js from Svelte store changes using ObjectStateManager
 export function updateThreeJSProperty(objectId: string, property: string, value: any, source: string = 'input') {
 	// Check if we're in an iframe - use PostMessage for cross-origin communication
 	const isInIframe = window !== window.parent;
 
 	if (isInIframe) {
-		// Use PostMessage for iframe communication (secure)
+		// Use unified communication system instead of direct PostMessage
 		try {
-			window.parent.postMessage({
-				type: 'property-update',
-				data: { objectId, property, value, source }
-			}, '*');
+			// Dynamic import to avoid SSR issues
+			import('$lib/services/unified-communication').then(({ unifiedCommunication }) => {
+				// Send property update through unified communication system
+				// Note: This could be expanded to use a dedicated property update method if needed
+				unifiedCommunication.sendNavigationCommand('property-update', { objectId, property, value, source }).catch(error => {
+					console.error('❌ Unified communication property update failed:', error);
+				});
+			}).catch(error => {
+				console.error('❌ Failed to load unified communication:', error);
+			});
 			return;
 		} catch (error) {
-			console.error('❌ PostMessage property update failed:', error);
+			console.error('❌ Unified communication property update failed:', error);
 			return;
 		}
 	}
 
-	// Direct access for non-iframe context
+	// Direct access for non-iframe context - use ObjectStateManager
 	const components = (window as any)?.modlerComponents || modlerComponentsBridge;
+	const objectStateManager = components?.objectStateManager;
 
-	if (!components) {
-		console.warn('⚠️ No Three.js components available for property update:', { objectId, property, value });
+	if (!objectStateManager) {
+		console.warn('⚠️ ObjectStateManager not available for property update:', { objectId, property, value });
 		return;
 	}
-
-	const { sceneController, propertyUpdateHandler } = components;
 
 	// Handle multi-selection updates
 	if (objectId === 'multi-selection') {
 		// Get current selected objects
 		const currentObjects = get(selectedObjects);
 
-		// Update all selected objects directly
+		// Update all selected objects through ObjectStateManager
 		currentObjects.forEach(obj => {
-			handleDirectPropertyUpdate(components, obj.id, property, value, source);
+			updateSingleObjectViaStateManager(objectStateManager, obj.id, property, value);
 		});
-
-		// Update the store for all objects
-		selectedObjects.update(objects =>
-			objects.map(obj => {
-				// Create updated object with nested property support
-				const updated = { ...obj };
-				const propertyParts = property.split('.');
-
-				if (propertyParts.length === 1) {
-					updated[property] = value;
-				} else if (propertyParts.length === 2) {
-					updated[propertyParts[0]] = {
-						...updated[propertyParts[0]],
-						[propertyParts[1]]: value
-					};
-				} else if (propertyParts.length === 3) {
-					updated[propertyParts[0]] = {
-						...updated[propertyParts[0]],
-						[propertyParts[1]]: {
-							...updated[propertyParts[0]][propertyParts[1]],
-							[propertyParts[2]]: value
-						}
-					};
-				}
-
-				return updated;
-			})
-		);
 
 		return;
 	}
 
-	// Single object update - handle directly with Three.js scene
-	handleDirectPropertyUpdate(components, objectId, property, value, source);
-
-	// Update the store to reflect the change with nested property support
-	selectedObjects.update(objects =>
-		objects.map(obj => {
-			if (obj.id !== objectId) return obj;
-
-			// Create updated object with nested property support
-			const updated = { ...obj };
-			const propertyParts = property.split('.');
-
-			if (propertyParts.length === 1) {
-				updated[property] = value;
-			} else if (propertyParts.length === 2) {
-				updated[propertyParts[0]] = {
-					...updated[propertyParts[0]],
-					[propertyParts[1]]: value
-				};
-			} else if (propertyParts.length === 3) {
-				updated[propertyParts[0]] = {
-					...updated[propertyParts[0]],
-					[propertyParts[1]]: {
-						...updated[propertyParts[0]][propertyParts[1]],
-						[propertyParts[2]]: value
-					}
-				};
-			}
-
-			return updated;
-		})
-	);
+	// Single object update through ObjectStateManager
+	updateSingleObjectViaStateManager(objectStateManager, objectId, property, value);
 }
 
-// Sync Three.js selection changes to Svelte stores
-export function syncSelectionFromThreeJS(selectedThreeObjects: any[]) {
-	// Check if objects are already serialized (have id, name, type fields) or raw Three.js objects
-	const objectDataArray = selectedThreeObjects.map(obj => {
-		// If object already has serialized structure, use it directly
-		if (obj && typeof obj === 'object' && obj.hasOwnProperty('id') && obj.hasOwnProperty('name') && obj.hasOwnProperty('type')) {
-			return obj; // Already serialized
+// Helper to update object via ObjectStateManager
+function updateSingleObjectViaStateManager(objectStateManager: any, objectId: string, property: string, value: any) {
+	// Convert property path to nested update object
+	const updates: any = {};
+	if (property.includes('.')) {
+		const [parent, child] = property.split('.');
+		updates[parent] = { [child]: parseFloat(value) || value };
+	} else {
+		updates[property] = parseFloat(value) || value;
+	}
+
+	// Handle special cases
+	if (property === 'autoLayout.enabled' && value) {
+		const currentObject = objectStateManager.getObject(objectId);
+		if (currentObject?.isContainer && !currentObject.autoLayout?.direction) {
+			updates.autoLayout.direction = 'x'; // Default direction
 		}
-		// Otherwise convert from Three.js object
-		return convertThreeObjectToObjectData(obj);
-	});
-	selectedObjects.set(objectDataArray);
+	}
+
+	// SINGLE CALL DOES EVERYTHING: Updates 3D scene, triggers layout, notifies UI
+	objectStateManager.updateObject(objectId, updates);
+}
+
+// Sync selection changes from ObjectStateManager (already in standard format)
+export function syncSelectionFromThreeJS(selectedObjectsData: any[]) {
+	try {
+		// Handle null/undefined input
+		if (!Array.isArray(selectedObjectsData)) {
+			console.warn('syncSelectionFromThreeJS: Invalid input, expected array');
+			selectedObjects.set([]);
+			return;
+		}
+
+		// Data should already be in standard format from ObjectStateManager
+		// Just validate and normalize if needed
+		const objectDataArray = selectedObjectsData
+			.filter(obj => obj != null) // Remove null/undefined objects
+			.map(obj => {
+				try {
+					return validateAndNormalizeObjectData(obj);
+				} catch (error) {
+					console.error('syncSelectionFromThreeJS: Error validating object:', error);
+					return createFallbackObjectData(obj?.id);
+				}
+			})
+			.filter(obj => obj != null); // Remove any failed validations
+
+		selectedObjects.set(objectDataArray);
+	} catch (error) {
+		console.error('syncSelectionFromThreeJS: Critical error:', error);
+		selectedObjects.set([]); // Fallback to empty selection
+	}
 }
 
 // Sync object hierarchy from Three.js

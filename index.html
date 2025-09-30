@@ -3,6 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
     <title>Modler V2 - Working Baseline</title>
     <link rel="stylesheet" href="styles/base.css">
     <link rel="stylesheet" href="styles/tabs.css">
@@ -12,17 +15,33 @@
     <link rel="stylesheet" href="styles/ui-improvements.css">
 </head>
 <body>
-    <div class="app-container">
-        <div class="content-area">
-            <!-- Clean viewport - Svelte panels will be overlaid -->
-            <div class="viewport-area">
-                <canvas id="canvas"></canvas>
+    <!-- 3D Canvas - Fixed Background -->
+    <canvas id="canvas"></canvas>
+
+    <!-- Unified CSS Grid Layout - Direct Svelte Integration -->
+    <div class="app-grid">
+        <!-- Left Panel - Direct Svelte mounting point -->
+        <div class="left-panel" id="left-panel-container">
+            <!-- Svelte left panel will be mounted here directly -->
+        </div>
+
+        <!-- Main Viewport Area -->
+        <div class="viewport-area">
+            <!-- Floating Toolbar Container -->
+            <div class="floating-toolbar" id="main-toolbar-container">
+                <!-- Svelte main toolbar will be mounted here directly -->
             </div>
+        </div>
+
+        <!-- Right Panel - Direct Svelte mounting point -->
+        <div class="property-panel" id="property-panel-container">
+            <!-- Svelte property panel will be mounted here directly -->
         </div>
     </div>
 
     <!-- External Scripts -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="vendor/three.min.js"></script>
+    <script src="vendor/split.min.js"></script>
     <script src="foundation/scene-foundation.js"></script>
     <script src="scene/scene-controller.js"></script>
     <script src="scene/visual-effects.js"></script>
@@ -38,6 +57,7 @@
     <script src="interaction/zoom-centering.js"></script>
     <script src="interaction/camera-controller.js"></script>
     <script src="layout/layout-engine.js"></script>
+    <script src="core/object-state-manager.js"></script>
     <script src="interaction/input-controller.js"></script>
     <script src="application/tool-controller.js"></script>
     <script src="application/configuration-manager.js"></script>
@@ -60,30 +80,40 @@
     <script src="application/utilities/geometry-utils.js"></script>
     <script src="application/utilities/transform-notification-utils.js"></script>
     <script src="application/utilities/transformation-manager.js"></script>
+    <script src="application/utilities/visualization-resource-pool.js"></script>
     <script src="application/utilities/geometry-factory.js"></script>
     <script src="application/utilities/material-manager.js"></script>
-    <script src="application/utilities/visualization-resource-pool.js"></script>
     <script src="application/utilities/development-validator.js"></script>
     <script src="application/tools/layout-geometry.js"></script>
     <script src="application/tools/container-crud-manager.js"></script>
     <script src="application/handlers/property-update-handler.js"></script>
     <script src="application/tools/box-creation-tool.js"></script>
+
+    <!-- Unified Notification System (Phase 1 Foundation) - MOVED BEFORE v2-main.js -->
+    <script src="application/events/object-event-bus.js"></script>
+    <script src="application/serialization/object-data-format.js"></script>
+
+    <!-- Property Format & Unit Conversion System (AFTER ObjectDataFormat) -->
+    <script src="application/utilities/unit-converter.js"></script>
+    <script src="integration/svelte/property-format-converter.js"></script>
+    <script src="application/serialization/object-serializer.js"></script>
+    <script src="integration/svelte/property-panel-sync.js"></script>
+
+    <!-- Svelte UI Integration Classes (Load BEFORE v2-main.js) -->
+    <script src="integration/svelte/port-detection.js"></script>
+    <script src="integration/svelte/panel-manager.js"></script>
+    <script src="integration/svelte/direct-component-manager.js"></script>
+    <script src="integration/split-panel-controller.js"></script>
+
     <script src="v2-main.js"></script>
 
     <!-- Legacy V1 UI scripts removed - replaced by Svelte UI -->
-
-    <!-- Unified Notification System (Phase 1 Foundation) -->
-    <script src="application/events/object-event-bus.js"></script>
-    <script src="application/serialization/object-serializer.js"></script>
-    <script src="integration/svelte/property-panel-sync.js"></script>
 
     <!-- Parametric Property System (Phase 3 Extensions) -->
     <script src="application/schemas/property-schema-registry.js"></script>
     <script src="application/examples/parametric-chair-example.js"></script>
 
-    <!-- Svelte UI Integration (Development Only - Modularized) -->
-    <script src="integration/svelte/port-detection.js"></script>
-    <script src="integration/svelte/panel-manager.js"></script>
+    <!-- Svelte UI Main Integration (Load AFTER v2-main.js) -->
     <script src="integration/svelte/main-integration.js"></script>
 </body>
 </html>

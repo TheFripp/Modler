@@ -7,6 +7,10 @@ class PropertyUpdateHandler {
         // This prevents initialization order issues
     }
 
+    get objectStateManager() {
+        return window.modlerComponents?.objectStateManager;
+    }
+
     // Get components on demand to avoid initialization order issues
     get sceneController() {
         return window.modlerComponents?.sceneController;
@@ -165,11 +169,11 @@ class PropertyUpdateHandler {
     }
 
     /**
-     * Handle object dimension changes using centralized system
+     * Handle object dimension changes using ObjectStateManager
      */
     handleObjectDimensionChange(objectId, property, value) {
-        if (!this.sceneController) {
-            console.error('SceneController not available for dimension change');
+        if (!this.objectStateManager) {
+            console.error('ObjectStateManager not available for dimension change');
             return false;
         }
 
@@ -180,26 +184,16 @@ class PropertyUpdateHandler {
                 return false;
             }
 
-            // Use SceneController's updateObjectDimensions for CAD-style updates
-            const success = this.sceneController.updateObjectDimensions(objectId, axis, value);
-
-            if (success) {
-
-                // Trigger container updates if object is in a container
-                const objectData = this.sceneController.getObject(objectId);
-                if (objectData?.parentContainer) {
-                    // Use MovementUtils for consistent container update behavior
-                    const MovementUtils = window.MovementUtils;
-                    if (MovementUtils) {
-                        MovementUtils.updateParentContainer(objectData.mesh, false, null, null, true);
-                    }
+            // Use ObjectStateManager for unified dimension updates
+            const updates = {
+                dimensions: {
+                    [axis]: value
                 }
+            };
 
-                return true;
-            } else {
-                console.error('Failed to update dimension:', { objectId, property, value });
-                return false;
-            }
+            this.objectStateManager.updateObject(objectId, updates);
+            return true;
+
         } catch (error) {
             console.error('PropertyUpdateHandler dimension error:', error);
             return false;
@@ -207,32 +201,24 @@ class PropertyUpdateHandler {
     }
 
     /**
-     * Handle object transform changes (position, rotation)
+     * Handle object transform changes using ObjectStateManager
      */
     handleObjectTransformChange(objectId, property, value) {
-        if (!this.sceneController) {
-            console.error('SceneController not available for transform change');
+        if (!this.objectStateManager) {
+            console.error('ObjectStateManager not available for transform change');
             return false;
         }
 
         try {
-            const objectData = this.sceneController.getObject(objectId);
-            if (!objectData?.mesh) {
-                console.error('Object or mesh not found:', objectId);
-                return false;
-            }
-
-            const mesh = objectData.mesh;
+            const updates = {};
 
             // Handle position updates
             if (property.startsWith('position.')) {
                 const axis = property.split('.')[1];
                 if (['x', 'y', 'z'].includes(axis)) {
-                    mesh.position[axis] = value;
-
-                    // Trigger transform notification for container updates
-                    this.sceneController.notifyObjectTransformChanged(objectId);
-                    return true;
+                    updates.position = {
+                        [axis]: value
+                    };
                 }
             }
 
@@ -240,13 +226,16 @@ class PropertyUpdateHandler {
             if (property.startsWith('rotation.')) {
                 const axis = property.split('.')[1];
                 if (['x', 'y', 'z'].includes(axis)) {
-                    // Convert degrees to radians
-                    mesh.rotation[axis] = value * Math.PI / 180;
-
-                    // Trigger transform notification
-                    this.sceneController.notifyObjectTransformChanged(objectId);
-                    return true;
+                    // Convert degrees to radians for internal storage
+                    updates.rotation = {
+                        [axis]: value * Math.PI / 180
+                    };
                 }
+            }
+
+            if (Object.keys(updates).length > 0) {
+                this.objectStateManager.updateObject(objectId, updates);
+                return true;
             }
 
             return false;
@@ -257,45 +246,33 @@ class PropertyUpdateHandler {
     }
 
     /**
-     * Handle object material changes using centralized system
+     * Handle object material changes using ObjectStateManager
      */
     handleObjectMaterialChange(objectId, property, value) {
-        if (!this.sceneController) {
-            console.error('SceneController not available for material change');
+        if (!this.objectStateManager) {
+            console.error('ObjectStateManager not available for material change');
             return false;
         }
 
         try {
-            const objectData = this.sceneController.getObject(objectId);
-            if (!objectData?.mesh?.material) {
-                console.error('Object, mesh, or material not found:', objectId);
-                return false;
-            }
-
-            const mesh = objectData.mesh;
             const materialProp = property.split('.')[1];
+            const updates = {};
 
             // Handle different material properties
             if (materialProp === 'color') {
-                const colorValue = typeof value === 'string' ? value.replace('#', '0x') : value;
-                mesh.material.color.setHex(colorValue);
+                updates.material = {
+                    color: value
+                };
             } else if (materialProp === 'opacity') {
-                mesh.material.opacity = value;
-                mesh.material.transparent = value < 1;
+                updates.material = {
+                    opacity: value
+                };
             } else {
                 console.error('Unknown material property:', materialProp);
                 return false;
             }
 
-            // Mark material for update and trigger visual completion
-            mesh.material.needsUpdate = true;
-
-            // Use completeObjectModification pattern for consistency
-            const MovementUtils = window.MovementUtils;
-            if (MovementUtils) {
-                MovementUtils.completeObjectModification(mesh, 'material', true);
-            }
-
+            this.objectStateManager.updateObject(objectId, updates);
             return true;
 
         } catch (error) {

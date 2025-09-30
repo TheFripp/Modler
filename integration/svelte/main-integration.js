@@ -1,420 +1,368 @@
 /**
- * Modler V2 - Main Svelte Integration
- * Coordinates between modular integration components
+ * UNIFIED Main Integration - Simplified with ObjectStateManager
+ *
+ * ELIMINATES: 100+ lines of manual property handling, scattered state updates
+ * REPLACES: Complex switch statements, manual ObjectEventBus calls, fragmented logic
+ * PROVIDES: Single, simple integration layer using ObjectStateManager
  */
 
 (function() {
     'use strict';
 
-    // Integration enabled check
-    const INTEGRATION_ENABLED = window.location.hostname === 'localhost' || window.location.protocol === 'file:';
+    // ==================================================================================
+    // INITIALIZATION
+    // ==================================================================================
 
-    if (!INTEGRATION_ENABLED) {
-        return;
-    }
-
-    // Integration components
+    let isInitialized = false;
+    let iframeMode = false;
     let portDetector = null;
     let panelManager = null;
-    // Legacy dataSync removed - using unified notification system
-    let initializationInProgress = false;
-
-    // Unified notification system components
-    let objectEventBus = null;
-    let objectSerializer = null;
+    let directComponentManager = null;
     let propertyPanelSync = null;
+    let splitPanelController = null;
 
     /**
-     * Initialize the Svelte integration system
+     * Show visual error message to user with enhanced debugging info
+     */
+    function showInitializationError(message) {
+        const timestamp = new Date().toLocaleTimeString();
+        const debugInfo = {
+            modlerComponents: !!window.modlerComponents,
+            objectStateManager: !!window.modlerComponents?.objectStateManager,
+            sceneController: !!window.modlerComponents?.sceneController,
+            selectionController: !!window.modlerComponents?.selectionController,
+            svelteClasses: {
+                SveltePortDetector: !!window.SveltePortDetector,
+                SveltePanelManager: !!window.SveltePanelManager
+            }
+        };
+
+        console.error('🚨 Integration Error Details:', {
+            message,
+            timestamp,
+            debugInfo,
+            userAgent: navigator.userAgent
+        });
+
+        const errorDiv = document.createElement('div');
+        errorDiv.style.cssText = `
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: #842029;
+            color: #f8d7da;
+            padding: 15px 20px;
+            border-radius: 5px;
+            border: 1px solid #721c24;
+            z-index: 10000;
+            font-family: Arial, sans-serif;
+            font-size: 14px;
+            max-width: 450px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        `;
+        errorDiv.innerHTML = `
+            <strong>⚠️ Integration Error (${timestamp})</strong><br>
+            ${message}<br><br>
+            <details style="margin-top: 8px;">
+                <summary style="cursor: pointer; font-weight: bold;">Debug Info</summary>
+                <pre style="font-size: 11px; margin: 5px 0; overflow: auto; max-height: 100px;">${JSON.stringify(debugInfo, null, 2)}</pre>
+            </details>
+            <small>Check browser console for full details. Try refreshing the page.</small>
+        `;
+        document.body.appendChild(errorDiv);
+
+        // Auto-remove after 15 seconds (longer for debugging)
+        setTimeout(() => {
+            if (errorDiv.parentNode) {
+                errorDiv.parentNode.removeChild(errorDiv);
+            }
+        }, 15000);
+    }
+
+    /**
+     * Initialize main integration system
      */
     async function initialize() {
-        if (initializationInProgress) {
-            return;
-        }
+        if (isInitialized) return;
 
         try {
-            initializationInProgress = true;
+            // Unified Main Integration initializing... (logging removed to reduce console noise)
 
-            // Step 1: Detect Svelte dev server
-            portDetector = new SveltePortDetector();
-            const serverDetected = await portDetector.detectPort();
+            // Wait for components to be ready before proceeding
+            await waitForComponentsReady();
 
-            if (!serverDetected) {
-                showSvelteError('Svelte dev server not detected');
-                return;
+            // Detect iframe mode
+            iframeMode = window !== window.parent;
+
+            if (iframeMode) {
+                console.log('📱 Running in iframe mode');
+                setupIframeMessageHandling();
+            } else {
+                // Running in direct mode (logging removed to reduce console noise)
+                setupDirectMessageHandling();
+
+                // Initialize UI system with automatic fallback
+                await initializeUISystem();
+
+                // Initialize Split.js panel resizing system
+                await initializeSplitPanels();
             }
 
-            // Step 2: Wait for Modler components to be ready
-            await waitForModlerComponents();
+            setupUnifiedEventHandlers();
+            isInitialized = true;
 
-            // Step 3: Initialize panel management
-            panelManager = new SveltePanelManager(portDetector);
-
-            // Step 4: Create panels
-            createPanels();
-
-            // Step 5: Initialize unified notification system
-            initializeUnifiedNotificationSystem();
-
-            // Step 6: Setup component synchronization
-            initializeComponentSync();
-
-            // Step 7: Setup message listener for UI interactions
-            setupMessageListener();
-
-            // Step 8: Show panels
-            panelManager.showPanels();
-
-            // Step 9: Delayed initial sync to ensure iframes are ready
-            setTimeout(() => {
-                // Performing delayed initial object list sync...
-                window.populateObjectList();
-            }, 1000); // 1 second delay to ensure panels are loaded
-
-            // showActivationNotification('Svelte UI Active'); // Disabled toast notification
-            initializationInProgress = false;
+            // Unified Main Integration ready
 
         } catch (error) {
-            initializationInProgress = false;
-            console.error('❌ Svelte integration initialization failed:', error);
-            showSvelteError(`Initialization failed: ${error.message}`);
-
-            // Retry initialization once after a delay if critical components failed
-            if (!panelManager) {
-                setTimeout(() => {
-                    if (!window.svelteIntegrationActive) {
-                        initialize();
-                    }
-                }, 2000);
-            }
+            console.error('❌ Main Integration initialization failed:', error);
+            showInitializationError(`Integration failed: ${error.message}`);
+            throw error;
         }
     }
 
     /**
-     * Setup message listener for commands from Svelte panels
+     * Wait for modlerComponents to be properly initialized using event-based approach
      */
-    function setupMessageListener() {
-        window.addEventListener('message', (event) => {
-            // Only accept messages from our Svelte panels
-            const sveltePort = portDetector?.detectedPort;
-            if (!sveltePort || event.origin !== `http://localhost:${sveltePort}`) {
+    async function waitForComponentsReady() {
+        return new Promise((resolve, reject) => {
+            const timeout = 10000; // 10 second timeout for complex initialization
+            let timeoutId;
+
+            // Check if components are already ready
+            if (window.modlerComponents &&
+                window.modlerComponents.objectStateManager &&
+                window.modlerComponents.sceneController &&
+                window.modlerComponents.selectionController) {
+                // Components already ready for integration
+                resolve();
                 return;
             }
 
-            const { type, data } = event.data;
+            // Listen for the modlerV2Ready event
+            const handleReady = (event) => {
+                const { success, error, components } = event.detail;
 
-            try {
-                switch (type) {
-                    case 'tool-switch':
-                        handleToolSwitch(data.tool);
-                        break;
-                    case 'object-select':
-                        handleObjectSelection(data.objectId, data.parentContainer, data.useNavigationController);
-                        break;
-                    case 'property-update':
-                        handlePropertyUpdate(data.objectId, data.property, data.value);
-                        break;
-                    case 'container-create':
-                        handleContainerCreate(data);
-                        break;
-                    case 'snap-toggle':
-                        handleSnapToggle();
-                        break;
-                    default:
-                        console.warn('🤷 Unknown message type from Svelte panel:', type);
+                clearTimeout(timeoutId);
+                window.removeEventListener('modlerV2Ready', handleReady);
+
+                if (success) {
+                    // Components ready for integration via event
+
+                    // Double-check that required components are available
+                    if (window.modlerComponents &&
+                        window.modlerComponents.objectStateManager &&
+                        window.modlerComponents.sceneController &&
+                        window.modlerComponents.selectionController) {
+                        resolve();
+                    } else {
+                        const missingComponents = [];
+                        if (!window.modlerComponents) missingComponents.push('modlerComponents');
+                        if (!window.modlerComponents?.objectStateManager) missingComponents.push('objectStateManager');
+                        if (!window.modlerComponents?.sceneController) missingComponents.push('sceneController');
+                        if (!window.modlerComponents?.selectionController) missingComponents.push('selectionController');
+
+                        const errorMsg = `Required components missing: ${missingComponents.join(', ')}`;
+                        console.error('❌', errorMsg);
+                        showInitializationError(errorMsg);
+                        reject(new Error(errorMsg));
+                    }
+                } else {
+                    console.error('❌ Components initialization failed:', error);
+                    showInitializationError(`Component initialization failed: ${error}`);
+                    reject(new Error(error || 'Component initialization failed'));
                 }
-            } catch (error) {
-                console.error('❌ Error handling Svelte panel message:', error);
-            }
+            };
+
+            // Set up event listener
+            window.addEventListener('modlerV2Ready', handleReady);
+
+            // Set up timeout fallback
+            timeoutId = setTimeout(() => {
+                window.removeEventListener('modlerV2Ready', handleReady);
+                console.error('❌ Components initialization timeout after 10 seconds');
+                showInitializationError('Components failed to initialize within 10 seconds. Check browser console for details.');
+                reject(new Error('Components initialization timeout'));
+            }, timeout);
+
+            console.log('⏳ Waiting for modlerV2Ready event...');
         });
     }
 
     /**
-     * Handle tool switching from Svelte UI
+     * Initialize UI system with automatic fallback
      */
-    function handleToolSwitch(toolName) {
-        const toolController = window.modlerComponents?.toolController;
-        if (!toolController) {
-            console.warn('❌ ToolController not available for tool switch');
+    async function initializeUISystem() {
+        console.log('🔧 Initializing UI System with fallback support...');
+
+        // Try direct component mounting first
+        const directSuccess = await tryDirectComponentMounting();
+
+        if (directSuccess) {
+            console.log('✅ Direct component mounting successful');
             return;
         }
 
-        const success = toolController.switchToTool(toolName);
+        // Fallback to iframe-based system
+        console.log('🔄 Falling back to iframe-based panel system...');
+        const iframeSuccess = await tryIframePanelSystem();
 
-        if (success) {
-            // Send updated tool state to all panels
-            sendToolStateUpdate(toolName);
+        if (iframeSuccess) {
+            console.log('✅ Iframe fallback system successful');
         } else {
-            console.warn('❌ Failed to switch to tool:', toolName);
+            console.error('❌ Both direct mounting and iframe fallback failed');
         }
     }
 
     /**
-     * Send tool state update to all Svelte panels
+     * Initialize Split.js panel system for professional resizing
      */
-    function sendToolStateUpdate(toolName) {
-        if (!propertyPanelSync || !panelManager) return;
+    async function initializeSplitPanels() {
+        try {
+            console.log('🎯 Initializing Split.js Panel System...');
 
-        // Get current snap state
-        const snapController = window.modlerComponents?.snapController;
-        const snapEnabled = snapController ? snapController.getEnabled() : false;
-
-        // Create tool state data
-        const toolStateData = {
-            activeTool: toolName,
-            snapEnabled: snapEnabled
-        };
-
-
-        // Send tool state update via unified PropertyPanelSync
-        if (propertyPanelSync) {
-            propertyPanelSync.sendToolStateUpdate(toolName, { snapEnabled });
-        } else {
-            console.warn('⚠️ PropertyPanelSync not available for tool state update');
-        }
-    }
-
-    /**
-     * Handle object selection from Svelte UI with container navigation support
-     */
-    function handleObjectSelection(objectId, parentContainer = null, useNavigationController = false) {
-        const sceneController = window.modlerComponents?.sceneController;
-        const selectionController = window.modlerComponents?.selectionController;
-        const navigationController = window.modlerComponents?.navigationController;
-
-        if (!sceneController || !selectionController) {
-            console.warn('❌ Scene or Selection controller not available for object selection');
-            return;
-        }
-
-        // Use NavigationController for unified navigation if requested and available
-        if (useNavigationController && navigationController) {
-            navigationController.navigateToObject(objectId);
-            return;
-        }
-
-        // Handle container navigation if object has a parent container
-        if (parentContainer) {
-
-            // Check if we need to step into the parent container
-            const currentContainer = navigationController?.getCurrentContainer();
-            if (!currentContainer || currentContainer.id !== parentContainer) {
-
-                // Step into the container first
-                if (window.stepIntoContainerById) {
-                    window.stepIntoContainerById(parentContainer);
-                } else if (navigationController) {
-                    // Use navigation controller as fallback
-                    const containerData = sceneController.getObject(parentContainer);
-                    if (containerData) {
-                        navigationController.stepIntoContainer(containerData);
-                    }
-                }
-
-                // Small delay to allow container navigation to complete before selecting child
-                setTimeout(() => {
-                    selectObjectInScene(objectId);
-                }, 50);
-                return;
-            }
-        }
-
-        // Direct object selection
-        selectObjectInScene(objectId);
-    }
-
-    /**
-     * Core object selection logic
-     */
-    function selectObjectInScene(objectId) {
-        const sceneController = window.modlerComponents?.sceneController;
-        const selectionController = window.modlerComponents?.selectionController;
-
-        const objectData = sceneController.getObject(objectId);
-        if (objectData && objectData.mesh) {
-            selectionController.clearSelection('svelte-ui-selection');
-            selectionController.select(objectData.mesh);
-        } else {
-            console.warn('❌ Object not found for selection:', objectId);
-        }
-    }
-
-    /**
-     * Handle property updates from Svelte UI
-     */
-    function handlePropertyUpdate(objectId, property, value) {
-        const sceneController = window.modlerComponents?.sceneController;
-
-        if (!sceneController) {
-            console.warn('❌ SceneController not available for property update');
-            return;
-        }
-
-        const objectData = sceneController.getObject(objectId);
-        if (objectData && objectData.mesh) {
-            // Apply property update based on type
-            switch (property) {
-                case 'position.x':
-                case 'position.y':
-                case 'position.z':
-                    const axis = property.split('.')[1];
-                    objectData.mesh.position[axis] = parseFloat(value);
-                    break;
-                case 'rotation.x':
-                case 'rotation.y':
-                case 'rotation.z':
-                    const rotAxis = property.split('.')[1];
-                    objectData.mesh.rotation[rotAxis] = parseFloat(value);
-                    break;
-                case 'scale.x':
-                case 'scale.y':
-                case 'scale.z':
-                    const scaleAxis = property.split('.')[1];
-                    objectData.mesh.scale[scaleAxis] = parseFloat(value);
-                    break;
-                case 'autoLayout.enabled':
-                    if (objectData.isContainer) {
-                        objectData.autoLayout = objectData.autoLayout || {};
-                        objectData.autoLayout.enabled = Boolean(value);
-                        console.log(`🔄 Setting autoLayout.enabled to ${value} for container ${objectData.id}`);
-
-                        // Set default direction if not already set when enabling layout
-                        if (objectData.autoLayout.enabled && !objectData.autoLayout.direction) {
-                            objectData.autoLayout.direction = 'x'; // Default to x-axis layout
-                            console.log(`🔄 Setting default autoLayout.direction to 'x' for container ${objectData.id}`);
-                        }
-
-                        // Trigger layout update if enabled
-                        if (objectData.autoLayout.enabled && window.modlerComponents?.sceneController) {
-                            const layoutResult = window.modlerComponents.sceneController.updateLayout(objectData.id);
-                            if (layoutResult && layoutResult.success) {
-                                console.log(`✅ Layout update successful for container ${objectData.id}`);
-                                console.log(`📐 Layout bounds:`, layoutResult.layoutBounds);
-
-                                // Resize container to fit layout bounds
-                                if (layoutResult.layoutBounds && window.modlerComponents?.containerCrudManager) {
-                                    console.log(`🔧 Resizing container ${objectData.id} to layout bounds`);
-                                    window.modlerComponents.containerCrudManager.resizeContainerToLayoutBounds(objectData, layoutResult.layoutBounds);
-                                }
-
-                                // Fire ObjectEventBus event for layout change
-                                if (window.objectEventBus) {
-                                    window.objectEventBus.emit(
-                                        window.objectEventBus.EVENT_TYPES.HIERARCHY,
-                                        objectData.id,
-                                        { changeType: 'layout-update', layoutEnabled: true },
-                                        { source: 'autoLayout-enabled', throttle: false }
-                                    );
-                                }
-                            } else {
-                                console.warn(`⚠️ Layout update failed for container ${objectData.id}:`, layoutResult?.reason);
-                            }
-                        } else if (!window.modlerComponents?.sceneController) {
-                            console.warn('⚠️ SceneController not available for layout update');
-                        }
-                    }
-                    break;
-                case 'autoLayout.direction':
-                    if (objectData.isContainer) {
-                        objectData.autoLayout = objectData.autoLayout || {};
-                        objectData.autoLayout.direction = String(value);
-                        console.log(`🔄 Setting autoLayout.direction to ${value} for container ${objectData.id}`);
-
-                        // Trigger layout update if layout is enabled
-                        if (objectData.autoLayout.enabled && window.modlerComponents?.sceneController) {
-                            const layoutResult = window.modlerComponents.sceneController.updateLayout(objectData.id);
-                            if (layoutResult && layoutResult.success) {
-                                console.log(`✅ Layout direction update successful for container ${objectData.id}`);
-                                console.log(`📐 Layout bounds:`, layoutResult.layoutBounds);
-
-                                // Resize container to fit layout bounds
-                                if (layoutResult.layoutBounds && window.modlerComponents?.containerCrudManager) {
-                                    console.log(`🔧 Resizing container ${objectData.id} to layout bounds`);
-                                    window.modlerComponents.containerCrudManager.resizeContainerToLayoutBounds(objectData, layoutResult.layoutBounds);
-                                }
-
-                                // Fire ObjectEventBus event for layout change
-                                if (window.objectEventBus) {
-                                    window.objectEventBus.emit(
-                                        window.objectEventBus.EVENT_TYPES.HIERARCHY,
-                                        objectData.id,
-                                        { changeType: 'layout-update', direction: value },
-                                        { source: 'autoLayout-direction', throttle: false }
-                                    );
-                                }
-                            } else {
-                                console.warn(`⚠️ Layout direction update failed for container ${objectData.id}:`, layoutResult?.reason);
-                            }
-                        } else if (!objectData.autoLayout.enabled) {
-                            console.log(`ℹ️ Layout not enabled for container ${objectData.id}, direction change stored but not applied`);
-                        } else if (!window.modlerComponents?.sceneController) {
-                            console.warn('⚠️ SceneController not available for layout update');
-                        }
-                    }
-                    break;
-                default:
-                    console.warn('❌ Unknown property update:', property);
-                    return;
+            if (!window.SplitPanelController) {
+                console.error('❌ SplitPanelController not available');
+                return false;
             }
 
-            // Notify system of object modification
-            if (window.notifyObjectModified) {
-                window.notifyObjectModified(objectData.mesh, 'property-change');
+            // Create and initialize Split panel controller
+            splitPanelController = new window.SplitPanelController();
+
+            // Wait longer to ensure DOM and UI components are fully loaded
+            setTimeout(() => {
+                splitPanelController.initialize();
+            }, 1000);
+
+            console.log('✅ Split.js Panel System initialized successfully');
+            return true;
+
+        } catch (error) {
+            console.error('❌ Failed to initialize Split.js Panel System:', error);
+            return false;
+        }
+    }
+
+    /**
+     * Try direct component mounting system
+     */
+    async function tryDirectComponentMounting() {
+        try {
+            if (!window.DirectComponentManager) {
+                console.warn('⚠️ DirectComponentManager not available, skipping direct mounting');
+                return false;
             }
 
-        } else {
-            console.warn('❌ Object not found for property update:', objectId);
+            directComponentManager = new window.DirectComponentManager();
+            const success = await directComponentManager.initialize();
+
+            if (!success) {
+                console.warn('⚠️ DirectComponentManager initialization failed');
+                return false;
+            }
+
+            // Initialize PropertyPanelSync for direct communication
+            if (window.PropertyPanelSync) {
+                propertyPanelSync = new window.PropertyPanelSync(window.objectEventBus, directComponentManager);
+                console.log('✅ PropertyPanelSync initialized for direct communication');
+            }
+
+            return true;
+
+        } catch (error) {
+            console.warn('⚠️ Direct component mounting failed:', error);
+            return false;
         }
     }
 
     /**
-     * Handle container creation from Svelte UI
+     * Fallback to iframe-based Svelte panels
      */
-    function handleContainerCreate(data) {
-        const containerCrudManager = window.modlerComponents?.containerCrudManager;
+    async function tryIframePanelSystem() {
+        try {
+            // Step 1: Wait for Svelte classes to be loaded
+            const classesReady = await waitForSvelteClasses();
+            if (!classesReady) {
+                console.error('❌ Svelte classes failed to load after timeout');
+                return false;
+            }
 
-        if (!containerCrudManager) {
-            console.warn('❌ ContainerCrudManager not available for container creation');
-            return;
+            // Step 2: Detect Svelte dev server
+            portDetector = new window.SveltePortDetector();
+            const serverDetected = await portDetector.detectPort();
+
+            if (!serverDetected) {
+                console.warn('⚠️ Svelte dev server not detected');
+                return false;
+            }
+
+            console.log('✅ Svelte server detected:', portDetector.getBaseUrl());
+
+            // Step 3: Wait for Modler components to be ready
+            await waitForModlerComponents();
+
+            // Step 4: Initialize iframe panel management
+            panelManager = new window.SveltePanelManager(portDetector);
+
+            // Step 5: Initialize PropertyPanelSync for iframe communication
+            if (window.PropertyPanelSync) {
+                propertyPanelSync = new window.PropertyPanelSync(window.objectEventBus, panelManager);
+                console.log('✅ PropertyPanelSync initialized for iframe communication');
+            }
+
+            // Step 6: Create and show iframe panels
+            createIframePanels();
+            panelManager.showPanels();
+
+            return true;
+
+        } catch (error) {
+            console.error('❌ Iframe panel system failed:', error);
+            return false;
         }
-
-        // Container creation logic would go here
-        // This depends on the specific container creation API
     }
 
     /**
-     * Handle snap toggle from Svelte UI
+     * Create iframe panels (restored from original working system)
      */
-    function handleSnapToggle() {
-        const snapController = window.modlerComponents?.snapController;
-
-        if (!snapController) {
-            console.warn('❌ SnapController not available for snap toggle');
-            return;
-        }
-
-        // Toggle snap state
-        const currentState = snapController.getEnabled();
-        snapController.setEnabled(!currentState);
-
-
-        // Send updated tool state to all panels
-        const toolController = window.modlerComponents?.toolController;
-        const currentTool = toolController ? toolController.getActiveToolName() : 'select';
-        sendToolStateUpdate(currentTool);
-    }
-
-    /**
-     * Create all Svelte panels
-     */
-    function createPanels() {
-        // Creating Svelte panels...
-
+    function createIframePanels() {
+        console.log('📺 Creating iframe panels...');
         panelManager.createLeftOverlay();
         panelManager.createRightOverlay();
         panelManager.createMainToolbar();
-        // Disabled: System toolbar creates duplicate floating snap button over properties panel
-        // panelManager.createSystemToolbar();
+        console.log('✅ Iframe panels created successfully');
+    }
+
+    // createPanels() function removed - DirectComponentManager handles mounting automatically
+
+    /**
+     * Wait for Svelte classes to be loaded
+     */
+    function waitForSvelteClasses() {
+        return new Promise((resolve) => {
+            const timeout = 5000; // 5 second timeout
+            const startTime = Date.now();
+
+            const checkClasses = () => {
+                if (window.SveltePortDetector && window.SveltePanelManager) {
+                    // Svelte classes are available (logging removed to reduce console noise)
+                    resolve(true);
+                } else {
+                    const elapsed = Date.now() - startTime;
+                    if (elapsed > timeout) {
+                        console.error('❌ Timeout waiting for Svelte classes');
+                        console.error('Missing classes:', {
+                            SveltePortDetector: !window.SveltePortDetector,
+                            SveltePanelManager: !window.SveltePanelManager
+                        });
+                        resolve(false);
+                    } else {
+                        console.log('⏳ Waiting for Svelte classes...');
+                        setTimeout(checkClasses, 100);
+                    }
+                }
+            };
+            checkClasses();
+        });
     }
 
     /**
@@ -426,8 +374,10 @@
                 if (window.modlerComponents &&
                     window.modlerComponents.sceneController &&
                     window.modlerComponents.selectionController) {
+                    // Modler components ready
                     resolve();
                 } else {
+                    console.log('⏳ Waiting for Modler components...');
                     setTimeout(checkComponents, 100);
                 }
             };
@@ -435,385 +385,830 @@
         });
     }
 
+    // ==================================================================================
+    // UNIFIED EVENT HANDLING
+    // ==================================================================================
+
     /**
-     * Initialize unified notification system
+     * Setup event handlers for ObjectStateManager and ObjectEventBus
      */
-    function initializeUnifiedNotificationSystem() {
-        try {
+    function setupUnifiedEventHandlers() {
+        const objectStateManager = window.modlerComponents?.objectStateManager;
+        if (!objectStateManager) {
+            console.warn('⚠️ ObjectStateManager not available');
+            return;
+        }
 
-            // Step 1: Initialize ObjectEventBus
-            if (window.ObjectEventBus) {
-                objectEventBus = new window.ObjectEventBus();
-            } else {
-                console.warn('⚠️ ObjectEventBus class not available, skipping initialization');
+        // Setup ObjectEventBus listeners for complete data flow
+        setupObjectEventBusListeners(objectStateManager);
+
+        // Listen to unified state changes
+        objectStateManager.addEventListener('objects-changed', (event) => {
+            const { objects, hierarchy, selection } = event.detail;
+
+            // Get PostMessage-ready data
+            const postMessageSelection = selection.map(objectId =>
+                objectStateManager.getObjectForPostMessage ?
+                objectStateManager.getObjectForPostMessage(objectId) :
+                objectStateManager.getObject(objectId)
+            ).filter(Boolean);
+
+            const postMessageHierarchy = objectStateManager.getHierarchyForPostMessage ?
+                objectStateManager.getHierarchyForPostMessage() : hierarchy;
+
+            // Notify UI systems with standard format
+            notifyUISystems({
+                type: 'data-update',
+                data: {
+                    selectedObjects: postMessageSelection,
+                    objectHierarchy: postMessageHierarchy,
+                    updateType: 'unified-update'
+                }
+            });
+        });
+
+        objectStateManager.addEventListener('selection-changed', (event) => {
+            const { selection } = event.detail;
+
+            // Retrieve full object data for selected objects
+            const selectedObjectsData = selection.map(objectId => {
+                const objectData = objectStateManager.getObject(objectId);
+                if (!objectData) {
+                    console.warn(`⚠️ Object ${objectId} not found in ObjectStateManager`);
+                    return null;
+                }
+                return objectData;
+            }).filter(Boolean);
+
+            // Get current hierarchy for context
+            const hierarchy = objectStateManager.getHierarchy();
+
+            // Use standard format directly from ObjectStateManager
+            // NO MORE FLAT PROPERTIES - ObjectStateManager already provides standard format
+
+            // Get PostMessage-ready data directly from ObjectStateManager
+            const postMessageSelectedObjects = selectedObjectsData.map(obj =>
+                objectStateManager.getObjectForPostMessage ?
+                objectStateManager.getObjectForPostMessage(obj.id) : obj
+            ).filter(Boolean);
+
+            const postMessageHierarchy = objectStateManager.getHierarchyForPostMessage ?
+                objectStateManager.getHierarchyForPostMessage() : hierarchy;
+
+            // Notify UI systems with standard format data
+            notifyUISystems({
+                type: 'data-update',
+                data: {
+                    selectedObjects: postMessageSelectedObjects,
+                    objectHierarchy: postMessageHierarchy,
+                    updateType: 'selection-change'
+                }
+            });
+
+            // Selection update sent to UI (logging removed to reduce console noise)
+        });
+    }
+
+    /**
+     * Setup ObjectEventBus listeners for comprehensive scene → state → UI data flow
+     */
+    function setupObjectEventBusListeners(objectStateManager) {
+        if (!window.objectEventBus) {
+            console.warn('⚠️ ObjectEventBus not available');
+            return;
+        }
+
+        // Setting up ObjectEventBus listeners for unified data flow
+
+        // Listen to object lifecycle events (create, delete)
+        window.objectEventBus.subscribe('object:lifecycle', (event) => {
+
+            if (event.changeData.action === 'create') {
+                // Object created - ensure ObjectStateManager is synchronized
+                setTimeout(() => {
+                    // Trigger re-import to capture newly created objects
+                    if (objectStateManager.importFromSceneController) {
+                        objectStateManager.importFromSceneController();
+                    }
+
+                    // Get the newly created object data for property panels
+                    const newObject = objectStateManager.getObject(event.objectId);
+                    const postMessageNewObject = objectStateManager.getObjectForPostMessage ?
+                        objectStateManager.getObjectForPostMessage(event.objectId) : newObject;
+                    const postMessageHierarchy = objectStateManager.getHierarchyForPostMessage ?
+                        objectStateManager.getHierarchyForPostMessage() : objectStateManager.getHierarchy();
+
+                    // Notify UI of new object with standard format data
+                    notifyUISystems({
+                        type: 'data-update',
+                        data: {
+                            selectedObjects: [],
+                            objectHierarchy: postMessageHierarchy,
+                            updateType: 'object-created',
+                            newObjectId: event.objectId,
+                            newObjectData: postMessageNewObject
+                        }
+                    });
+
+                    // Also send object list update
+                    notifyUISystems({
+                        type: 'object-list-update',
+                        data: {
+                            hierarchy: postMessageHierarchy,
+                            updateType: 'object-added',
+                            addedObjectId: event.objectId
+                        }
+                    });
+                }, 50); // Small delay to ensure object is fully processed
+            }
+
+            if (event.changeData.action === 'delete') {
+                // Object deleted - notify UI to update
+                const postMessageHierarchy = objectStateManager.getHierarchyForPostMessage ?
+                    objectStateManager.getHierarchyForPostMessage() : objectStateManager.getHierarchy();
+
+                notifyUISystems({
+                    type: 'data-update',
+                    data: {
+                        selectedObjects: [],
+                        objectHierarchy: postMessageHierarchy,
+                        updateType: 'object-deleted',
+                        deletedObjectId: event.objectId
+                    }
+                });
+
+                // Also send object list update
+                notifyUISystems({
+                    type: 'object-list-update',
+                    data: {
+                        hierarchy: postMessageHierarchy,
+                        updateType: 'object-removed',
+                        removedObjectId: event.objectId
+                    }
+                });
+            }
+        });
+
+        // Listen to transform events (position, rotation, scale changes)
+        window.objectEventBus.subscribe('object:transform', (event) => {
+            // Transform events are frequent during tools - only log errors
+
+            // Update ObjectStateManager with transform changes
+            if (event.changeData.position || event.changeData.rotation || event.changeData.scale) {
+                objectStateManager.updateObject(event.objectId, event.changeData);
+            }
+        });
+
+        // Listen to selection events
+        window.objectEventBus.subscribe('object:selection', (event) => {
+            // ObjectEventBus selection event received (logging removed to reduce console noise)
+
+            // Sync selection state
+            if (event.changeData.selected) {
+                objectStateManager.setSelection([event.objectId]);
+            }
+        });
+
+        // Listen to property change events for comprehensive UI updates
+        window.objectEventBus.subscribe('object:property-changed', (event) => {
+
+            // Send property update to UI systems using standard format
+            const objectData = event.changeData.objectData;
+            if (objectData) {
+                const postMessageObjectData = objectStateManager.getObjectForPostMessage ?
+                    objectStateManager.getObjectForPostMessage(event.objectId) : objectData;
+
+                notifyUISystems({
+                    type: 'property-update',
+                    data: {
+                        objectId: event.objectId,
+                        property: event.changeData.property,
+                        value: event.changeData.value,
+                        updatedObject: postMessageObjectData,
+                        updateSource: event.changeData.source || 'unknown'
+                    }
+                });
+            }
+        });
+
+        // ObjectEventBus listeners setup complete
+    }
+
+    // ==================================================================================
+    // SIMPLIFIED PROPERTY HANDLING
+    // ==================================================================================
+
+    /**
+     * REVOLUTIONARY SIMPLIFICATION: All property updates in ~10 lines
+     */
+    function handlePropertyUpdate(objectId, property, value) {
+        const objectStateManager = window.modlerComponents?.objectStateManager;
+        if (!objectStateManager) {
+            console.warn('❌ ObjectStateManager not available');
+            return;
+        }
+
+        // Convert property path to update object with proper format conversion
+        const updates = {};
+
+        // Use PropertyFormatConverter for proper type conversion and validation
+        const formatConverter = window.propertyFormatConverter;
+        if (formatConverter) {
+            const result = formatConverter.convertToInternal(property, value);
+            if (!result.isValid) {
+                console.warn(`❌ Property format validation failed for ${property}:`, result.error);
+            }
+            updates[property] = result.value;
+        } else {
+            // Fallback to basic conversion if PropertyFormatConverter not available
+            updates[property] = parseFloat(value) || value;
+        }
+
+        // Handle special cases
+        if (property === 'autoLayout.enabled' && value) {
+            const currentObject = objectStateManager.getObject(objectId);
+            if (currentObject?.isContainer && !currentObject.autoLayout?.direction) {
+                updates.autoLayout.direction = 'x'; // Default direction
+            }
+        }
+
+        // Property updates are frequent during tools - only log errors
+
+        // SINGLE CALL DOES EVERYTHING: Updates 3D scene, triggers layout, notifies UI
+        objectStateManager.updateObject(objectId, updates);
+
+        // UNIFIED ARCHITECTURE: Emit ObjectEventBus events for property changes
+        if (window.objectEventBus) {
+            // Determine event type based on property
+            let eventType = 'object:transform';
+            if (property.startsWith('dimensions')) {
+                eventType = window.objectEventBus.EVENT_TYPES?.GEOMETRY || 'object:geometry';
+            } else if (property.startsWith('material')) {
+                eventType = window.objectEventBus.EVENT_TYPES?.MATERIAL || 'object:material';
+            } else if (property.startsWith('autoLayout') || property === 'parentContainer') {
+                eventType = window.objectEventBus.EVENT_TYPES?.HIERARCHY || 'object:hierarchy';
+            } else if (property.startsWith('position') || property.startsWith('rotation') || property.startsWith('scale')) {
+                eventType = window.objectEventBus.EVENT_TYPES?.TRANSFORM || 'object:transform';
+            }
+
+            window.objectEventBus.emit(
+                eventType,
+                objectId,
+                {
+                    property: property,
+                    value: value,
+                    updates: updates,
+                    source: 'UI'
+                },
+                { immediate: true, source: 'main-integration.handlePropertyUpdate' }
+            );
+        }
+
+        // Also emit a comprehensive property-changed event for UI synchronization
+        if (window.objectEventBus) {
+            window.objectEventBus.emit(
+                'object:property-changed',
+                objectId,
+                {
+                    property: property,
+                    value: value,
+                    objectData: objectStateManager.getObject(objectId)
+                },
+                { immediate: true, source: 'main-integration.handlePropertyUpdate' }
+            );
+        }
+    }
+
+    // ==================================================================================
+    // MESSAGE HANDLING (PostMessage & Direct)
+    // ==================================================================================
+
+    /**
+     * Setup PostMessage handling for iframe mode
+     */
+    function setupIframeMessageHandling() {
+        window.addEventListener('message', (event) => {
+            if (!event.origin.startsWith('http://localhost:')) {
+                console.warn('⚠️ PostMessage rejected - invalid origin:', event.origin);
                 return;
             }
 
-            // Step 2: Initialize ObjectSerializer
-            if (window.ObjectSerializer) {
-                objectSerializer = new window.ObjectSerializer();
-            } else {
-                console.warn('⚠️ ObjectSerializer class not available, skipping initialization');
-                return;
+            const { type, data } = event.data;
+
+            switch (type) {
+                case 'property-update':
+                    handlePropertyUpdate(data.objectId, data.property, data.value);
+                    break;
+                case 'tool-activation':
+                    activateTool(data.toolName);
+                    break;
+                case 'snap-toggle':
+                    handleSnapToggle();
+                    break;
+                case 'cad-wireframe-settings-changed':
+                    handleCadWireframeSettingsUpdate(data.settings);
+                    break;
+                case 'get-cad-wireframe-settings':
+                    handleGetCadWireframeSettings(event.source);
+                    break;
+                case 'visual-settings-changed':
+                    handleVisualSettingsUpdate(data.settings);
+                    break;
+                case 'get-visual-settings':
+                    handleGetVisualSettings(event.source);
+                    break;
+                case 'scene-settings-changed':
+                    handleSceneSettingsUpdate(data.settings);
+                    break;
+                case 'get-scene-settings':
+                    handleGetSceneSettings(event.source);
+                    break;
+                case 'interface-settings-changed':
+                    handleInterfaceSettingsUpdate(data.settings);
+                    break;
+                case 'get-interface-settings':
+                    handleGetInterfaceSettings(event.source);
+                    break;
+            }
+        });
+    }
+
+    /**
+     * Setup direct message handling for non-iframe mode
+     */
+    function setupDirectMessageHandling() {
+        // Listen to postMessage calls in direct mode
+        window.addEventListener('message', (event) => {
+            const { type, data } = event.data;
+
+            if (type === 'property-update') {
+                handlePropertyUpdate(data.objectId, data.property, data.value);
+            }
+        });
+
+        // Make handlePropertyUpdate globally available for direct calls
+        window.handlePropertyUpdate = handlePropertyUpdate;
+    }
+
+    // ==================================================================================
+    // UI NOTIFICATION (Replaces complex PropertyPanelSync)
+    // ==================================================================================
+
+    // Throttling for UI updates
+    let lastUpdateTime = 0;
+    let updateTimeout = null;
+    let pendingUpdate = null;
+
+    /**
+     * Notify UI systems of state changes (throttled)
+     */
+    function notifyUISystems(message) {
+        // Throttle rapid updates to prevent spam
+        const now = Date.now();
+        const timeSinceLastUpdate = now - lastUpdateTime;
+
+        if (timeSinceLastUpdate < 50) { // 50ms throttle
+            // Clear existing timeout and set new one
+            if (updateTimeout) {
+                clearTimeout(updateTimeout);
             }
 
-            // Step 3: Initialize PropertyPanelSync
-            if (window.PropertyPanelSync) {
-                propertyPanelSync = new window.PropertyPanelSync(objectEventBus, panelManager);
-            } else {
-                console.warn('⚠️ PropertyPanelSync class not available, skipping initialization');
-                return;
+            pendingUpdate = message;
+            updateTimeout = setTimeout(() => {
+                sendUIUpdate(pendingUpdate);
+                pendingUpdate = null;
+                updateTimeout = null;
+            }, 50);
+            return;
+        }
+
+        sendUIUpdate(message);
+    }
+
+    function sendUIUpdate(message) {
+        lastUpdateTime = Date.now();
+
+        // Use direct component communication or PropertyPanelSync
+        if (directComponentManager) {
+            try {
+                // Direct communication with mounted components
+                directComponentManager.broadcastToAll(message);
+            } catch (error) {
+                console.error('❌ Direct component communication failed:', error);
             }
-
-            // Step 4: Make global references available for tools
-            window.unifiedNotificationSystem = {
-                eventBus: objectEventBus,
-                serializer: objectSerializer,
-                panelSync: propertyPanelSync
-            };
-
-
-        } catch (error) {
-            console.error('❌ Failed to initialize unified notification system:', error);
+        } else if (propertyPanelSync) {
+            try {
+                // Map message types to PropertyPanelSync methods
+                if (message.type === 'data-update') {
+                    // Map data-update to sendToUI with appropriate updateType
+                    const data = message.data;
+                    propertyPanelSync.sendToUI(data.updateType || 'data-update', data.selectedObjects || [], {
+                        hierarchy: data.objectHierarchy,
+                        containerContext: data.containerContext,
+                        newObjectId: data.newObjectId,
+                        newObjectData: data.newObjectData,
+                        deletedObjectId: data.deletedObjectId
+                    });
+                } else if (message.type === 'property-update') {
+                    // Use sendToUI for property updates
+                    propertyPanelSync.sendToUI('property-refresh', message.data.updatedObject ? [message.data.updatedObject] : [], {
+                        property: message.data.property,
+                        value: message.data.value,
+                        objectId: message.data.objectId,
+                        source: message.data.updateSource
+                    });
+                } else if (message.type === 'tool-state-update') {
+                    // Use sendToolStateUpdate for tool state changes
+                    propertyPanelSync.sendToolStateUpdate(message.data.toolState?.activeTool || 'unknown', message.data);
+                } else if (message.type === 'object-list-update') {
+                    // Map object-list-update to hierarchy-changed
+                    propertyPanelSync.sendToUI('hierarchy-changed', [], {
+                        hierarchy: message.data.hierarchy,
+                        updateType: message.data.updateType,
+                        addedObjectId: message.data.addedObjectId,
+                        removedObjectId: message.data.removedObjectId
+                    });
+                } else {
+                    // Fallback for other message types - use sendToUI with custom type
+                    propertyPanelSync.sendToUI(message.type, message.data?.selectedObjects || [], {
+                        ...message.data
+                    });
+                }
+            } catch (error) {
+                console.error('❌ PropertyPanelSync communication failed:', error);
+                // Fallback to legacy behavior only on error
+                fallbackToLegacyPostMessage(message);
+            }
+        } else {
+            console.warn('⚠️ No communication system available');
+            fallbackToLegacyPostMessage(message);
         }
     }
 
     /**
-     * Initialize component synchronization
+     * Fallback to PropertyPanelSync when main communication fails
+     * CRITICAL FIX: Remove direct postMessage bypass - always route through PropertyPanelSync
      */
-    function initializeComponentSync() {
-        const selectionController = window.modlerComponents?.selectionController;
-        const toolController = window.modlerComponents?.toolController;
-        const sceneController = window.modlerComponents?.sceneController;
+    function fallbackToLegacyPostMessage(message) {
+        // BYPASS ELIMINATED: No longer use direct postMessage - force through PropertyPanelSync
+        console.warn('❌ PropertyPanelSync should have handled this message:', message.type);
+        console.warn('❌ This indicates a communication bypass that needs investigation');
 
-        // Clear initial selection to ensure clean startup state
+        // Don't create parallel communication paths - let the failure be visible
+        // This forces proper PropertyPanelSync usage and prevents race conditions
+    }
+
+    /**
+     * Sanitize data for PostMessage - SIMPLIFIED VERSION
+     * ObjectStateManager now provides clean standard format data
+     */
+    function sanitizeForPostMessage(obj) {
+        // ObjectStateManager should already provide clean data via getObjectForPostMessage()
+        // This function is now just a safety fallback for edge cases
+
+        if (obj === null || obj === undefined) return obj;
+        if (typeof obj === 'function') return '[Function]';
+        if (obj instanceof Date) return obj.toISOString();
+        if (Array.isArray(obj)) return obj.map(sanitizeForPostMessage);
+
+        if (typeof obj === 'object') {
+            // Skip Three.js objects that shouldn't be in standard format data
+            if (obj.constructor?.name?.includes('Mesh') ||
+                obj.constructor?.name?.includes('Three') ||
+                obj.constructor?.name?.includes('WebGL')) {
+                return `[${obj.constructor.name}]`;
+            }
+
+            // Simple object cloning - ObjectDataFormat should have already cleaned the data
+            try {
+                return JSON.parse(JSON.stringify(obj));
+            } catch (error) {
+                console.warn('sanitizeForPostMessage: JSON serialization failed, using fallback');
+                const sanitized = {};
+                for (const [key, value] of Object.entries(obj)) {
+                    if (key.startsWith('_') || key === 'mesh') continue;
+                    sanitized[key] = sanitizeForPostMessage(value);
+                }
+                return sanitized;
+            }
+        }
+
+        return obj;
+    }
+
+    /**
+     * Notify iframe panels via PropertyPanelSync (BYPASS ELIMINATED)
+     * CRITICAL FIX: Replace direct iframe access with PropertyPanelSync routing
+     */
+    function notifyIframePanels(message) {
+        // BYPASS ELIMINATED: No longer use direct iframe.contentWindow access
         if (propertyPanelSync) {
-            propertyPanelSync.sendToUI('clear-selection', []);
+            try {
+                // Route through PropertyPanelSync instead of direct iframe access
+                // This ensures consistent message authorization and monitoring
+                propertyPanelSync.sendToUI(message.type, message.data?.selectedObjects || [], {
+                    messageData: message.data
+                });
+            } catch (error) {
+                console.error('❌ PropertyPanelSync communication failed:', error);
+            }
+        } else {
+            console.error('❌ PropertyPanelSync not available - cannot send message:', message.type);
+            console.error('❌ Direct iframe access bypass eliminated to prevent race conditions');
         }
+    }
 
-        // Connect SceneController events to hierarchy updates
-        if (sceneController) {
-            sceneController.on('objectAdded', (objectData) => {
-                console.log('🎯 objectAdded event:', objectData?.name || objectData?.id);
-                // Trigger hierarchy refresh when objects are added
-                window.populateObjectList();
-            });
+    // ==================================================================================
+    // TOOL INTEGRATION (Complete)
+    // ==================================================================================
 
-            sceneController.on('objectRemoved', (objectData) => {
-                console.log('🎯 objectRemoved event:', objectData?.name || objectData?.id);
-                // Trigger hierarchy refresh when objects are removed
-                window.populateObjectList();
-            });
-        }
-
-        if (selectionController) {
-            // Listen for selection changes using SelectionController's callback system
-            selectionController.onSelectionChange((selectedObjects) => {
-                if (propertyPanelSync && selectedObjects) {
-                    propertyPanelSync.sendToUI('selection-change', selectedObjects, {
-                        panels: ['left', 'right'] // Send to both object list (left) and properties (right)
-                    });
-                }
-            });
-
-            // Initial data sync - send all scene objects to populate object list
-            const sceneController = window.modlerComponents?.sceneController;
-
-            if (sceneController && sceneController.getAllObjects) {
-                const allObjects = sceneController.getAllObjects();
-
-                if (allObjects && allObjects.length > 0) {
-                    const allMeshes = allObjects.map(obj => obj.mesh).filter(mesh => mesh);
-
-                    if (allMeshes.length > 0) {
-                        propertyPanelSync.sendToUI('scene-objects', allMeshes);
-                    } else {
-                        console.warn('❌ No scene objects with meshes found - objects without meshes:', allObjects.filter(obj => !obj.mesh));
-                    }
-                } else {
-                    console.warn('❌ getAllObjects returned empty or null array');
-                }
+    function activateTool(toolName) {
+        const toolController = window.modlerComponents?.toolController;
+        if (toolController) {
+            const success = toolController.switchToTool(toolName);
+            if (success) {
+                // Send updated tool state to all panels
+                sendToolStateUpdate(toolName);
             } else {
-                console.warn('❌ SceneController or getAllObjects not available');
+                console.warn('❌ Failed to switch to tool:', toolName);
             }
+        }
+    }
 
-            // Also sync current selection
-            const currentSelection = Array.from(selectionController.selectedObjects || []);
-            if (currentSelection.length > 0) {
-                propertyPanelSync.sendToUI('initial-sync', currentSelection);
+    /**
+     * Handle CAD wireframe settings update from Svelte toolbar
+     */
+    function handleCadWireframeSettingsUpdate(settings) {
+        console.log('⚙️ Updating CAD wireframe settings:', settings);
+
+        const configurationManager = window.modlerComponents?.configurationManager;
+        if (!configurationManager) {
+            console.warn('❌ ConfigurationManager not available for CAD wireframe settings');
+            return;
+        }
+
+        // Update configuration using proper ConfigurationManager methods
+        // The ConfigurationManager will handle persistence and notifications automatically
+        for (const [key, value] of Object.entries(settings)) {
+            configurationManager.set(key, value);
+        }
+
+        console.log('✅ CAD wireframe settings updated via ConfigurationManager');
+    }
+
+    /**
+     * Handle request for current CAD wireframe settings
+     */
+    function handleGetCadWireframeSettings(source) {
+        const configurationManager = window.modlerComponents?.configurationManager;
+        if (!configurationManager) {
+            console.warn('❌ ConfigurationManager not available for getting CAD wireframe settings');
+            return;
+        }
+
+        // Get current settings from ConfigurationManager
+        const currentSettings = {
+            color: configurationManager.get('visual.cad.wireframe.color') || '#666666',
+            opacity: configurationManager.get('visual.cad.wireframe.opacity') || 0.5,
+            lineWidth: configurationManager.get('visual.cad.wireframe.lineWidth') || 1
+        };
+
+        // Send response back to requesting iframe
+        source.postMessage({
+            type: 'cad-wireframe-settings-response',
+            settings: currentSettings
+        }, '*');
+    }
+
+    /**
+     * Handle visual settings update from Svelte left panel
+     */
+    function handleVisualSettingsUpdate(settings) {
+        const configurationManager = window.modlerComponents?.configurationManager;
+        if (!configurationManager) {
+            console.warn('❌ ConfigurationManager not available for visual settings');
+            return;
+        }
+
+        // Update configuration using proper ConfigurationManager methods
+        // The ConfigurationManager will handle persistence and notifications automatically
+        for (const [key, value] of Object.entries(settings)) {
+            configurationManager.set(key, value);
+        }
+    }
+
+    /**
+     * Handle scene settings update from Svelte left panel
+     */
+    function handleSceneSettingsUpdate(settings) {
+        const configurationManager = window.modlerComponents?.configurationManager;
+        if (!configurationManager) {
+            console.warn('❌ ConfigurationManager not available for scene settings');
+            return;
+        }
+
+        // Update configuration using proper ConfigurationManager methods
+        // The ConfigurationManager will handle persistence and notifications automatically
+        for (const [key, value] of Object.entries(settings)) {
+            configurationManager.set(key, value);
+        }
+    }
+
+    /**
+     * Handle request for current scene settings
+     */
+    function handleGetSceneSettings(source) {
+        const configurationManager = window.modlerComponents?.configurationManager;
+        if (!configurationManager) {
+            console.warn('❌ ConfigurationManager not available for getting scene settings');
+            return;
+        }
+
+        // Get current settings from ConfigurationManager
+        const currentSettings = {
+            backgroundColor: configurationManager.get('scene.backgroundColor') || '#1a1a1a',
+            gridMainColor: configurationManager.get('scene.gridMainColor') || '#444444',
+            gridSubColor: configurationManager.get('scene.gridSubColor') || '#222222'
+        };
+
+        // Send response back to requesting iframe
+        source.postMessage({
+            type: 'scene-settings-response',
+            settings: currentSettings
+        }, '*');
+    }
+
+    /**
+     * Handle interface settings update from Svelte left panel
+     */
+    function handleInterfaceSettingsUpdate(settings) {
+        const configurationManager = window.modlerComponents?.configurationManager;
+        if (!configurationManager) {
+            console.warn('❌ ConfigurationManager not available for interface settings');
+            return;
+        }
+
+        // Update configuration using proper ConfigurationManager methods
+        // The ConfigurationManager will handle persistence and notifications automatically
+        for (const [key, value] of Object.entries(settings)) {
+            configurationManager.set(key, value);
+        }
+    }
+
+    /**
+     * Handle request for current interface settings
+     */
+    function handleGetInterfaceSettings(source) {
+        const configurationManager = window.modlerComponents?.configurationManager;
+        if (!configurationManager) {
+            console.warn('❌ ConfigurationManager not available for getting interface settings');
+            return;
+        }
+
+        // Get current settings from ConfigurationManager
+        const currentSettings = {
+            accentColor: configurationManager.get('interface.accentColor') || '#4a9eff',
+            toolbarOpacity: configurationManager.get('interface.toolbarOpacity') || 0.95
+        };
+
+        // Send response back to requesting iframe
+        source.postMessage({
+            type: 'interface-settings-response',
+            settings: currentSettings
+        }, '*');
+    }
+
+    /**
+     * Handle request for current visual settings
+     */
+    function handleGetVisualSettings(source) {
+        const configurationManager = window.modlerComponents?.configurationManager;
+        if (!configurationManager) {
+            console.warn('❌ ConfigurationManager not available for getting visual settings');
+            return;
+        }
+
+        // Get current settings from ConfigurationManager
+        const currentSettings = {
+            selection: {
+                color: configurationManager.get('visual.selection.color') || '#ff6600',
+                lineWidth: configurationManager.get('visual.selection.lineWidth') || 2,
+                opacity: configurationManager.get('visual.selection.opacity') || 0.8
+            },
+            containers: {
+                wireframeColor: configurationManager.get('visual.containers.wireframeColor') || '#00ff00',
+                lineWidth: configurationManager.get('visual.containers.lineWidth') || 1,
+                opacity: configurationManager.get('visual.containers.opacity') || 0.8
             }
+        };
 
-            // Send initial tool state
+        // Send response back to requesting iframe
+        source.postMessage({
+            type: 'visual-settings-response',
+            settings: currentSettings
+        }, '*');
+    }
+
+    /**
+     * Handle snap toggle from Svelte toolbar
+     */
+    function handleSnapToggle() {
+        const snapController = window.modlerComponents?.snapController;
+        if (snapController) {
+            snapController.toggle();
+            console.log('✅ Snap toggled:', snapController.getEnabled());
+        } else {
+            console.warn('❌ SnapController not available');
+        }
+    }
+
+    /**
+     * Send tool state update to all panels
+     */
+    function sendToolStateUpdate(toolName) {
+        // Get current snap state
+        const snapController = window.modlerComponents?.snapController;
+        const snapEnabled = snapController ? snapController.getEnabled() : false;
+
+        const toolStateMessage = {
+            type: 'tool-state-update',
+            data: {
+                toolState: { activeTool: toolName },
+                snapEnabled
+            }
+        };
+
+        if (directComponentManager) {
+            directComponentManager.broadcastToAll(toolStateMessage);
+            console.log(`📡 Tool state update sent via DirectComponentManager: ${toolName} (snap: ${snapEnabled})`);
+        } else if (propertyPanelSync) {
+            propertyPanelSync.sendToolStateUpdate(toolName, { snapEnabled });
+            console.log(`📡 Tool state update sent via PropertyPanelSync: ${toolName} (snap: ${snapEnabled})`);
+        } else {
+            console.debug('🔧 No communication system available for tool state update');
+        }
+    }
+
+    function toggleSnapping() {
+        const snapController = window.modlerComponents?.snapController;
+        if (snapController) {
+            snapController.setEnabled(!snapController.getEnabled());
+
+            // Send updated tool state after snap toggle
+            const toolController = window.modlerComponents?.toolController;
             const currentTool = toolController ? toolController.getActiveToolName() : 'select';
             sendToolStateUpdate(currentTool);
         }
-
-        if (toolController) {
-            // TODO: ToolController doesn't have event system yet
-            // Initial tool state already sent above
-        }
     }
 
-
-    /**
-     * Show activation notification
-     */
-    function showActivationNotification(message) {
-        const notification = document.createElement('div');
-        notification.style.cssText = `
-            position: fixed;
-            top: 20px;
-            left: 50%;
-            transform: translateX(-50%);
-            background: rgba(34, 197, 94, 0.9);
-            color: white;
-            padding: 12px 24px;
-            border-radius: 8px;
-            font-family: Arial, sans-serif;
-            font-size: 14px;
-            font-weight: 500;
-            z-index: 1000000;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-            animation: slideDown 0.3s ease-out;
-        `;
-
-        notification.textContent = message;
-        document.body.appendChild(notification);
-
-        setTimeout(() => {
-            if (notification.parentNode) {
-                notification.style.animation = 'slideUp 0.3s ease-in forwards';
-                setTimeout(() => {
-                    if (notification.parentNode) {
-                        notification.remove();
-                    }
-                }, 300);
-            }
-        }, 2000);
-    }
-
-    /**
-     * Show error message
-     */
-    function showSvelteError(message) {
-        console.error('❌ Svelte Integration Error:', message);
-
-        const errorDiv = document.createElement('div');
-        errorDiv.style.cssText = `
-            position: fixed;
-            top: 20px;
-            left: 50%;
-            transform: translateX(-50%);
-            background: rgba(239, 68, 68, 0.9);
-            color: white;
-            padding: 12px 24px;
-            border-radius: 8px;
-            font-family: Arial, sans-serif;
-            font-size: 14px;
-            z-index: 1000000;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-        `;
-
-        errorDiv.textContent = `Svelte UI Error: ${message}`;
-        document.body.appendChild(errorDiv);
-
-        setTimeout(() => {
-            if (errorDiv.parentNode) {
-                errorDiv.remove();
-            }
-        }, 5000);
-    }
-
-    // Add required CSS animations
-    const style = document.createElement('style');
-    style.textContent = `
-        @keyframes slideDown {
-            from { transform: translateX(-50%) translateY(-20px); opacity: 0; }
-            to { transform: translateX(-50%) translateY(0); opacity: 1; }
-        }
-        @keyframes slideUp {
-            from { transform: translateX(-50%) translateY(0); opacity: 1; }
-            to { transform: translateX(-50%) translateY(-20px); opacity: 0; }
-        }
-    `;
-    document.head.appendChild(style);
-
-    // Initialize when DOM is ready
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', initialize);
-    } else {
-        initialize();
-    }
-
-
-    /**
-     * Bridge functions for backward compatibility with legacy selection system
-     */
-
-    // Bridge function: Update property panel when object is selected/deselected
-    window.updatePropertyPanelFromObject = function(selectedMesh) {
-        if (!propertyPanelSync) return;
-
-        if (selectedMesh) {
-            // Send the selected object to Svelte panels
-            propertyPanelSync.sendToUI('legacy-selection', [selectedMesh]);
-        } else {
-            // Clear property panel
-            propertyPanelSync.sendToUI('legacy-clear-selection', []);
-        }
+    // Bridge function: Notify tool state changed (for keyboard shortcuts)
+    window.notifyToolStateChanged = function(toolName) {
+        console.log(`🔔 Tool state changed notification: ${toolName}`);
+        sendToolStateUpdate(toolName);
     };
 
-    // Bridge function: Update object list selection (handled by unified notification system)
-    window.updateObjectListSelection = function(selectedNames) {
-        // This is handled automatically by sendFullDataUpdate, but we can add specific logic if needed
-    };
+    // ==================================================================================
+    // SCENE EVENT INTEGRATION (Simplified)
+    // ==================================================================================
 
-    // Bridge function: Populate object list in left panel
-    window.populateObjectList = function(retryCount = 0) {
-        if (!propertyPanelSync) {
-            if (retryCount < 20) { // Max 2 seconds of retries (20 * 100ms)
-                setTimeout(() => {
-                    window.populateObjectList(retryCount + 1);
-                }, 100);
-                return;
-            } else {
-                console.error('❌ Main Integration: PropertyPanelSync still not available after 2 seconds, giving up');
-                showSvelteError('Unified notification system failed to initialize');
-                return;
-            }
-        }
-
+    /**
+     * Setup SceneController event listeners
+     */
+    function setupSceneEventListeners() {
         const sceneController = window.modlerComponents?.sceneController;
-        if (!sceneController) {
-            console.warn('📋 Main Integration: SceneController not available');
-            return;
-        }
+        if (!sceneController) return;
 
-        try {
-            const allObjects = sceneController.getAllObjects();
+        // Listen to object creation/deletion
+        sceneController.on?.('objectAdded', (objectData) => {
+            // Object events during creation are frequent - only log errors
 
-            // Filter out utility objects (same logic as bridge)
-            const filteredObjects = allObjects.filter(obj =>
-                obj.name !== 'Floor Grid' &&
-                obj.type !== 'grid' &&
-                !obj.name?.toLowerCase().includes('grid') &&
-                obj.name !== '(Interactive)' &&
-                !obj.name?.toLowerCase().includes('interactive')
-            );
-
-            if (filteredObjects && filteredObjects.length > 0) {
-                // Serialize objects for hierarchy update
-                const serializedObjects = filteredObjects.map(obj => objectSerializer.serializeObject(obj.mesh)).filter(Boolean);
-                propertyPanelSync.sendToUI('hierarchy-changed', serializedObjects, {
-                    includeContext: false,
-                    panels: ['left'] // Send to left panel where object list is located
-                });
-            } else {
-                propertyPanelSync.sendToUI('hierarchy-changed', [], {
-                    includeContext: false,
-                    panels: ['left'] // Send to left panel where object list is located
-                });
+            // Import new object to ObjectStateManager
+            const objectStateManager = window.modlerComponents?.objectStateManager;
+            if (objectStateManager) {
+                objectStateManager.importFromSceneController();
             }
-        } catch (error) {
-            console.warn('❌ Error populating object list:', error);
-        }
-    };
+        });
 
-    // Bridge function: Notify object hierarchy changed (containers, parents, children)
-    // Simplified to only handle hierarchy updates, following 3-type system
-    window.notifyObjectHierarchyChanged = function() {
-        if (!propertyPanelSync) return;
+        sceneController.on?.('objectRemoved', (objectData) => {
+            // Object events during manipulation are frequent - only log errors
 
-        // Update the full object list to reflect hierarchy changes
-        // This will send hierarchy-changed updateType automatically
-        window.populateObjectList();
-    };
-
-    // Bridge function: Notify object modified (properties, transforms, etc.)
-    window.notifyObjectModified = function(objectOrId, modificationType = 'geometry') {
-
-        if (!propertyPanelSync) {
-            console.warn('❌ PropertyPanelSync not available for notifyObjectModified');
-            return;
-        }
-
-        const sceneController = window.modlerComponents?.sceneController;
-        if (!sceneController) {
-            console.warn('❌ SceneController not available for notifyObjectModified');
-            return;
-        }
-
-        try {
-            let targetObject = null;
-            let objectId = null;
-
-            // Handle both object and ID inputs
-            if (typeof objectOrId === 'string' || typeof objectOrId === 'number') {
-                // ID passed - find the object
-                objectId = objectOrId;
-                const objectData = sceneController.getObject(objectOrId);
-                targetObject = objectData ? objectData.mesh : null;
-            } else {
-                // Object passed directly
-                targetObject = objectOrId;
-                objectId = targetObject?.userData?.id;
+            // Remove from ObjectStateManager
+            const objectStateManager = window.modlerComponents?.objectStateManager;
+            if (objectStateManager) {
+                objectStateManager.objects.delete(objectData.id);
+                objectStateManager.rebuildHierarchy();
             }
+        });
+    }
 
-            if (targetObject && objectId) {
-                // UNIFIED SYSTEM: Emit through ObjectEventBus only
-                if (objectEventBus) {
-                    // Map modification types to standardized event types
-                    let eventType;
-                    switch (modificationType) {
-                        case 'transform':
-                        case 'position':
-                        case 'rotation':
-                        case 'scale':
-                            eventType = objectEventBus.EVENT_TYPES.TRANSFORM;
-                            break;
-                        case 'geometry':
-                        case 'dimension':
-                        case 'dimensions':
-                            eventType = objectEventBus.EVENT_TYPES.GEOMETRY;
-                            break;
-                        case 'material':
-                        case 'color':
-                        case 'opacity':
-                            eventType = objectEventBus.EVENT_TYPES.MATERIAL;
-                            break;
-                        case 'hierarchy':
-                        case 'parent':
-                        case 'children':
-                            eventType = objectEventBus.EVENT_TYPES.HIERARCHY;
-                            break;
-                        default:
-                            eventType = objectEventBus.EVENT_TYPES.GEOMETRY; // Default fallback
-                    }
+    // ==================================================================================
+    // SCENE UPDATE FUNCTIONS (Bridge functions for ConfigurationManager)
+    // ==================================================================================
 
-                    // Emit through unified system - PropertyPanelSync handles UI updates
-                    objectEventBus.emit(eventType, objectId, {
-                        modificationType: modificationType,
-                        timestamp: Date.now()
-                    }, {
-                        source: 'legacy-bridge',
-                        throttle: true
-                    });
-                } else {
-                    console.warn('⚠️ ObjectEventBus not available - unified notification system not working');
-                }
-
-                // PropertyPanelSync automatically handles updates for selected objects
-                // No additional calls needed - unified system handles everything
-            }
-        } catch (error) {
-            console.warn('❌ Error notifying object modification:', error);
-        }
-    };
-
-    // Bridge function: Update scene background from configuration
+    /**
+     * Update scene background color from configuration
+     */
     window.updateSceneBackground = function(backgroundColor) {
-        // Scene background update: ${backgroundColor}
-
         const scene = window.modlerComponents?.scene;
         if (!scene) return;
 
@@ -825,137 +1220,114 @@
             } else if (typeof backgroundColor === 'number') {
                 scene.background = new THREE.Color(backgroundColor);
             }
+        } catch (error) {
+            console.error('❌ Failed to update scene background:', error);
+        }
+    };
 
-            // Notify panels of background change if needed
-            if (propertyPanelSync) {
-                const bgData = {
-                    backgroundColor: backgroundColor,
-                    timestamp: Date.now()
-                };
+    /**
+     * Update grid main color from configuration
+     */
+    window.updateGridMainColor = function(gridMainColor) {
+        // Find and update the main grid lines
+        const scene = window.modlerComponents?.scene;
+        if (!scene) return;
 
-                // Use unified PropertyPanelSync for system updates
-                if (propertyPanelSync) {
-                    propertyPanelSync.sendToUI('background-update', [], {
-                        throttle: false,
-                        panels: ['right', 'left', 'mainToolbar', 'systemToolbar'],
-                        includeContext: false
-                    });
-                } else {
-                    console.warn('⚠️ PropertyPanelSync not available for background update');
+        try {
+            const color = new THREE.Color(gridMainColor);
+            // Look for the floor grid object and update its main lines
+            scene.traverse((child) => {
+                if (child.name === 'Floor Grid' || child.userData?.gridType === 'main') {
+                    if (child.material && child.material.color) {
+                        child.material.color.copy(color);
+                        child.material.needsUpdate = true;
+                    }
                 }
-            }
-        } catch (error) {
-            console.warn('❌ Error updating scene background:', error);
-        }
-    };
-
-    // Bridge function: Update config UI from values
-    window.updateConfigUIFromValues = function(configValues) {
-        if (!propertyPanelSync || !panelManager) return;
-
-
-        try {
-            const configData = {
-                config: configValues || {},
-                timestamp: Date.now()
-            };
-
-            // Use unified PropertyPanelSync for system updates
-            if (propertyPanelSync) {
-                propertyPanelSync.sendToUI('config-update', [], {
-                    throttle: false,
-                    panels: ['right', 'left', 'mainToolbar', 'systemToolbar'],
-                    includeContext: false
-                });
-            } else {
-                console.warn('⚠️ PropertyPanelSync not available for config update');
-            }
-        } catch (error) {
-            console.warn('❌ Error updating config UI:', error);
-        }
-    };
-
-    // Bridge function: Update property panel dimensions (for box creation tool)
-    window.updatePropertyPanelDimensions = function(width, height, depth) {
-        if (!propertyPanelSync) {
-            console.warn('⚠️ PropertyPanelSync not available for dimension update');
-            return;
-        }
-
-        try {
-            // Use unified PropertyPanelSync for dimension updates
-            propertyPanelSync.sendToUI('dimension-update', [], {
-                throttle: true,
-                panels: ['right'],
-                includeContext: false
             });
         } catch (error) {
-            console.warn('❌ Error updating property panel dimensions:', error);
+            console.error('❌ Failed to update grid main color:', error);
         }
     };
 
-    // Bridge function: Update selected object info (for creation tools)
-    window.updateSelectedObjectInfo = function(object) {
-        if (!propertyPanelSync) return;
+    /**
+     * Update grid sub color from configuration
+     */
+    window.updateGridSubColor = function(gridSubColor) {
+        // Find and update the sub grid lines
+        const scene = window.modlerComponents?.scene;
+        if (!scene) return;
 
         try {
-            if (object) {
-                propertyPanelSync.sendToUI('creation-object-info', [object]);
-            }
+            const color = new THREE.Color(gridSubColor);
+            // Look for the floor grid object and update its sub lines
+            scene.traverse((child) => {
+                if (child.name === 'Floor Grid' || child.userData?.gridType === 'sub') {
+                    if (child.material && child.material.color) {
+                        child.material.color.copy(color);
+                        child.material.needsUpdate = true;
+                    }
+                }
+            });
         } catch (error) {
-            console.warn('❌ Error updating selected object info:', error);
+            console.error('❌ Failed to update grid sub color:', error);
         }
     };
 
-    // Bridge function: Notify tool state changed (for keyboard shortcuts)
-    window.notifyToolStateChanged = function(toolName) {
-        sendToolStateUpdate(toolName);
-    };
-
-    // Bridge function: Toggle snapping on/off
-    window.toggleSnapping = function() {
-        const snapController = window.modlerComponents?.snapController;
-
-        if (!snapController) {
-            console.warn('❌ SnapController not available for snap toggle');
-            return;
+    /**
+     * Update interface accent color from configuration
+     */
+    window.updateAccentColor = function(accentColor) {
+        // Update CSS custom property for accent color
+        try {
+            document.documentElement.style.setProperty('--accent-color', accentColor);
+        } catch (error) {
+            console.error('❌ Failed to update accent color:', error);
         }
-
-        // Toggle snap state
-        const currentState = snapController.getEnabled();
-        snapController.setEnabled(!currentState);
-
-        return !currentState;
     };
 
-    // Bridge function: Activate tool by name
-    window.activateTool = function(toolName) {
-        const toolController = window.modlerComponents?.toolController;
-
-        if (!toolController) {
-            console.warn('❌ ToolController not available for tool activation');
-            return;
+    /**
+     * Update toolbar opacity from configuration
+     */
+    window.updateToolbarOpacity = function(toolbarOpacity) {
+        // Update CSS custom property for toolbar opacity
+        try {
+            document.documentElement.style.setProperty('--toolbar-opacity', toolbarOpacity.toString());
+        } catch (error) {
+            console.error('❌ Failed to update toolbar opacity:', error);
         }
-
-        return toolController.switchToTool(toolName);
     };
 
-    // Export for debugging/external access
-    window.SvelteIntegration = {
-        portDetector: () => portDetector,
-        panelManager: () => panelManager,
-        // Legacy dataSync removed - use propertyPanelSync instead
-        // Unified notification system components
-        eventBus: () => objectEventBus,
-        serializer: () => objectSerializer,
-        panelSync: () => propertyPanelSync,
-        // Control functions
-        reinitialize: initialize,
-        getStats: () => ({
-            eventBus: objectEventBus?.getStats(),
-            serializer: objectSerializer?.getStats(),
-            panelSync: propertyPanelSync?.getStats()
-        })
-    };
+    // ==================================================================================
+    // AUTO-INITIALIZATION
+    // ==================================================================================
+
+    /**
+     * Smart initialization that waits for proper timing
+     */
+    function startIntegration() {
+        // Main Integration starting... (logging removed to reduce console noise)
+
+        // Give v2-main.js time to complete its initialization
+        // Since both scripts listen to DOMContentLoaded, we need to wait
+        setTimeout(() => {
+            initialize().then(() => {
+                // Setup scene listeners after successful integration
+                setupSceneEventListeners();
+            }).catch(error => {
+                console.error('❌ Integration startup failed:', error);
+            });
+        }, 200); // Small delay to let v2-main.js start first
+    }
+
+    // Initialize when DOM is ready with improved timing
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', startIntegration);
+    } else if (document.readyState === 'interactive' || document.readyState === 'complete') {
+        // DOM already loaded
+        startIntegration();
+    }
+
+    // Export for manual initialization if needed
+    window.initializeUnifiedIntegration = initialize;
 
 })();

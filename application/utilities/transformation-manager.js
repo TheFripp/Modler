@@ -523,9 +523,34 @@ class TransformationManager {
                 }
             }
 
-            // LEGACY: Continue with legacy notification for compatibility
-            if (window.notifyObjectModified) {
-                window.notifyObjectModified(object, transformType);
+            // Use ObjectStateManager for unified state management
+            const objectStateManager = window.modlerComponents?.objectStateManager;
+            if (objectStateManager && object.userData?.id) {
+                // Get current mesh state and sync to ObjectStateManager
+                const stateUpdate = {
+                    position: {
+                        x: object.position.x,
+                        y: object.position.y,
+                        z: object.position.z
+                    },
+                    rotation: {
+                        x: object.rotation.x,
+                        y: object.rotation.y,
+                        z: object.rotation.z
+                    },
+                    scale: {
+                        x: object.scale.x,
+                        y: object.scale.y,
+                        z: object.scale.z
+                    }
+                };
+
+                objectStateManager.updateObject(object.userData.id, stateUpdate);
+            } else {
+                // BYPASS ELIMINATED: ObjectStateManager must be available for transformations - no fallback bypasses
+                console.error('❌ TransformationManager: ObjectStateManager not available - this is an architectural error');
+                console.error('❌ window.notifyObjectModified fallback eliminated to prevent race conditions');
+                console.error('❌ Object transformation notifications will not be sent');
             }
 
         } catch (error) {

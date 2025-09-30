@@ -39,7 +39,7 @@
 	}: Props = $props();
 
 	// Get constraints from property controller
-	const constraints = property ? propertyController.getConstraints(property) : null;
+	const constraints = property && propertyController ? propertyController?.getConstraints(property) : null;
 	const step = constraints?.step || 0.1;
 	const min = constraints?.min;
 	const max = constraints?.max;
@@ -62,7 +62,7 @@
 			const currentValue = getNumericValue();
 			const stepValue = typeof step === 'number' ? step : 0.1;
 			const newValue = Math.round((currentValue + stepValue) * 10) / 10;
-			propertyController.updateProperty(objectId, property, newValue, 'button');
+			propertyController?.updateProperty(objectId, property, newValue, 'button');
 		} else if (type === 'number') {
 			// Fallback for non-property-controller usage
 			const currentValue = getNumericValue();
@@ -80,7 +80,7 @@
 			const currentValue = getNumericValue();
 			const stepValue = typeof step === 'number' ? step : 0.1;
 			const newValue = Math.round((currentValue - stepValue) * 10) / 10;
-			propertyController.updateProperty(objectId, property, newValue, 'button');
+			propertyController?.updateProperty(objectId, property, newValue, 'button');
 		} else if (type === 'number') {
 			// Fallback for non-property-controller usage
 			const currentValue = getNumericValue();
@@ -95,7 +95,7 @@
 
 		if (objectId && property) {
 			// Use property controller for immediate update
-			propertyController.updateProperty(objectId, property, newValue, 'input');
+			propertyController?.updateProperty(objectId, property, newValue, 'input');
 		} else if (onchange) {
 			// Legacy handler
 			onchange(event);
@@ -128,7 +128,7 @@
 				inputValue = (value === '' || value === undefined) ? 0 : value;
 			} else {
 				// Always update on blur regardless of whether value changed (handles mixed→single transitions)
-				propertyController.updateProperty(objectId, property, newValue, 'input');
+				propertyController?.updateProperty(objectId, property, newValue, 'input');
 			}
 		}
 	}
@@ -212,7 +212,7 @@
 
 			// Apply final validated update when drag stops - use the tracked drag value, not getNumericValue()
 			if (objectId && property) {
-				propertyController.updateProperty(objectId, property, currentDragValue, 'input');
+				propertyController?.updateProperty(objectId, property, currentDragValue, 'input');
 			}
 		}
 
@@ -256,7 +256,7 @@
 
 		if (objectId && property) {
 			// Use immediate update for real-time 60fps drag operations (bypasses debouncing)
-			propertyController.updatePropertyImmediate(objectId, property, actualValue, 'drag');
+			propertyController?.updatePropertyImmediate(objectId, property, actualValue, 'drag');
 		} else {
 			// Fallback direct update with full precision
 			value = actualValue;
@@ -265,7 +265,7 @@
 </script>
 
 <div class={cn('inline-input-container', className)}>
-	<div class="relative flex items-center bg-[#212121] rounded-md h-8 border border-[#2E2E2E] focus-within:border-[#6b7280] transition-colors">
+	<div class="relative flex items-center bg-[#212121]/50 rounded-md h-8 border border-[#2E2E2E]/50 focus-within:border-[#6b7280] transition-colors">
 		<!-- Label -->
 		<span class="text-xs text-muted-foreground px-2 py-1 flex-shrink-0 min-w-0 truncate">
 			{label}

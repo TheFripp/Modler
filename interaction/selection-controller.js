@@ -118,16 +118,7 @@ class SelectionController {
             this.visualizationManager.setState(targetObject, 'selected');
         }
 
-        // Update property panel with the selected object
-        if (window.updatePropertyPanelFromObject) {
-            window.updatePropertyPanelFromObject(targetObject);
-        }
-
-        // Update object list selection with all currently selected objects
-        if (window.updateObjectListSelection) {
-            const allSelectedNames = Array.from(this.selectedObjects).map(obj => obj.name);
-            window.updateObjectListSelection(allSelectedNames);
-        }
+        // Legacy property panel updates removed - using unified ObjectEventBus communication only
 
         // Notify tools about selection change
         this.notifySelectionChange();
@@ -161,24 +152,9 @@ class SelectionController {
     }
 
     updatePropertyPanelForCurrentSelection() {
-        // Update object list selection with current selection
-        if (window.updateObjectListSelection) {
-            const allSelectedNames = Array.from(this.selectedObjects).map(obj => obj.name);
-            window.updateObjectListSelection(allSelectedNames);
-        }
-
-        if (this.selectedObjects.size === 0) {
-            // No selection - clear property panel
-            if (window.clearPropertyPanel) {
-                window.clearPropertyPanel();
-            }
-        } else {
-            // Show properties for the most recently selected object
-            const lastSelected = Array.from(this.selectedObjects)[this.selectedObjects.size - 1];
-            if (window.updatePropertyPanelFromObject) {
-                window.updatePropertyPanelFromObject(lastSelected);
-            }
-        }
+        // Legacy method - functionality moved to unified ObjectEventBus communication
+        // All panel updates now handled by notifySelectionChange() → ObjectEventBus → PropertyPanelSync
+        this.notifySelectionChange();
     }
 
     clearSelection(reason = 'normal') {
@@ -199,15 +175,7 @@ class SelectionController {
         this.selectedObjects.clear();
         this.addToHistory('clear', null);
 
-        // Update property panel to show no selection
-        if (window.updatePropertyPanelFromObject) {
-            window.updatePropertyPanelFromObject(null);
-        }
-
-        // Update object list selection to show no selection
-        if (window.updateObjectListSelection) {
-            window.updateObjectListSelection([]);
-        }
+        // Legacy property panel updates removed - using unified ObjectEventBus communication only
 
         // Notify tools about selection change
         this.notifySelectionChange();
@@ -317,6 +285,46 @@ class SelectionController {
 
     notifySelectionChange() {
         const selectedObjects = this.getSelectedObjects();
+
+        // Selection changed (logging removed to reduce console noise)
+
+        // UNIFIED ARCHITECTURE: Emit ObjectEventBus events for selection changes
+        if (window.objectEventBus && selectedObjects.length > 0) {
+            selectedObjects.forEach(selectedObject => {
+                const sceneController = window.modlerComponents?.sceneController;
+                const objectData = sceneController?.getObjectByMesh(selectedObject);
+
+                if (objectData) {
+                    window.objectEventBus.emit(
+                        window.objectEventBus.EVENT_TYPES?.SELECTION || 'object:selection',
+                        objectData.id,
+                        {
+                            selected: true,
+                            objectType: objectData.type,
+                            name: objectData.name,
+                            mesh: selectedObject
+                        },
+                        { immediate: true, source: 'SelectionController.notifySelectionChange' }
+                    );
+                    // ObjectEventBus selection event emitted (logging removed to reduce console noise)
+                }
+            });
+        }
+
+        // UNIFIED ARCHITECTURE: Sync selection to ObjectStateManager
+        const objectStateManager = window.modlerComponents?.objectStateManager;
+        if (objectStateManager) {
+            const sceneController = window.modlerComponents?.sceneController;
+            const selectedObjectIds = selectedObjects.map(mesh => {
+                const objectData = sceneController?.getObjectByMesh(mesh);
+                return objectData?.id;
+            }).filter(Boolean);
+
+            // Update ObjectStateManager selection
+            objectStateManager.setSelection(selectedObjectIds);
+            // ObjectStateManager selection updated (logging removed to reduce console noise)
+        }
+
         // Notify registered callback
         if (this.selectionChangeCallback) {
             this.selectionChangeCallback(selectedObjects);
@@ -329,6 +337,19 @@ class SelectionController {
             if (currentTool && currentTool.onSelectionChange) {
                 currentTool.onSelectionChange(selectedObjects);
             }
+        }
+    }
+
+    // Configuration updates
+    refreshSelectionVisualization() {
+        // Refresh visualization for all currently selected objects
+        const selectedObjects = Array.from(this.selectedObjects);
+
+        if (this.visualizationManager && selectedObjects.length > 0) {
+            selectedObjects.forEach(object => {
+                // Force refresh of selection visualization
+                this.visualizationManager.setState(object, 'selected');
+            });
         }
     }
 

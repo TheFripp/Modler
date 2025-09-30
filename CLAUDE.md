@@ -24,10 +24,10 @@ CAD software with rule-based parametric design and intelligent 3D auto-layout sy
 - **Container-First Selection**: Click child → selects parent container, double-click for direct selection
 - **CAD Geometry**: ALWAYS use geometry-based manipulation, NEVER visual transforms
 - **Support Mesh Architecture**: Create once as children at object creation, then only show/hide - master object is single source of truth
-- **Unified Notifications**: ALL property/transform changes MUST flow through ObjectEventBus → PropertyPanelSync
+- **Unified State Management**: ALL object changes MUST use ObjectStateManager for single source of truth
 - **NO Direct PostMessage**: Never bypass PropertyPanelSync with direct iframe.postMessage calls
 - **NO Legacy DataSync**: SvelteDataSync is deprecated - use ObjectSerializer only
-- **Event-First Pattern**: Tools emit ObjectEventBus events, never call notifyObjectModified directly
+- **State-First Pattern**: Tools use ObjectStateManager.updateObject(), never direct mesh manipulation or manual events
 - **UI ↔ 3D Communication**: Unified notification highway, PostMessage security via port detection
 - **Container Creation**: Direct command (Cmd+F) → ToolController → ContainerManager
 - **Layout Mode**: Property-panel driven, NOT tool-driven
@@ -52,7 +52,8 @@ See [`/documentation/README.md`](documentation/README.md) for all documentation.
 - **UI**: `/svelte-ui/` - Svelte components and panels
 - **Support**: `/interaction/support-mesh-factory.js` - Visualization mesh creation
 - **Geometry**: `/interaction/geometry-utils.js` - CAD geometry operations and support mesh synchronization
-- **Notifications**: `/application/events/object-event-bus.js` - Unified event system (REQUIRED)
+- **State Management**: `/core/object-state-manager.js` - Unified state management (REQUIRED for all object changes)
+- **Notifications**: `/application/events/object-event-bus.js` - Event system (used by ObjectStateManager)
 - **Serialization**: `/application/serialization/object-serializer.js` - Consistent data formatting
 - **UI Bridge**: `/integration/svelte/property-panel-sync.js` - UI communication (ONLY PostMessage source)
 

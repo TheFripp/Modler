@@ -89,76 +89,7 @@
     letter-spacing: 0.5px;
 }
 
-/* Better resizing indication - only change border color on hover */
-.left-panel {
-    position: relative;
-}
-
-.right-panel {
-    position: relative;
-}
-
-.left-panel:hover {
-    border-right-color: #4a9eff;
-}
-
-.right-panel:hover {
-    border-left-color: #4a9eff;
-}
-
-/* Improve the built-in resize handle */
-.left-panel::-webkit-resizer,
-.right-panel::-webkit-resizer {
-    background: #2E2E2E;
-    border-radius: 2px;
-    background-image:
-        linear-gradient(45deg, transparent 40%, #666 40%, #666 60%, transparent 60%),
-        linear-gradient(-45deg, transparent 40%, #666 40%, #666 60%, transparent 60%);
-    background-size: 6px 6px;
-    background-position: 0 0, 3px 3px;
-}
-
-.left-panel::-webkit-resizer:hover,
-.right-panel::-webkit-resizer:hover {
-    background-color: #4a9eff;
-}
-
-/* Add visual resize indication */
-.left-panel::after {
-    content: '';
-    position: absolute;
-    right: 0;
-    top: 50%;
-    transform: translateY(-50%);
-    width: 3px;
-    height: 30px;
-    background: #2E2E2E;
-    border-radius: 2px;
-    opacity: 0;
-    transition: opacity 0.2s ease;
-    pointer-events: none;
-}
-
-.right-panel::before {
-    content: '';
-    position: absolute;
-    left: 0;
-    top: 50%;
-    transform: translateY(-50%);
-    width: 3px;
-    height: 30px;
-    background: #2E2E2E;
-    border-radius: 2px;
-    opacity: 0;
-    transition: opacity 0.2s ease;
-    pointer-events: none;
-}
-
-.left-panel:hover::after,
-.right-panel:hover::before {
-    opacity: 1;
-    background: #4a9eff;
-}
+/* Custom resize styling removed - Split.js handles resizing */
 
 /* Form improvements */
 .xyz-inputs {

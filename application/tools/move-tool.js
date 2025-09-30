@@ -20,8 +20,8 @@ class MoveTool {
         this.dragFaceNormal = null;
         this.lastMousePos = null;
 
-        // Centralized transformation system
-        this.transformationManager = null;
+        // Unified state management system
+        this.objectStateManager = null;
 
         // Container update throttling using shared utils - use default 16ms for smooth updates
         this.containerThrottleState = MovementUtils.createThrottleState();
@@ -29,9 +29,14 @@ class MoveTool {
         // Direction change detection for immediate response
         this.lastMovementDelta = undefined;
 
-        // Initialize transformation manager after components are loaded
+        // Position update debouncing to prevent UI spam
+        this.lastPositionUpdateTime = 0;
+        this.positionUpdateThrottle = 16; // ~60fps max rate
+        this.pendingPositionUpdate = null;
+
+        // Initialize ObjectStateManager after components are loaded
         setTimeout(() => {
-            this.transformationManager = window.modlerComponents?.transformationManager;
+            this.objectStateManager = window.modlerComponents?.objectStateManager;
         }, 50);
     }
     
@@ -94,6 +99,54 @@ class MoveTool {
         this.eventHandler.handleDoubleClick(hit, event, operationCallbacks);
     }
     
+    /**
+     * Update object position through unified state management
+     */
+    updateObjectPosition(newPosition) {
+        if (!this.dragObject) return;
+
+        // Throttle position updates to prevent UI spam
+        const now = Date.now();
+        if (now - this.lastPositionUpdateTime < this.positionUpdateThrottle) {
+            // Clear previous pending update and set new one
+            if (this.pendingPositionUpdate) {
+                clearTimeout(this.pendingPositionUpdate);
+            }
+
+            this.pendingPositionUpdate = setTimeout(() => {
+                this.performPositionUpdate(newPosition);
+                this.pendingPositionUpdate = null;
+            }, this.positionUpdateThrottle);
+            return;
+        }
+
+        this.performPositionUpdate(newPosition);
+    }
+
+    performPositionUpdate(newPosition) {
+        this.lastPositionUpdateTime = Date.now();
+
+        // Get object ID for state management
+        const sceneController = window.modlerComponents?.sceneController;
+        const objectData = sceneController?.getObjectByMesh?.(this.dragObject);
+        const objectId = objectData?.id || this.dragObject.uuid;
+
+        if (this.objectStateManager) {
+            // Use unified state management - automatically handles 3D scene, UI notifications, layout updates
+            this.objectStateManager.updateObject(objectId, {
+                position: {
+                    x: newPosition.x,
+                    y: newPosition.y,
+                    z: newPosition.z
+                }
+            });
+        } else {
+            // Fallback to direct manipulation if ObjectStateManager unavailable
+            this.dragObject.position.copy(newPosition);
+            this.dragObject.updateMatrixWorld(true);
+        }
+    }
+
     /**
      * Register field navigation for Tab key during dragging
      */
@@ -248,46 +301,19 @@ class MoveTool {
                     this.dragStartPosition
                 );
 
-                // Use axis-constrained snapped position with centralized transformation
-                if (this.transformationManager) {
-                    this.transformationManager.setPosition(this.dragObject, axisConstrainedPosition, { batchUpdate: true });
-                } else {
-                    // Fallback to direct manipulation if TransformationManager unavailable
-                    this.dragObject.position.copy(axisConstrainedPosition);
-                    this.dragObject.updateMatrixWorld(true);
-                }
+                // Use unified state management for snapped position
+                this.updateObjectPosition(axisConstrainedPosition);
             } else {
                 // No snap point, use regular movement
-                if (this.transformationManager) {
-                    this.transformationManager.setPosition(this.dragObject, potentialPosition, { batchUpdate: true });
-                } else {
-                    this.dragObject.position.copy(potentialPosition);
-                    this.dragObject.updateMatrixWorld(true);
-                }
+                this.updateObjectPosition(potentialPosition);
             }
         } else {
             // Snapping disabled, use regular movement
-            if (this.transformationManager) {
-                this.transformationManager.setPosition(this.dragObject, potentialPosition, { batchUpdate: true });
-            } else {
-                this.dragObject.position.copy(potentialPosition);
-                this.dragObject.updateMatrixWorld(true);
-            }
+            this.updateObjectPosition(potentialPosition);
         }
 
-        // TransformationManager handles mesh synchronization and notifications automatically
-        // Support meshes are now children - fallback sync no longer needed
-        if (!this.transformationManager) {
-            // Emit direct ObjectEventBus event for real-time property panel updates
-            if (window.objectEventBus) {
-                window.objectEventBus.emit(
-                    window.objectEventBus.EVENT_TYPES.TRANSFORM,
-                    this.dragObject.id,
-                    { changeType: 'transform' },
-                    { source: 'move-tool', throttle: true }
-                );
-            }
-        }
+        // ObjectStateManager handles all notifications automatically
+        // No manual ObjectEventBus emissions needed - unified state propagation
         
         // Update container context highlight if we're in container mode and moving a container
         // Skip real-time updates when moving child objects - container will resize at end of drag

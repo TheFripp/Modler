@@ -12,13 +12,8 @@ class SceneController {
         this.nextBoxNumber = 1;
         this.nextContainerNumber = 1;
 
-        // Centralized transformation system
-        this.transformationManager = null;
-
-        // Initialize transformation manager after components are loaded
-        setTimeout(() => {
-            this.transformationManager = window.modlerComponents?.transformationManager;
-        }, 100);
+        // Unified state management system
+        this.objectStateManager = null;
         
         // Setup CAD lighting - balanced illumination to show face differences clearly
         // Key light from front-top-right for primary illumination
@@ -111,14 +106,41 @@ class SceneController {
 
         // Add to scene and registry
         this.scene.add(mesh);
-
-
         this.objects.set(id, objectData);
-        
-        // Emit event for UI updates
+
+        // DEBUG: Check ObjectStateManager availability before sync
+        const objectStateManager = window.modlerComponents?.objectStateManager;
+        // ObjectStateManager integration
+
+        // Sync to ObjectStateManager for unified state management
+        this.syncObjectToStateManager(objectData);
+
+        // UNIFIED ARCHITECTURE: Emit ObjectEventBus events for UI synchronization
+        if (window.objectEventBus) {
+            window.objectEventBus.emit(
+                window.objectEventBus.EVENT_TYPES?.LIFECYCLE || 'object:lifecycle',
+                objectData.id,
+                {
+                    action: 'create',
+                    objectType: objectData.type,
+                    name: objectData.name,
+                    isContainer: objectData.isContainer,
+                    position: objectData.mesh ? {
+                        x: objectData.mesh.position.x,
+                        y: objectData.mesh.position.y,
+                        z: objectData.mesh.position.z
+                    } : null,
+                    dimensions: objectData.dimensions
+                },
+                { immediate: true, source: 'SceneController.addObject' }
+            );
+            // ObjectEventBus event emitted for object creation (logging removed to reduce console noise)
+        }
+
+        // Emit legacy event for backward compatibility
         this.emit('objectAdded', objectData);
-        
-        // Object added successfully
+
+        // Object added successfully (logging removed to reduce console noise)
         return objectData;
     }
     
@@ -153,10 +175,16 @@ class SceneController {
         
         // Remove from registry
         this.objects.delete(id);
-        
+
+        // Remove from ObjectStateManager for unified state management
+        if (this.objectStateManager) {
+            this.objectStateManager.objects.delete(id);
+            this.objectStateManager.rebuildHierarchy();
+        }
+
         // Emit event for UI updates
         this.emit('objectRemoved', objectData);
-        
+
         // Object removed successfully
         return true;
     }
@@ -688,9 +716,16 @@ class SceneController {
         // Update metadata
         obj.parentContainer = parentId;
 
-        // Notify UI of hierarchy change
-        if (window.notifyObjectModified) {
-            window.notifyObjectModified(obj.mesh, 'hierarchy');
+        // BYPASS ELIMINATED: Use ObjectEventBus instead of legacy window.notifyObjectModified
+        if (window.objectEventBus) {
+            window.objectEventBus.emit(
+                window.objectEventBus.EVENT_TYPES?.HIERARCHY_CHANGED || 'object:hierarchy-changed',
+                {
+                    objectId: obj.mesh.userData.modlerId,
+                    newParentId: parentId,
+                    changeType: 'parent-changed'
+                }
+            );
         }
 
         // Update layout of the new parent container only if requested
@@ -979,6 +1014,180 @@ class SceneController {
                 objectData.dimensions = dimensions;
             }
         }
+    }
+
+    /**
+     * Sync an object to ObjectStateManager for unified state management
+     * Converts SceneController object data to ObjectStateManager format
+     * @param {Object} objectData - Object data from SceneController
+     */
+    syncObjectToStateManager(objectData) {
+        // Sync events are frequent during tool operations - only log errors
+
+        if (!objectData) {
+            console.warn('🚨 SceneController: Cannot sync null objectData to ObjectStateManager');
+            return;
+        }
+
+        // Get ObjectStateManager reference dynamically (handles initialization timing)
+        const objectStateManager = window.modlerComponents?.objectStateManager;
+        // Debug info for sync operations - only log errors
+
+        if (!objectStateManager) {
+            console.warn('🚨 SceneController: ObjectStateManager not available, deferring sync for object:', objectData.id);
+            console.log('🔍 Available window.modlerComponents:', Object.keys(window.modlerComponents || {}));
+            // Defer sync until ObjectStateManager is available (retry up to 10 times)
+            this.retryObjectSync(objectData, 0);
+            return;
+        }
+
+
+        // Extract mesh position if available
+        const meshPosition = objectData.mesh ? {
+            x: objectData.mesh.position.x,
+            y: objectData.mesh.position.y,
+            z: objectData.mesh.position.z
+        } : { x: 0, y: 0, z: 0 };
+
+        // Extract mesh rotation if available
+        const meshRotation = objectData.mesh ? {
+            x: objectData.mesh.rotation.x,
+            y: objectData.mesh.rotation.y,
+            z: objectData.mesh.rotation.z
+        } : { x: 0, y: 0, z: 0 };
+
+        // Extract dimensions from geometry if available
+        let dimensions = objectData.dimensions || { x: 1, y: 1, z: 1 };
+        if (!objectData.dimensions && objectData.mesh && objectData.mesh.geometry) {
+            const geometryDimensions = window.GeometryUtils?.getGeometryDimensions(objectData.mesh.geometry);
+            if (geometryDimensions) {
+                dimensions = {
+                    x: geometryDimensions.x,
+                    y: geometryDimensions.y,
+                    z: geometryDimensions.z
+                };
+            }
+        }
+
+        // Create complete object state for ObjectStateManager
+        const objectState = {
+            // Core identity
+            id: objectData.id,
+            name: objectData.name || `Object ${objectData.id}`,
+            type: objectData.type || 'box',
+
+            // 3D properties from mesh
+            position: meshPosition,
+            rotation: meshRotation,
+            dimensions: dimensions,
+
+            // Container properties
+            isContainer: objectData.isContainer || false,
+            parentContainer: objectData.parentContainer || null,
+            autoLayout: objectData.autoLayout || { enabled: false, direction: 'x' },
+
+            // Material properties
+            material: objectData.material || { color: 0x888888 },
+
+            // Internal references
+            mesh: objectData.mesh,
+            _sceneObjectData: objectData
+        };
+
+        // Use importObjectFromScene instead of updateObject to avoid "not found" errors
+        if (typeof objectStateManager.importObjectFromScene === 'function') {
+            objectStateManager.importObjectFromScene(objectData);
+        } else {
+            console.warn('🚨 SceneController: ObjectStateManager.importObjectFromScene not available, falling back to updateObject');
+            objectStateManager.updateObject(objectData.id, objectState);
+        }
+
+        // Rebuild hierarchy to ensure UI gets updated
+        if (typeof objectStateManager.rebuildHierarchy === 'function') {
+            objectStateManager.rebuildHierarchy();
+        }
+    }
+
+    /**
+     * Retry object sync with exponential backoff and limited attempts
+     * @param {Object} objectData - Object data to sync
+     * @param {number} attempt - Current attempt number
+     */
+    retryObjectSync(objectData, attempt) {
+        const MAX_ATTEMPTS = 10;
+        const BASE_DELAY = 50; // Start with 50ms
+
+        console.log(`🔄 SceneController.retryObjectSync: Attempt ${attempt + 1}/${MAX_ATTEMPTS} for object ${objectData.id}`);
+
+        if (attempt >= MAX_ATTEMPTS) {
+            console.error(`🚨 SceneController: Failed to sync object ${objectData.id} after ${MAX_ATTEMPTS} attempts`);
+            console.log('🔍 Final state check:');
+            console.log('  - window.modlerComponents:', !!window.modlerComponents);
+            console.log('  - Available components:', Object.keys(window.modlerComponents || {}));
+            console.log('  - ObjectStateManager:', !!window.modlerComponents?.objectStateManager);
+            return;
+        }
+
+        // Check if ObjectStateManager is now available
+        const objectStateManager = window.modlerComponents?.objectStateManager;
+        console.log(`🔍 SceneController.retryObjectSync: ObjectStateManager available: ${!!objectStateManager}`);
+
+        if (objectStateManager) {
+            console.log(`🔧 SceneController: ObjectStateManager now available, syncing object ${objectData.id} (attempt ${attempt + 1})`);
+            this.syncObjectToStateManager(objectData);
+            return;
+        }
+
+        // Log current state for debugging
+        console.log(`🔍 SceneController.retryObjectSync: Still waiting... (attempt ${attempt + 1})`);
+        console.log('  - window.modlerComponents:', !!window.modlerComponents);
+        console.log('  - Available components:', Object.keys(window.modlerComponents || {}));
+
+        // Exponential backoff: 50ms, 100ms, 200ms, etc.
+        const delay = BASE_DELAY * Math.pow(2, attempt);
+        console.log(`🕐 SceneController.retryObjectSync: Retrying in ${delay}ms...`);
+
+        setTimeout(() => {
+            this.retryObjectSync(objectData, attempt + 1);
+        }, delay);
+    }
+
+    /**
+     * Refresh all CAD wireframes with updated settings
+     */
+    refreshCadWireframes() {
+
+        const supportMeshFactory = window.modlerComponents?.supportMeshFactory;
+        if (!supportMeshFactory) {
+            console.warn('❌ SupportMeshFactory not available for CAD wireframe refresh');
+            return;
+        }
+
+        let refreshedCount = 0;
+
+        // Iterate through all objects and refresh their CAD wireframes
+        for (const [id, objectData] of this.objects) {
+            const mesh = objectData.mesh;
+            if (!mesh || !mesh.userData.supportMeshes) continue;
+
+            const cadWireframe = mesh.userData.supportMeshes.cadWireframe;
+            if (!cadWireframe) continue;
+
+            // Remove old CAD wireframe
+            mesh.remove(cadWireframe);
+
+            // Create new CAD wireframe with updated settings
+            const newCadWireframe = supportMeshFactory.createCadWireframe(mesh);
+            if (newCadWireframe) {
+                mesh.add(newCadWireframe);
+                newCadWireframe.visible = true; // Ensure visibility
+
+                // Update reference
+                mesh.userData.supportMeshes.cadWireframe = newCadWireframe;
+                refreshedCount++;
+            }
+        }
+
     }
 
     // Memory cleanup

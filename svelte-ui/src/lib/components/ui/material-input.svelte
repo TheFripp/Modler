@@ -24,12 +24,27 @@
 		...restProps
 	}: Props = $props();
 
+	// Ensure color is properly formatted with # prefix
+	const formattedColor = $derived(
+		color && typeof color === 'string' && !color.startsWith('#') && /^[0-9A-Fa-f]{6}$/.test(color)
+			? '#' + color
+			: (typeof color === 'string' ? color : null) || '#ffffff'
+	);
+
 	function handleColorChange(event: Event) {
 		const target = event.target as HTMLInputElement;
-		if (objectId) {
-			propertyController.updateProperty(objectId, 'material.color', target.value, 'input');
+		let colorValue = target.value;
+
+		// CRITICAL FIX: Ensure color has # prefix for hex values
+		// This fixes the "8947848" → "#8947848" format issue
+		if (colorValue && !colorValue.startsWith('#') && /^[0-9A-Fa-f]{6}$/.test(colorValue)) {
+			colorValue = '#' + colorValue;
+		}
+
+		if (objectId && propertyController) {
+			propertyController?.updateProperty(objectId, 'material.color', colorValue, 'input');
 		} else if (onColorChange) {
-			onColorChange(target.value);
+			onColorChange(colorValue);
 		}
 	}
 
@@ -37,8 +52,8 @@
 		const target = event.target as HTMLInputElement;
 		const value = parseFloat(target.value);
 		if (!isNaN(value)) {
-			if (objectId) {
-				propertyController.updateProperty(objectId, 'material.opacity', value, 'input');
+			if (objectId && propertyController) {
+				propertyController?.updateProperty(objectId, 'material.opacity', value, 'input');
 			} else if (onOpacityChange) {
 				onOpacityChange(value);
 			}
@@ -47,8 +62,8 @@
 
 	function handleOpacityIncrease() {
 		const newOpacity = Math.min(1, opacity + 0.1);
-		if (objectId) {
-			propertyController.updateProperty(objectId, 'material.opacity', newOpacity, 'arrow');
+		if (objectId && propertyController) {
+			propertyController?.updateProperty(objectId, 'material.opacity', newOpacity, 'arrow');
 		} else if (onOpacityChange) {
 			onOpacityChange(newOpacity);
 		}
@@ -56,8 +71,8 @@
 
 	function handleOpacityDecrease() {
 		const newOpacity = Math.max(0, opacity - 0.1);
-		if (objectId) {
-			propertyController.updateProperty(objectId, 'material.opacity', newOpacity, 'arrow');
+		if (objectId && propertyController) {
+			propertyController?.updateProperty(objectId, 'material.opacity', newOpacity, 'arrow');
 		} else if (onOpacityChange) {
 			onOpacityChange(newOpacity);
 		}
@@ -76,7 +91,7 @@
 			<span class="text-xs text-muted-foreground px-2 py-1 flex-shrink-0">Color</span>
 			<input
 				type="text"
-				value={color}
+				value={formattedColor}
 				onchange={handleColorChange}
 				onfocus={handleColorFocus}
 				class="flex-1 bg-transparent border-none outline-none text-xs text-foreground px-1 py-1 font-mono"
@@ -85,7 +100,7 @@
 			<div class="border-l border-[#2E2E2E] px-1">
 				<input
 					type="color"
-					value={color}
+					value={formattedColor}
 					onchange={handleColorChange}
 					class="w-5 h-5 rounded border-none cursor-pointer bg-transparent"
 				/>

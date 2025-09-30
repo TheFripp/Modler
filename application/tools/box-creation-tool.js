@@ -17,6 +17,14 @@ class BoxCreationTool {
         this.materialManager = new MaterialManager();
         this.resourcePool = new VisualizationResourcePool();
 
+        // Unified state management system
+        this.objectStateManager = null;
+
+        // Initialize ObjectStateManager after components are loaded
+        setTimeout(() => {
+            this.objectStateManager = window.modlerComponents?.objectStateManager;
+        }, 50);
+
         // Core state
         this.state = BoxCreationState.IDLE;
         this.startPosition = null;
@@ -170,8 +178,8 @@ class BoxCreationTool {
 
         // Switch to select tool after box creation
         const toolController = window.modlerComponents?.toolController;
-        if (toolController) {
-            toolController.activateTool('select');
+        if (toolController && toolController.switchToTool) {
+            toolController.switchToTool('select');
         }
 
         // Properties panel will be updated automatically when the new box is selected
@@ -526,29 +534,20 @@ class BoxCreationTool {
             }
         }
 
-        // NEW: Emit through unified notification system if available
-        const objectEventBus = window.unifiedNotificationSystem?.eventBus;
-        if (objectEventBus && this.creationObject?.userData?.id) {
-            // Emit geometry change event for real-time dimension updates during creation
-            objectEventBus.emit(objectEventBus.EVENT_TYPES.GEOMETRY, this.creationObject.userData.id, {
-                changeType: 'dimension',
-                operation: 'creation',
-                dimensions: { width, height, depth },
-                timestamp: Date.now()
-            }, {
-                source: 'BoxCreationTool',
-                throttle: true // Enable throttling for smooth real-time updates
+        // Update dimensions through unified state management
+        if (this.objectStateManager && this.creationObject?.userData?.id) {
+            this.objectStateManager.updateObject(this.creationObject.userData.id, {
+                dimensions: {
+                    x: Math.max(width, 0.01),
+                    y: Math.max(height, 0.01),
+                    z: Math.max(depth, 0.01)
+                },
+                position: {
+                    x: centerX,
+                    y: centerY,
+                    z: centerZ
+                }
             });
-        }
-
-        // Emit direct ObjectEventBus event for unified notification system
-        if (window.objectEventBus) {
-            window.objectEventBus.emit(
-                window.objectEventBus.EVENT_TYPES.GEOMETRY,
-                this.creationObject.id,
-                { dimensions: this.creationObject.dimensions },
-                { source: 'box-creation-tool', throttle: true }
-            );
         }
     }
 

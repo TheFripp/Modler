@@ -4,6 +4,7 @@
 	import type { PropertyPath } from '$lib/services/property-controller';
 	import { getPropertyMixedState, selectedObjects, fieldStates } from '$lib/stores/modler';
 
+
 	interface Props {
 		label?: string;
 		values: { x: number; y: number; z: number };

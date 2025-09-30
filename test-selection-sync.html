@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Selection Sync Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; background: #1a1a1a; color: #fff; }
+        .test-result { padding: 8px; margin: 5px 0; border-radius: 4px; }
+        .success { background: #0f5132; color: #d1e7dd; }
+        .error { background: #842029; color: #f8d7da; }
+        .info { background: #055160; color: #cff4fc; }
+        .warning { background: #664d03; color: #fff3cd; }
+        button { padding: 10px 20px; margin: 5px; background: #0d6efd; color: white; border: none; border-radius: 4px; cursor: pointer; }
+        .test-canvas { border: 1px solid #666; margin: 10px 0; }
+    </style>
+</head>
+<body>
+    <h1>🔄 Selection Sync Test - 3D Scene ↔ UI Panels</h1>
+
+    <div id="test-results"></div>
+
+    <button onclick="testBasicComponents()">Test Basic Components</button>
+    <button onclick="testObjectCreation()">Test Object Creation</button>
+    <button onclick="testSelectionSync()">Test Selection Sync</button>
+    <button onclick="runFullSelectionTest()">Run Full Selection Test</button>
+
+    <!-- Test canvas for 3D scene -->
+    <canvas id="test-canvas" class="test-canvas" width="400" height="300"></canvas>
+
+    <script>
+        let modlerV2System = null;
+
+        function log(message, type = 'info') {
+            const div = document.createElement('div');
+            div.className = `test-result ${type}`;
+            div.textContent = new Date().toLocaleTimeString() + ' - ' + message;
+            document.getElementById('test-results').appendChild(div);
+            console.log(message);
+        }
+
+        function clear() {
+            document.getElementById('test-results').innerHTML = '';
+        }
+
+        // Helper function to wait for object to appear in ObjectStateManager
+        async function waitForObjectInStateManager(objectStateManager, objectId, timeoutMs = 1000) {
+            const startTime = Date.now();
+            const checkInterval = 50; // Check every 50ms
+
+            while (Date.now() - startTime < timeoutMs) {
+                const objectData = objectStateManager.getObject(objectId);
+                if (objectData) {
+                    return objectData;
+                }
+
+                // Wait before next check
+                await new Promise(resolve => setTimeout(resolve, checkInterval));
+            }
+
+            return null; // Timeout reached
+        }
+
+        async function testBasicComponents() {
+            clear();
+            log('🔧 Testing basic component availability...', 'info');
+
+            // Test if canvas is available
+            const canvas = document.getElementById('test-canvas');
+            if (!canvas) {
+                log('❌ Test canvas not found', 'error');
+                return false;
+            }
+            log('✅ Test canvas available', 'success');
+
+            // Test if V2 initialization is available
+            if (typeof window.initializeModlerV2 !== 'function') {
+                log('❌ initializeModlerV2 function not available', 'error');
+                return false;
+            }
+            log('✅ initializeModlerV2 function available', 'success');
+
+            // Initialize the system
+            try {
+                modlerV2System = await window.initializeModlerV2(canvas);
+                if (modlerV2System && window.modlerComponents) {
+                    log('✅ V2 system initialized successfully', 'success');
+
+                    // Check core components
+                    const { objectStateManager, sceneController, selectionController } = window.modlerComponents;
+
+                    if (objectStateManager) log('✅ ObjectStateManager available', 'success');
+                    else log('❌ ObjectStateManager missing', 'error');
+
+                    if (sceneController) log('✅ SceneController available', 'success');
+                    else log('❌ SceneController missing', 'error');
+
+                    if (selectionController) log('✅ SelectionController available', 'success');
+                    else log('❌ SelectionController missing', 'error');
+
+                    return true;
+                } else {
+                    log('❌ V2 system initialization failed', 'error');
+                    return false;
+                }
+            } catch (error) {
+                log(`❌ Initialization error: ${error.message}`, 'error');
+                return false;
+            }
+        }
+
+        async function testObjectCreation() {
+            clear();
+            log('📦 Testing object creation...', 'info');
+
+            if (!window.modlerComponents) {
+                log('❌ System not initialized. Run basic component test first.', 'error');
+                return false;
+            }
+
+            const { sceneController, objectStateManager } = window.modlerComponents;
+
+            try {
+                // Create a test box object
+                const boxGeometry = new THREE.BoxGeometry(1, 1, 1);
+                const boxMaterial = new THREE.MeshBasicMaterial({ color: 0x00ff00 });
+                const boxMesh = new THREE.Mesh(boxGeometry, boxMaterial);
+
+                // Position it in the scene
+                boxMesh.position.set(0, 0, 0);
+
+                // Add it to the scene through SceneController
+                if (sceneController && typeof sceneController.addObject === 'function') {
+                    const objectId = sceneController.addObject(boxMesh, {
+                        name: 'Test Box',
+                        type: 'box',
+                        width: 1,
+                        height: 1,
+                        depth: 1
+                    });
+
+                    log(`✅ Object created with ID: ${objectId}`, 'success');
+
+                    // Check if ObjectStateManager knows about it (with retry for timing)
+                    const objectData = await waitForObjectInStateManager(objectStateManager, objectId, 1000);
+                    if (objectData) {
+                        log(`✅ Object found in ObjectStateManager: ${objectData.name || 'Object'}`, 'success');
+                        return objectId;
+                    } else {
+                        log('⚠️ Object not found in ObjectStateManager after timeout', 'warning');
+                        return objectId;
+                    }
+                } else {
+                    log('❌ SceneController.addObject not available', 'error');
+                    return false;
+                }
+            } catch (error) {
+                log(`❌ Object creation failed: ${error.message}`, 'error');
+                return false;
+            }
+        }
+
+        async function testSelectionSync() {
+            clear();
+            log('🎯 Testing selection synchronization...', 'info');
+
+            if (!window.modlerComponents) {
+                log('❌ System not initialized. Run basic component test first.', 'error');
+                return false;
+            }
+
+            const { selectionController, objectStateManager, sceneController } = window.modlerComponents;
+
+            // First create an object to select
+            const objectId = await testObjectCreation();
+            if (!objectId) {
+                log('❌ Cannot test selection without object', 'error');
+                return false;
+            }
+
+            // Set up event listener for selection changes
+            let selectionEventReceived = false;
+            const selectionHandler = (event) => {
+                selectionEventReceived = true;
+                log(`📤 Selection event received: ${JSON.stringify(event.detail)}`, 'info');
+            };
+
+            objectStateManager.addEventListener('selection-changed', selectionHandler);
+
+            try {
+                // Simulate object selection (use select method, not selectObject)
+                if (selectionController && typeof selectionController.select === 'function') {
+                    log(`🎯 Selecting object ${objectId}...`, 'info');
+
+                    // Get the actual mesh object from the scene
+                    const sceneObject = sceneController.getObject(objectId);
+                    if (sceneObject && sceneObject.mesh) {
+                        selectionController.select(sceneObject.mesh);
+                    } else {
+                        log(`⚠️ Could not find mesh for object ${objectId}`, 'warning');
+                        return false;
+                    }
+
+                    // Wait a moment for event to propagate
+                    await new Promise(resolve => setTimeout(resolve, 100));
+
+                    if (selectionEventReceived) {
+                        log('✅ Selection event successfully triggered', 'success');
+
+                        // Check selection state
+                        const selection = objectStateManager.getSelection();
+                        if (selection && selection.includes(objectId)) {
+                            log(`✅ Object ${objectId} correctly selected in ObjectStateManager`, 'success');
+                            return true;
+                        } else {
+                            log('⚠️ Selection not reflected in ObjectStateManager', 'warning');
+                            return false;
+                        }
+                    } else {
+                        log('❌ Selection event not received', 'error');
+                        return false;
+                    }
+                } else {
+                    log('❌ SelectionController.select not available', 'error');
+                    return false;
+                }
+            } catch (error) {
+                log(`❌ Selection test failed: ${error.message}`, 'error');
+                return false;
+            } finally {
+                // Clean up event listener
+                objectStateManager.removeEventListener('selection-changed', selectionHandler);
+            }
+        }
+
+        async function runFullSelectionTest() {
+            clear();
+            log('🚀 Running full selection synchronization test...', 'info');
+
+            // Test 1: Basic components
+            const componentsOk = await testBasicComponents();
+            if (!componentsOk) {
+                log('❌ Full test failed at component initialization', 'error');
+                return;
+            }
+
+            await new Promise(resolve => setTimeout(resolve, 500));
+
+            // Test 2: Object creation
+            log('---', 'info');
+            const objectId = await testObjectCreation();
+            if (!objectId) {
+                log('❌ Full test failed at object creation', 'error');
+                return;
+            }
+
+            await new Promise(resolve => setTimeout(resolve, 500));
+
+            // Test 3: Selection sync
+            log('---', 'info');
+            const selectionOk = await testSelectionSync();
+            if (!selectionOk) {
+                log('❌ Full test failed at selection sync', 'error');
+                return;
+            }
+
+            log('---', 'info');
+            log('🎉 Full selection synchronization test completed successfully!', 'success');
+            log('💡 The 3D scene and UI panels should now be communicating properly', 'info');
+        }
+
+        // Auto-run basic test on load
+        window.addEventListener('load', () => {
+            setTimeout(() => {
+                log('🔧 Selection sync test page loaded', 'info');
+                log('Click "Run Full Selection Test" to verify end-to-end communication', 'info');
+            }, 500);
+        });
+    </script>
+
+    <!-- Load all required scripts in proper order -->
+    <script src="vendor/three.min.js"></script>
+    <script src="foundation/scene-foundation.js"></script>
+    <script src="scene/scene-controller.js"></script>
+    <script src="scene/visual-effects.js"></script>
+    <script src="scene/snap-visualizer.js"></script>
+    <script src="interaction/support-mesh-factory.js"></script>
+    <script src="interaction/field-navigation-manager.js"></script>
+    <script src="interaction/object-visualizer.js"></script>
+    <script src="interaction/container-visualizer.js"></script>
+    <script src="interaction/visualization-manager.js"></script>
+    <script src="interaction/container-interaction-manager.js"></script>
+    <script src="interaction/selection-controller.js"></script>
+    <script src="interaction/camera-math-utils.js"></script>
+    <script src="interaction/zoom-centering.js"></script>
+    <script src="interaction/camera-controller.js"></script>
+    <script src="layout/layout-engine.js"></script>
+    <script src="core/object-state-manager.js"></script>
+    <script src="interaction/input-controller.js"></script>
+    <script src="application/tool-controller.js"></script>
+    <script src="application/configuration-manager.js"></script>
+    <script src="application/snap-controller.js"></script>
+    <script src="application/managers/hierarchical-selection-manager.js"></script>
+    <script src="application/managers/navigation-controller.js"></script>
+    <script src="application/managers/property-manager.js"></script>
+    <script src="application/commands/base-command.js"></script>
+    <script src="application/commands/delete-object-command.js"></script>
+    <script src="application/commands/create-container-command.js"></script>
+    <script src="application/commands/update-layout-property-command.js"></script>
+    <script src="application/managers/history-manager.js"></script>
+    <script src="application/tools/movement-utils.js"></script>
+    <script src="application/tools/base-face-tool-behavior.js"></script>
+    <script src="application/tools/base-face-tool-event-handler.js"></script>
+    <script src="application/tools/select-tool.js"></script>
+    <script src="application/tools/move-tool.js"></script>
+    <script src="application/tools/push-tool.js"></script>
+    <script src="application/utilities/position-transform.js"></script>
+    <script src="application/utilities/geometry-utils.js"></script>
+    <script src="application/utilities/transform-notification-utils.js"></script>
+    <script src="application/utilities/transformation-manager.js"></script>
+    <script src="application/utilities/visualization-resource-pool.js"></script>
+    <script src="application/utilities/geometry-factory.js"></script>
+    <script src="application/utilities/material-manager.js"></script>
+    <script src="application/utilities/development-validator.js"></script>
+    <script src="application/tools/layout-geometry.js"></script>
+    <script src="application/tools/container-crud-manager.js"></script>
+    <script src="application/handlers/property-update-handler.js"></script>
+    <script src="application/tools/box-creation-tool.js"></script>
+    <script src="application/events/object-event-bus.js"></script>
+    <script src="application/serialization/object-serializer.js"></script>
+    <script src="integration/svelte/property-panel-sync.js"></script>
+    <script src="integration/svelte/port-detection.js"></script>
+    <script src="integration/svelte/panel-manager.js"></script>
+    <script src="v2-main.js"></script>
+    <script src="application/schemas/property-schema-registry.js"></script>
+    <script src="application/examples/parametric-chair-example.js"></script>
+    <script src="integration/svelte/main-integration.js"></script>
+</body>
+</html>

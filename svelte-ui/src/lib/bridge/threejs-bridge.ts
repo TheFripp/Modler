@@ -5,6 +5,7 @@ import {
 	syncContainerContextFromThreeJS,
 	toolState
 } from '$lib/stores/modler';
+import { unifiedCommunication } from '$lib/services/unified-communication';
 
 /**
  * Bridge class to connect Three.js Modler components with Svelte UI
@@ -87,21 +88,43 @@ function setupPostMessageFallback() {
 
 		// Handle data-update messages
 		if (event.data.type === 'data-update') {
-			const data = event.data.data;
+			try {
+				const data = event.data.data;
 
-			// Update selected objects in store
-			if (data.selectedObjects) {
-				syncSelectionFromThreeJS(data.selectedObjects);
-			}
+				// Validate data structure
+				if (!data || typeof data !== 'object') {
+					console.warn('PostMessage: Invalid data structure received');
+					return;
+				}
 
-			// Update object hierarchy in store
-			if (data.objectHierarchy) {
-				syncHierarchyFromThreeJS(data.objectHierarchy);
-			}
+				// Update selected objects in store with error handling
+				if (data.selectedObjects) {
+					try {
+						syncSelectionFromThreeJS(data.selectedObjects);
+					} catch (error) {
+						console.error('PostMessage: Error syncing selected objects:', error);
+					}
+				}
 
-			// Update container context in store
-			if (data.containerContext) {
-				syncContainerContextFromThreeJS(data.containerContext);
+				// Update object hierarchy in store with error handling
+				if (data.objectHierarchy) {
+					try {
+						syncHierarchyFromThreeJS(data.objectHierarchy);
+					} catch (error) {
+						console.error('PostMessage: Error syncing hierarchy:', error);
+					}
+				}
+
+				// Update container context in store with error handling
+				if (data.containerContext) {
+					try {
+						syncContainerContextFromThreeJS(data.containerContext);
+					} catch (error) {
+						console.error('PostMessage: Error syncing container context:', error);
+					}
+				}
+			} catch (error) {
+				console.error('PostMessage: Critical error processing data-update:', error);
 			}
 		}
 
@@ -226,64 +249,40 @@ function setupUIToSceneActions(components: any) {
  * Send tool activation command to main application
  */
 export function activateToolInScene(toolName: string) {
-	// For iframe context, use PostMessage
-	const isInIframe = window !== window.parent;
+	// Use unified communication system instead of direct PostMessage
+	unifiedCommunication.sendToolActivation(toolName).catch(error => {
+		console.error('❌ Tool activation failed:', error);
 
-	if (isInIframe) {
+		// Fallback to direct access if unified communication fails
 		try {
-			window.parent.postMessage({
-				type: 'tool-activation',
-				data: { toolName }
-			}, '*');
-		} catch (error) {
-			console.error('❌ Tool activation PostMessage failed:', error);
+			if ((window as any)?.activateTool) {
+				(window as any).activateTool(toolName);
+				return;
+			}
+		} catch (fallbackError) {
+			console.error('❌ Direct tool activation fallback failed:', fallbackError);
 		}
-		return;
-	}
-
-	// Non-iframe mode: try direct access
-	try {
-		if ((window as any)?.activateTool) {
-			(window as any).activateTool(toolName);
-			return;
-		}
-	} catch (error) {
-		console.error('❌ Direct tool activation failed:', error);
-	}
-
-	console.error('❌ No tool activation method available');
+	});
 }
 
 /**
  * Send snap toggle command to main application
  */
 export function toggleSnapInScene() {
-	// For iframe context, use PostMessage
-	const isInIframe = window !== window.parent;
+	// Use unified communication system instead of direct PostMessage
+	unifiedCommunication.sendSnapToggle().catch(error => {
+		console.error('❌ Snap toggle failed:', error);
 
-	if (isInIframe) {
+		// Fallback to direct access if unified communication fails
 		try {
-			window.parent.postMessage({
-				type: 'snap-toggle',
-				data: {}
-			}, '*');
-		} catch (error) {
-			console.error('❌ Snap toggle PostMessage failed:', error);
+			if ((window as any)?.toggleSnapping) {
+				(window as any).toggleSnapping();
+				return;
+			}
+		} catch (fallbackError) {
+			console.error('❌ Direct snap toggle fallback failed:', fallbackError);
 		}
-		return;
-	}
-
-	// Non-iframe mode: try direct access
-	try {
-		if ((window as any)?.toggleSnapping) {
-			(window as any).toggleSnapping();
-			return;
-		}
-	} catch (error) {
-		console.error('❌ Direct snap toggle failed:', error);
-	}
-
-	console.error('❌ No snap toggle method available');
+	});
 }
 
 

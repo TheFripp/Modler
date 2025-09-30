@@ -59,7 +59,7 @@ class VisualizationResourcePool {
             }
         }
 
-        console.log('VisualizationResourcePool: Initialized with pre-populated pools');
+        // VisualizationResourcePool initialized (logging removed to reduce console noise)
     }
 
     /**

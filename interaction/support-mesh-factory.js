@@ -15,7 +15,8 @@ class SupportMeshFactory {
             selectionWireframe: null,
             faceHighlight: null,
             containerWireframe: null,
-            containerInteractive: null
+            containerInteractive: null,
+            cadWireframe: null
         };
 
         this.createBaseMaterials();
@@ -29,6 +30,7 @@ class SupportMeshFactory {
         this.materials.selectionWireframe = this.materialManager.createSelectionEdgeMaterial();
         this.materials.faceHighlight = this.materialManager.createFaceHighlightMaterial();
         this.materials.containerWireframe = this.materialManager.createContainerWireframeMaterial();
+        this.materials.cadWireframe = this.materialManager.createCadEdgeMaterial();
 
         // Container interactive material - specialized invisible raycasting material
         // Using MaterialManager's invisible raycast material method for better resource management
@@ -55,10 +57,11 @@ class SupportMeshFactory {
                 this.cleanupSupportMeshes(mainMesh.userData.supportMeshes, mainMesh);
             }
 
-            // Create minimal support meshes - faceHighlight and interactiveMesh for containers
+            // Create minimal support meshes - faceHighlight, interactiveMesh, and cadWireframe for containers
             const supportMeshes = {
                 faceHighlight: this.createFaceHighlight(mainMesh), // Use existing method with orange selection color
-                interactiveMesh: this.createContainerInteractiveMesh(mainMesh) // Needed for proper raycasting in tools
+                interactiveMesh: this.createContainerInteractiveMesh(mainMesh), // Needed for proper raycasting in tools
+                cadWireframe: this.createCadWireframe(mainMesh) // CAD wireframes for better edge visibility
             };
 
             // Add face highlight and interactive mesh as children
@@ -69,6 +72,10 @@ class SupportMeshFactory {
             if (supportMeshes.interactiveMesh) {
                 mainMesh.add(supportMeshes.interactiveMesh);
                 supportMeshes.interactiveMesh.visible = false; // Hidden by default, used for raycasting
+            }
+            if (supportMeshes.cadWireframe) {
+                mainMesh.add(supportMeshes.cadWireframe);
+                supportMeshes.cadWireframe.visible = true; // Visible by default for CAD wireframes
             }
 
             // Store support meshes with face highlight and interactive mesh
@@ -81,7 +88,8 @@ class SupportMeshFactory {
         // Regular objects: Create support meshes as normal
         const supportMeshes = {
             selectionWireframe: this.createSelectionWireframe(mainMesh),
-            faceHighlight: this.createFaceHighlight(mainMesh)
+            faceHighlight: this.createFaceHighlight(mainMesh),
+            cadWireframe: this.createCadWireframe(mainMesh)
         };
 
         // Add as children of main mesh (only if they were created successfully)
@@ -92,6 +100,10 @@ class SupportMeshFactory {
         if (supportMeshes.faceHighlight) {
             mainMesh.add(supportMeshes.faceHighlight);
             supportMeshes.faceHighlight.visible = false;
+        }
+        if (supportMeshes.cadWireframe) {
+            mainMesh.add(supportMeshes.cadWireframe);
+            supportMeshes.cadWireframe.visible = true; // Visible by default for CAD wireframes
         }
 
         // Store references for easy access
@@ -111,7 +123,8 @@ class SupportMeshFactory {
             selectionWireframe: wireframeMesh,  // For ObjectVisualizer compatibility
             wireframeMesh: wireframeMesh,       // Single unified wireframe
             faceHighlight: this.createFaceHighlight(mainMesh),
-            interactiveMesh: this.createContainerInteractiveMesh(mainMesh)
+            interactiveMesh: this.createContainerInteractiveMesh(mainMesh),
+            cadWireframe: this.createCadWireframe(mainMesh) // CAD wireframes for better edge visibility
         };
 
         // Add as children of main mesh (only if they were created successfully)
@@ -132,6 +145,10 @@ class SupportMeshFactory {
             mainMesh.updateMatrixWorld(true);
             supportMeshes.interactiveMesh.updateMatrixWorld(true);
 
+        }
+        if (supportMeshes.cadWireframe) {
+            mainMesh.add(supportMeshes.cadWireframe);
+            supportMeshes.cadWireframe.visible = true; // Visible by default for CAD wireframes
         }
         // contextHighlight removed - using single wireframeMesh for all states
 
@@ -160,6 +177,28 @@ class SupportMeshFactory {
         wireframe.position.set(0, 0.001, 0); // Small Y offset to prevent z-fighting
         wireframe.raycast = () => {}; // Non-raycastable
         wireframe.userData.supportMeshType = 'selectionWireframe';
+
+        return wireframe;
+    }
+
+    /**
+     * Create CAD wireframe (always visible, thin edges for CAD visibility)
+     */
+    createCadWireframe(mainMesh) {
+        if (!mainMesh.geometry || mainMesh.type === 'Group') {
+            return null;
+        }
+
+        const edgeGeometry = this.geometryFactory.createEdgeGeometry(mainMesh.geometry);
+        if (!edgeGeometry) {
+            return null;
+        }
+        const wireframe = new THREE.LineSegments(edgeGeometry, this.materials.cadWireframe);
+
+        // Position at (0,0,0) relative to parent - inherits parent transform
+        wireframe.position.set(0, 0.002, 0); // Slightly higher offset than selection wireframe
+        wireframe.raycast = () => {}; // Non-raycastable
+        wireframe.userData.supportMeshType = 'cadWireframe';
 
         return wireframe;
     }
@@ -294,6 +333,14 @@ class SupportMeshFactory {
             // Return old geometry to pool instead of disposing
             this.geometryFactory.returnGeometry(supportMeshes.containerWireframe.geometry, 'edge');
             supportMeshes.containerWireframe.geometry = newEdgeGeometry;
+        }
+
+        // Update CAD wireframes
+        if (supportMeshes.cadWireframe) {
+            const newEdgeGeometry = this.geometryFactory.createEdgeGeometry(mainMesh.geometry);
+            // Return old geometry to pool instead of disposing
+            this.geometryFactory.returnGeometry(supportMeshes.cadWireframe.geometry, 'edge');
+            supportMeshes.cadWireframe.geometry = newEdgeGeometry;
         }
 
         // contextHighlight removed - using single wireframeMesh managed above

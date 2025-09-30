@@ -26,7 +26,7 @@ class PropertyManager {
         this.historyManager = window.modlerComponents?.historyManager;
 
         this.initialized = true;
-        console.log('✅ PropertyManager initialized');
+        // PropertyManager initialized (logging removed to reduce console noise)
     }
 
     /**
@@ -111,15 +111,23 @@ class PropertyManager {
             this.sceneController.updateLayout(container.id);
         }
 
-        // Update property panel display
-        if (window.updatePropertyPanelFromObject) {
-            window.updatePropertyPanelFromObject(mesh);
+        // BYPASS ELIMINATED: Use ObjectStateManager instead of direct property panel calls
+        // ObjectStateManager already handles ObjectEventBus → PropertyPanelSync flow
+        if (objectStateManager && mesh?.userData?.modlerId) {
+            objectStateManager.notifyObjectModified(mesh.userData.modlerId, 'layout');
         }
 
         // Support meshes are now self-contained children - no sync needed
 
-        // Notify SceneController
-        this.sceneController.notifyObjectModified(objectData.id);
+        // Use ObjectStateManager for unified state management
+        const objectStateManager = window.modlerComponents?.objectStateManager;
+        if (objectStateManager) {
+            // Sync object state after layout update
+            objectStateManager.syncObjectFromSceneController(objectData.id);
+        } else {
+            // Fallback to SceneController notification
+            this.sceneController.notifyObjectModified(objectData.id);
+        }
 
         // Trigger property panel refresh for all affected objects
         this.refreshLayoutPropertyPanels(container);
@@ -143,10 +151,13 @@ class PropertyManager {
         const shouldRefresh = children.some(child => selectedIds.includes(child.id));
 
         if (shouldRefresh) {
-            // Trigger property panel update
+            // BYPASS ELIMINATED: Use ObjectStateManager instead of direct property panel calls
             setTimeout(() => {
-                if (window.updatePropertyPanelFromObject) {
-                    window.updatePropertyPanelFromObject(selectedObjects[0]);
+                const objectStateManager = window.modlerComponents?.objectStateManager;
+                if (objectStateManager && selectedObjects[0]?.userData?.modlerId) {
+                    objectStateManager.notifyObjectModified(selectedObjects[0].userData.modlerId, 'property-refresh');
+                } else {
+                    console.warn('⚠️ PropertyManager: ObjectStateManager not available for property refresh');
                 }
             }, 100); // Small delay to allow layout calculations to complete
         }
