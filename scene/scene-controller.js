@@ -108,10 +108,6 @@ class SceneController {
         this.scene.add(mesh);
         this.objects.set(id, objectData);
 
-        // DEBUG: Check ObjectStateManager availability before sync
-        const objectStateManager = window.modlerComponents?.objectStateManager;
-        // ObjectStateManager integration
-
         // Sync to ObjectStateManager for unified state management
         this.syncObjectToStateManager(objectData);
 
@@ -134,13 +130,11 @@ class SceneController {
                 },
                 { immediate: true, source: 'SceneController.addObject' }
             );
-            // ObjectEventBus event emitted for object creation (logging removed to reduce console noise)
         }
 
         // Emit legacy event for backward compatibility
         this.emit('objectAdded', objectData);
 
-        // Object added successfully (logging removed to reduce console noise)
         return objectData;
     }
     
@@ -185,7 +179,6 @@ class SceneController {
         // Emit event for UI updates
         this.emit('objectRemoved', objectData);
 
-        // Object removed successfully
         return true;
     }
     
@@ -331,13 +324,12 @@ class SceneController {
                 metadataUpdates[key] = value;
             }
         }
-        
+
         // Apply metadata updates if any
         if (Object.keys(metadataUpdates).length > 0) {
             Object.assign(objectData, metadataUpdates);
         }
-        
-        // Object updated successfully
+
         return true;
     }
     
@@ -366,7 +358,6 @@ class SceneController {
     clear() {
         const ids = Array.from(this.objects.keys());
         ids.forEach(id => this.removeObject(id));
-        // Scene cleared successfully
     }
     
     // Get statistics
@@ -1077,20 +1068,15 @@ class SceneController {
      * @param {Object} objectData - Object data from SceneController
      */
     syncObjectToStateManager(objectData) {
-        // Sync events are frequent during tool operations - only log errors
-
         if (!objectData) {
-            console.warn('🚨 SceneController: Cannot sync null objectData to ObjectStateManager');
+            console.warn('SceneController: Cannot sync null objectData to ObjectStateManager');
             return;
         }
 
         // Get ObjectStateManager reference dynamically (handles initialization timing)
         const objectStateManager = window.modlerComponents?.objectStateManager;
-        // Debug info for sync operations - only log errors
 
         if (!objectStateManager) {
-            console.warn('🚨 SceneController: ObjectStateManager not available, deferring sync for object:', objectData.id);
-            console.log('🔍 Available window.modlerComponents:', Object.keys(window.modlerComponents || {}));
             // Defer sync until ObjectStateManager is available (retry up to 10 times)
             this.retryObjectSync(objectData, 0);
             return;
@@ -1153,7 +1139,6 @@ class SceneController {
         if (typeof objectStateManager.importObjectFromScene === 'function') {
             objectStateManager.importObjectFromScene(objectData);
         } else {
-            console.warn('🚨 SceneController: ObjectStateManager.importObjectFromScene not available, falling back to updateObject');
             objectStateManager.updateObject(objectData.id, objectState);
         }
 
@@ -1172,35 +1157,21 @@ class SceneController {
         const MAX_ATTEMPTS = 10;
         const BASE_DELAY = 50; // Start with 50ms
 
-        console.log(`🔄 SceneController.retryObjectSync: Attempt ${attempt + 1}/${MAX_ATTEMPTS} for object ${objectData.id}`);
-
         if (attempt >= MAX_ATTEMPTS) {
-            console.error(`🚨 SceneController: Failed to sync object ${objectData.id} after ${MAX_ATTEMPTS} attempts`);
-            console.log('🔍 Final state check:');
-            console.log('  - window.modlerComponents:', !!window.modlerComponents);
-            console.log('  - Available components:', Object.keys(window.modlerComponents || {}));
-            console.log('  - ObjectStateManager:', !!window.modlerComponents?.objectStateManager);
+            console.error(`SceneController: Failed to sync object ${objectData.id} after ${MAX_ATTEMPTS} attempts`);
             return;
         }
 
         // Check if ObjectStateManager is now available
         const objectStateManager = window.modlerComponents?.objectStateManager;
-        console.log(`🔍 SceneController.retryObjectSync: ObjectStateManager available: ${!!objectStateManager}`);
 
         if (objectStateManager) {
-            console.log(`🔧 SceneController: ObjectStateManager now available, syncing object ${objectData.id} (attempt ${attempt + 1})`);
             this.syncObjectToStateManager(objectData);
             return;
         }
 
-        // Log current state for debugging
-        console.log(`🔍 SceneController.retryObjectSync: Still waiting... (attempt ${attempt + 1})`);
-        console.log('  - window.modlerComponents:', !!window.modlerComponents);
-        console.log('  - Available components:', Object.keys(window.modlerComponents || {}));
-
         // Exponential backoff: 50ms, 100ms, 200ms, etc.
         const delay = BASE_DELAY * Math.pow(2, attempt);
-        console.log(`🕐 SceneController.retryObjectSync: Retrying in ${delay}ms...`);
 
         setTimeout(() => {
             this.retryObjectSync(objectData, attempt + 1);
@@ -1304,7 +1275,6 @@ class SceneController {
     destroy() {
         this.clear();
         this.objects.clear();
-        // SceneController destroyed
     }
 }
 
