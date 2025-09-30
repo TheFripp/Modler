@@ -303,11 +303,6 @@ class ContainerCrudManager {
             return null;
         }
 
-        // const unifiedContainerManager = window.modlerComponents?.unifiedContainerManager;
-        // if (unifiedContainerManager) {
-        //     unifiedContainerManager.registerContainer(containerObject);
-        // }
-
         return containerObject;
     }
 
@@ -411,15 +406,6 @@ class ContainerCrudManager {
             selectable: false, // WIREFRAME IS NOT SELECTABLE - only interactive mesh should be selectable
             sizingMode: 'hug' // Default container sizing mode - automatically resizes to fit children
         });
-
-        // Register container with unified ContainerManager (new architecture)
-        // const unifiedContainerManager = window.modlerComponents?.unifiedContainerManager;
-        // if (unifiedContainerManager && containerObject) {
-        //     unifiedContainerManager.registerContainer(containerObject);
-        // }
-
-        // LEGACY MANAGERS REMOVED: Only UnifiedContainerManager handles containers now
-        // Legacy containerSupportManager registration removed to prevent conflicts
 
         return containerObject;
     }
