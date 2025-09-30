@@ -131,6 +131,30 @@ class MoveTool {
         const objectData = sceneController?.getObjectByMesh?.(this.dragObject);
         const objectId = objectData?.id || this.dragObject.uuid;
 
+        // FAST PATH: During drag, update mesh directly AND notify UI
+        // Skip full propagation (no container updates, no event bus spam)
+        if (this.isDragging) {
+            this.dragObject.position.copy(newPosition);
+            this.dragObject.updateMatrixWorld(true);
+
+            // Update UI panel in real-time without full ObjectStateManager propagation
+            if (this.objectStateManager) {
+                const object = this.objectStateManager.getObject(objectId);
+                if (object) {
+                    // Update local state copy for UI sync
+                    object.position = {
+                        x: newPosition.x,
+                        y: newPosition.y,
+                        z: newPosition.z
+                    };
+                    // Trigger UI update only (skip SceneController and event propagation)
+                    this.objectStateManager.updateUISystems([object]);
+                }
+            }
+            return;
+        }
+
+        // FULL PATH: Discrete updates (non-drag) go through full ObjectStateManager
         if (this.objectStateManager) {
             // Use unified state management - automatically handles 3D scene, UI notifications, layout updates
             this.objectStateManager.updateObject(objectId, {
@@ -379,6 +403,22 @@ class MoveTool {
         const fieldNavigationManager = window.modlerComponents?.fieldNavigationManager;
         if (fieldNavigationManager) {
             fieldNavigationManager.unregisterNavigationWorkflow('move-tool-drag');
+        }
+
+        // CRITICAL: Sync final position to ObjectStateManager before clearing drag state
+        // This ensures system state, UI panels, and events get the final position
+        if (draggedObject && this.objectStateManager) {
+            const sceneController = window.modlerComponents?.sceneController;
+            const objectData = sceneController?.getObjectByMesh?.(draggedObject);
+            const objectId = objectData?.id || draggedObject.uuid;
+
+            this.objectStateManager.updateObject(objectId, {
+                position: {
+                    x: draggedObject.position.x,
+                    y: draggedObject.position.y,
+                    z: draggedObject.position.z
+                }
+            });
         }
 
         // Clear drag state

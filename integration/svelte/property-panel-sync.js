@@ -1013,9 +1013,13 @@ class PropertyPanelSync {
             }
 
             // Direct mode: trigger local event
-            window.dispatchEvent(new CustomEvent(`${settingsType}-settings-changed`, {
+            const eventName = `${settingsType}-settings-changed`;
+            console.log('📡 PropertyPanelSync: Dispatching window event:', eventName, settings);
+            const event = new CustomEvent(eventName, {
                 detail: { settings }
-            }));
+            });
+            window.dispatchEvent(event);
+            console.log('📡 PropertyPanelSync: Event dispatched successfully');
             this.stats.messagesSucceeded++;
             return true;
 

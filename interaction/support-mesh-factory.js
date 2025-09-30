@@ -171,10 +171,11 @@ class SupportMeshFactory {
             console.warn('❌ Failed to create edge geometry for selection wireframe:', mainMesh.name);
             return null;
         }
-        const wireframe = new THREE.LineSegments(edgeGeometry, this.materials.selectionWireframe);
+        const wireframe = this.resourcePool.getLineMesh(edgeGeometry, this.materials.selectionWireframe);
 
-        // Position at (0,0,0) relative to parent - inherits parent transform
-        wireframe.position.set(0, 0.001, 0); // Small Y offset to prevent z-fighting
+        // Scale slightly larger to ensure visibility outside mesh
+        wireframe.scale.setScalar(1.002);
+        wireframe.renderOrder = 999; // Render on top of geometry
         wireframe.raycast = () => {}; // Non-raycastable
         wireframe.userData.supportMeshType = 'selectionWireframe';
 
@@ -193,10 +194,11 @@ class SupportMeshFactory {
         if (!edgeGeometry) {
             return null;
         }
-        const wireframe = new THREE.LineSegments(edgeGeometry, this.materials.cadWireframe);
+        const wireframe = this.resourcePool.getLineMesh(edgeGeometry, this.materials.cadWireframe);
 
-        // Position at (0,0,0) relative to parent - inherits parent transform
-        wireframe.position.set(0, 0.002, 0); // Slightly higher offset than selection wireframe
+        // Scale slightly larger to ensure visibility outside mesh
+        wireframe.scale.setScalar(1.001);
+        wireframe.renderOrder = 998; // Render on top but below selection wireframe
         wireframe.raycast = () => {}; // Non-raycastable
         wireframe.userData.supportMeshType = 'cadWireframe';
 

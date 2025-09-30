@@ -358,18 +358,18 @@ class ConfigurationManager {
      */
     set(keyPath, value, save = true) {
         const oldValue = this.get(keyPath);
-        
+
         // Update the configuration
         this.setNestedValue(this.config, keyPath, value);
-        
+
         // Save to storage if requested
         if (save) {
             this.saveToStorage();
         }
-        
+
         // Notify subscribers
         this.notifySubscribers(keyPath, value, oldValue);
-        
+
         return true;
     }
     
@@ -627,17 +627,15 @@ class ConfigurationManager {
      * Notify subscribers of configuration changes
      */
     notifySubscribers(keyPath, newValue, oldValue) {
-
         if (this.subscribers.has(keyPath)) {
             const callbacks = this.subscribers.get(keyPath);
-            callbacks.forEach((callback, index) => {
+            callbacks.forEach((callback) => {
                 try {
                     callback(newValue, oldValue);
                 } catch (error) {
                     console.error(`Error in config subscriber for ${keyPath}:`, error);
                 }
             });
-        } else {
         }
     }
     

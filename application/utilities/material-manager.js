@@ -113,6 +113,19 @@ class MaterialManager {
             this.updateMaterialsOfType(this.materialTypes.PADDING_VISUALIZATION, 'linewidth', newValue);
         });
 
+        // CAD wireframe materials
+        this.registerConfigCallback('visual.cad.wireframe.color', (newValue) => {
+            this.updateMaterialsOfType(this.materialTypes.CAD_WIREFRAME, 'color', newValue);
+        });
+
+        this.registerConfigCallback('visual.cad.wireframe.lineWidth', (newValue) => {
+            this.updateMaterialsOfType(this.materialTypes.CAD_WIREFRAME, 'linewidth', newValue);
+        });
+
+        this.registerConfigCallback('visual.cad.wireframe.opacity', (newValue) => {
+            this.updateMaterialsOfType(this.materialTypes.CAD_WIREFRAME, 'opacity', newValue);
+        });
+
         // Configuration callbacks registered
     }
 
@@ -149,6 +162,8 @@ class MaterialManager {
             opacity: options.opacity || configManager?.get('visual.selection.opacity') || 0.8,
             renderOrder: options.renderOrder || configManager?.get('visual.selection.renderOrder') || 999,
             transparent: true,
+            depthTest: false,  // Render on top of geometry
+            depthWrite: false, // Don't write to depth buffer
             ...options
         };
 
@@ -197,6 +212,8 @@ class MaterialManager {
             opacity: options.opacity || configManager?.get('visual.containers.opacity') || 0.8,
             renderOrder: options.renderOrder || configManager?.get('visual.containers.renderOrder') || 998,
             transparent: true,
+            depthTest: false,  // Render on top of geometry
+            depthWrite: false, // Don't write to depth buffer
             ...options
         };
 
@@ -407,10 +424,12 @@ class MaterialManager {
 
         // Build configuration for CAD wireframe
         const config = {
-            color: options.color || configManager?.get('visual.cad.wireframe.color') || '#666666',
+            color: options.color || configManager?.get('visual.cad.wireframe.color') || '#888888',
             lineWidth: options.lineWidth || configManager?.get('visual.cad.wireframe.lineWidth') || 1,
-            opacity: options.opacity !== undefined ? options.opacity : (configManager?.get('visual.cad.wireframe.opacity') !== undefined ? configManager.get('visual.cad.wireframe.opacity') : 0.5),
+            opacity: options.opacity !== undefined ? options.opacity : (configManager?.get('visual.cad.wireframe.opacity') !== undefined ? configManager.get('visual.cad.wireframe.opacity') : 0.8),
             transparent: true,
+            depthTest: false,  // Render on top of geometry
+            depthWrite: false, // Don't write to depth buffer
             ...options
         };
 
@@ -633,7 +652,6 @@ class MaterialManager {
 
         if (updatedCount > 0) {
             this.stats.configUpdates++;
-            console.log(`MaterialManager: Updated ${updatedCount} materials of type ${type}, property: ${property}, value: ${value}`);
         }
     }
 

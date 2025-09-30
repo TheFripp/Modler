@@ -112,7 +112,31 @@ class SceneFoundation {
     clearAnimationCallbacks() {
         this.animationCallbacks = [];
     }
-    
+
+    /**
+     * Update scene background color
+     */
+    updateBackgroundColor(color) {
+        this.renderer.setClearColor(color);
+    }
+
+    /**
+     * Update grid colors - delegates to SceneController
+     */
+    updateGridMainColor(color) {
+        const sceneController = window.modlerComponents?.sceneController;
+        if (sceneController && sceneController.updateGridMainColor) {
+            sceneController.updateGridMainColor(color);
+        }
+    }
+
+    updateGridSubColor(color) {
+        const sceneController = window.modlerComponents?.sceneController;
+        if (sceneController && sceneController.updateGridSubColor) {
+            sceneController.updateGridSubColor(color);
+        }
+    }
+
     destroy() {
         this.isRunning = false;
         window.removeEventListener('resize', this.resizeHandler);
@@ -140,3 +164,36 @@ class SceneFoundation {
 
 // Export for use in main application
 window.SceneFoundation = SceneFoundation;
+
+// Global scene update functions for ConfigurationManager
+window.updateSceneBackground = (color) => {
+    const sceneFoundation = window.modlerComponents?.sceneFoundation;
+    if (sceneFoundation) {
+        sceneFoundation.updateBackgroundColor(color);
+    }
+};
+
+window.updateGridMainColor = (color) => {
+    const sceneFoundation = window.modlerComponents?.sceneFoundation;
+    if (sceneFoundation) {
+        sceneFoundation.updateGridMainColor(color);
+    }
+};
+
+window.updateGridSubColor = (color) => {
+    const sceneFoundation = window.modlerComponents?.sceneFoundation;
+    if (sceneFoundation) {
+        sceneFoundation.updateGridSubColor(color);
+    }
+};
+
+window.updateAccentColor = (color) => {
+    // Update CSS custom property for accent color
+    document.documentElement.style.setProperty('--accent-color', color);
+};
+
+window.updateToolbarOpacity = (opacity) => {
+    // Update CSS custom property for toolbar opacity
+    const opacityDecimal = typeof opacity === 'number' && opacity <= 1 ? opacity : opacity / 100;
+    document.documentElement.style.setProperty('--toolbar-opacity', opacityDecimal);
+};

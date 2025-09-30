@@ -38,11 +38,14 @@
 		...restProps
 	}: Props = $props();
 
-	// Get constraints from property controller
+	// Check if this is an opacity field (should display as integer)
+	const isOpacity = label?.toLowerCase().includes('opacity');
+
+	// Get constraints from property controller or restProps
 	const constraints = property && propertyController ? propertyController?.getConstraints(property) : null;
-	const step = constraints?.step || 0.1;
-	const min = constraints?.min;
-	const max = constraints?.max;
+	const step = constraints?.step || (restProps as any).step || (isOpacity ? 1 : 0.1);
+	const min = constraints?.min ?? (restProps as any).min ?? (isOpacity ? 0 : undefined);
+	const max = constraints?.max ?? (restProps as any).max ?? (isOpacity ? 100 : undefined);
 	const showArrows = type === 'number';
 
 	// Internal state for the input field
@@ -63,14 +66,25 @@
 		} else if (objectId && property) {
 			// Use property controller - handles mixed values automatically
 			const currentValue = getNumericValue();
-			const stepValue = typeof step === 'number' ? step : 0.1;
-			const newValue = Math.round((currentValue + stepValue) * 10) / 10;
+			const stepValue = typeof step === 'number' ? step : (isOpacity ? 1 : 0.1);
+			let newValue = isOpacity
+				? Math.round(currentValue + stepValue)
+				: parseFloat((Math.round((currentValue + stepValue) * 10) / 10).toFixed(1));
+			// Apply constraints
+			if (max !== undefined) newValue = Math.min(newValue, max);
+			if (min !== undefined) newValue = Math.max(newValue, min);
 			propertyController?.updateProperty(objectId, property, newValue, 'button');
 		} else if (type === 'number') {
 			// Fallback for non-property-controller usage
 			const currentValue = getNumericValue();
-			const stepValue = typeof step === 'number' ? step : 0.1;
-			value = Math.round((currentValue + stepValue) * 10) / 10;
+			const stepValue = typeof step === 'number' ? step : (isOpacity ? 1 : 0.1);
+			let newValue = isOpacity
+				? Math.round(currentValue + stepValue)
+				: parseFloat((Math.round((currentValue + stepValue) * 10) / 10).toFixed(1));
+			// Apply constraints
+			if (max !== undefined) newValue = Math.min(newValue, max);
+			if (min !== undefined) newValue = Math.max(newValue, min);
+			value = newValue;
 		}
 	}
 
@@ -81,14 +95,25 @@
 		} else if (objectId && property) {
 			// Use property controller - handles mixed values automatically
 			const currentValue = getNumericValue();
-			const stepValue = typeof step === 'number' ? step : 0.1;
-			const newValue = Math.round((currentValue - stepValue) * 10) / 10;
+			const stepValue = typeof step === 'number' ? step : (isOpacity ? 1 : 0.1);
+			let newValue = isOpacity
+				? Math.round(currentValue - stepValue)
+				: parseFloat((Math.round((currentValue - stepValue) * 10) / 10).toFixed(1));
+			// Apply constraints
+			if (max !== undefined) newValue = Math.min(newValue, max);
+			if (min !== undefined) newValue = Math.max(newValue, min);
 			propertyController?.updateProperty(objectId, property, newValue, 'button');
 		} else if (type === 'number') {
 			// Fallback for non-property-controller usage
 			const currentValue = getNumericValue();
-			const stepValue = typeof step === 'number' ? step : 0.1;
-			value = Math.round((currentValue - stepValue) * 10) / 10;
+			const stepValue = typeof step === 'number' ? step : (isOpacity ? 1 : 0.1);
+			let newValue = isOpacity
+				? Math.round(currentValue - stepValue)
+				: parseFloat((Math.round((currentValue - stepValue) * 10) / 10).toFixed(1));
+			// Apply constraints
+			if (max !== undefined) newValue = Math.min(newValue, max);
+			if (min !== undefined) newValue = Math.max(newValue, min);
+			value = newValue;
 		}
 	}
 
@@ -240,8 +265,8 @@
 		if (!isDragging) return;
 
 		const deltaY = startY - event.clientY; // Invert so dragging up increases value
-		const stepValue = typeof step === 'number' ? step : 0.1;
-		const sensitivity = 4; // Improved sensitivity for smoother dragging
+		const stepValue = typeof step === 'number' ? step : (isOpacity ? 1 : 0.1);
+		const sensitivity = isOpacity ? 0.4 : 4; // 10x faster for opacity (smaller divisor = faster)
 		const rawValue = startValue + (deltaY / sensitivity) * stepValue;
 
 		// Apply constraints during drag, especially for dimensions
@@ -259,14 +284,16 @@
 			}
 		}
 
-		// Keep full precision for the actual value, but round display to 1 decimal
+		// Keep full precision for the actual value, but round display appropriately
 		const actualValue = constrainedValue;
-		const displayValue = Math.round(constrainedValue * 10) / 10;
+		const displayValue = isOpacity
+			? Math.round(constrainedValue)
+			: parseFloat((Math.round(constrainedValue * 10) / 10).toFixed(1));
 
 		// Track the current dragged value for final update
 		currentDragValue = actualValue;
 
-		// Update input value immediately for visual feedback (1 decimal for display)
+		// Update input value immediately for visual feedback
 		// This only updates the local input field, preventing UI flickering
 		inputValue = displayValue;
 

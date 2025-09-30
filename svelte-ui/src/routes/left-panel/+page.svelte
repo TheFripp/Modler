@@ -32,8 +32,8 @@
 
 	// CAD wireframe settings
 	let cadWireframeSettings = {
-		color: '#666666',
-		opacity: 50,
+		color: '#888888',
+		opacity: 80,
 		lineWidth: 1
 	};
 
@@ -636,13 +636,19 @@
 		// Map property to proper config path
 		const configPath = `scene.${property}`;
 
+		console.log('🎨 Left Panel: updateSceneSettings called', { property, value, configPath });
+
 		// Send individual setting update through unified communication system
 		const settings = {
 			[configPath]: value
 		};
 
+		console.log('🎨 Left Panel: Sending via unifiedCommunication', settings);
+
 		// Use unified communication system for scene settings
-		unifiedCommunication.sendVisualSettings('scene', settings).catch(error => {
+		unifiedCommunication.sendVisualSettings('scene', settings).then(success => {
+			console.log('🎨 Left Panel: sendVisualSettings result:', success);
+		}).catch(error => {
 			console.error('Failed to send scene settings update:', error);
 		});
 
@@ -670,32 +676,37 @@
 		});
 	}
 
-	function requestCurrentCadWireframeSettings() {
-		// Request current CAD wireframe settings through unified communication system
-		unifiedCommunication.sendSettingsRequest('get-cad-wireframe-settings').catch(error => {
-			console.error('Failed to request CAD wireframe settings:', error);
-		});
-	}
+	function loadSettingsFromConfig() {
+		// Access ConfigurationManager directly from parent window
+		const configManager = (window.parent as any)?.modlerComponents?.configurationManager;
+		if (!configManager) {
+			console.warn('ConfigurationManager not available yet, will retry...');
+			setTimeout(loadSettingsFromConfig, 100);
+			return;
+		}
 
-	function requestCurrentSceneSettings() {
-		// Request current scene settings through unified communication system
-		unifiedCommunication.sendSettingsRequest('get-scene-settings').catch(error => {
-			console.error('Failed to request scene settings:', error);
-		});
-	}
+		// Load visual settings
+		visualSettings.selection.color = configManager.get('visual.selection.color') || '#ff6600';
+		visualSettings.selection.lineWidth = configManager.get('visual.selection.lineWidth') || 2;
+		visualSettings.selection.opacity = (configManager.get('visual.selection.opacity') || 0.8) * 100;
 
-	function requestCurrentVisualSettings() {
-		// Request current visual settings through unified communication system
-		unifiedCommunication.sendSettingsRequest('get-visual-settings').catch(error => {
-			console.error('Failed to request visual settings:', error);
-		});
-	}
+		visualSettings.containers.wireframeColor = configManager.get('visual.containers.wireframeColor') || '#00ff00';
+		visualSettings.containers.lineWidth = configManager.get('visual.containers.lineWidth') || 1;
+		visualSettings.containers.opacity = (configManager.get('visual.containers.opacity') || 0.8) * 100;
 
-	function requestCurrentInterfaceSettings() {
-		// Request current interface settings through unified communication system
-		unifiedCommunication.sendSettingsRequest('get-interface-settings').catch(error => {
-			console.error('Failed to request interface settings:', error);
-		});
+		// Load CAD wireframe settings
+		cadWireframeSettings.color = configManager.get('visual.cad.wireframe.color') || '#888888';
+		cadWireframeSettings.lineWidth = configManager.get('visual.cad.wireframe.lineWidth') || 1;
+		cadWireframeSettings.opacity = (configManager.get('visual.cad.wireframe.opacity') || 0.8) * 100;
+
+		// Load scene settings
+		sceneSettings.backgroundColor = configManager.get('scene.background.color') || '#1a1a1a';
+		sceneSettings.gridMainColor = configManager.get('scene.grid.mainColor') || '#444444';
+		sceneSettings.gridSubColor = configManager.get('scene.grid.subColor') || '#222222';
+
+		// Load interface settings
+		interfaceSettings.accentColor = configManager.get('interface.accentColor') || '#4a9eff';
+		interfaceSettings.toolbarOpacity = (configManager.get('interface.toolbarOpacity') || 0.95) * 100;
 	}
 
 	onMount(() => {
@@ -709,11 +720,8 @@
 			}
 		});
 
-		// Initialize visual settings
-		requestCurrentVisualSettings();
-		requestCurrentCadWireframeSettings();
-		requestCurrentSceneSettings();
-		requestCurrentInterfaceSettings();
+		// Load settings from ConfigurationManager
+		loadSettingsFromConfig();
 
 		// Get unit converter instance
 		unitConverter = (window as any).UnitConverter ? new (window as any).UnitConverter() : null;
@@ -919,6 +927,8 @@
 										type="number"
 										bind:value={visualSettings.selection.lineWidth}
 										onchange={() => updateVisualSettings('selection', 'lineWidth', visualSettings.selection.lineWidth)}
+										min={1}
+										max={10}
 									/>
 									<InlineInput
 										label="Opacity"
@@ -945,6 +955,8 @@
 										type="number"
 										bind:value={visualSettings.containers.lineWidth}
 										onchange={() => updateVisualSettings('containers', 'lineWidth', visualSettings.containers.lineWidth)}
+										min={1}
+										max={10}
 									/>
 									<InlineInput
 										label="Opacity"
@@ -989,6 +1001,8 @@
 										type="number"
 										bind:value={cadWireframeSettings.lineWidth}
 										onchange={() => updateCadWireframeSettings('lineWidth', cadWireframeSettings.lineWidth)}
+										min={1}
+										max={10}
 									/>
 									<InlineInput
 										label="Opacity"

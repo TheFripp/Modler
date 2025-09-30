@@ -752,13 +752,38 @@
      * Setup direct message handling for non-iframe mode
      */
     function setupDirectMessageHandling() {
-        // Listen to postMessage calls in direct mode
+        // Listen to postMessage calls in direct mode (from iframes)
         window.addEventListener('message', (event) => {
             const { type, data } = event.data;
 
             if (type === 'property-update') {
                 handlePropertyUpdate(data.objectId, data.property, data.value);
+            } else if (type === 'visual-settings-changed') {
+                handleVisualSettingsUpdate(data.settings);
+            } else if (type === 'scene-settings-changed') {
+                handleSceneSettingsUpdate(data.settings);
+            } else if (type === 'cad-wireframe-settings-changed') {
+                handleCadWireframeSettingsUpdate(data.settings);
+            } else if (type === 'interface-settings-changed') {
+                handleInterfaceSettingsUpdate(data.settings);
             }
+        });
+
+        // Listen for window custom events dispatched by PropertyPanelSync
+        window.addEventListener('visual-settings-changed', (event) => {
+            handleVisualSettingsUpdate(event.detail.settings);
+        });
+
+        window.addEventListener('scene-settings-changed', (event) => {
+            handleSceneSettingsUpdate(event.detail.settings);
+        });
+
+        window.addEventListener('cad-wireframe-settings-changed', (event) => {
+            handleCadWireframeSettingsUpdate(event.detail.settings);
+        });
+
+        window.addEventListener('interface-settings-changed', (event) => {
+            handleInterfaceSettingsUpdate(event.detail.settings);
         });
 
         // Make handlePropertyUpdate globally available for direct calls
@@ -1016,17 +1041,24 @@
      * Handle scene settings update from Svelte left panel
      */
     function handleSceneSettingsUpdate(settings) {
+        console.log('🔧 Main Integration: handleSceneSettingsUpdate called', settings);
+
         const configurationManager = window.modlerComponents?.configurationManager;
         if (!configurationManager) {
             console.warn('❌ ConfigurationManager not available for scene settings');
             return;
         }
 
+        console.log('🔧 Main Integration: ConfigurationManager found, updating settings');
+
         // Update configuration using proper ConfigurationManager methods
         // The ConfigurationManager will handle persistence and notifications automatically
         for (const [key, value] of Object.entries(settings)) {
+            console.log('🔧 Main Integration: Setting', key, '=', value);
             configurationManager.set(key, value);
         }
+
+        console.log('🔧 Main Integration: All settings updated');
     }
 
     /**

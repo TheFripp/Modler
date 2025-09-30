@@ -1245,6 +1245,61 @@ class SceneController {
 
     }
 
+    /**
+     * Update grid colors from configuration
+     */
+    updateGridMainColor(color) {
+        // Find the grid object
+        for (const [id, objectData] of this.objects.entries()) {
+            if (objectData.type === 'grid' && objectData.name === 'Floor Grid') {
+                const gridMesh = objectData.mesh;
+                if (gridMesh && gridMesh.children) {
+                    // Find the LineSegments child (the actual grid)
+                    const lineSegments = gridMesh.children.find(child => child.type === 'LineSegments');
+                    if (lineSegments && lineSegments.geometry) {
+                        // Update colors in the geometry
+                        const colors = lineSegments.geometry.attributes.color;
+                        if (colors) {
+                            const mainColor = new THREE.Color(color);
+                            // Update main grid lines (every other set of vertices)
+                            for (let i = 0; i < colors.count; i += 2) {
+                                colors.setXYZ(i, mainColor.r, mainColor.g, mainColor.b);
+                            }
+                            colors.needsUpdate = true;
+                        }
+                    }
+                }
+                break;
+            }
+        }
+    }
+
+    updateGridSubColor(color) {
+        // Find the grid object
+        for (const [id, objectData] of this.objects.entries()) {
+            if (objectData.type === 'grid' && objectData.name === 'Floor Grid') {
+                const gridMesh = objectData.mesh;
+                if (gridMesh && gridMesh.children) {
+                    // Find the LineSegments child (the actual grid)
+                    const lineSegments = gridMesh.children.find(child => child.type === 'LineSegments');
+                    if (lineSegments && lineSegments.geometry) {
+                        // Update colors in the geometry
+                        const colors = lineSegments.geometry.attributes.color;
+                        if (colors) {
+                            const subColor = new THREE.Color(color);
+                            // Update sub grid lines (every other set of vertices offset by 1)
+                            for (let i = 1; i < colors.count; i += 2) {
+                                colors.setXYZ(i, subColor.r, subColor.g, subColor.b);
+                            }
+                            colors.needsUpdate = true;
+                        }
+                    }
+                }
+                break;
+            }
+        }
+    }
+
     // Memory cleanup
     destroy() {
         this.clear();
