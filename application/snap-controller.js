@@ -45,7 +45,6 @@ class SnapController {
     registerSnapSystem(systemName, systemRef) {
         if (systemRef && typeof systemRef.setEnabled === 'function') {
             this.registeredSnapSystems.set(systemName, systemRef);
-        } else {
         }
     }
 
