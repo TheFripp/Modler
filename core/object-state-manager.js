@@ -1,23 +1,24 @@
 /**
- * ObjectStateManager - Single Source of Truth
+ * ObjectStateManager - State Coordination Layer
  *
- * UPDATED: Now uses ObjectDataFormat for standardized data
+ * ARCHITECTURE: Proxy Pattern
+ * - SceneController is the single source of truth for 3D geometry
+ * - ObjectStateManager coordinates updates between systems
+ * - All geometry updates (dimensions, position, rotation) proxy to SceneController
  *
- * SOLVES: Multiple disconnected state systems causing manual integration bugs
- *
- * REPLACES:
- * - Manual property updates in main-integration.js
- * - Scattered state in SceneController, Svelte stores, PropertyController
- * - Manual ObjectEventBus emissions
- * - PostMessage bridging code
- * - Multiple data format conversions
+ * SOLVES: Multiple disconnected state systems causing sync bugs
  *
  * PROVIDES:
- * - Single object state store with standard format
- * - Automatic change propagation
- * - Reactive subscriptions
- * - Unified update API
- * - Format validation and consistency
+ * - Unified update API for all property changes
+ * - Automatic propagation to SceneController and UI
+ * - Event coordination (ObjectEventBus, selection, hierarchy)
+ * - Format validation via ObjectDataFormat
+ * - Batched updates for performance
+ *
+ * KEY PRINCIPLE:
+ * - SceneController owns the 3D data (geometry, meshes)
+ * - ObjectStateManager routes updates and coordinates events
+ * - No duplicate storage of geometry properties
  */
 
 class ObjectStateManager extends EventTarget {
@@ -141,9 +142,8 @@ class ObjectStateManager extends EventTarget {
                 standardizedData = this.createLegacyFormat(objectData);
             }
 
-            // Add internal references (not part of standard format)
+            // Add internal references (mesh kept for backward compatibility)
             standardizedData.mesh = objectData.mesh;
-            standardizedData._sceneObjectData = objectData;
 
             this.objects.set(objectData.id, standardizedData);
         });
@@ -237,9 +237,8 @@ class ObjectStateManager extends EventTarget {
             // Material properties
             material: objectData.material || { color: 0x888888 },
 
-            // Internal references (read-only)
-            mesh: objectData.mesh,
-            _sceneObjectData: objectData
+            // Internal references (mesh kept for backward compatibility)
+            mesh: objectData.mesh
         });
 
         // CRITICAL: Rebuild hierarchy and emit events to trigger UI updates
@@ -312,23 +311,30 @@ class ObjectStateManager extends EventTarget {
 
     /**
      * Apply nested property updates (e.g., "position.x", "autoLayout.enabled")
+     * Note: For geometry properties (dimensions, position, rotation), we store the updates
+     * and SceneController applies them (proxy pattern - SceneController is single source of truth)
      */
     applyUpdates(object, updates) {
-        // Check if any dimension updates are coming - save previous state FIRST
-        const hasDimensionUpdate = Object.keys(updates).some(key => key.startsWith('dimensions.'));
-        if (hasDimensionUpdate && object.dimensions) {
-            // Save a DEEP copy of current dimensions before updating
-            // This must be a separate object, not a reference to the same object
-            object._previousDimensions = {
-                x: object.dimensions.x,
-                y: object.dimensions.y,
-                z: object.dimensions.z
-            };
-        }
+        // Track geometry updates separately - these will be applied by SceneController
+        const dimensionUpdates = {};
+        const positionUpdates = {};
+        const rotationUpdates = {};
 
         Object.entries(updates).forEach(([path, value]) => {
-            if (path.includes('.')) {
-                // Nested property (e.g., "position.x")
+            if (path.startsWith('dimensions.')) {
+                // Store dimension updates for SceneController to apply
+                const axis = path.split('.')[1];
+                dimensionUpdates[axis] = value;
+            } else if (path.startsWith('position.')) {
+                // Store position updates for SceneController to apply
+                const axis = path.split('.')[1];
+                positionUpdates[axis] = value;
+            } else if (path.startsWith('rotation.')) {
+                // Store rotation updates for SceneController to apply
+                const axis = path.split('.')[1];
+                rotationUpdates[axis] = value;
+            } else if (path.includes('.')) {
+                // Other nested properties (e.g., "autoLayout.gap", "material.color")
                 const [parent, child] = path.split('.');
                 if (!object[parent]) object[parent] = {};
                 object[parent][child] = value;
@@ -337,6 +343,17 @@ class ObjectStateManager extends EventTarget {
                 object[path] = value;
             }
         });
+
+        // Store geometry updates for later application by SceneController
+        if (Object.keys(dimensionUpdates).length > 0) {
+            object._pendingDimensionUpdates = dimensionUpdates;
+        }
+        if (Object.keys(positionUpdates).length > 0) {
+            object._pendingPositionUpdates = positionUpdates;
+        }
+        if (Object.keys(rotationUpdates).length > 0) {
+            object._pendingRotationUpdates = rotationUpdates;
+        }
     }
 
     /**
@@ -389,39 +406,51 @@ class ObjectStateManager extends EventTarget {
         }
 
         changedObjects.forEach(object => {
-            // CRITICAL: Update geometry when dimensions change
-            // This must happen FIRST, before position/rotation updates
-            // Note: object._previousDimensions is set in applyUpdates() before the update
-            if (object.dimensions && object._previousDimensions && this.sceneController.updateObjectDimensions) {
-                const oldDims = object._previousDimensions;
-                const newDims = object.dimensions;
+            // PROXY PATTERN: Apply ALL geometry updates directly to SceneController
+            // SceneController is the single source of truth for all 3D properties
 
-                // Update each axis that changed
-                if (oldDims.x !== newDims.x) {
-                    this.sceneController.updateObjectDimensions(object.id, 'x', newDims.x);
-                }
-                if (oldDims.y !== newDims.y) {
-                    this.sceneController.updateObjectDimensions(object.id, 'y', newDims.y);
-                }
-                if (oldDims.z !== newDims.z) {
-                    this.sceneController.updateObjectDimensions(object.id, 'z', newDims.z);
-                }
+            // Apply dimension updates
+            if (object._pendingDimensionUpdates && this.sceneController.updateObjectDimensions) {
+                const updates = object._pendingDimensionUpdates;
+                Object.entries(updates).forEach(([axis, value]) => {
+                    this.sceneController.updateObjectDimensions(object.id, axis, value);
+                });
+                delete object._pendingDimensionUpdates;
 
-                // Clean up the previous dimensions marker
-                delete object._previousDimensions;
+                // Sync back from SceneController
+                const sceneObject = this.sceneController.getObject(object.id);
+                if (sceneObject?.dimensions) {
+                    object.dimensions = { ...sceneObject.dimensions };
+                }
             }
 
-            // Update position/rotation via direct mesh access (if available)
-            const sceneObject = object._sceneObjectData;
-            if (sceneObject && sceneObject.mesh) {
-                // Update 3D properties
-                if (object.position) {
-                    sceneObject.mesh.position.set(object.position.x, object.position.y, object.position.z);
-                    sceneObject.mesh.updateMatrixWorld(true);
-                }
+            // Apply position updates
+            if (object._pendingPositionUpdates && this.sceneController.updateObjectPosition) {
+                const updates = object._pendingPositionUpdates;
+                Object.entries(updates).forEach(([axis, value]) => {
+                    this.sceneController.updateObjectPosition(object.id, axis, value);
+                });
+                delete object._pendingPositionUpdates;
 
-                if (object.rotation) {
-                    sceneObject.mesh.rotation.set(object.rotation.x, object.rotation.y, object.rotation.z);
+                // Sync back from SceneController
+                const sceneObject = this.sceneController.getObject(object.id);
+                if (sceneObject?.position) {
+                    object.position = { ...sceneObject.position };
+                }
+            }
+
+            // Apply rotation updates
+            if (object._pendingRotationUpdates && this.sceneController.updateObjectRotation) {
+                const updates = object._pendingRotationUpdates;
+                Object.entries(updates).forEach(([axis, value]) => {
+                    this.sceneController.updateObjectRotation(object.id, axis, value);
+                });
+                delete object._pendingRotationUpdates;
+
+                // Sync back from SceneController
+                const sceneObject = this.sceneController.getObject(object.id);
+                if (sceneObject?.rotation) {
+                    object.rotation = { ...sceneObject.rotation };
                 }
             }
 
@@ -430,12 +459,14 @@ class ObjectStateManager extends EventTarget {
                 this.sceneController.updateLayout(object.id);
             }
 
-            // Update object data properties
-            Object.assign(sceneObject, {
-                name: object.name,
-                dimensions: object.dimensions,
-                autoLayout: object.autoLayout
-            });
+            // Sync non-geometry properties to SceneController
+            const sceneObject = this.sceneController.getObject(object.id);
+            if (sceneObject) {
+                sceneObject.name = object.name;
+                if (object.autoLayout) {
+                    sceneObject.autoLayout = object.autoLayout;
+                }
+            }
         });
     }
 
