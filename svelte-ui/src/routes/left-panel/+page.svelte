@@ -911,6 +911,8 @@
 										type="number"
 										bind:value={visualSettings.selection.opacity}
 										onchange={() => updateVisualSettings('selection', 'opacity', visualSettings.selection.opacity)}
+										min={0}
+										max={100}
 									/>
 								</div>
 							</div>
@@ -939,6 +941,8 @@
 										type="number"
 										bind:value={visualSettings.containers.opacity}
 										onchange={() => updateVisualSettings('containers', 'opacity', visualSettings.containers.opacity)}
+										min={0}
+										max={100}
 									/>
 								</div>
 							</div>
@@ -985,6 +989,8 @@
 										type="number"
 										bind:value={cadWireframeSettings.opacity}
 										onchange={() => updateCadWireframeSettings('opacity', cadWireframeSettings.opacity)}
+										min={0}
+										max={100}
 									/>
 								</div>
 							</div>
@@ -1020,6 +1026,8 @@
 							type="number"
 							bind:value={interfaceSettings.toolbarOpacity}
 							onchange={() => updateInterfaceSettings('toolbarOpacity', interfaceSettings.toolbarOpacity)}
+							min={0}
+							max={100}
 						/>
 					</div>
 				</PropertyGroup>

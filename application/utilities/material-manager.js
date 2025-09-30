@@ -629,6 +629,7 @@ class MaterialManager {
      */
     updateMaterialsOfType(type, property, value) {
         let updatedCount = 0;
+        let needsGeometryUpdate = false;
 
         for (const material of this.activeMaterials) {
             if (material.userData?.materialManagerType === type) {
@@ -638,6 +639,7 @@ class MaterialManager {
                         material.color.setHex(colorHex);
                     } else if (property === 'linewidth') {
                         material.lineWidth = value;
+                        needsGeometryUpdate = true; // LineWidth changes require geometry rebuild
                     } else {
                         material[property] = value;
                     }
@@ -648,6 +650,13 @@ class MaterialManager {
                     console.warn('MaterialManager: Error updating material property:', error);
                 }
             }
+        }
+
+        // Trigger geometry updates for lineWidth changes
+        if (needsGeometryUpdate && type === this.materialTypes.SELECTION_EDGE) {
+            this.refreshSelectionVisualizations();
+        } else if (needsGeometryUpdate && type === this.materialTypes.CONTAINER_WIREFRAME) {
+            this.refreshContainerVisualizations();
         }
 
         if (updatedCount > 0) {
@@ -942,6 +951,46 @@ class MaterialManager {
         }
 
         // MaterialManager cleared cached materials (logging removed to reduce console noise)
+    }
+
+    /**
+     * Refresh selection visualizations when lineWidth changes
+     * Triggers geometry rebuild for thick line groups
+     */
+    refreshSelectionVisualizations() {
+        const geometryUtils = window.GeometryUtils;
+        const sceneController = window.modlerComponents?.sceneController;
+
+        if (!geometryUtils || !sceneController) return;
+
+        // Get all selected objects and refresh their wireframes
+        const selectedObjects = sceneController.getAllObjects().filter(obj =>
+            obj.mesh && obj.mesh.userData?.isSelected
+        );
+
+        selectedObjects.forEach(objData => {
+            geometryUtils.updateSupportMeshGeometries(objData.mesh);
+        });
+    }
+
+    /**
+     * Refresh container visualizations when lineWidth changes
+     * Triggers geometry rebuild for container wireframes
+     */
+    refreshContainerVisualizations() {
+        const geometryUtils = window.GeometryUtils;
+        const sceneController = window.modlerComponents?.sceneController;
+
+        if (!geometryUtils || !sceneController) return;
+
+        // Get all container objects and refresh their wireframes
+        const containers = sceneController.getAllObjects().filter(obj =>
+            obj.isContainer && obj.mesh
+        );
+
+        containers.forEach(container => {
+            geometryUtils.updateSupportMeshGeometries(container.mesh);
+        });
     }
 }
 
