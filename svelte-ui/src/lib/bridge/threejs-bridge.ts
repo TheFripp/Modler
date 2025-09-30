@@ -100,11 +100,6 @@ function setupPostMessageFallback() {
 				// Update selected objects in store with error handling
 				if (data.selectedObjects) {
 					try {
-						console.log('🔄 threejs-bridge: data-update with selectedObjects', {
-							updateType: data.updateType,
-							objectIds: data.selectedObjects.map((obj: any) => obj.id),
-							objectNames: data.selectedObjects.map((obj: any) => obj.name)
-						});
 						syncSelectionFromThreeJS(data.selectedObjects);
 					} catch (error) {
 						console.error('PostMessage: Error syncing selected objects:', error);

@@ -182,7 +182,6 @@
 		dragObjectId = objectId;
 		dragProperty = property;
 		const capturedStartValue = getNumericValue();
-		console.log('🎯 Drag start:', { objectId: dragObjectId, property: dragProperty, startValue: capturedStartValue });
 
 		// Start a timeout to distinguish between click and drag
 		dragStartTimeout = setTimeout(() => {
@@ -281,18 +280,6 @@
 			value = actualValue;
 		}
 	}
-
-	// DEBUG: Log when objectId changes during render
-	$effect(() => {
-		if (isDragging && objectId !== dragObjectId) {
-			console.warn('⚠️ ObjectId changed during drag!', {
-				was: dragObjectId,
-				now: objectId,
-				property: dragProperty,
-				isDragging
-			});
-		}
-	});
 </script>
 
 <div class={cn('inline-input-container', className)}>

@@ -126,17 +126,6 @@
 			};
 		}
 	});
-
-	// Debug: Log when displayObject changes
-	$effect(() => {
-		if ($displayObject) {
-			console.log('📋 PropertyPanel displayObject:', {
-				id: $displayObject.id,
-				name: $displayObject.name,
-				dimensions: $displayObject.dimensions
-			});
-		}
-	});
 </script>
 
 <div class="property-panel h-full bg-[#171717] border-l border-[#2E2E2E] p-4 overflow-y-auto">

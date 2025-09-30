@@ -140,13 +140,18 @@ class PropertyPanelSync {
      */
     setupEventSubscriptions() {
         // Subscribe to all relevant event types
-        this.subscriptions.push(
-            this.eventBus.subscribe(
-                this.eventBus.EVENT_TYPES.TRANSFORM,
-                this.handleTransformEvent.bind(this),
-                { subscriberId: 'PropertyPanelSync_Transform' }
-            )
-        );
+
+        // DISABLED: TRANSFORM event subscription causes flickering due to incomplete object data
+        // Transform updates are already handled by ObjectStateManager → 'unified-update' path
+        // which sends complete object data. This redundant subscription was sending minimal
+        // "Object" data that conflicted with the complete "Demo Cube" data.
+        // this.subscriptions.push(
+        //     this.eventBus.subscribe(
+        //         this.eventBus.EVENT_TYPES.TRANSFORM,
+        //         this.handleTransformEvent.bind(this),
+        //         { subscriberId: 'PropertyPanelSync_Transform' }
+        //     )
+        // );
 
         this.subscriptions.push(
             this.eventBus.subscribe(
