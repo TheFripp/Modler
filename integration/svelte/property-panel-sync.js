@@ -81,9 +81,6 @@ class PropertyPanelSync {
         // Initialize subscriptions and components
         this.setupEventSubscriptions();
         this.initializeComponents();
-
-        // Initialize communication architecture guards
-        this.setupArchitectureGuards();
     }
 
     /**
@@ -862,9 +859,6 @@ class PropertyPanelSync {
                 return false;
             }
 
-            // Get all panel iframes
-            const iframes = this.panelManager.getIframes();
-
             // Create unified message format
             const message = {
                 type: `object-${operation}`,
@@ -875,8 +869,6 @@ class PropertyPanelSync {
 
             // Send to main window (integration layer will handle the operation)
             if (window.parent && window.parent !== window) {
-                // Authorize this message before sending
-                this.authorizePostMessage(message);
                 window.parent.postMessage(message, '*');
                 this.stats.messagesSucceeded++;
                 return true;
@@ -918,8 +910,6 @@ class PropertyPanelSync {
 
             // Send to main window
             if (window.parent && window.parent !== window) {
-                // Authorize this message before sending
-                this.authorizePostMessage(message);
                 window.parent.postMessage(message, '*');
                 this.stats.messagesSucceeded++;
                 return true;
@@ -958,8 +948,6 @@ class PropertyPanelSync {
 
             // Send to main window
             if (window.parent && window.parent !== window) {
-                // Authorize this message before sending
-                this.authorizePostMessage(message);
                 window.parent.postMessage(message, '*');
                 this.stats.messagesSucceeded++;
                 return true;
@@ -1005,8 +993,6 @@ class PropertyPanelSync {
 
             // Send to main window
             if (window.parent && window.parent !== window) {
-                // Authorize this message before sending
-                this.authorizePostMessage(message);
                 window.parent.postMessage(message, '*');
                 this.stats.messagesSucceeded++;
                 return true;
@@ -1014,12 +1000,10 @@ class PropertyPanelSync {
 
             // Direct mode: trigger local event
             const eventName = `${settingsType}-settings-changed`;
-            console.log('📡 PropertyPanelSync: Dispatching window event:', eventName, settings);
             const event = new CustomEvent(eventName, {
                 detail: { settings }
             });
             window.dispatchEvent(event);
-            console.log('📡 PropertyPanelSync: Event dispatched successfully');
             this.stats.messagesSucceeded++;
             return true;
 
@@ -1053,8 +1037,6 @@ class PropertyPanelSync {
 
             // Send to main window
             if (window.parent && window.parent !== window) {
-                // Authorize this message before sending
-                this.authorizePostMessage(message);
                 window.parent.postMessage(message, '*');
                 this.stats.messagesSucceeded++;
                 return true;
@@ -1114,8 +1096,6 @@ class PropertyPanelSync {
 
             // Send to main window
             if (window.parent && window.parent !== window) {
-                // Authorize this message before sending
-                this.authorizePostMessage(message);
                 window.parent.postMessage(message, '*');
                 this.stats.messagesSucceeded++;
                 return true;
@@ -1128,87 +1108,6 @@ class PropertyPanelSync {
             console.error('PropertyPanelSync.sendSettingsRequest error:', error);
             this.stats.messagesFailed++;
             return false;
-        }
-    }
-
-    /**
-     * Setup communication architecture guards to prevent bypasses
-     * Monitors and warns about direct PostMessage usage that bypasses the unified system
-     */
-    setupArchitectureGuards() {
-        // Guard against direct PostMessage usage
-        this.setupPostMessageGuard();
-
-        // Guard against unauthorized communication patterns
-        this.setupCommunicationPatternGuards();
-
-        console.log('✅ PropertyPanelSync: Communication architecture guards enabled');
-    }
-
-    /**
-     * Monitor window.postMessage calls to detect bypasses
-     */
-    setupPostMessageGuard() {
-        // Store original postMessage for authorized use
-        const originalPostMessage = window.postMessage.bind(window);
-
-        // Track authorized PropertyPanelSync usage
-        this.authorizedPostMessages = new Set();
-
-        // Override window.postMessage to monitor usage
-        window.postMessage = (message, targetOrigin, transfer) => {
-            // Check if this is an authorized PropertyPanelSync call
-            const isAuthorized = this.authorizedPostMessages.has(JSON.stringify(message));
-
-            if (!isAuthorized && typeof message === 'object' && message.type) {
-                console.warn(
-                    '⚠️ ARCHITECTURE VIOLATION: Direct PostMessage detected!',
-                    '\n📍 Message:', message.type,
-                    '\n🔧 Use PropertyPanelSync unified communication instead',
-                    '\n📋 Available methods: sendObjectMovement, sendToolActivation, sendSnapToggle, sendVisualSettings, sendNavigationCommand, sendSettingsRequest'
-                );
-
-                // Log stack trace to help identify the source
-                console.trace('Direct PostMessage call stack:');
-            }
-
-            // Always allow the call to proceed (monitoring only, not blocking)
-            return originalPostMessage(message, targetOrigin, transfer);
-        };
-    }
-
-    /**
-     * Setup guards for communication patterns
-     */
-    setupCommunicationPatternGuards() {
-        // Monitor iframe.postMessage calls from parent context
-        if (window.parent && window.parent !== window) {
-            // Guard against direct iframe.postMessage bypasses
-            const originalParentPostMessage = window.parent.postMessage;
-            if (originalParentPostMessage) {
-                window.parent.postMessage = (...args) => {
-                    console.warn(
-                        '⚠️ ARCHITECTURE VIOLATION: Direct iframe.postMessage detected!',
-                        '\n🔧 Use PropertyPanelSync unified communication instead'
-                    );
-                    console.trace('Direct iframe PostMessage call stack:');
-                    return originalParentPostMessage.apply(window.parent, args);
-                };
-            }
-        }
-    }
-
-    /**
-     * Mark a PostMessage as authorized (called internally by PropertyPanelSync methods)
-     */
-    authorizePostMessage(message) {
-        if (this.authorizedPostMessages) {
-            this.authorizedPostMessages.add(JSON.stringify(message));
-
-            // Clean up authorization after a short delay
-            setTimeout(() => {
-                this.authorizedPostMessages.delete(JSON.stringify(message));
-            }, 100);
         }
     }
 
@@ -1230,9 +1129,6 @@ class PropertyPanelSync {
         if (this.serializer) {
             this.serializer.dispose();
         }
-
-        // Clear architecture guards
-        this.authorizedPostMessages?.clear();
 
         // Clear references
         this.eventBus = null;
