@@ -119,13 +119,22 @@
 
 	function handleInputChange(event: Event) {
 		const target = event.target as HTMLInputElement;
-		const newValue = type === 'number' ? parseFloat(target.value) : target.value;
+		let newValue = type === 'number' ? parseFloat(target.value) : target.value;
+
+		// Apply constraints for number inputs
+		if (type === 'number' && typeof newValue === 'number' && !isNaN(newValue)) {
+			if (max !== undefined) newValue = Math.min(newValue, max);
+			if (min !== undefined) newValue = Math.max(newValue, min);
+		}
 
 		if (objectId && property) {
 			// Use property controller for immediate update
 			propertyController?.updateProperty(objectId, property, newValue, 'input');
 		} else if (onchange) {
-			// Legacy handler
+			// Legacy handler - update target value to constrained value
+			if (type === 'number' && typeof newValue === 'number') {
+				target.value = String(newValue);
+			}
 			onchange(event);
 		} else {
 			// Direct value update
@@ -148,13 +157,20 @@
 	function handleBlur(event: FocusEvent) {
 		// Ensure property controller gets the final value on blur (only place where updates happen)
 		if (objectId && property) {
-			const newValue = type === 'number' ? parseFloat(String(inputValue)) : inputValue;
+			let newValue = type === 'number' ? parseFloat(String(inputValue)) : inputValue;
 
 			// Skip NaN values for number inputs
 			if (type === 'number' && isNaN(newValue)) {
 				// Reset to original value or 0 for mixed values
 				inputValue = (value === '' || value === undefined) ? 0 : value;
 			} else {
+				// Apply constraints for number inputs
+				if (type === 'number' && typeof newValue === 'number') {
+					if (max !== undefined) newValue = Math.min(newValue, max);
+					if (min !== undefined) newValue = Math.max(newValue, min);
+					// Update input display to constrained value
+					inputValue = newValue;
+				}
 				// Always update on blur regardless of whether value changed (handles mixed→single transitions)
 				propertyController?.updateProperty(objectId, property, newValue, 'input');
 			}
