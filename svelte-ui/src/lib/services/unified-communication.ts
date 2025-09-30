@@ -76,14 +76,6 @@ class UnifiedCommunication implements UnifiedCommunicationService {
         // Stop polling after 2 seconds (faster detection for iframe context)
         setTimeout(() => {
             clearInterval(pollInterval);
-            if (!this.initialized) {
-                // In iframe context, PostMessage fallback is expected behavior
-                if (window.parent && window.parent !== window) {
-                    console.log('✅ UnifiedCommunication: Using PostMessage fallback (iframe context)');
-                } else {
-                    console.warn('UnifiedCommunication: PropertyPanelSync not found, using PostMessage fallback');
-                }
-            }
         }, 2000);
     }
 
@@ -180,16 +172,11 @@ class UnifiedCommunication implements UnifiedCommunicationService {
                     if (globalPropertyPanelSync && globalPropertyPanelSync.authorizePostMessage) {
                         // Authorize the message before sending
                         globalPropertyPanelSync.authorizePostMessage(message);
-                        console.log('📤 UnifiedCommunication: Authorized fallback PostMessage for', type);
-                    } else {
-                        // No local PropertyPanelSync available, send message anyway
-                        // The parent window PropertyPanelSync will handle authorization on receipt
                     }
 
                     window.parent.postMessage(message, '*');
                     resolve(true);
                 } else {
-                    console.warn('UnifiedCommunication: No parent window available for fallback');
                     resolve(false);
                 }
             } catch (error) {

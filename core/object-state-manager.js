@@ -314,11 +314,16 @@ class ObjectStateManager extends EventTarget {
      * Apply nested property updates (e.g., "position.x", "autoLayout.enabled")
      */
     applyUpdates(object, updates) {
-        // Check if any dimension updates are coming - save previous state
+        // Check if any dimension updates are coming - save previous state FIRST
         const hasDimensionUpdate = Object.keys(updates).some(key => key.startsWith('dimensions.'));
         if (hasDimensionUpdate && object.dimensions) {
-            // Save a copy of current dimensions before updating
-            object._previousDimensions = { ...object.dimensions };
+            // Save a DEEP copy of current dimensions before updating
+            // This must be a separate object, not a reference to the same object
+            object._previousDimensions = {
+                x: object.dimensions.x,
+                y: object.dimensions.y,
+                z: object.dimensions.z
+            };
         }
 
         Object.entries(updates).forEach(([path, value]) => {
@@ -379,23 +384,13 @@ class ObjectStateManager extends EventTarget {
      * Update SceneController with object changes
      */
     updateSceneController(changedObjects) {
-        if (!this.sceneController) return;
+        if (!this.sceneController) {
+            return;
+        }
 
         changedObjects.forEach(object => {
-            const sceneObject = object._sceneObjectData;
-            if (!sceneObject || !sceneObject.mesh) return;
-
-            // Update 3D properties
-            if (object.position) {
-                sceneObject.mesh.position.set(object.position.x, object.position.y, object.position.z);
-                sceneObject.mesh.updateMatrixWorld(true);
-            }
-
-            if (object.rotation) {
-                sceneObject.mesh.rotation.set(object.rotation.x, object.rotation.y, object.rotation.z);
-            }
-
-            // CRITICAL FIX: Update geometry when dimensions change
+            // CRITICAL: Update geometry when dimensions change
+            // This must happen FIRST, before position/rotation updates
             // Note: object._previousDimensions is set in applyUpdates() before the update
             if (object.dimensions && object._previousDimensions && this.sceneController.updateObjectDimensions) {
                 const oldDims = object._previousDimensions;
@@ -414,6 +409,20 @@ class ObjectStateManager extends EventTarget {
 
                 // Clean up the previous dimensions marker
                 delete object._previousDimensions;
+            }
+
+            // Update position/rotation via direct mesh access (if available)
+            const sceneObject = object._sceneObjectData;
+            if (sceneObject && sceneObject.mesh) {
+                // Update 3D properties
+                if (object.position) {
+                    sceneObject.mesh.position.set(object.position.x, object.position.y, object.position.z);
+                    sceneObject.mesh.updateMatrixWorld(true);
+                }
+
+                if (object.rotation) {
+                    sceneObject.mesh.rotation.set(object.rotation.x, object.rotation.y, object.rotation.z);
+                }
             }
 
             // Update container layout if needed
