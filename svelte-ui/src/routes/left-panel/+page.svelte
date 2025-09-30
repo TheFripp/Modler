@@ -720,17 +720,22 @@
 			}
 		});
 
-		// Load settings from ConfigurationManager
-		loadSettingsFromConfig();
+		// Initialize the bridge with Three.js for real-time synchronization
+		// MUST be called before anything else to set up PostMessage listener
+		initializeBridge();
+
+		// Load settings from ConfigurationManager (may fail in iframe due to CORS)
+		try {
+			loadSettingsFromConfig();
+		} catch (error) {
+			console.warn('Failed to load settings from ConfigurationManager:', error);
+		}
 
 		// Get unit converter instance
 		unitConverter = (window as any).UnitConverter ? new (window as any).UnitConverter() : null;
 		if (unitConverter) {
 			currentUnit = unitConverter.userUnit;
 		}
-
-		// Initialize the bridge with Three.js for real-time synchronization
-		initializeBridge();
 	});
 
 </script>

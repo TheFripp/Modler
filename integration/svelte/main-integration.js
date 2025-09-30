@@ -1015,19 +1015,14 @@
 
         if (directComponentManager) {
             directComponentManager.broadcastToAll(toolStateMessage);
-            console.log(`📡 Tool state update sent via DirectComponentManager: ${toolName} (snap: ${snapEnabled})`);
         } else if (propertyPanelSync) {
             propertyPanelSync.sendToolStateUpdate(toolName, { snapEnabled });
-            console.log(`📡 Tool state update sent via PropertyPanelSync: ${toolName} (snap: ${snapEnabled})`);
-        } else {
-            console.debug('🔧 No communication system available for tool state update');
         }
     }
 
 
     // Bridge function: Notify tool state changed (for keyboard shortcuts)
     window.notifyToolStateChanged = function(toolName) {
-        console.log(`🔔 Tool state changed notification: ${toolName}`);
         sendToolStateUpdate(toolName);
     };
 

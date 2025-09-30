@@ -137,7 +137,7 @@ class BoxCreationTool {
     }
 
     finalizeBox() {
-        if (!this.startPosition || !this.currentPosition) return;
+        if (!this.startPosition || !this.currentPosition || !this.creationObject) return;
 
         // Calculate dimensions
         const width = Math.abs(this.currentPosition.x - this.startPosition.x);
@@ -149,31 +149,57 @@ class BoxCreationTool {
         const centerZ = (this.startPosition.z + this.currentPosition.z) / 2;
         const centerY = height / 2;
 
-        // Replace invisible creation object with final box
+        // Update the existing creation object to be the final box
+        // Replace geometry with final dimensions
+        const newGeometry = this.geometryFactory.createBoxGeometry(width, height, depth);
+        if (this.creationObject.geometry) {
+            this.geometryFactory.returnGeometry(this.creationObject.geometry, 'box');
+        }
+        this.creationObject.geometry = newGeometry;
+
+        // Make material opaque
+        this.creationObject.material.opacity = 1.0;
+        this.creationObject.material.transparent = false;
+        this.creationObject.material.needsUpdate = true;
+
+        // Update position to center
+        this.creationObject.position.set(centerX, centerY, centerZ);
+
+        // Make visible for selection
+        delete this.creationObject.userData.hideFromSelection;
+
+        // Update SceneController object data
         const sceneController = window.modlerComponents?.sceneController;
         if (sceneController) {
-            // Remove the invisible creation object first
-            if (this.creationObject) {
-                sceneController.removeObject(this.creationObject.userData.id);
-                this.creationObject = null;
-            }
+            const objectData = sceneController.getObject(this.creationObject.userData.id);
+            if (objectData) {
+                objectData.position = this.creationObject.position.clone();
+                objectData.dimensions = { x: width, y: height, z: depth };
 
-            const geometry = this.geometryFactory.createBoxGeometry(width, height, depth);
-            const material = this.materialManager.createMeshLambertMaterial({ color: 0x888888 });
-
-            const boxData = sceneController.addObject(geometry, material, {
-                name: sceneController.generateObjectName('box'),
-                type: 'cube', // Consistent with centralized system
-                position: new THREE.Vector3(centerX, centerY, centerZ)
-            });
-
-            if (boxData && boxData.mesh) {
-                this.selectionController.clearSelection('normal');
-                this.selectionController.select(boxData.mesh);
+                // Emit final update event
+                if (window.objectEventBus) {
+                    window.objectEventBus.emit(
+                        window.objectEventBus.EVENT_TYPES.GEOMETRY,
+                        objectData.id,
+                        {
+                            dimensions: objectData.dimensions,
+                            position: objectData.position
+                        },
+                        { immediate: true, source: 'BoxCreationTool.finalizeBox' }
+                    );
+                }
             }
         }
 
-        this.cleanup();
+        // Keep selection on the finalized box
+        // (already selected, no need to re-select)
+
+        // Clear only the visual preview elements
+        this.cleanupVisuals();
+        this.creationObject = null;
+        this.startPosition = null;
+        this.currentPosition = null;
+        this.heightDragStartY = undefined;
         this.state = BoxCreationState.IDLE;
 
         // Switch to select tool after box creation
@@ -181,14 +207,6 @@ class BoxCreationTool {
         if (toolController && toolController.switchToTool) {
             toolController.switchToTool('select');
         }
-
-        // Properties panel will be updated automatically when the new box is selected
-        // Reset the panel title back to normal
-        const panelTitle = document.querySelector('.properties-panel h3');
-        if (panelTitle) {
-            panelTitle.textContent = 'Properties';
-        }
-
     }
 
     cancelCreation() {
@@ -454,7 +472,7 @@ class BoxCreationTool {
         const sceneController = window.modlerComponents?.sceneController;
         if (!sceneController) return;
 
-        // Create minimal geometry and invisible material
+        // Create minimal geometry and material (will become visible on finalize)
         const geometry = this.geometryFactory.createBoxGeometry(0.01, 0.01, 0.01);
         const material = this.materialManager.createMeshLambertMaterial({
             color: 0x888888,
@@ -462,12 +480,11 @@ class BoxCreationTool {
             opacity: 0.0
         });
 
-        // Add to scene controller but make it invisible
+        // Add to scene controller with proper name from the start
         const boxData = sceneController.addObject(geometry, material, {
-            name: 'Creating Box...',
+            name: sceneController.generateObjectName('box'),
             type: 'cube',
             position: this.startPosition.clone(),
-            category: 'temp',
             selectable: true
         });
 

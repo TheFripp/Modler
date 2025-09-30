@@ -303,10 +303,10 @@ function convertFromThreeJS(threeObject) {
     const userData = threeObject.userData || {};
 
     const standardData = {
-        id: userData.id || threeObject.uuid,
-        name: userData.name || 'Object',
-        type: userData.type || 'object',
-        isContainer: userData.isContainer || false,
+        id: threeObject.id || userData.id || threeObject.uuid,
+        name: threeObject.name || userData.name || 'Object',
+        type: threeObject.type || userData.type || 'object',
+        isContainer: threeObject.isContainer || userData.isContainer || false,
 
         position: {
             x: threeObject.position ? parseFloat(threeObject.position.x.toFixed(3)) : 0,

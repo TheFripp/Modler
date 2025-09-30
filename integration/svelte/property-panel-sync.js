@@ -106,6 +106,12 @@ class PropertyPanelSync {
                 }
             } else {
                 this.initializationRetries = 0;
+
+                // Send initial hierarchy to left panel after successful initialization
+                // Wait longer to ensure iframes are fully loaded and message listeners are ready
+                setTimeout(() => {
+                    this.refreshCompleteHierarchy();
+                }, 1000); // Increased delay to 1 second to ensure iframes are ready
             }
         } catch (error) {
             console.error('PropertyPanelSync: Component initialization failed:', error);
