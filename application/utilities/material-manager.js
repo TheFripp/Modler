@@ -697,8 +697,6 @@ class MaterialManager {
         // Clear collections
         this.materialCache.clear();
         this.activeMaterials.clear();
-
-        console.log('MaterialManager: All materials cleared and disposed');
     }
 
     // ===== STANDARD MATERIAL CREATION METHODS =====
@@ -884,12 +882,6 @@ class MaterialManager {
             byType[type].push(material);
         }
 
-        for (const [type, materials] of Object.entries(byType)) {
-            console.log(`${type}: ${materials.length} materials`);
-        }
-
-        console.log('Total cache entries:', this.materialCache.size);
-        console.log('Stats:', this.getStats());
         console.groupEnd();
     }
 
@@ -923,8 +915,6 @@ class MaterialManager {
             disposed: 0,
             configUpdates: 0
         };
-
-        console.log('MaterialManager: Destroyed and cleaned up');
     }
 
     /**

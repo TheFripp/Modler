@@ -105,7 +105,6 @@ class PropertyPanelSync {
                     setTimeout(() => this.initializeComponents(), 500);
                 }
             } else {
-                console.log('PropertyPanelSync: Successfully initialized with all components');
                 this.initializationRetries = 0;
             }
         } catch (error) {
@@ -367,8 +366,6 @@ class PropertyPanelSync {
 
             // Lifecycle events (create/delete) require full hierarchy refresh
             this.refreshCompleteHierarchy();
-
-            console.log('🔄 PropertyPanelSync: Lifecycle event handled -', event.changeData?.action, event.objectId);
 
         } catch (error) {
             console.error('PropertyPanelSync.handleLifecycleEvent error:', error);
