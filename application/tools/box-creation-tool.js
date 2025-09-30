@@ -511,7 +511,8 @@ class BoxCreationTool {
         const centerY = height / 2;
         this.creationObject.position.set(centerX, centerY, centerZ);
 
-        // Update SceneController object data with new dimensions
+        // Update SceneController object data directly (skip ObjectStateManager during creation)
+        // During creation, we're replacing the entire geometry, not doing CAD vertex manipulation
         const sceneController = window.modlerComponents?.sceneController;
         if (sceneController && this.creationObject.userData && this.creationObject.userData.id) {
             const objectData = sceneController.getObject(this.creationObject.userData.id);
@@ -531,23 +532,20 @@ class BoxCreationTool {
                 objectData.width = Math.max(width, 0.01);
                 objectData.height = Math.max(height, 0.01);
                 objectData.depth = Math.max(depth, 0.01);
-            }
-        }
 
-        // Update dimensions through unified state management
-        if (this.objectStateManager && this.creationObject?.userData?.id) {
-            this.objectStateManager.updateObject(this.creationObject.userData.id, {
-                dimensions: {
-                    x: Math.max(width, 0.01),
-                    y: Math.max(height, 0.01),
-                    z: Math.max(depth, 0.01)
-                },
-                position: {
-                    x: centerX,
-                    y: centerY,
-                    z: centerZ
+                // Emit event for UI updates (without triggering SceneController dimension update)
+                if (window.objectEventBus) {
+                    window.objectEventBus.emit(
+                        window.objectEventBus.EVENT_TYPES.GEOMETRY,
+                        objectData.id,
+                        {
+                            dimensions: objectData.dimensions,
+                            position: objectData.position
+                        },
+                        { immediate: true, source: 'BoxCreationTool.updateInvisibleBoxDimensions' }
+                    );
                 }
-            });
+            }
         }
     }
 
