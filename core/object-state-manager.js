@@ -310,9 +310,12 @@ class ObjectStateManager extends EventTarget {
     }
 
     /**
-     * Apply nested property updates (e.g., "position.x", "autoLayout.enabled")
-     * Note: For geometry properties (dimensions, position, rotation), we store the updates
-     * and SceneController applies them (proxy pattern - SceneController is single source of truth)
+     * Apply nested property updates
+     * Supports two formats:
+     * 1. Flat paths: {'position.x': 5, 'position.y': 10} (from UI)
+     * 2. Nested objects: {position: {x: 5, y: 10}} (from tools)
+     *
+     * Note: Geometry properties proxy to SceneController (single source of truth)
      */
     applyUpdates(object, updates) {
         // Track geometry updates separately - these will be applied by SceneController
@@ -321,16 +324,26 @@ class ObjectStateManager extends EventTarget {
         const rotationUpdates = {};
 
         Object.entries(updates).forEach(([path, value]) => {
+            // Handle nested object format (e.g., position: {x: 5, y: 10})
+            if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+                if (path === 'position' || path === 'rotation' || path === 'dimensions') {
+                    // Expand nested object into flat paths
+                    Object.entries(value).forEach(([axis, axisValue]) => {
+                        const flatPath = `${path}.${axis}`;
+                        updates[flatPath] = axisValue;
+                    });
+                    return; // Skip this entry, we've expanded it
+                }
+            }
+
+            // Handle flat path format (e.g., 'position.x': 5)
             if (path.startsWith('dimensions.')) {
-                // Store dimension updates for SceneController to apply
                 const axis = path.split('.')[1];
                 dimensionUpdates[axis] = value;
             } else if (path.startsWith('position.')) {
-                // Store position updates for SceneController to apply
                 const axis = path.split('.')[1];
                 positionUpdates[axis] = value;
             } else if (path.startsWith('rotation.')) {
-                // Store rotation updates for SceneController to apply
                 const axis = path.split('.')[1];
                 rotationUpdates[axis] = value;
             } else if (path.includes('.')) {
@@ -339,8 +352,10 @@ class ObjectStateManager extends EventTarget {
                 if (!object[parent]) object[parent] = {};
                 object[parent][child] = value;
             } else {
-                // Direct property
-                object[path] = value;
+                // Direct property (but skip position/rotation/dimensions objects we already expanded)
+                if (path !== 'position' && path !== 'rotation' && path !== 'dimensions') {
+                    object[path] = value;
+                }
             }
         });
 
