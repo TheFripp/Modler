@@ -318,10 +318,9 @@ class ObjectStateManager extends EventTarget {
      * Note: Geometry properties proxy to SceneController (single source of truth)
      */
     applyUpdates(object, updates) {
-        // Track geometry updates separately - these will be applied by SceneController
-        const dimensionUpdates = {};
-        const positionUpdates = {};
-        const rotationUpdates = {};
+        // PASS 1: Expand nested objects into flat paths
+        // Must be done BEFORE iterating to process, otherwise forEach snapshot misses new keys
+        const expandedUpdates = {};
 
         Object.entries(updates).forEach(([path, value]) => {
             // Handle nested object format (e.g., position: {x: 5, y: 10})
@@ -329,13 +328,21 @@ class ObjectStateManager extends EventTarget {
                 if (path === 'position' || path === 'rotation' || path === 'dimensions') {
                     // Expand nested object into flat paths
                     Object.entries(value).forEach(([axis, axisValue]) => {
-                        const flatPath = `${path}.${axis}`;
-                        updates[flatPath] = axisValue;
+                        expandedUpdates[`${path}.${axis}`] = axisValue;
                     });
-                    return; // Skip this entry, we've expanded it
+                    return; // Skip adding the nested object itself
                 }
             }
+            // Copy all other updates as-is
+            expandedUpdates[path] = value;
+        });
 
+        // PASS 2: Process all flat paths into pending updates
+        const dimensionUpdates = {};
+        const positionUpdates = {};
+        const rotationUpdates = {};
+
+        Object.entries(expandedUpdates).forEach(([path, value]) => {
             // Handle flat path format (e.g., 'position.x': 5)
             if (path.startsWith('dimensions.')) {
                 const axis = path.split('.')[1];
@@ -352,10 +359,8 @@ class ObjectStateManager extends EventTarget {
                 if (!object[parent]) object[parent] = {};
                 object[parent][child] = value;
             } else {
-                // Direct property (but skip position/rotation/dimensions objects we already expanded)
-                if (path !== 'position' && path !== 'rotation' && path !== 'dimensions') {
-                    object[path] = value;
-                }
+                // Direct property
+                object[path] = value;
             }
         });
 
