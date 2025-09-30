@@ -902,61 +902,6 @@
      * Sanitize data for PostMessage - SIMPLIFIED VERSION
      * ObjectStateManager now provides clean standard format data
      */
-    function sanitizeForPostMessage(obj) {
-        // ObjectStateManager should already provide clean data via getObjectForPostMessage()
-        // This function is now just a safety fallback for edge cases
-
-        if (obj === null || obj === undefined) return obj;
-        if (typeof obj === 'function') return '[Function]';
-        if (obj instanceof Date) return obj.toISOString();
-        if (Array.isArray(obj)) return obj.map(sanitizeForPostMessage);
-
-        if (typeof obj === 'object') {
-            // Skip Three.js objects that shouldn't be in standard format data
-            if (obj.constructor?.name?.includes('Mesh') ||
-                obj.constructor?.name?.includes('Three') ||
-                obj.constructor?.name?.includes('WebGL')) {
-                return `[${obj.constructor.name}]`;
-            }
-
-            // Simple object cloning - ObjectDataFormat should have already cleaned the data
-            try {
-                return JSON.parse(JSON.stringify(obj));
-            } catch (error) {
-                console.warn('sanitizeForPostMessage: JSON serialization failed, using fallback');
-                const sanitized = {};
-                for (const [key, value] of Object.entries(obj)) {
-                    if (key.startsWith('_') || key === 'mesh') continue;
-                    sanitized[key] = sanitizeForPostMessage(value);
-                }
-                return sanitized;
-            }
-        }
-
-        return obj;
-    }
-
-    /**
-     * Notify iframe panels via PropertyPanelSync (BYPASS ELIMINATED)
-     * CRITICAL FIX: Replace direct iframe access with PropertyPanelSync routing
-     */
-    function notifyIframePanels(message) {
-        // BYPASS ELIMINATED: No longer use direct iframe.contentWindow access
-        if (propertyPanelSync) {
-            try {
-                // Route through PropertyPanelSync instead of direct iframe access
-                // This ensures consistent message authorization and monitoring
-                propertyPanelSync.sendToUI(message.type, message.data?.selectedObjects || [], {
-                    messageData: message.data
-                });
-            } catch (error) {
-                console.error('❌ PropertyPanelSync communication failed:', error);
-            }
-        } else {
-            console.error('❌ PropertyPanelSync not available - cannot send message:', message.type);
-            console.error('❌ Direct iframe access bypass eliminated to prevent race conditions');
-        }
-    }
 
     // ==================================================================================
     // TOOL INTEGRATION (Complete)
@@ -1196,17 +1141,6 @@
         }
     }
 
-    function toggleSnapping() {
-        const snapController = window.modlerComponents?.snapController;
-        if (snapController) {
-            snapController.setEnabled(!snapController.getEnabled());
-
-            // Send updated tool state after snap toggle
-            const toolController = window.modlerComponents?.toolController;
-            const currentTool = toolController ? toolController.getActiveToolName() : 'select';
-            sendToolStateUpdate(currentTool);
-        }
-    }
 
     // Bridge function: Notify tool state changed (for keyboard shortcuts)
     window.notifyToolStateChanged = function(toolName) {
@@ -1226,9 +1160,7 @@
         if (!sceneController) return;
 
         // Listen to object creation/deletion
-        sceneController.on?.('objectAdded', (objectData) => {
-            // Object events during creation are frequent - only log errors
-
+        sceneController.on?.('objectAdded', () => {
             // Import new object to ObjectStateManager
             const objectStateManager = window.modlerComponents?.objectStateManager;
             if (objectStateManager) {
@@ -1237,8 +1169,6 @@
         });
 
         sceneController.on?.('objectRemoved', (objectData) => {
-            // Object events during manipulation are frequent - only log errors
-
             // Remove from ObjectStateManager
             const objectStateManager = window.modlerComponents?.objectStateManager;
             if (objectStateManager) {
@@ -1250,75 +1180,8 @@
 
     // ==================================================================================
     // SCENE UPDATE FUNCTIONS (Bridge functions for ConfigurationManager)
+    // NOTE: These functions are now defined in scene-foundation.js
     // ==================================================================================
-
-    /**
-     * Update scene background color from configuration
-     */
-    window.updateSceneBackground = function(backgroundColor) {
-        const scene = window.modlerComponents?.scene;
-        if (!scene) return;
-
-        try {
-            // Parse color and update scene background
-            if (typeof backgroundColor === 'string') {
-                const colorHex = parseInt(backgroundColor.replace('#', ''), 16);
-                scene.background = new THREE.Color(colorHex);
-            } else if (typeof backgroundColor === 'number') {
-                scene.background = new THREE.Color(backgroundColor);
-            }
-        } catch (error) {
-            console.error('❌ Failed to update scene background:', error);
-        }
-    };
-
-    /**
-     * Update grid main color from configuration
-     */
-    window.updateGridMainColor = function(gridMainColor) {
-        // Find and update the main grid lines
-        const scene = window.modlerComponents?.scene;
-        if (!scene) return;
-
-        try {
-            const color = new THREE.Color(gridMainColor);
-            // Look for the floor grid object and update its main lines
-            scene.traverse((child) => {
-                if (child.name === 'Floor Grid' || child.userData?.gridType === 'main') {
-                    if (child.material && child.material.color) {
-                        child.material.color.copy(color);
-                        child.material.needsUpdate = true;
-                    }
-                }
-            });
-        } catch (error) {
-            console.error('❌ Failed to update grid main color:', error);
-        }
-    };
-
-    /**
-     * Update grid sub color from configuration
-     */
-    window.updateGridSubColor = function(gridSubColor) {
-        // Find and update the sub grid lines
-        const scene = window.modlerComponents?.scene;
-        if (!scene) return;
-
-        try {
-            const color = new THREE.Color(gridSubColor);
-            // Look for the floor grid object and update its sub lines
-            scene.traverse((child) => {
-                if (child.name === 'Floor Grid' || child.userData?.gridType === 'sub') {
-                    if (child.material && child.material.color) {
-                        child.material.color.copy(color);
-                        child.material.needsUpdate = true;
-                    }
-                }
-            });
-        } catch (error) {
-            console.error('❌ Failed to update grid sub color:', error);
-        }
-    };
 
     /**
      * Update interface accent color from configuration
