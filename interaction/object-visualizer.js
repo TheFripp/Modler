@@ -54,8 +54,14 @@ class ObjectVisualizer {
      */
     registerConfigurationCallbacks() {
         // MaterialManager handles material updates automatically via its own callbacks
-        // No need for duplicate callbacks here - support meshes use MaterialManager materials
-        // This prevents conflicts between legacy edgeMaterial and MaterialManager system
+        // But we need to recreate thick line groups when lineWidth changes
+        const configManager = this.getConfigManager();
+        if (configManager) {
+            // When lineWidth changes, recreate all thick line groups with new width
+            configManager.subscribe('visual.selection.lineWidth', () => {
+                this.refreshAllHighlights();
+            });
+        }
     }
 
     /**
