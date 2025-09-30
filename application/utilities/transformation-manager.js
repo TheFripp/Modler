@@ -586,5 +586,33 @@ class TransformationManager {
     }
 }
 
+/**
+ * TRANSFORM UTILITIES OVERVIEW:
+ *
+ * This module is part of a specialized trio of transform utilities:
+ *
+ * 1. TransformationManager (this file, 589 lines):
+ *    - General transform operations: setPosition, setRotation, setScale
+ *    - Transform caching for performance
+ *    - Batch updates and notifications
+ *    USE FOR: Basic transform operations with caching
+ *
+ * 2. PositionTransform (543 lines):
+ *    - Coordinate space conversions (world ↔ local)
+ *    - Preserving positions when changing parents
+ *    - Nested container positioning math
+ *    - Bounds calculation with caching
+ *    USE FOR: Complex coordinate transformations, nested containers
+ *
+ * 3. TransformNotificationUtils (168 lines):
+ *    - Notification patterns for transform changes
+ *    - Container update workflows
+ *    - Mesh synchronization patterns
+ *    USE FOR: Standardized notification after transforms
+ *
+ * These utilities are complementary, not duplicate. Consolidation would create
+ * a 1300-line god object. Keep them specialized for maintainability.
+ */
+
 // Export for use in main application
 window.TransformationManager = TransformationManager;

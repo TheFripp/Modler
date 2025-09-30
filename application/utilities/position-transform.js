@@ -1,7 +1,15 @@
 /**
  * Position Transform Utility
- * Centralized coordinate space transformations to eliminate position bugs
- * Single source of truth for world ↔ local coordinate conversions
+ * Specialized coordinate space transformations for nested containers and complex hierarchies
+ *
+ * Part of Transform Utilities trio - see TransformationManager for overview.
+ * This utility focuses on coordinate math that PositionTransform specializes in.
+ *
+ * USE THIS FOR:
+ * - Preserving world positions when changing parents
+ * - World ↔ local coordinate conversions
+ * - Nested container positioning
+ * - Bounds calculation with caching
  */
 
 class PositionTransform {

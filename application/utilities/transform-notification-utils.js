@@ -1,5 +1,13 @@
 // Modler V2 - Transform Notification Utilities
-// Centralized patterns for object transform change notifications and container updates
+// Standardized notification patterns after transform operations
+//
+// Part of Transform Utilities trio - see TransformationManager for overview.
+// This utility provides consistent notification patterns used across tools.
+//
+// USE THIS FOR:
+// - Standardized workflows after modifying objects
+// - Container update notifications
+// - Mesh synchronization after changes
 
 class TransformNotificationUtils {
 
