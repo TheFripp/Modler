@@ -905,6 +905,7 @@
 										onchange={() => updateVisualSettings('selection', 'lineWidth', visualSettings.selection.lineWidth)}
 										min={1}
 										max={10}
+										step={1}
 									/>
 									<InlineInput
 										label="Opacity"
@@ -935,6 +936,7 @@
 										onchange={() => updateVisualSettings('containers', 'lineWidth', visualSettings.containers.lineWidth)}
 										min={1}
 										max={10}
+										step={1}
 									/>
 									<InlineInput
 										label="Opacity"
@@ -983,6 +985,7 @@
 										onchange={() => updateCadWireframeSettings('lineWidth', cadWireframeSettings.lineWidth)}
 										min={1}
 										max={10}
+										step={1}
 									/>
 									<InlineInput
 										label="Opacity"
