@@ -296,13 +296,21 @@
 			// Enforce minimum value for dimensions (cannot be 0 or negative)
 			constrainedValue = Math.max(rawValue, 0.1);
 		} else if (constraints) {
-			// Apply general constraints if available
+			// Apply general constraints if available from property controller
 			if (constraints.min !== undefined) {
 				constrainedValue = Math.max(constrainedValue, constraints.min);
 			}
 			if (constraints.max !== undefined) {
 				constrainedValue = Math.min(constrainedValue, constraints.max);
 			}
+		}
+
+		// Always apply min/max props if they exist (for bind:value usage without property controller)
+		if (min !== undefined) {
+			constrainedValue = Math.max(constrainedValue, min);
+		}
+		if (max !== undefined) {
+			constrainedValue = Math.min(constrainedValue, max);
 		}
 
 		// Keep full precision for the actual value, but round display appropriately
