@@ -32,6 +32,11 @@ class PropertySchemaRegistry {
         this.masterInstances = new Map(); // masterId -> Set<instance objects>
         this.instanceMasters = new Map(); // instanceId -> masterId
 
+        // Parametric systems integration
+        this.formulaEvaluator = null;
+        this.dependencyGraph = null;
+        this.constraintSolver = null;
+
         // Statistics
         this.stats = {
             registeredSchemas: 0,
@@ -40,8 +45,38 @@ class PropertySchemaRegistry {
             formulaEvaluations: 0
         };
 
+        // Initialize parametric systems
+        this.initializeParametricSystems();
+
         // Initialize with core CAD property schemas
         this.initializeCoreSchemas();
+    }
+
+    /**
+     * Initialize parametric evaluation systems
+     * @private
+     */
+    initializeParametricSystems() {
+        // Create formula evaluator
+        if (window.FormulaEvaluator) {
+            this.formulaEvaluator = new window.FormulaEvaluator();
+        } else {
+            console.warn('PropertySchemaRegistry: FormulaEvaluator not available');
+        }
+
+        // Create dependency graph
+        if (window.DependencyGraph) {
+            this.dependencyGraph = new window.DependencyGraph();
+        } else {
+            console.warn('PropertySchemaRegistry: DependencyGraph not available');
+        }
+
+        // Create constraint solver
+        if (window.ConstraintSolver) {
+            this.constraintSolver = new window.ConstraintSolver();
+        } else {
+            console.warn('PropertySchemaRegistry: ConstraintSolver not available');
+        }
     }
 
     /**
@@ -129,12 +164,49 @@ class PropertySchemaRegistry {
         const dependencySet = new Set(drives);
         this.parameterDependencies.set(parameterId, dependencySet);
 
+        // Register in dependency graph
+        if (this.dependencyGraph) {
+            this.dependencyGraph.addNode(parameterId, {
+                type: 'parameter',
+                objectId,
+                parameterName,
+                value,
+                unit
+            });
+
+            // Add edges for all driven properties
+            for (const drivenProperty of drives) {
+                const success = this.dependencyGraph.addDependency(parameterId, drivenProperty);
+                if (!success) {
+                    console.error('PropertySchemaRegistry: Cannot create dependency - would create cycle:',
+                        parameterId, '->', drivenProperty);
+                }
+            }
+        }
+
         // Register formula if provided
         if (formula) {
+            // Validate and extract dependencies
+            const formulaDeps = this.formulaEvaluator ?
+                this.formulaEvaluator.extractDependencies(formula) :
+                this.extractFormulaDependencies(formula);
+
             this.formulaRegistry.set(parameterId, {
                 expression: formula,
-                dependencies: this.extractFormulaDependencies(formula)
+                dependencies: formulaDeps
             });
+
+            // Validate formula if evaluator available
+            if (this.formulaEvaluator) {
+                const testContext = {};
+                for (const dep of formulaDeps) {
+                    testContext[dep] = 1; // Test with dummy value
+                }
+                const validation = this.formulaEvaluator.validateFormula(formula, testContext);
+                if (!validation.valid) {
+                    console.warn('PropertySchemaRegistry: Formula validation warning:', validation.error);
+                }
+            }
         }
 
         // Emit parametric property creation event
@@ -197,8 +269,10 @@ class PropertySchemaRegistry {
                 );
             }
 
-            // Propagate changes to dependent objects
+            // Propagate changes to dependent objects with proper ordering
             this.propagateParametricChange(parameterId, newValue);
+
+            this.stats.formulaEvaluations++;
 
             return true;
 
@@ -435,20 +509,66 @@ class PropertySchemaRegistry {
         const dependencies = this.parameterDependencies.get(parameterId);
         if (!dependencies) return;
 
-        // For now, emit dependency update events
-        // Future implementation would include formula evaluation
-        for (const dependentProperty of dependencies) {
-            if (window.objectEventBus) {
-                window.objectEventBus.emit(
-                    window.objectEventBus.EVENT_TYPES.DEPENDENCY_UPDATE,
-                    parameterId.split('.')[0], // objectId
-                    {
-                        sourceParameter: parameterId,
-                        dependentProperty: dependentProperty,
-                        newValue: newValue
-                    },
-                    { source: 'PropertySchemaRegistry' }
-                );
+        // Get update order from dependency graph
+        let updateOrder = Array.from(dependencies);
+        if (this.dependencyGraph) {
+            updateOrder = this.dependencyGraph.getUpdateOrder(parameterId);
+        }
+
+        // Build context for formula evaluation
+        const context = { [parameterId.split('.')[1]]: newValue };
+
+        // Update each dependent property in order
+        for (const dependentProperty of updateOrder) {
+            try {
+                // Get formula for this dependent property
+                const formulaData = this.formulaRegistry.get(dependentProperty);
+
+                if (formulaData && this.formulaEvaluator) {
+                    // Evaluate formula with current context
+                    const evaluatedValue = this.formulaEvaluator.evaluate(
+                        formulaData.expression,
+                        context
+                    );
+
+                    if (evaluatedValue !== null) {
+                        // Update context for next property
+                        const [, propName] = dependentProperty.split('.');
+                        context[propName] = evaluatedValue;
+
+                        // Emit update event with evaluated value
+                        if (window.objectEventBus) {
+                            const [objId] = dependentProperty.split('.');
+                            window.objectEventBus.emit(
+                                window.objectEventBus.EVENT_TYPES.FORMULA_UPDATE,
+                                objId,
+                                {
+                                    property: propName,
+                                    value: evaluatedValue,
+                                    formula: formulaData.expression,
+                                    sourceParameter: parameterId
+                                },
+                                { source: 'PropertySchemaRegistry.propagateParametricChange' }
+                            );
+                        }
+                    }
+                } else {
+                    // No formula - emit basic dependency update
+                    if (window.objectEventBus) {
+                        window.objectEventBus.emit(
+                            window.objectEventBus.EVENT_TYPES.DEPENDENCY_UPDATE,
+                            parameterId.split('.')[0],
+                            {
+                                sourceParameter: parameterId,
+                                dependentProperty: dependentProperty,
+                                newValue: newValue
+                            },
+                            { source: 'PropertySchemaRegistry' }
+                        );
+                    }
+                }
+            } catch (error) {
+                console.error('PropertySchemaRegistry.propagateParametricChange: Error updating', dependentProperty, error);
             }
         }
     }
