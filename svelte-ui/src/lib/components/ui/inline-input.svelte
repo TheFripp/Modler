@@ -155,25 +155,30 @@
 	}
 
 	function handleBlur(event: FocusEvent) {
-		// Ensure property controller gets the final value on blur (only place where updates happen)
-		if (objectId && property) {
-			let newValue = type === 'number' ? parseFloat(String(inputValue)) : inputValue;
+		const target = event.target as HTMLInputElement;
+		let newValue = type === 'number' ? parseFloat(String(inputValue)) : inputValue;
 
-			// Skip NaN values for number inputs
-			if (type === 'number' && isNaN(newValue)) {
-				// Reset to original value or 0 for mixed values
-				inputValue = (value === '' || value === undefined) ? 0 : value;
-			} else {
-				// Apply constraints for number inputs
-				if (type === 'number' && typeof newValue === 'number') {
-					if (max !== undefined) newValue = Math.min(newValue, max);
-					if (min !== undefined) newValue = Math.max(newValue, min);
-					// Update input display to constrained value
-					inputValue = newValue;
-				}
-				// Always update on blur regardless of whether value changed (handles mixed→single transitions)
-				propertyController?.updateProperty(objectId, property, newValue, 'input');
-			}
+		// Skip NaN values for number inputs
+		if (type === 'number' && isNaN(newValue)) {
+			// Reset to original value or 0 for mixed values
+			inputValue = (value === '' || value === undefined) ? 0 : value;
+			if (target) target.value = String(inputValue);
+			return;
+		}
+
+		// Apply constraints for number inputs
+		if (type === 'number' && typeof newValue === 'number') {
+			if (max !== undefined) newValue = Math.min(newValue, max);
+			if (min !== undefined) newValue = Math.max(newValue, min);
+			// Update input display and bound value to constrained value
+			inputValue = newValue;
+			value = newValue;
+			if (target) target.value = String(newValue);
+		}
+
+		// Update through property controller if available
+		if (objectId && property) {
+			propertyController?.updateProperty(objectId, property, newValue, 'input');
 		}
 	}
 
