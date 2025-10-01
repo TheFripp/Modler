@@ -77,20 +77,27 @@
 			return false;
 		}
 
+		// Access parent window if we're in an iframe
+		const targetWindow = window !== window.parent ? window.parent : window;
+
 		// Check if PropertyManager is available (silently return false if not)
-		const hasPropertyManager = window.modlerComponents?.propertyManager?.initialized;
+		const hasPropertyManager = targetWindow.modlerComponents?.propertyManager?.initialized;
 		if (!hasPropertyManager) {
 			return false;
 		}
 
 		// Check if object is in a layout-enabled container
-		return window.modlerComponents.propertyManager.isInLayoutContainer($displayObject.id);
+		return targetWindow.modlerComponents.propertyManager.isInLayoutContainer($displayObject.id);
 	}
 
 	function getFillStates(): { x?: boolean; y?: boolean; z?: boolean } {
-		if (!$displayObject || !window.modlerComponents?.propertyManager) return {};
+		if (!$displayObject) return {};
 
-		const pm = window.modlerComponents.propertyManager;
+		// Access parent window if we're in an iframe
+		const targetWindow = window !== window.parent ? window.parent : window;
+		if (!targetWindow.modlerComponents?.propertyManager) return {};
+
+		const pm = targetWindow.modlerComponents.propertyManager;
 		return {
 			x: pm.isAxisFilled($displayObject.id, 'x'),
 			y: pm.isAxisFilled($displayObject.id, 'y'),
@@ -99,14 +106,19 @@
 	}
 
 	function handleFillToggle(axis: 'x' | 'y' | 'z') {
-		if (window.modlerComponents?.propertyManager) {
-			window.modlerComponents.propertyManager.toggleFillProperty(axis);
+		// Access parent window if we're in an iframe
+		const targetWindow = window !== window.parent ? window.parent : window;
+		if (targetWindow.modlerComponents?.propertyManager) {
+			targetWindow.modlerComponents.propertyManager.toggleFillProperty(axis);
 		}
 	}
 
 	function handleFillHover(axis: 'x' | 'y' | 'z' | null) {
+		// Access parent window if we're in an iframe
+		const targetWindow = window !== window.parent ? window.parent : window;
+
 		// Trigger face highlighting via VisualEffects
-		const visualEffects = window.modlerComponents?.visualEffects;
+		const visualEffects = targetWindow.modlerComponents?.visualEffects;
 		if (!visualEffects) return;
 
 		if (axis) {
