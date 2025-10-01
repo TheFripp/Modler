@@ -77,27 +77,22 @@
 			return false;
 		}
 
-		// Access parent window if we're in an iframe
-		const targetWindow = window !== window.parent ? window.parent : window;
-
 		// Check if PropertyManager is available (silently return false if not)
-		const hasPropertyManager = targetWindow.modlerComponents?.propertyManager?.initialized;
+		// Note: Don't try window.parent - it causes cross-origin errors in dev mode
+		const hasPropertyManager = window.modlerComponents?.propertyManager?.initialized;
 		if (!hasPropertyManager) {
 			return false;
 		}
 
 		// Check if object is in a layout-enabled container
-		return targetWindow.modlerComponents.propertyManager.isInLayoutContainer($displayObject.id);
+		return window.modlerComponents.propertyManager.isInLayoutContainer($displayObject.id);
 	}
 
 	function getFillStates(): { x?: boolean; y?: boolean; z?: boolean } {
 		if (!$displayObject) return {};
+		if (!window.modlerComponents?.propertyManager) return {};
 
-		// Access parent window if we're in an iframe
-		const targetWindow = window !== window.parent ? window.parent : window;
-		if (!targetWindow.modlerComponents?.propertyManager) return {};
-
-		const pm = targetWindow.modlerComponents.propertyManager;
+		const pm = window.modlerComponents.propertyManager;
 		return {
 			x: pm.isAxisFilled($displayObject.id, 'x'),
 			y: pm.isAxisFilled($displayObject.id, 'y'),
@@ -106,19 +101,14 @@
 	}
 
 	function handleFillToggle(axis: 'x' | 'y' | 'z') {
-		// Access parent window if we're in an iframe
-		const targetWindow = window !== window.parent ? window.parent : window;
-		if (targetWindow.modlerComponents?.propertyManager) {
-			targetWindow.modlerComponents.propertyManager.toggleFillProperty(axis);
+		if (window.modlerComponents?.propertyManager) {
+			window.modlerComponents.propertyManager.toggleFillProperty(axis);
 		}
 	}
 
 	function handleFillHover(axis: 'x' | 'y' | 'z' | null) {
-		// Access parent window if we're in an iframe
-		const targetWindow = window !== window.parent ? window.parent : window;
-
 		// Trigger face highlighting via VisualEffects
-		const visualEffects = targetWindow.modlerComponents?.visualEffects;
+		const visualEffects = window.modlerComponents?.visualEffects;
 		if (!visualEffects) return;
 
 		if (axis) {

@@ -367,6 +367,20 @@ class SveltePanelManager {
             container.innerHTML = '';
             container.appendChild(iframe);
             this.iframes[iframeKey] = iframe;
+
+            // Expose modlerComponents to iframe window after it loads
+            iframe.addEventListener('load', () => {
+                try {
+                    // Only works for same-origin iframes (localhost:5173 -> localhost:5173)
+                    if (iframe.contentWindow && window.modlerComponents) {
+                        iframe.contentWindow.modlerComponents = window.modlerComponents;
+                        console.log(`✅ Exposed modlerComponents to ${panelType} iframe`);
+                    }
+                } catch (error) {
+                    // Cross-origin - can't access iframe contentWindow
+                    console.warn(`⚠️ Cannot expose modlerComponents to ${panelType} iframe (cross-origin)`);
+                }
+            });
         }
     }
 
