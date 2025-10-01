@@ -513,15 +513,18 @@ class VisualEffects {
     // ===== PADDING VISUALIZATION =====
 
     showPaddingVisualization(mesh, padding) {
-        if (!mesh || !padding) return;
+        if (!mesh) return;
 
-        // Ensure padding values are valid numbers, default to 0 if not
-        const paddingWidth = (typeof padding.width === 'number' && !isNaN(padding.width)) ? padding.width : 0;
-        const paddingHeight = (typeof padding.height === 'number' && !isNaN(padding.height)) ? padding.height : 0;
-        const paddingDepth = (typeof padding.depth === 'number' && !isNaN(padding.depth)) ? padding.depth : 0;
+        // The padding parameter is just used to determine if we should show the visualization
+        // The actual visualization size is ALWAYS just the children bounds (independent of padding values)
+        const hasPadding = padding && (
+            (typeof padding.width === 'number' && padding.width > 0) ||
+            (typeof padding.height === 'number' && padding.height > 0) ||
+            (typeof padding.depth === 'number' && padding.depth > 0)
+        );
 
         // If no padding, hide visualization
-        if (paddingWidth === 0 && paddingHeight === 0 && paddingDepth === 0) {
+        if (!hasPadding) {
             this.hidePaddingVisualization(mesh);
             return;
         }
