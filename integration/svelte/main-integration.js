@@ -683,6 +683,9 @@
                 case 'fill-button-get-states':
                     handleFillButtonGetStates(event.source, data.objectId);
                     break;
+                case 'check-layout-mode':
+                    handleCheckLayoutMode(event.source, data.objectId);
+                    break;
                 case 'cad-wireframe-settings-changed':
                     handleCadWireframeSettingsUpdate(data.settings);
                     break;
@@ -962,6 +965,33 @@
         if (propertyManager) {
             propertyManager.toggleFillProperty(axis);
         }
+    }
+
+    /**
+     * Check if object is in a layout-enabled container
+     */
+    function handleCheckLayoutMode(source, objectId) {
+        const sceneController = window.modlerComponents?.sceneController;
+        if (!sceneController) {
+            source.postMessage({
+                type: 'layout-mode-response',
+                data: { objectId, inLayoutMode: false }
+            }, '*');
+            return;
+        }
+
+        const objectData = sceneController.getObject(objectId);
+        let inLayoutMode = false;
+
+        if (objectData && objectData.parentContainer) {
+            const container = sceneController.getObject(objectData.parentContainer);
+            inLayoutMode = container && container.autoLayout && container.autoLayout.enabled;
+        }
+
+        source.postMessage({
+            type: 'layout-mode-response',
+            data: { objectId, inLayoutMode }
+        }, '*');
     }
 
     /**

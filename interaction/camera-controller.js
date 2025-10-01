@@ -121,35 +121,23 @@ class CameraController {
     onWheel(event) {
         event.preventDefault();
 
-        // Try zoom centering first (for selected objects), fallback to simple zoom
-        if (this.zoomCentering && this.zoomCentering.handleWheel(event)) {
-            // ZoomCentering handled the event and applied centering
-            this.performSimpleZoom(event);
-        } else {
-            // No selection or centering not applied, use simple zoom
-            this.performSimpleZoom(event);
-        }
-    }
-
-    performSimpleZoom(event) {
-        // Distance-based zoom speed: slower when close, max speed when far
+        // Direct smooth zoom with reduced sensitivity
         const distance = this.camera.position.distanceTo(this.orbitTarget);
-        const minDistance = 2.0;
-        const maxDistance = 50.0;
-        const maxZoomFactor = 0.1; // Maximum 10% change per wheel event
 
-        // Calculate zoom factor based on distance (linear interpolation)
-        const normalizedDistance = Math.min(Math.max((distance - minDistance) / (maxDistance - minDistance), 0), 1);
-        const zoomFactor = 0.02 + (normalizedDistance * maxZoomFactor); // 2% minimum, 10% maximum
+        // Use deltaY directly but scale it down significantly for smooth control
+        // Typical wheel deltaY is ~100 per notch, trackpad is ~1-4 per event
+        const zoomAmount = (event.deltaY * distance * 0.0006); // Very small multiplier for smooth zoom
 
-        const scale = event.deltaY > 0 ? (1 + zoomFactor) : (1 - zoomFactor);
-
-        // Move camera towards/away from target
+        // Direction vector from target to camera
         const direction = new THREE.Vector3()
             .subVectors(this.camera.position, this.orbitTarget)
-            .multiplyScalar(scale);
+            .normalize();
 
-        this.camera.position.copy(this.orbitTarget).add(direction);
+        // Calculate new distance with minimum limit
+        const newDistance = Math.max(0.5, distance + zoomAmount);
+
+        // Set camera position at new distance
+        this.camera.position.copy(this.orbitTarget).addScaledVector(direction, newDistance);
     }
 
     // Called by InputController to stop operations

@@ -71,18 +71,26 @@ class PushTool {
         } else {
             // Check if we should show face highlighting
             if (this.shouldShowFaceHighlight(hit)) {
+                console.log('PushTool: shouldShowFaceHighlight = true, calling handleFaceDetection');
                 this.faceToolBehavior.handleFaceDetection(hit);
             } else {
+                console.log('PushTool: shouldShowFaceHighlight = false, clearing hover');
                 this.faceToolBehavior.clearHover();
             }
         }
     }
 
     shouldShowFaceHighlight(hit) {
-        if (!hit || !hit.object) return false;
+        if (!hit || !hit.object) {
+            console.log('PushTool shouldShow: No hit');
+            return false;
+        }
 
         const targetObject = this.faceToolBehavior.getTargetObject(hit);
-        if (!targetObject) return false;
+        if (!targetObject) {
+            console.log('PushTool shouldShow: No targetObject');
+            return false;
+        }
 
         // Check if this is a container and determine if it should be highlightable
         const sceneController = window.modlerComponents?.sceneController;
@@ -93,17 +101,23 @@ class PushTool {
                 const isLayoutEnabled = objectData.autoLayout && objectData.autoLayout.enabled;
                 const isFixedMode = objectData.sizingMode === 'fixed';
 
+                console.log(`PushTool shouldShow: Container ${objectData.name}, layout=${isLayoutEnabled}, fixed=${isFixedMode}`);
+
                 if (!isLayoutEnabled && !isFixedMode) {
+                    console.log('PushTool shouldShow: Container in hug mode - blocking');
                     return false; // Only block containers in hug mode without layout
                 }
             } else if (objectData && !objectData.isContainer) {
+                const canPush = this.canPushChildObject(targetObject);
+                console.log(`PushTool shouldShow: Child object ${objectData.name}, canPush=${canPush}`);
                 // CRITICAL: Block highlighting child objects inside layout-enabled containers
-                if (!this.canPushChildObject(targetObject)) {
+                if (!canPush) {
                     return false;
                 }
             }
         }
 
+        console.log('PushTool shouldShow: Allowing highlight');
         return true; // Allow highlighting for everything else
     }
 
@@ -113,6 +127,11 @@ class PushTool {
         if (this.active) {
             this.endFacePush();
             return true;
+        }
+
+        // Check if we should allow pushing this object
+        if (!this.shouldShowFaceHighlight(hit)) {
+            return false; // Allow camera to engage
         }
 
         const targetObject = this.faceToolBehavior.getTargetObject(hit);

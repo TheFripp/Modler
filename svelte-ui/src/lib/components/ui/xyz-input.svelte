@@ -24,6 +24,8 @@
 		fillStates?: { x?: boolean; y?: boolean; z?: boolean };
 		onFillToggle?: (axis: 'x' | 'y' | 'z') => void;
 		onFillHover?: (axis: 'x' | 'y' | 'z' | null) => void;
+		// Disable all inputs (for layout mode)
+		disableAll?: boolean;
 	}
 
 	let {
@@ -40,6 +42,7 @@
 		fillStates = {},
 		onFillToggle,
 		onFillHover,
+		disableAll = false,
 		...restProps
 	}: Props = $props();
 
@@ -127,7 +130,7 @@
 			{@const mixedState = property ? getPropertyMixedState(property, $selectedObjects) : { isMixed: false, value: values[axis] }}
 			{@const displayValue = mixedState.isMixed ? '' : (typeof mixedState.value === 'number' ? Math.round(mixedState.value * 10) / 10 : mixedState.value)}
 			{@const fieldState = property ? $fieldStates[property] : undefined}
-			{@const isDisabled = fieldState?.disabled || false}
+			{@const isDisabled = disableAll || fieldState?.disabled || false}
 			{@const isFilled = fillStates[axis] || false}
 			<div class="flex-1 min-w-0">
 				<div class="flex items-center gap-1">
@@ -137,11 +140,11 @@
 							label={labels[axis]}
 							type="number"
 							value={displayValue}
-							placeholder={mixedState.isMixed ? 'Mixed' : (isDisabled ? fieldState?.tooltip || 'Disabled' : '')}
+							placeholder={mixedState.isMixed ? 'Mixed' : (disableAll ? 'Layout Mode' : (isDisabled ? fieldState?.tooltip || 'Disabled' : ''))}
 							class={cn(
 								mixedState.isMixed ? 'text-muted-foreground/60' : '',
 								isDisabled ? 'opacity-50' : '',
-								isFilled ? 'opacity-70' : ''
+								isFilled ? 'opacity-50' : ''
 							)}
 							disabled={isDisabled || isFilled}
 							{objectId}

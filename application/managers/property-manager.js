@@ -97,10 +97,27 @@ class PropertyManager {
             };
         }
 
+        // Initialize savedDimensions storage if needed
+        if (!objectData.savedDimensions) {
+            objectData.savedDimensions = { x: null, y: null, z: null };
+        }
+
         // Toggle fill state for the axis
         const sizeProperty = `size${axis.toUpperCase()}`;
         const currentState = objectData.layoutProperties[sizeProperty];
         const newState = currentState === 'fill' ? 'fixed' : 'fill';
+
+        if (newState === 'fill') {
+            // Save current dimension before applying fill
+            const currentDimension = objectData.dimensions?.[axis] || 1;
+            objectData.savedDimensions[axis] = currentDimension;
+        } else {
+            // Restore saved dimension when toggling fill off
+            if (objectData.savedDimensions[axis] !== null) {
+                this.sceneController.updateObjectDimensions(objectData.id, axis, objectData.savedDimensions[axis]);
+                objectData.savedDimensions[axis] = null; // Clear saved value
+            }
+        }
 
         objectData.layoutProperties[sizeProperty] = newState;
 

@@ -631,7 +631,27 @@ class SceneController {
 
         objects.forEach((obj, index) => {
             const layoutPosition = positions[index];
-            // layoutSize available if needed: sizes[index]
+            const layoutSize = sizes[index];
+
+            // Apply fill-based sizing BEFORE positioning
+            if (layoutSize && obj.layoutProperties) {
+                // Check each axis for fill behavior
+                ['x', 'y', 'z'].forEach(axis => {
+                    const sizeProperty = `size${axis.toUpperCase()}`;
+                    if (obj.layoutProperties[sizeProperty] === 'fill') {
+                        // Only update if size has actually changed to avoid unnecessary geometry updates
+                        const currentDim = obj.dimensions?.[axis] || 1;
+                        const newDim = layoutSize[axis];
+
+                        // Validate dimension is a valid number
+                        if (typeof newDim === 'number' && !isNaN(newDim) && newDim > 0) {
+                            if (Math.abs(currentDim - newDim) > 0.001) {
+                                this.updateObjectDimensions(obj.id, axis, newDim);
+                            }
+                        }
+                    }
+                });
+            }
 
             // CRITICAL FIX: Use local positions when objects are children of container
             // Layout positions are already relative to container coordinate space
@@ -653,9 +673,6 @@ class SceneController {
                 obj.position = worldPosition.clone();
 
             }
-
-            // CAD PRINCIPLE: Never resize objects - maintain 1:1 scale
-            // Objects keep their original geometry - layout only positions them
 
             // Transform change notification handled by mesh synchronizer
         });
@@ -767,6 +784,12 @@ class SceneController {
      * @returns {boolean} - Success status
      */
     updateObjectDimensions(objectId, axis, newDimension) {
+        // Validate input parameters
+        if (typeof newDimension !== 'number' || isNaN(newDimension) || newDimension <= 0) {
+            console.warn('Cannot update dimensions: invalid dimension value', newDimension);
+            return false;
+        }
+
         const objectData = this.getObject(objectId);
         if (!objectData || !objectData.mesh || !objectData.mesh.geometry) {
             console.warn('Cannot update dimensions: object or geometry not found', objectId);

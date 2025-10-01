@@ -41,12 +41,43 @@ class MoveTool {
     }
     
     /**
+     * Check if face highlighting should be shown for this object
+     */
+    shouldShowFaceHighlight(hit) {
+        if (!hit || !hit.object) return false;
+
+        const targetObject = this.faceToolBehavior.getTargetObject(hit);
+        if (!targetObject) return false;
+
+        // Check if object is a child in a layout-enabled container
+        const sceneController = window.modlerComponents?.sceneController;
+        if (sceneController) {
+            const objectData = sceneController.getObjectByMesh(targetObject);
+            if (objectData && objectData.parentContainer) {
+                const container = sceneController.getObject(objectData.parentContainer);
+                if (container && container.autoLayout && container.autoLayout.enabled) {
+                    // Don't show highlights for children in layout mode
+                    return false;
+                }
+            }
+        }
+
+        return true; // Allow highlighting for everything else
+    }
+
+    /**
      * Handle mouse hover events - show face highlighting for selected objects and handle dragging
      */
     onHover(hit) {
         // Handle dragging movement during hover
         if (this.isDragging && this.dragObject && this.dragFaceNormal) {
             this.updateDragMovement();
+            return;
+        }
+
+        // Check if we should show highlight for this object
+        if (!this.shouldShowFaceHighlight(hit)) {
+            this.faceToolBehavior.clearHover();
             return;
         }
 
@@ -213,6 +244,19 @@ class MoveTool {
 
         // Use shared behavior to get target object (handles both old and new container architectures)
         const targetObject = this.faceToolBehavior.getTargetObject(hit);
+
+        // Check if object is a child in a layout-enabled container
+        const sceneController = window.modlerComponents?.sceneController;
+        if (sceneController) {
+            const objectData = sceneController.getObjectByMesh(targetObject);
+            if (objectData && objectData.parentContainer) {
+                const container = sceneController.getObject(objectData.parentContainer);
+                if (container && container.autoLayout && container.autoLayout.enabled) {
+                    console.warn('MoveTool: Cannot move child objects in layout mode. Move the container instead.');
+                    return false; // Prevent drag operation
+                }
+            }
+        }
 
         this.isDragging = true;
         this.dragObject = targetObject; // Use the actual container, not the collision mesh

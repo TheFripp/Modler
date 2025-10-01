@@ -285,11 +285,11 @@ class BaseFaceToolBehavior {
     }
 
     /**
-     * Check if a container is in hug mode (sizing mode is 'hug')
-     * Face highlights should only show for containers in layout/fixed mode, not hug mode
+     * Check if a container is in hug mode (no layout enabled)
+     * Face highlights should only show for containers in layout mode or fixed mode
      *
      * @param {THREE.Object3D} object - Object to check (should be container mesh)
-     * @returns {boolean} True if container is in hug mode
+     * @returns {boolean} True if container is in hug mode (not pushable)
      */
     isContainerInHugMode(object) {
         if (!object) return false;
@@ -303,8 +303,12 @@ class BaseFaceToolBehavior {
             return false;
         }
 
-        // Check if container is in hug sizing mode
-        return objectData.sizingMode === 'hug';
+        // Container is pushable if it has layout enabled OR is in fixed sizing mode
+        const hasLayoutEnabled = objectData.autoLayout && objectData.autoLayout.enabled;
+        const isFixedMode = objectData.sizingMode === 'fixed';
+
+        // In hug mode if neither layout nor fixed sizing is active
+        return !hasLayoutEnabled && !isFixedMode;
     }
 
     /**

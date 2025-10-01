@@ -75,11 +75,16 @@
 	let showFillButtons = false;
 	let fillButtonStates = { x: false, y: false, z: false };
 
-	// Request fill button state via PostMessage when displayObject changes
+	// Layout mode state - determines if position inputs should be disabled
+	let inLayoutMode = false;
+
+	// Request fill button state and layout mode via PostMessage when displayObject changes
 	$: if ($displayObject && !$displayObject.isContainer) {
 		requestFillButtonState($displayObject.id);
+		requestLayoutMode($displayObject.id);
 	} else {
 		showFillButtons = false;
+		inLayoutMode = false;
 	}
 
 	function requestFillButtonState(objectId: string) {
@@ -95,18 +100,28 @@
 		}, '*');
 	}
 
-	// Listen for fill button responses
+	function requestLayoutMode(objectId: string) {
+		// Send request to parent window via PostMessage
+		window.parent.postMessage({
+			type: 'check-layout-mode',
+			data: { objectId }
+		}, '*');
+	}
+
+	// Listen for fill button and layout mode responses
 	onMount(() => {
-		const handleFillButtonResponse = (event: MessageEvent) => {
+		const handleMessageResponse = (event: MessageEvent) => {
 			if (event.data.type === 'fill-button-check-response') {
 				showFillButtons = event.data.data.shouldShow;
 			} else if (event.data.type === 'fill-button-states-response') {
 				fillButtonStates = event.data.data.states || { x: false, y: false, z: false };
+			} else if (event.data.type === 'layout-mode-response') {
+				inLayoutMode = event.data.data.inLayoutMode || false;
 			}
 		};
 
-		window.addEventListener('message', handleFillButtonResponse);
-		return () => window.removeEventListener('message', handleFillButtonResponse);
+		window.addEventListener('message', handleMessageResponse);
+		return () => window.removeEventListener('message', handleMessageResponse);
 	});
 
 	function handleFillToggle(axis: 'x' | 'y' | 'z') {
@@ -186,6 +201,7 @@
 						objectId={$displayObject.id}
 						propertyBase="position"
 						idPrefix="pos"
+						disableAll={inLayoutMode}
 					/>
 				</div>
 
