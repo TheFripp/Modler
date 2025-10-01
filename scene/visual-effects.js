@@ -584,18 +584,50 @@ class VisualEffects {
             return;
         }
 
-        // ARCHITECTURE: Create padding box once, reuse and update
+        // ARCHITECTURE: Create padding box once, reuse and update ONLY when children change
         let paddingBox = mesh.getObjectByName('paddingVisualization');
 
         if (!paddingBox) {
             // First-time creation: single wireframe box that wraps children
             paddingBox = this.createPaddingBox(1, 1, 1, new THREE.Vector3(), 0xff9900, 0.5);
             paddingBox.name = 'paddingVisualization';
+            // Store the children bounds so we can detect if they changed
+            paddingBox.userData.childrenBounds = {
+                width: paddingBoxWidth,
+                height: paddingBoxHeight,
+                depth: paddingBoxDepth,
+                centerX: paddingBoxCenter.x,
+                centerY: paddingBoxCenter.y,
+                centerZ: paddingBoxCenter.z
+            };
             mesh.add(paddingBox);
+            this.updatePaddingBox(paddingBox, paddingBoxWidth, paddingBoxHeight, paddingBoxDepth, paddingBoxCenter);
+        } else {
+            // Check if children bounds changed (with small tolerance for floating point)
+            const bounds = paddingBox.userData.childrenBounds || {};
+            const tolerance = 0.001;
+            const boundsChanged =
+                Math.abs(bounds.width - paddingBoxWidth) > tolerance ||
+                Math.abs(bounds.height - paddingBoxHeight) > tolerance ||
+                Math.abs(bounds.depth - paddingBoxDepth) > tolerance ||
+                Math.abs(bounds.centerX - paddingBoxCenter.x) > tolerance ||
+                Math.abs(bounds.centerY - paddingBoxCenter.y) > tolerance ||
+                Math.abs(bounds.centerZ - paddingBoxCenter.z) > tolerance;
+
+            // Only update if children actually moved/resized
+            if (boundsChanged) {
+                paddingBox.userData.childrenBounds = {
+                    width: paddingBoxWidth,
+                    height: paddingBoxHeight,
+                    depth: paddingBoxDepth,
+                    centerX: paddingBoxCenter.x,
+                    centerY: paddingBoxCenter.y,
+                    centerZ: paddingBoxCenter.z
+                };
+                this.updatePaddingBox(paddingBox, paddingBoxWidth, paddingBoxHeight, paddingBoxDepth, paddingBoxCenter);
+            }
         }
 
-        // Update the padding box to wrap children (container will be this box + padding on all sides)
-        this.updatePaddingBox(paddingBox, paddingBoxWidth, paddingBoxHeight, paddingBoxDepth, paddingBoxCenter);
         paddingBox.visible = true;
     }
 
