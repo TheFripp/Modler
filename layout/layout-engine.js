@@ -29,11 +29,11 @@ class LayoutEngine {
 
         switch (direction) {
             case 'x':
-                return this.calculateLinearLayout(objects, 'x', gap, padding, axisSize, containerSize, layoutAnchor);
+                return this.calculateLinearLayout(objects, 'x', gap, padding, axisSize, containerSize, layoutAnchor, layoutConfig);
             case 'y':
-                return this.calculateLinearLayout(objects, 'y', gap, padding, axisSize, containerSize, layoutAnchor);
+                return this.calculateLinearLayout(objects, 'y', gap, padding, axisSize, containerSize, layoutAnchor, layoutConfig);
             case 'z':
-                return this.calculateLinearLayout(objects, 'z', gap, padding, axisSize, containerSize, layoutAnchor);
+                return this.calculateLinearLayout(objects, 'z', gap, padding, axisSize, containerSize, layoutAnchor, layoutConfig);
             case 'xy':
                 return this.calculateGridLayout(objects, 'xy', gap, padding, layoutConfig, layoutAnchor);
             case 'xyz':
@@ -58,7 +58,7 @@ class LayoutEngine {
      * @param {THREE.Vector3} layoutAnchor - Optional anchor point to center layout around (default: origin)
      * @returns {Array} Array of positions
      */
-    static calculateLinearLayout(objects, axis, gap, padding, axisSize = null, fullContainerSize = null, layoutAnchor = null) {
+    static calculateLinearLayout(objects, axis, gap, padding, axisSize = null, fullContainerSize = null, layoutAnchor = null, layoutConfig = null) {
         const positions = [];
         const paddingOffset = this.getPaddingOffset(axis, padding);
 
@@ -107,8 +107,8 @@ class LayoutEngine {
         // Apply padding after centering
         const finalPositions = this.applyPaddingToAxis(centeredPositions, axis, paddingOffset);
 
-        // Calculate bounds for the final layout
-        const layoutBounds = this.calculateLayoutBounds(objects, finalPositions, null, fullContainerSize);
+        // Calculate bounds for the final layout (pass layoutConfig to include padding in size)
+        const layoutBounds = this.calculateLayoutBounds(objects, finalPositions, layoutConfig, fullContainerSize);
 
         return {
             positions: finalPositions,
