@@ -38,6 +38,10 @@ class ObjectStateManager extends EventTarget {
         // Change tracking for efficient updates
         this.pendingChanges = new Map(); // objectId -> source
         this.updateScheduled = false;
+
+        // Performance optimization: Layout propagation tracking
+        this.depthCache = new Map(); // containerId -> depth (cleared on hierarchy change)
+        this.nextFramePropagations = new Set(); // Deferred propagations for next frame
     }
 
     /**
@@ -742,16 +746,29 @@ class ObjectStateManager extends EventTarget {
     /**
      * Process all scheduled layout updates (bottom-up order)
      * Deepest containers are updated first to ensure proper propagation
+     *
+     * PERFORMANCE OPTIMIZATIONS:
+     * - Caches container depths to avoid O(n×d) recalculation during sort
+     * - Defers grandparent propagations to next frame to avoid re-processing
      */
     processScheduledLayouts() {
         if (!this.scheduledLayoutUpdates || this.scheduledLayoutUpdates.size === 0) return;
 
-        // Sort by container depth (deepest first)
-        const sorted = Array.from(this.scheduledLayoutUpdates).sort((a, b) => {
-            const depthA = this.getContainerDepth(a);
-            const depthB = this.getContainerDepth(b);
-            return depthB - depthA; // Descending order (deepest first)
+        // OPTIMIZATION: Build depth cache for this batch
+        const containersToProcess = Array.from(this.scheduledLayoutUpdates);
+        const depthMap = new Map();
+
+        containersToProcess.forEach(containerId => {
+            depthMap.set(containerId, this.getContainerDepthCached(containerId));
         });
+
+        // Sort by container depth (deepest first) using cached depths
+        const sorted = containersToProcess.sort((a, b) => {
+            return depthMap.get(b) - depthMap.get(a); // Descending order (deepest first)
+        });
+
+        // OPTIMIZATION: Collect propagations for next frame instead of re-adding to current batch
+        const deferredPropagations = new Set();
 
         // Update each container's layout
         sorted.forEach(containerId => {
@@ -768,23 +785,68 @@ class ObjectStateManager extends EventTarget {
                     }
                 }
 
-                // If this container is in a parent container, schedule parent update
+                // OPTIMIZATION: Defer grandparent propagations to next frame
                 if (container.parentContainer) {
                     const grandparent = this.sceneController.getObject(container.parentContainer);
                     if (grandparent?.autoLayout?.enabled) {
-                        this.scheduledLayoutUpdates.add(container.parentContainer);
+                        deferredPropagations.add(container.parentContainer);
                     }
                 }
             }
         });
 
         this.scheduledLayoutUpdates.clear();
+
+        // Schedule deferred propagations for next frame
+        if (deferredPropagations.size > 0) {
+            this.nextFramePropagations = new Set([...this.nextFramePropagations, ...deferredPropagations]);
+
+            if (!this.deferredPropagationScheduled) {
+                this.deferredPropagationScheduled = true;
+                requestAnimationFrame(() => {
+                    // Move deferred propagations to scheduled updates
+                    this.nextFramePropagations.forEach(id => {
+                        this.scheduledLayoutUpdates.add(id);
+                    });
+                    this.nextFramePropagations.clear();
+                    this.deferredPropagationScheduled = false;
+
+                    // Process the propagations
+                    this.processScheduledLayouts();
+                });
+            }
+        }
+    }
+
+    /**
+     * Get container nesting depth with caching (0 for root-level containers)
+     * PERFORMANCE: Caches depths to avoid O(d) recalculation for each container during sort
+     */
+    getContainerDepthCached(containerId) {
+        // Check cache first
+        if (this.depthCache.has(containerId)) {
+            return this.depthCache.get(containerId);
+        }
+
+        // Calculate and cache
+        const depth = this.calculateContainerDepth(containerId);
+        this.depthCache.set(containerId, depth);
+        return depth;
     }
 
     /**
      * Get container nesting depth (0 for root-level containers)
+     * Use getContainerDepthCached() for better performance in batch operations
      */
     getContainerDepth(containerId) {
+        return this.calculateContainerDepth(containerId);
+    }
+
+    /**
+     * Calculate container depth by walking up parent chain
+     * @private
+     */
+    calculateContainerDepth(containerId) {
         let depth = 0;
         let current = this.sceneController?.getObject(containerId);
 
@@ -798,6 +860,14 @@ class ObjectStateManager extends EventTarget {
         }
 
         return depth;
+    }
+
+    /**
+     * Clear depth cache when hierarchy changes
+     * Called automatically on hierarchy modifications
+     */
+    clearDepthCache() {
+        this.depthCache.clear();
     }
 }
 

@@ -707,6 +707,12 @@ class SceneController {
         // Update metadata
         obj.parentContainer = parentId;
 
+        // PERFORMANCE: Clear depth cache since hierarchy changed
+        const objectStateManager = window.modlerComponents?.objectStateManager;
+        if (objectStateManager?.clearDepthCache) {
+            objectStateManager.clearDepthCache();
+        }
+
         // BYPASS ELIMINATED: Use ObjectEventBus instead of legacy window.notifyObjectModified
         if (window.objectEventBus) {
             window.objectEventBus.emit(
