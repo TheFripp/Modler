@@ -173,22 +173,55 @@ class DirectComponentManager {
     }
 
     /**
-     * Send message directly to component (temporary iframe communication)
+     * Send message directly to component
+     * ARCHITECTURE: Uses PropertyPanelSync for all postMessage communication
      */
     sendToComponent(componentName, message) {
-        const component = this.componentInstances[componentName];
-        if (component && component.iframe) {
-            component.iframe.contentWindow.postMessage(message, '*');
+        // ARCHITECTURE: Route through PropertyPanelSync (ONLY authorized postMessage source)
+        const propertyPanelSync = window.modlerComponents?.propertyPanelSync;
+        if (!propertyPanelSync) {
+            console.warn('DirectComponentManager: PropertyPanelSync not available');
+            return;
+        }
+
+        // Map component name to panel name
+        const panelMap = {
+            'PropertyPanel': 'right',
+            'ObjectListPanel': 'left',
+            'MainToolbar': 'mainToolbar',
+            'SystemToolbar': 'systemToolbar'
+        };
+
+        const panelName = panelMap[componentName];
+        if (panelName) {
+            propertyPanelSync.sendToUI(message.type || 'data-update', [], {
+                throttle: false,
+                panels: [panelName],
+                includeContext: false,
+                customData: message.data || message
+            });
+        } else {
+            console.warn(`DirectComponentManager: Unknown component ${componentName}`);
         }
     }
 
     /**
      * Broadcast message to all components
+     * ARCHITECTURE: Uses PropertyPanelSync for all postMessage communication
      */
     broadcastToAll(message) {
-        Object.keys(this.componentInstances).forEach(componentName => {
-            this.sendToComponent(componentName, message);
-        });
+        // ARCHITECTURE: Route through PropertyPanelSync (ONLY authorized postMessage source)
+        const propertyPanelSync = window.modlerComponents?.propertyPanelSync;
+        if (propertyPanelSync) {
+            propertyPanelSync.sendToUI(message.type || 'data-update', [], {
+                throttle: false,
+                panels: ['right', 'left', 'mainToolbar', 'systemToolbar'],
+                includeContext: false,
+                customData: message.data || message
+            });
+        } else {
+            console.warn('DirectComponentManager: PropertyPanelSync not available for broadcast');
+        }
     }
 
     /**

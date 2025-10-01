@@ -19,6 +19,13 @@ class SettingsHandler {
     }
 
     /**
+     * Get PropertyPanelSync instance for communication
+     */
+    getPropertyPanelSync() {
+        return window.modlerComponents?.propertyPanelSync;
+    }
+
+    /**
      * Handle CAD wireframe settings update
      */
     handleCadWireframeSettingsUpdate(settings) {
@@ -50,10 +57,18 @@ class SettingsHandler {
             lineWidth: configurationManager.get('visual.cad.wireframe.lineWidth') || 1
         };
 
-        source.postMessage({
-            type: 'cad-wireframe-settings-response',
-            settings: currentSettings
-        }, '*');
+        // ARCHITECTURE: Route through PropertyPanelSync (ONLY authorized postMessage source)
+        const propertyPanelSync = this.getPropertyPanelSync();
+        if (propertyPanelSync) {
+            propertyPanelSync.sendToUI('cad-wireframe-settings-response', [], {
+                throttle: false,
+                panels: ['right'],
+                includeContext: false,
+                customData: { settings: currentSettings }
+            });
+        } else {
+            console.warn('❌ PropertyPanelSync not available for settings response');
+        }
     }
 
     /**
@@ -97,10 +112,19 @@ class SettingsHandler {
         };
 
         console.log('📤 SettingsHandler: Sending visual-settings-response:', currentSettings);
-        source.postMessage({
-            type: 'visual-settings-response',
-            settings: currentSettings
-        }, '*');
+
+        // ARCHITECTURE: Route through PropertyPanelSync (ONLY authorized postMessage source)
+        const propertyPanelSync = this.getPropertyPanelSync();
+        if (propertyPanelSync) {
+            propertyPanelSync.sendToUI('visual-settings-response', [], {
+                throttle: false,
+                panels: ['right'],
+                includeContext: false,
+                customData: { settings: currentSettings }
+            });
+        } else {
+            console.warn('❌ PropertyPanelSync not available for settings response');
+        }
     }
 
     /**
@@ -134,10 +158,18 @@ class SettingsHandler {
             gridSubColor: configurationManager.get('scene.grid.subColor') || '#222222'
         };
 
-        source.postMessage({
-            type: 'scene-settings-response',
-            settings: currentSettings
-        }, '*');
+        // ARCHITECTURE: Route through PropertyPanelSync (ONLY authorized postMessage source)
+        const propertyPanelSync = this.getPropertyPanelSync();
+        if (propertyPanelSync) {
+            propertyPanelSync.sendToUI('scene-settings-response', [], {
+                throttle: false,
+                panels: ['right'],
+                includeContext: false,
+                customData: { settings: currentSettings }
+            });
+        } else {
+            console.warn('❌ PropertyPanelSync not available for settings response');
+        }
     }
 
     /**
@@ -170,10 +202,18 @@ class SettingsHandler {
             toolbarOpacity: configurationManager.get('interface.toolbarOpacity') || 0.95
         };
 
-        source.postMessage({
-            type: 'interface-settings-response',
-            settings: currentSettings
-        }, '*');
+        // ARCHITECTURE: Route through PropertyPanelSync (ONLY authorized postMessage source)
+        const propertyPanelSync = this.getPropertyPanelSync();
+        if (propertyPanelSync) {
+            propertyPanelSync.sendToUI('interface-settings-response', [], {
+                throttle: false,
+                panels: ['right'],
+                includeContext: false,
+                customData: { settings: currentSettings }
+            });
+        } else {
+            console.warn('❌ PropertyPanelSync not available for settings response');
+        }
     }
 }
 

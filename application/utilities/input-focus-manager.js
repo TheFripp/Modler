@@ -93,18 +93,18 @@ class InputFocusManager {
             detail: { objectId, property }
         }));
 
-        // Also send via PostMessage for iframe-based panels
-        const panels = document.querySelectorAll('iframe');
-        panels.forEach(panel => {
-            try {
-                panel.contentWindow.postMessage({
-                    type: 'focus-input',
-                    data: { objectId, property }
-                }, '*'); // Use '*' for same-origin iframes
-            } catch (error) {
-                console.warn('InputFocusManager: Failed to send focus message to panel:', error);
-            }
-        });
+        // ARCHITECTURE: Route through PropertyPanelSync (ONLY authorized postMessage source)
+        const propertyPanelSync = window.modlerComponents?.propertyPanelSync;
+        if (propertyPanelSync) {
+            propertyPanelSync.sendToUI('focus-input', [], {
+                throttle: false,
+                panels: ['right'], // Property panel where focus is needed
+                includeContext: false,
+                customData: { objectId, property }
+            });
+        } else {
+            console.warn('InputFocusManager: PropertyPanelSync not available for focus notification');
+        }
     }
 }
 
