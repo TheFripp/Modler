@@ -576,12 +576,20 @@ class VisualEffects {
 
         box.visible = visible;
         if (visible) {
-            // Update geometry
-            const newGeometry = this.geometryFactory.createBoxGeometry(width, height, depth);
+            // Create new box geometry
+            const boxGeometry = this.geometryFactory.createBoxGeometry(width, height, depth);
+
+            // Create edges geometry (only face edges, not triangles)
+            const edgesGeometry = new THREE.EdgesGeometry(boxGeometry);
+
+            // Return box geometry to pool
+            this.geometryFactory.returnGeometry(boxGeometry, 'box');
+
+            // Dispose old geometry and update
             if (box.geometry) {
-                this.geometryFactory.returnGeometry(box.geometry, 'box');
+                box.geometry.dispose();
             }
-            box.geometry = newGeometry;
+            box.geometry = edgesGeometry;
             box.position.copy(position);
         }
     }
@@ -597,17 +605,26 @@ class VisualEffects {
     }
 
     createPaddingBox(width, height, depth, position, color, opacity) {
-        // Get geometry from factory (pooled resource)
-        const geometry = this.geometryFactory.createBoxGeometry(width, height, depth);
+        // Create box geometry
+        const boxGeometry = this.geometryFactory.createBoxGeometry(width, height, depth);
 
-        // Get material from manager
-        const material = this.materialManager.createPaddingVisualizationMaterial({
+        // Create edges geometry for wireframe (only outer edges, not triangles)
+        const edgesGeometry = new THREE.EdgesGeometry(boxGeometry);
+
+        // Return box geometry to pool since we only need edges
+        this.geometryFactory.returnGeometry(boxGeometry, 'box');
+
+        // Create line material for edges
+        const material = new THREE.LineBasicMaterial({
             color: color,
-            opacity: opacity
+            opacity: opacity,
+            transparent: true,
+            depthTest: true,
+            depthWrite: false
         });
 
-        // Get mesh from visualization pool (proper resource pooling)
-        const box = this.resourcePool.getMeshHighlight(geometry, material);
+        // Create LineSegments (wireframe box with only face edges)
+        const box = new THREE.LineSegments(edgesGeometry, material);
         box.position.copy(position);
         return box;
     }
