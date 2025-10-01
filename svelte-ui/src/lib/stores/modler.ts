@@ -291,7 +291,7 @@ function convertLegacyFlatFormat(flatObj: any): ObjectData {
 			enabled: flatObj['autoLayout.enabled'] || flatObj.autoLayout?.enabled || false,
 			direction: flatObj['autoLayout.direction'] || flatObj.autoLayout?.direction || null,
 			gap: flatObj['autoLayout.gap'] || flatObj.autoLayout?.gap || 0,
-			padding: flatObj['autoLayout.padding'] || flatObj.autoLayout?.padding || { top: 0, bottom: 0, left: 0, right: 0, front: 0, back: 0 }
+			padding: flatObj['autoLayout.padding'] || flatObj.autoLayout?.padding || { width: 0, height: 0, depth: 0 }
 		},
 
 		selected: flatObj.selected || false,
@@ -322,7 +322,7 @@ function normalizeUnknownFormat(obj: any): ObjectData {
 
 		isContainer: !!obj.isContainer,
 		layoutMode: obj.layoutMode || null,
-		autoLayout: obj.autoLayout || { enabled: false, direction: null, gap: 0, padding: { top: 0, bottom: 0, left: 0, right: 0, front: 0, back: 0 } },
+		autoLayout: obj.autoLayout || { enabled: false, direction: null, gap: 0, padding: { width: 0, height: 0, depth: 0 } },
 
 		selected: !!obj.selected,
 		locked: !!obj.locked,
@@ -352,7 +352,7 @@ function createFallbackObjectData(id?: string): ObjectData {
 
 		isContainer: false,
 		layoutMode: null,
-		autoLayout: { enabled: false, direction: null, gap: 0, padding: { top: 0, bottom: 0, left: 0, right: 0, front: 0, back: 0 } },
+		autoLayout: { enabled: false, direction: null, gap: 0, padding: { width: 0, height: 0, depth: 0 } },
 
 		selected: false,
 		locked: false,
