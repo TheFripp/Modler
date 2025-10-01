@@ -77,44 +77,72 @@
 			return false;
 		}
 
-		// Check if PropertyManager is available (silently return false if not)
-		// Note: Don't try window.parent - it causes cross-origin errors in dev mode
-		const hasPropertyManager = window.modlerComponents?.propertyManager?.initialized;
-		if (!hasPropertyManager) {
+		// Safely check for PropertyManager - handle undefined gracefully
+		try {
+			const modlerComponents = (window as any).modlerComponents;
+			if (!modlerComponents) {
+				console.log('🔍 Fill buttons: modlerComponents not available yet');
+				return false;
+			}
+
+			const hasPropertyManager = modlerComponents.propertyManager?.initialized;
+			console.log('🔍 Fill buttons: PropertyManager available?', hasPropertyManager);
+			if (!hasPropertyManager) {
+				return false;
+			}
+
+			// Check if object is in a layout-enabled container
+			const inLayoutContainer = modlerComponents.propertyManager.isInLayoutContainer($displayObject.id);
+			console.log('🔍 Fill buttons: in layout container?', inLayoutContainer);
+			return inLayoutContainer;
+		} catch (error) {
+			console.warn('🔍 Fill buttons: Error accessing PropertyManager', error);
 			return false;
 		}
-
-		// Check if object is in a layout-enabled container
-		return window.modlerComponents.propertyManager.isInLayoutContainer($displayObject.id);
 	}
 
 	function getFillStates(): { x?: boolean; y?: boolean; z?: boolean } {
 		if (!$displayObject) return {};
-		if (!window.modlerComponents?.propertyManager) return {};
 
-		const pm = window.modlerComponents.propertyManager;
-		return {
-			x: pm.isAxisFilled($displayObject.id, 'x'),
-			y: pm.isAxisFilled($displayObject.id, 'y'),
-			z: pm.isAxisFilled($displayObject.id, 'z')
-		};
+		try {
+			const modlerComponents = (window as any).modlerComponents;
+			if (!modlerComponents?.propertyManager) return {};
+
+			const pm = modlerComponents.propertyManager;
+			return {
+				x: pm.isAxisFilled($displayObject.id, 'x'),
+				y: pm.isAxisFilled($displayObject.id, 'y'),
+				z: pm.isAxisFilled($displayObject.id, 'z')
+			};
+		} catch (error) {
+			return {};
+		}
 	}
 
 	function handleFillToggle(axis: 'x' | 'y' | 'z') {
-		if (window.modlerComponents?.propertyManager) {
-			window.modlerComponents.propertyManager.toggleFillProperty(axis);
+		try {
+			const modlerComponents = (window as any).modlerComponents;
+			if (modlerComponents?.propertyManager) {
+				modlerComponents.propertyManager.toggleFillProperty(axis);
+			}
+		} catch (error) {
+			console.warn('Fill toggle failed:', error);
 		}
 	}
 
 	function handleFillHover(axis: 'x' | 'y' | 'z' | null) {
-		// Trigger face highlighting via VisualEffects
-		const visualEffects = window.modlerComponents?.visualEffects;
-		if (!visualEffects) return;
+		try {
+			const modlerComponents = (window as any).modlerComponents;
+			const visualEffects = modlerComponents?.visualEffects;
+			if (!visualEffects) return;
 
-		if (axis) {
-			visualEffects.showAxisFaceHighlight(axis);
-		} else {
-			visualEffects.clearHighlight();
+			if (axis) {
+				visualEffects.showAxisFaceHighlight(axis);
+			} else {
+				visualEffects.clearHighlight();
+			}
+		} catch (error) {
+			// Silently fail for hover events
 		}
 	}
 
