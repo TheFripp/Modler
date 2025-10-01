@@ -316,31 +316,9 @@ function connectComponents() {
 function setupObjectSystemIntegration() {
     const { sceneController, objectStateManager } = modlerV2Components;
 
-    // Legacy UI support (if present)
-    if (sceneController && window.populateObjectList) {
-        sceneController.on('objectAdded', window.populateObjectList);
-        sceneController.on('objectRemoved', window.populateObjectList);
-        window.populateObjectList();
-    }
-
-    // CRITICAL: Bridge SceneController events to ObjectEventBus for UI notification
-    // ObjectStateManager already imports objects, we just need to ensure UI gets notified
-    if (sceneController && window.objectEventBus) {
-        sceneController.on('objectAdded', (objectData) => {
-            // ObjectStateManager.importObjectFromScene() already emits HIERARCHY event
-            // This is handled by SceneController → syncObjectToStateManager → importObjectFromScene
-        });
-
-        sceneController.on('objectRemoved', (objectData) => {
-            // Emit HIERARCHY event to trigger UI refresh for deletions
-            window.objectEventBus.emit(
-                window.objectEventBus.EVENT_TYPES.HIERARCHY,
-                objectData.id,
-                { action: 'delete', objectName: objectData.name },
-                { immediate: true, source: 'v2-main.setupObjectSystemIntegration' }
-            );
-        });
-    }
+    // NOTE: SceneController LIFECYCLE events (objectAdded/objectRemoved) are now handled by PropertyPanelSync
+    // This eliminates redundant event listeners and ensures single source of truth for UI updates
+    // Legacy window.populateObjectList() was never defined - removed dead code
 }
 
 /**

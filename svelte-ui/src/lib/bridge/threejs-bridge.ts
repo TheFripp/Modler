@@ -177,26 +177,10 @@ function setupDirectDataSync(components: any) {
 	}
 
 	// === SCENE → UI: Object Hierarchy Changes ===
+	// NOTE: LIFECYCLE events (objectAdded/objectRemoved) are now handled by PropertyPanelSync
+	// This eliminates duplicate hierarchy syncing
 	if (components.sceneController) {
-		// Listen to SceneController events for object creation/deletion
-		components.sceneController.on('objectAdded', (objectData: any) => {
-			syncHierarchyFromSceneController(components.sceneController);
-		});
-
-		components.sceneController.on('objectRemoved', (objectData: any) => {
-			syncHierarchyFromSceneController(components.sceneController);
-		});
-
-		// Hook into existing notification methods for backward compatibility
-		const originalNotifyHierarchyChanged = (window as any).notifyObjectHierarchyChanged;
-		(window as any).notifyObjectHierarchyChanged = () => {
-			if (originalNotifyHierarchyChanged) {
-				originalNotifyHierarchyChanged();
-			}
-			syncHierarchyFromSceneController(components.sceneController);
-		};
-
-		// Initial sync
+		// Initial sync only
 		syncHierarchyFromSceneController(components.sceneController);
 	}
 

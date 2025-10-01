@@ -369,12 +369,6 @@ class ContainerCrudManager {
 
         // Hierarchy updates handled automatically by PropertyPanelSync listening to events
 
-        // Legacy support for old object list
-        if (window.populateObjectList) {
-            setTimeout(() => {
-                window.populateObjectList();
-            }, 10);
-        }
 
         return true;
     }
@@ -443,12 +437,6 @@ class ContainerCrudManager {
 
         // Hierarchy updates handled automatically by PropertyPanelSync listening to events
 
-        // Legacy support for old object list
-        if (window.populateObjectList) {
-            setTimeout(() => {
-                window.populateObjectList();
-            }, 10);
-        }
 
         return true;
     }
