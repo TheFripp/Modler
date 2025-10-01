@@ -482,9 +482,9 @@ function createFloorGrid() {
     // Set renderOrder to prevent z-fighting with wireframes
     gridHelper.renderOrder = gridRenderOrder;
 
-    // Access centralized systems for floor plane creation
-    const geometryFactory = window.GeometryFactory ? new GeometryFactory() : null;
-    const materialManager = window.MaterialManager ? new MaterialManager() : null;
+    // PERFORMANCE: Reuse centralized factory instances instead of creating new ones
+    const geometryFactory = modlerV2Components.geometryFactory;
+    const materialManager = modlerV2Components.materialManager;
 
     // Floor plane creation using centralized systems where available (50x50 to match grid)
     let planeGeometry, planeMaterial;
@@ -532,9 +532,9 @@ function createFloorGrid() {
  * UNIFIED SYSTEM: Uses ObjectStateManager to ensure proper notification pipeline
  */
 function createDemoObjects() {
-    // Access centralized systems
-    const geometryFactory = window.GeometryFactory ? new GeometryFactory() : null;
-    const materialManager = window.MaterialManager ? new MaterialManager() : null;
+    // PERFORMANCE: Reuse centralized factory instances
+    const geometryFactory = modlerV2Components.geometryFactory;
+    const materialManager = modlerV2Components.materialManager;
     const objectStateManager = modlerV2Components.objectStateManager;
     const sc = modlerV2Components.sceneController;
 
