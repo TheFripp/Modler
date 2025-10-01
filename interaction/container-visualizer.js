@@ -578,9 +578,7 @@ class ContainerVisualizer extends ObjectVisualizer {
         if (!containerData.autoLayout?.padding) return false;
 
         const padding = containerData.autoLayout.padding;
-        return padding.top > 0 || padding.bottom > 0 ||
-               padding.left > 0 || padding.right > 0 ||
-               padding.front > 0 || padding.back > 0;
+        return padding.width > 0 || padding.height > 0 || padding.depth > 0;
     }
 
     /**
