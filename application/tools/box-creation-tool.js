@@ -139,6 +139,9 @@ class BoxCreationTool {
     finalizeBox() {
         if (!this.startPosition || !this.currentPosition || !this.creationObject) return;
 
+        // Store the object ID before we clear it
+        const createdObjectId = this.creationObject.userData.id;
+
         // Calculate dimensions
         const width = Math.abs(this.currentPosition.x - this.startPosition.x);
         const depth = Math.abs(this.currentPosition.z - this.startPosition.z);
@@ -195,6 +198,29 @@ class BoxCreationTool {
                     );
                 }
             }
+        }
+
+        // Register the creation as an undoable command AFTER finalization
+        const historyManager = window.modlerComponents?.historyManager;
+        if (historyManager && createdObjectId) {
+            // Create a simple command that just tracks the object ID for deletion on undo
+            const command = new CreateObjectCommand(newGeometry, this.creationObject.material, {
+                name: sceneController.getObject(createdObjectId)?.name || 'box',
+                type: 'cube',
+                position: this.creationObject.position.clone(),
+                selectable: true
+            });
+            // Set the ID to the already-created object
+            command.createdObjectId = createdObjectId;
+            command.objectSnapshot = command.createObjectSnapshot(sceneController.getObject(createdObjectId));
+
+            // Add to history (but don't execute, since object is already created)
+            historyManager.undoStack.push(command);
+            historyManager.clearRedoStack();
+            historyManager.trimHistory();
+            historyManager.notifyHistoryChanged();
+
+            logger.debug(`📝 Registered box creation in history: ${createdObjectId}`);
         }
 
         // Keep selection on the finalized box

@@ -33,9 +33,49 @@
 		// Enable dark mode
 		document.documentElement.classList.add('dark');
 
-
 		// Initialize the bridge with Three.js for real-time synchronization
 		initializeBridge();
+
+		// Handle keyboard shortcuts globally when toolbar has focus
+		const handleKeyDown = (event: KeyboardEvent) => {
+			// Skip if typing in an input field
+			const target = event.target as HTMLElement;
+			if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.contentEditable === 'true') {
+				return;
+			}
+
+			// Skip if modifier keys are pressed (let main app handle Cmd+Z, etc.)
+			if (event.metaKey || event.ctrlKey) {
+				return;
+			}
+
+			// Tool switching shortcuts
+			switch (event.key.toLowerCase()) {
+				case 'q':
+					event.preventDefault();
+					handleToolClick('select');
+					break;
+				case 'w':
+					event.preventDefault();
+					handleToolClick('move');
+					break;
+				case 'e':
+					event.preventDefault();
+					handleToolClick('push');
+					break;
+				case 'r':
+					event.preventDefault();
+					handleToolClick('box-creation');
+					break;
+			}
+		};
+
+		document.addEventListener('keydown', handleKeyDown);
+
+		// Cleanup
+		return () => {
+			document.removeEventListener('keydown', handleKeyDown);
+		};
 	});
 </script>
 

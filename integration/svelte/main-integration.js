@@ -132,7 +132,6 @@
             iframeMode = window !== window.parent;
 
             if (iframeMode) {
-                console.log('📱 Running in iframe mode');
                 setupIframeMessageHandling();
             } else {
                 // Running in direct mode (logging removed to reduce console noise)
@@ -227,8 +226,6 @@
                 showInitializationError('Components failed to initialize within 10 seconds. Check browser console for details.');
                 reject(new Error('Components initialization timeout'));
             }, timeout);
-
-            console.log('⏳ Waiting for modlerV2Ready event...');
         });
     }
 
@@ -236,23 +233,17 @@
      * Initialize UI system with automatic fallback
      */
     async function initializeUISystem() {
-        console.log('🔧 Initializing UI System with fallback support...');
-
         // Try direct component mounting first
         const directSuccess = await tryDirectComponentMounting();
 
         if (directSuccess) {
-            console.log('✅ Direct component mounting successful');
             return;
         }
 
         // Fallback to iframe-based system
-        console.log('🔄 Falling back to iframe-based panel system...');
         const iframeSuccess = await tryIframePanelSystem();
 
-        if (iframeSuccess) {
-            console.log('✅ Iframe fallback system successful');
-        } else {
+        if (!iframeSuccess) {
             console.error('❌ Both direct mounting and iframe fallback failed');
         }
     }
@@ -262,8 +253,6 @@
      */
     async function initializeSplitPanels() {
         try {
-            console.log('🎯 Initializing Split.js Panel System...');
-
             if (!window.SplitPanelController) {
                 console.error('❌ SplitPanelController not available');
                 return false;
@@ -277,7 +266,6 @@
                 splitPanelController.initialize();
             }, 1000);
 
-            console.log('✅ Split.js Panel System initialized successfully');
             return true;
 
         } catch (error) {
@@ -307,7 +295,7 @@
             // Initialize PropertyPanelSync for direct communication
             if (window.PropertyPanelSync) {
                 propertyPanelSync = new window.PropertyPanelSync(window.objectEventBus, directComponentManager);
-                console.log('✅ PropertyPanelSync initialized for direct communication');
+                window.modlerComponents.propertyPanelSync = propertyPanelSync;
             }
 
             return true;
@@ -339,7 +327,6 @@
                 return false;
             }
 
-            console.log('✅ Svelte server detected:', portDetector.getBaseUrl());
 
             // Step 3: Wait for Modler components to be ready
             await waitForModlerComponents();
@@ -350,7 +337,7 @@
             // Step 5: Initialize PropertyPanelSync for iframe communication
             if (window.PropertyPanelSync) {
                 propertyPanelSync = new window.PropertyPanelSync(window.objectEventBus, panelManager);
-                console.log('✅ PropertyPanelSync initialized for iframe communication');
+                window.modlerComponents.propertyPanelSync = propertyPanelSync;
             }
 
             // Step 6: Create and show iframe panels
@@ -369,11 +356,9 @@
      * Create iframe panels (restored from original working system)
      */
     function createIframePanels() {
-        console.log('📺 Creating iframe panels...');
         panelManager.createLeftOverlay();
         panelManager.createRightOverlay();
         panelManager.createMainToolbar();
-        console.log('✅ Iframe panels created successfully');
     }
 
     // createPanels() function removed - DirectComponentManager handles mounting automatically
@@ -400,7 +385,6 @@
                         });
                         resolve(false);
                     } else {
-                        console.log('⏳ Waiting for Svelte classes...');
                         setTimeout(checkClasses, 100);
                     }
                 }
@@ -421,7 +405,6 @@
                     // Modler components ready
                     resolve();
                 } else {
-                    console.log('⏳ Waiting for Modler components...');
                     setTimeout(checkComponents, 100);
                 }
             };
@@ -770,6 +753,10 @@
 
             if (type === 'property-update') {
                 handlePropertyUpdate(data.objectId, data.property, data.value);
+            } else if (type === 'tool-activation') {
+                activateTool(data.toolName);
+            } else if (type === 'snap-toggle') {
+                handleSnapToggle();
             } else if (type === 'visual-settings-changed') {
                 handleVisualSettingsUpdate(data.settings);
             } else if (type === 'get-visual-settings') {
@@ -940,6 +927,9 @@
         }
     }
 
+    // Expose tool activation for UI components
+    window.activateTool = activateTool;
+
     // ==================================================================================
     // SETTINGS HANDLERS (Delegated to SettingsHandler class)
     // ==================================================================================
@@ -1003,11 +993,17 @@
         const snapController = window.modlerComponents?.snapController;
         if (snapController) {
             snapController.toggle();
-            console.log('✅ Snap toggled:', snapController.getEnabled());
+            // Send updated tool state after snap toggle
+            const toolController = window.modlerComponents?.toolController;
+            const currentTool = toolController?.getActiveToolName() || 'select';
+            sendToolStateUpdate(currentTool);
         } else {
             console.warn('❌ SnapController not available');
         }
     }
+
+    // Expose snap toggle for UI components
+    window.toggleSnapping = handleSnapToggle;
 
     /**
      * Send tool state update to all panels
@@ -1030,6 +1026,7 @@
         } else if (propertyPanelSync) {
             propertyPanelSync.sendToolStateUpdate(toolName, { snapEnabled });
         }
+        // Silently skip if UI not initialized yet - will sync when ready
     }
 
 

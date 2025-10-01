@@ -329,7 +329,6 @@ function setupObjectSystemIntegration() {
         sceneController.on('objectAdded', (objectData) => {
             // ObjectStateManager.importObjectFromScene() already emits HIERARCHY event
             // This is handled by SceneController → syncObjectToStateManager → importObjectFromScene
-            console.log('🔗 Object added - unified system notified:', objectData.id);
         });
 
         sceneController.on('objectRemoved', (objectData) => {
@@ -340,10 +339,7 @@ function setupObjectSystemIntegration() {
                 { action: 'delete', objectName: objectData.name },
                 { immediate: true, source: 'v2-main.setupObjectSystemIntegration' }
             );
-            console.log('🔗 Object removed - unified system notified:', objectData.id);
         });
-
-        console.log('✅ SceneController events bridged to ObjectEventBus');
     }
 }
 
@@ -566,9 +562,7 @@ function createDemoObjects() {
         position: new THREE.Vector3(0, 1, 0)
     });
 
-    if (objectData) {
-        logger.info('✅ Demo Cube created through unified system');
-    } else {
+    if (!objectData) {
         logger.error('❌ Failed to create Demo Cube');
     }
 }
@@ -589,9 +583,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (canvas) {
         // Starting Modler V2 auto-initialization...
         initializeModlerV2(canvas).then((success) => {
-            if (success) {
-                console.log('✅ Auto-initialization completed successfully');
-            } else {
+            if (!success) {
                 console.error('❌ Auto-initialization completed with errors');
             }
         }).catch(error => {

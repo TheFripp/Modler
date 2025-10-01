@@ -41,6 +41,16 @@ class VisualizationManager {
         this.containerVisualizer.initializeWithConfigurationManager();
     }
 
+    // ====== COMPONENT GETTERS (reduce repeated lookups) ======
+
+    getSceneController() {
+        return window.modlerComponents?.sceneController;
+    }
+
+    getNavigationController() {
+        return window.modlerComponents?.navigationController;
+    }
+
     /**
      * Get the appropriate visualizer for an object
      */
@@ -51,13 +61,9 @@ class VisualizationManager {
         }
 
         // Determine object type
-        const sceneController = window.modlerComponents?.sceneController;
-        let isContainer = false;
-
-        if (sceneController) {
-            const objectData = sceneController.getObjectByMesh(object);
-            isContainer = objectData && objectData.isContainer;
-        }
+        const sceneController = this.getSceneController();
+        const objectData = sceneController?.getObjectByMesh(object);
+        const isContainer = objectData?.isContainer ?? false;
 
         // Select appropriate visualizer
         const visualizer = isContainer ? this.containerVisualizer : this.objectVisualizer;
@@ -142,29 +148,17 @@ class VisualizationManager {
         return visualizer.isInState(object, state);
     }
 
-    // Container-specific methods (delegate to ContainerVisualizer)
+    // Container-specific methods (delegate to NavigationController)
 
-    // REMOVED: Container navigation methods - NavigationController is the single authority
-    // VisualizationManager focuses solely on visual state management, not navigation
-    // Use NavigationController directly for all container navigation needs
-
-    /**
-     * Check if currently in container context - delegate to NavigationController
-     */
     isInContainerContext() {
-        const navigationController = window.modlerComponents?.navigationController;
-        return navigationController ? navigationController.isInContainerContext() : false;
+        const navigationController = this.getNavigationController();
+        return navigationController?.isInContainerContext() ?? false;
     }
 
-    /**
-     * Get current container context - delegate to NavigationController
-     */
     getContainerContext() {
-        const navigationController = window.modlerComponents?.navigationController;
-        return navigationController ? navigationController.getCurrentContainer()?.mesh : null;
+        const navigationController = this.getNavigationController();
+        return navigationController?.getCurrentContainer()?.mesh ?? null;
     }
-
-    // Legacy compatibility methods removed - visualizers use setState() directly
 
     // Performance optimization methods
 
@@ -315,14 +309,12 @@ class VisualizationManager {
     /**
      * Tool-specific highlighting (push tool, move tool, etc.)
      */
-    setToolHighlight(object, toolName, isActive) {
-        // For now, delegate to face highlighting
+    setToolHighlight(object, isActive) {
+        // For now, delegate to hover state
         // Future: Could have tool-specific states like 'push-hover', 'move-drag', etc.
         if (isActive) {
-            // Tool-specific highlighting logic would go here
             return this.setState(object, 'hovered');
         } else {
-            // Restore to previous state
             const currentState = this.getState(object);
             if (currentState === 'hovered') {
                 return this.setState(object, 'normal');

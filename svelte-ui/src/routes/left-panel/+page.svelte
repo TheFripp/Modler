@@ -679,12 +679,10 @@
 
 	function loadSettingsFromConfig() {
 		// Use PostMessage to request settings from parent window (avoids cross-origin issues)
-		console.log('🔄 Requesting settings from parent window...');
 
 		// Listen for responses BEFORE sending requests
 		const handleSettingsResponse = (event: MessageEvent) => {
 			if (event.data.type === 'visual-settings-response') {
-				console.log('✅ Received visual settings:', event.data.settings);
 				const settings = event.data.settings;
 				visualSettings.selection.color = settings.selection.color;
 				visualSettings.selection.lineWidth = settings.selection.lineWidth;
@@ -749,6 +747,47 @@
 		if (unitConverter) {
 			currentUnit = unitConverter.userUnit;
 		}
+
+		// Handle keyboard shortcuts globally when left panel has focus
+		const handleKeyDown = (event: KeyboardEvent) => {
+			// Skip if typing in an input field
+			const target = event.target as HTMLElement;
+			if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.contentEditable === 'true') {
+				return;
+			}
+
+			// Skip if modifier keys are pressed (let main app handle Cmd+Z, etc.)
+			if (event.metaKey || event.ctrlKey) {
+				return;
+			}
+
+			// Tool switching shortcuts
+			switch (event.key.toLowerCase()) {
+				case 'q':
+					event.preventDefault();
+					unifiedCommunication.sendToolActivation('select');
+					break;
+				case 'w':
+					event.preventDefault();
+					unifiedCommunication.sendToolActivation('move');
+					break;
+				case 'e':
+					event.preventDefault();
+					unifiedCommunication.sendToolActivation('push');
+					break;
+				case 'r':
+					event.preventDefault();
+					unifiedCommunication.sendToolActivation('box-creation');
+					break;
+			}
+		};
+
+		document.addEventListener('keydown', handleKeyDown);
+
+		// Cleanup
+		return () => {
+			document.removeEventListener('keydown', handleKeyDown);
+		};
 	});
 
 </script>

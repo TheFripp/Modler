@@ -38,7 +38,6 @@ class SplitPanelController {
         }
 
         try {
-            console.log('🎯 Initializing Split.js Panel Controller...');
 
             // Initialize Split.js with 3-panel layout
             this.splitInstance = Split(['.left-panel', '.viewport-area', '.property-panel'], {
@@ -68,7 +67,6 @@ class SplitPanelController {
             });
 
             this.isInitialized = true;
-            console.log('✅ Split.js Panel Controller initialized successfully');
 
 
         } catch (error) {

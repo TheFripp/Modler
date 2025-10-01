@@ -145,8 +145,9 @@ class SupportMeshFactory {
         edgeGeometry.computeBoundingSphere();
         edgeGeometry.computeBoundingBox();
 
-        // Scale larger to ensure visibility outside mesh (sits on top of faces)
-        wireframe.scale.setScalar(1.01);
+        // CAD PRINCIPLE: Never use mesh.scale for visibility
+        // Scale is always (1, 1, 1) - geometry defines exact dimensions
+        wireframe.scale.set(1, 1, 1);
         wireframe.renderOrder = 999; // Render on top of geometry
         wireframe.raycast = () => {}; // Non-raycastable
         wireframe.userData.supportMeshType = 'selectionWireframe';
@@ -184,8 +185,9 @@ class SupportMeshFactory {
         edgeGeometry.computeBoundingSphere();
         edgeGeometry.computeBoundingBox();
 
-        // Scale larger to ensure visibility outside mesh (sits on top of faces)
-        wireframe.scale.setScalar(1.005);
+        // CAD PRINCIPLE: Never use mesh.scale for visibility
+        // Scale is always (1, 1, 1) - geometry defines exact dimensions
+        wireframe.scale.set(1, 1, 1);
         wireframe.renderOrder = 998; // Render on top but below selection wireframe
         wireframe.raycast = () => {}; // Non-raycastable
         wireframe.userData.supportMeshType = 'cadWireframe';

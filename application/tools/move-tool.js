@@ -412,13 +412,35 @@ class MoveTool {
             const objectData = sceneController?.getObjectByMesh?.(draggedObject);
             const objectId = objectData?.id || draggedObject.uuid;
 
+            const finalPosition = {
+                x: draggedObject.position.x,
+                y: draggedObject.position.y,
+                z: draggedObject.position.z
+            };
+
             this.objectStateManager.updateObject(objectId, {
-                position: {
-                    x: draggedObject.position.x,
-                    y: draggedObject.position.y,
-                    z: draggedObject.position.z
-                }
+                position: finalPosition
             });
+
+            // Register move as undoable command
+            const historyManager = window.modlerComponents?.historyManager;
+            if (historyManager && this.dragStartPosition) {
+                // Only create command if position actually changed
+                const hasMoved =
+                    Math.abs(finalPosition.x - this.dragStartPosition.x) > 0.001 ||
+                    Math.abs(finalPosition.y - this.dragStartPosition.y) > 0.001 ||
+                    Math.abs(finalPosition.z - this.dragStartPosition.z) > 0.001;
+
+                if (hasMoved) {
+                    const command = new MoveObjectCommand(objectId, this.dragStartPosition, finalPosition);
+                    historyManager.undoStack.push(command);
+                    historyManager.clearRedoStack();
+                    historyManager.trimHistory();
+                    historyManager.notifyHistoryChanged();
+
+                    logger.debug(`📝 Registered move in history: ${objectId}`);
+                }
+            }
         }
 
         // Clear drag state

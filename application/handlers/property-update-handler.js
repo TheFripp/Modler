@@ -144,28 +144,68 @@ class PropertyUpdateHandler {
             return this.executeLayoutPropertyChangeCommand(objectId, property, value);
         }
 
+        // For all other properties, wrap in UpdatePropertyCommand for undo support
+        // Get old value before making the change
+        const oldValue = this.getPropertyValue(objectData, property);
+
+        let success = false;
+
         // Handle dimension property changes through centralized system
         if (property.startsWith('dimensions.')) {
-            return this.handleObjectDimensionChange(objectId, property, value);
+            success = this.handleObjectDimensionChange(objectId, property, value);
         }
-
         // Handle transform property changes (position, rotation)
-        if (property.startsWith('position.') || property.startsWith('rotation.')) {
-            return this.handleObjectTransformChange(objectId, property, value);
+        else if (property.startsWith('position.') || property.startsWith('rotation.')) {
+            success = this.handleObjectTransformChange(objectId, property, value);
         }
-
         // Handle material property changes
-        if (property.startsWith('material.')) {
-            return this.handleObjectMaterialChange(objectId, property, value);
+        else if (property.startsWith('material.')) {
+            success = this.handleObjectMaterialChange(objectId, property, value);
         }
-
         // Handle container sizing property changes
-        if (objectData && objectData.isContainer && this.isContainerSizingProperty(property)) {
-            return this.handleContainerSizingChange(objectId, property, value);
+        else if (objectData && objectData.isContainer && this.isContainerSizingProperty(property)) {
+            success = this.handleContainerSizingChange(objectId, property, value);
+        }
+        // Handle other property changes here in the future
+        else {
+            success = true;
         }
 
-        // Handle other property changes here in the future
-        return true;
+        // Register as undoable command if the change was successful
+        if (success && oldValue !== value) {
+            const historyManager = window.modlerComponents?.historyManager;
+            if (historyManager) {
+                const command = new UpdatePropertyCommand(objectId, property, oldValue, value);
+                historyManager.undoStack.push(command);
+                historyManager.clearRedoStack();
+                historyManager.trimHistory();
+                historyManager.notifyHistoryChanged();
+
+                logger.debug(`📝 Registered property change in history: ${property}`);
+            }
+        }
+
+        return success;
+    }
+
+    /**
+     * Get current property value from object data
+     */
+    getPropertyValue(objectData, property) {
+        if (!objectData) return undefined;
+
+        const parts = property.split('.');
+        let value = objectData;
+
+        for (const part of parts) {
+            if (value && typeof value === 'object' && part in value) {
+                value = value[part];
+            } else {
+                return undefined;
+            }
+        }
+
+        return value;
     }
 
     /**

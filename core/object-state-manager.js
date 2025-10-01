@@ -44,6 +44,50 @@ class ObjectStateManager extends EventTarget {
         this.nextFramePropagations = new Set(); // Deferred propagations for next frame
     }
 
+    // ====== COMPONENT GETTERS (reduce repeated lookups) ======
+
+    getSelectionController() {
+        return window.modlerComponents?.selectionController;
+    }
+
+    getContainerCrudManager() {
+        return window.modlerComponents?.containerCrudManager;
+    }
+
+    getVisualEffects() {
+        return window.modlerComponents?.visualEffects;
+    }
+
+    /**
+     * Apply geometry updates (dimension/position/rotation) to SceneController
+     * Handles the repeated pattern of: apply updates → sync back → trigger layout
+     */
+    applyGeometryUpdate(object, updateType, sceneMethodName, triggerLayout = false) {
+        const pendingKey = `_pending${updateType}Updates`;
+        const propertyKey = updateType.toLowerCase();
+        const sceneMethod = this.sceneController[sceneMethodName];
+
+        if (!object[pendingKey] || !sceneMethod) return;
+
+        // Apply updates to SceneController
+        const updates = object[pendingKey];
+        Object.entries(updates).forEach(([axis, value]) => {
+            sceneMethod.call(this.sceneController, object.id, axis, value);
+        });
+        delete object[pendingKey];
+
+        // Sync back from SceneController (single source of truth)
+        const sceneObject = this.sceneController.getObject(object.id);
+        if (sceneObject?.[propertyKey]) {
+            object[propertyKey] = { ...sceneObject[propertyKey] };
+        }
+
+        // Trigger parent layout update if needed (BOTTOM-UP PROPAGATION)
+        if (triggerLayout) {
+            this.scheduleParentLayoutUpdate(object.id);
+        }
+    }
+
     /**
      * Initialize with system references
      */
@@ -60,7 +104,7 @@ class ObjectStateManager extends EventTarget {
         this.importFromSceneController();
 
         // Set up SelectionController integration if available
-        this.setupSelectionControllerIntegration(systems);
+        this.setupSelectionControllerIntegration();
 
         // Make ObjectStateManager globally available immediately
         if (window.modlerComponents) {
@@ -73,8 +117,8 @@ class ObjectStateManager extends EventTarget {
     /**
      * Set up bidirectional integration with SelectionController
      */
-    setupSelectionControllerIntegration(systems) {
-        const selectionController = window.modlerComponents?.selectionController;
+    setupSelectionControllerIntegration() {
+        const selectionController = this.getSelectionController();
         if (!selectionController) return;
 
         // Listen to SelectionController changes and sync to ObjectStateManager
@@ -156,51 +200,59 @@ class ObjectStateManager extends EventTarget {
     }
 
     /**
-     * Create legacy format for fallback compatibility
+     * Extract Vector3 data from Three.js objects
      * @private
      */
-    createLegacyFormat(objectData) {
-        return {
+    extractVector3(vector3, defaultValue = { x: 0, y: 0, z: 0 }) {
+        return vector3 ? { x: vector3.x, y: vector3.y, z: vector3.z } : defaultValue;
+    }
+
+    /**
+     * Build standard object structure from objectData
+     * @private
+     */
+    buildObjectStructure(objectData, includeExtendedProps = true) {
+        const structure = {
             // Core identity
             id: objectData.id,
             name: objectData.name,
             type: objectData.type,
 
             // 3D properties
-            position: objectData.mesh ? {
-                x: objectData.mesh.position.x,
-                y: objectData.mesh.position.y,
-                z: objectData.mesh.position.z
-            } : { x: 0, y: 0, z: 0 },
-
-            rotation: objectData.mesh ? {
-                x: objectData.mesh.rotation.x,
-                y: objectData.mesh.rotation.y,
-                z: objectData.mesh.rotation.z
-            } : { x: 0, y: 0, z: 0 },
-
-            scale: { x: 1, y: 1, z: 1 },
+            position: this.extractVector3(objectData.mesh?.position),
+            rotation: this.extractVector3(objectData.mesh?.rotation),
             dimensions: objectData.dimensions || { x: 1, y: 1, z: 1 },
 
             // Container properties
             isContainer: objectData.isContainer || false,
             parentContainer: objectData.parentContainer || null,
             autoLayout: objectData.autoLayout || { enabled: false, direction: 'x' },
-            childIds: [],
-            layoutMode: null,
 
             // Material properties
-            material: objectData.material || { color: '#888888', opacity: 1, transparent: false },
-
-            // State flags
-            selected: false,
-            locked: false,
-            visible: true,
-
-            // Metadata
-            formatVersion: '1.0.0',
-            lastModified: Date.now()
+            material: objectData.material || { color: '#888888', opacity: 1, transparent: false }
         };
+
+        // Add extended properties for legacy format
+        if (includeExtendedProps) {
+            structure.scale = { x: 1, y: 1, z: 1 };
+            structure.childIds = [];
+            structure.layoutMode = null;
+            structure.selected = false;
+            structure.locked = false;
+            structure.visible = true;
+            structure.formatVersion = '1.0.0';
+            structure.lastModified = Date.now();
+        }
+
+        return structure;
+    }
+
+    /**
+     * Create legacy format for fallback compatibility
+     * @private
+     */
+    createLegacyFormat(objectData) {
+        return this.buildObjectStructure(objectData, true);
     }
 
     /**
@@ -212,38 +264,11 @@ class ObjectStateManager extends EventTarget {
             return;
         }
 
-        this.objects.set(objectData.id, {
-            // Core identity
-            id: objectData.id,
-            name: objectData.name,
-            type: objectData.type,
+        // Build standard structure and add mesh reference
+        const importedObject = this.buildObjectStructure(objectData, false);
+        importedObject.mesh = objectData.mesh;
 
-            // 3D properties
-            position: objectData.mesh ? {
-                x: objectData.mesh.position.x,
-                y: objectData.mesh.position.y,
-                z: objectData.mesh.position.z
-            } : { x: 0, y: 0, z: 0 },
-
-            rotation: objectData.mesh ? {
-                x: objectData.mesh.rotation.x,
-                y: objectData.mesh.rotation.y,
-                z: objectData.mesh.rotation.z
-            } : { x: 0, y: 0, z: 0 },
-
-            dimensions: objectData.dimensions || { x: 1, y: 1, z: 1 },
-
-            // Container properties
-            isContainer: objectData.isContainer || false,
-            parentContainer: objectData.parentContainer || null,
-            autoLayout: objectData.autoLayout || { enabled: false, direction: 'x' },
-
-            // Material properties
-            material: objectData.material || { color: 0x888888 },
-
-            // Internal references (mesh kept for backward compatibility)
-            mesh: objectData.mesh
-        });
+        this.objects.set(objectData.id, importedObject);
 
         // CRITICAL: Rebuild hierarchy and emit events to trigger UI updates
         this.rebuildHierarchy();
@@ -468,53 +493,14 @@ class ObjectStateManager extends EventTarget {
             // PROXY PATTERN: Apply ALL geometry updates directly to SceneController
             // SceneController is the single source of truth for all 3D properties
 
-            // Apply dimension updates
-            if (object._pendingDimensionUpdates && this.sceneController.updateObjectDimensions) {
-                const updates = object._pendingDimensionUpdates;
-                Object.entries(updates).forEach(([axis, value]) => {
-                    this.sceneController.updateObjectDimensions(object.id, axis, value);
-                });
-                delete object._pendingDimensionUpdates;
-
-                // Sync back from SceneController
-                const sceneObject = this.sceneController.getObject(object.id);
-                if (sceneObject?.dimensions) {
-                    object.dimensions = { ...sceneObject.dimensions };
-                }
-
-                // BOTTOM-UP PROPAGATION: Child dimensions changed → schedule parent layout update
-                this.scheduleParentLayoutUpdate(object.id);
-            }
+            // Apply dimension updates (triggers parent layout on change)
+            this.applyGeometryUpdate(object, 'Dimension', 'updateObjectDimensions', true);
 
             // Apply position updates
-            if (object._pendingPositionUpdates && this.sceneController.updateObjectPosition) {
-                const updates = object._pendingPositionUpdates;
-                Object.entries(updates).forEach(([axis, value]) => {
-                    this.sceneController.updateObjectPosition(object.id, axis, value);
-                });
-                delete object._pendingPositionUpdates;
-
-                // Sync back from SceneController
-                const sceneObject = this.sceneController.getObject(object.id);
-                if (sceneObject?.position) {
-                    object.position = { ...sceneObject.position };
-                }
-            }
+            this.applyGeometryUpdate(object, 'Position', 'updateObjectPosition', false);
 
             // Apply rotation updates
-            if (object._pendingRotationUpdates && this.sceneController.updateObjectRotation) {
-                const updates = object._pendingRotationUpdates;
-                Object.entries(updates).forEach(([axis, value]) => {
-                    this.sceneController.updateObjectRotation(object.id, axis, value);
-                });
-                delete object._pendingRotationUpdates;
-
-                // Sync back from SceneController
-                const sceneObject = this.sceneController.getObject(object.id);
-                if (sceneObject?.rotation) {
-                    object.rotation = { ...sceneObject.rotation };
-                }
-            }
+            this.applyGeometryUpdate(object, 'Rotation', 'updateObjectRotation', false);
 
             // Sync non-geometry properties to SceneController first (needed for layout)
             const sceneObject = this.sceneController.getObject(object.id);
@@ -533,14 +519,14 @@ class ObjectStateManager extends EventTarget {
 
                 // Resize container to fit the laid out objects
                 if (layoutResult && layoutResult.success && layoutResult.layoutBounds) {
-                    const containerCrudManager = window.modlerComponents?.containerCrudManager;
+                    const containerCrudManager = this.getContainerCrudManager();
                     if (containerCrudManager) {
                         containerCrudManager.resizeContainerToLayoutBounds(sceneObject, layoutResult.layoutBounds);
                     }
                 }
 
                 // Show padding visualization if padding is set
-                const visualEffects = window.modlerComponents?.visualEffects;
+                const visualEffects = this.getVisualEffects();
                 if (visualEffects && object.autoLayout.padding) {
                     visualEffects.showPaddingVisualization(sceneObject.mesh, object.autoLayout.padding);
                 } else if (visualEffects) {
@@ -660,22 +646,31 @@ class ObjectStateManager extends EventTarget {
     }
 
     /**
+     * Safe serialization wrapper for PostMessage
+     * @private
+     */
+    safeSerializeForPostMessage(data, errorContext = '') {
+        if (!this.objectDataFormat) return data;
+
+        try {
+            if (Array.isArray(data)) {
+                return data.map(item => this.objectDataFormat.serializeForPostMessage(item)).filter(Boolean);
+            }
+            return this.objectDataFormat.serializeForPostMessage(data);
+        } catch (error) {
+            console.error(`ObjectStateManager: Failed to serialize ${errorContext}:`, error);
+            return data;
+        }
+    }
+
+    /**
      * Get object in PostMessage-ready format
      * @param {string} objectId - Object ID
      * @returns {Object|null} PostMessage-safe object data
      */
     getObjectForPostMessage(objectId) {
         const object = this.objects.get(objectId);
-        if (!object || !this.objectDataFormat) {
-            return object; // Return as-is if ObjectDataFormat not available
-        }
-
-        try {
-            return this.objectDataFormat.serializeForPostMessage(object);
-        } catch (error) {
-            console.error(`ObjectStateManager: Failed to serialize object ${objectId} for PostMessage:`, error);
-            return object;
-        }
+        return this.safeSerializeForPostMessage(object, `object ${objectId}`);
     }
 
     /**
@@ -683,18 +678,7 @@ class ObjectStateManager extends EventTarget {
      * @returns {Array<Object>} Array of PostMessage-safe objects
      */
     getAllObjectsForPostMessage() {
-        const objects = Array.from(this.objects.values());
-
-        if (!this.objectDataFormat) {
-            return objects; // Return as-is if ObjectDataFormat not available
-        }
-
-        try {
-            return objects.map(obj => this.objectDataFormat.serializeForPostMessage(obj)).filter(Boolean);
-        } catch (error) {
-            console.error('ObjectStateManager: Failed to serialize objects for PostMessage:', error);
-            return objects;
-        }
+        return this.safeSerializeForPostMessage(Array.from(this.objects.values()), 'objects');
     }
 
     /**
@@ -702,16 +686,7 @@ class ObjectStateManager extends EventTarget {
      * @returns {Array<Object>} PostMessage-safe hierarchy
      */
     getHierarchyForPostMessage() {
-        if (!this.objectDataFormat) {
-            return this.hierarchy; // Return as-is if ObjectDataFormat not available
-        }
-
-        try {
-            return this.hierarchy.map(obj => this.objectDataFormat.serializeForPostMessage(obj)).filter(Boolean);
-        } catch (error) {
-            console.error('ObjectStateManager: Failed to serialize hierarchy for PostMessage:', error);
-            return this.hierarchy;
-        }
+        return this.safeSerializeForPostMessage(this.hierarchy, 'hierarchy');
     }
 
     /**
@@ -779,7 +754,7 @@ class ObjectStateManager extends EventTarget {
 
                 // Resize container to fit new layout
                 if (layoutResult?.success && layoutResult.layoutBounds) {
-                    const containerCrudManager = window.modlerComponents?.containerCrudManager;
+                    const containerCrudManager = this.getContainerCrudManager();
                     if (containerCrudManager) {
                         containerCrudManager.resizeContainerToLayoutBounds(container, layoutResult.layoutBounds);
                     }

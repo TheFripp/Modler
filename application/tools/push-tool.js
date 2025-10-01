@@ -214,6 +214,18 @@ class PushTool {
             }
         }
 
+        // Store initial dimensions and position for undo
+        const sceneController = window.modlerComponents?.sceneController;
+        const objectData = sceneController?.getObjectByMesh(targetObject);
+        if (objectData) {
+            this.initialDimensions = objectData.dimensions ? { ...objectData.dimensions } : null;
+            this.initialPosition = targetObject.position ? {
+                x: targetObject.position.x,
+                y: targetObject.position.y,
+                z: targetObject.position.z
+            } : null;
+        }
+
         // Store initial mouse position for movement calculation
         const inputController = window.modlerComponents?.inputController;
         if (inputController) {
@@ -519,12 +531,56 @@ class PushTool {
      */
     endFacePush() {
         const pushedObject = this.pushedObject; // Store reference before clearing
+        const initialDimensions = this.initialDimensions;
+        const initialPosition = this.initialPosition;
 
         // Record which axis was manipulated for Tab key focus
         if (this.pushFaceNormal && pushedObject && window.inputFocusManager) {
             const dominantAxis = this.getDominantAxisFromNormal(this.pushFaceNormal);
             const objectId = pushedObject.userData?.objectId || pushedObject.userData?.id || pushedObject.id;
             window.inputFocusManager.recordManipulation(objectId, `dimensions.${dominantAxis}`);
+        }
+
+        // Register push as undoable command
+        if (pushedObject && initialDimensions && initialPosition) {
+            const sceneController = window.modlerComponents?.sceneController;
+            const objectData = sceneController?.getObjectByMesh(pushedObject);
+
+            if (objectData) {
+                const finalDimensions = objectData.dimensions ? { ...objectData.dimensions } : null;
+                const finalPosition = {
+                    x: pushedObject.position.x,
+                    y: pushedObject.position.y,
+                    z: pushedObject.position.z
+                };
+
+                // Only create command if dimensions actually changed
+                const hasChanged = finalDimensions && (
+                    Math.abs(finalDimensions.x - initialDimensions.x) > 0.001 ||
+                    Math.abs(finalDimensions.y - initialDimensions.y) > 0.001 ||
+                    Math.abs(finalDimensions.z - initialDimensions.z) > 0.001
+                );
+
+                if (hasChanged) {
+                    const historyManager = window.modlerComponents?.historyManager;
+                    if (historyManager) {
+                        const command = new PushFaceCommand(
+                            objectData.id,
+                            initialDimensions,
+                            finalDimensions,
+                            initialPosition,
+                            finalPosition
+                        );
+
+                        historyManager.undoStack.push(command);
+                        historyManager.clearRedoStack();
+                        historyManager.trimHistory();
+                        historyManager.notifyHistoryChanged();
+
+                        logger.debug(`📝 Registered push in history: ${objectData.id}`);
+                    }
+                }
+            }
         }
 
         this.resetPushState();

@@ -203,6 +203,11 @@ class InputController {
             return;
         }
 
+        // Skip if modifier keys are pressed (let ToolController handle these)
+        if (event.metaKey || event.ctrlKey) {
+            return;
+        }
+
         if (!this.keys.has(event.code)) {
             this.keys.add(event.code);
 

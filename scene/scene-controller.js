@@ -32,7 +32,25 @@ class SceneController {
         
         // SceneController initialized
     }
-    
+
+    // ====== COMPONENT GETTERS (reduce repeated lookups) ======
+
+    getSupportMeshFactory() {
+        return window.modlerComponents?.supportMeshFactory;
+    }
+
+    getObjectStateManager() {
+        return window.modlerComponents?.objectStateManager;
+    }
+
+    getNavigationController() {
+        return window.modlerComponents?.navigationController;
+    }
+
+    getContainerCrudManager() {
+        return window.modlerComponents?.containerCrudManager;
+    }
+
     /**
      * Generate sequential names for objects
      * @param {string} type - Object type ('box', 'container')
@@ -97,7 +115,7 @@ class SceneController {
 
         // UNIFIED ARCHITECTURE: Create support meshes for all objects
         // Support mesh factory handles containers and regular objects differently
-        const supportMeshFactory = window.modlerComponents?.supportMeshFactory;
+        const supportMeshFactory = this.getSupportMeshFactory();
         if (supportMeshFactory) {
             // Create support meshes for all objects (factory handles containers vs regular objects)
             supportMeshFactory.createObjectSupportMeshes(mesh);
@@ -146,7 +164,7 @@ class SceneController {
         }
         
         // Clean up support meshes first
-        const supportMeshFactory = window.modlerComponents?.supportMeshFactory;
+        const supportMeshFactory = this.getSupportMeshFactory();
         if (supportMeshFactory) {
             supportMeshFactory.cleanupSupportMeshes(objectData.mesh);
         }
@@ -416,7 +434,7 @@ class SceneController {
 
         // Resize container to fit the laid out objects
         if (layoutResult && layoutResult.success && layoutResult.layoutBounds) {
-            const containerCrudManager = window.modlerComponents?.containerCrudManager;
+            const containerCrudManager = this.getContainerCrudManager();
             if (containerCrudManager) {
                 containerCrudManager.resizeContainerToLayoutBounds(container, layoutResult.layoutBounds);
             }
@@ -708,7 +726,7 @@ class SceneController {
         obj.parentContainer = parentId;
 
         // PERFORMANCE: Clear depth cache since hierarchy changed
-        const objectStateManager = window.modlerComponents?.objectStateManager;
+        const objectStateManager = this.getObjectStateManager();
         if (objectStateManager?.clearDepthCache) {
             objectStateManager.clearDepthCache();
         }
@@ -867,7 +885,7 @@ class SceneController {
         const geometryUtils = window.GeometryUtils;
         if (geometryUtils) {
             // Check if we're in container context and this is the container we're stepped into
-            const navigationController = window.modlerComponents?.navigationController;
+            const navigationController = this.getNavigationController();
             const isInContainerContext = navigationController?.isInContainerContext() || false;
             const containerContext = navigationController?.getCurrentContainer()?.mesh;
 
@@ -1049,9 +1067,19 @@ class SceneController {
             mesh.rotation.copy(options.rotation);
         }
 
+        // CAD PRINCIPLE: Scale must always be (1, 1, 1) for exact measurements
+        // Dimensions are defined by geometry, NOT by mesh.scale
+        // If options.scale is provided during restoration, validate it
         if (options.scale) {
-            mesh.scale.copy(options.scale);
+            // Only allow (1,1,1) - reject any other scale values
+            if (Math.abs(options.scale.x - 1) > 0.001 ||
+                Math.abs(options.scale.y - 1) > 0.001 ||
+                Math.abs(options.scale.z - 1) > 0.001) {
+                console.warn(`CAD violation: Attempted to set non-uniform scale ${options.scale.x},${options.scale.y},${options.scale.z} - forcing to (1,1,1)`);
+            }
         }
+        // Always enforce (1,1,1) scale for CAD precision
+        mesh.scale.set(1, 1, 1);
     }
 
     /**
@@ -1080,7 +1108,7 @@ class SceneController {
         }
 
         // Get ObjectStateManager reference dynamically (handles initialization timing)
-        const objectStateManager = window.modlerComponents?.objectStateManager;
+        const objectStateManager = this.getObjectStateManager();
 
         if (!objectStateManager) {
             // Defer sync until ObjectStateManager is available (retry up to 10 times)
@@ -1169,7 +1197,7 @@ class SceneController {
         }
 
         // Check if ObjectStateManager is now available
-        const objectStateManager = window.modlerComponents?.objectStateManager;
+        const objectStateManager = this.getObjectStateManager();
 
         if (objectStateManager) {
             this.syncObjectToStateManager(objectData);
@@ -1189,7 +1217,7 @@ class SceneController {
      */
     refreshCadWireframes() {
 
-        const supportMeshFactory = window.modlerComponents?.supportMeshFactory;
+        const supportMeshFactory = this.getSupportMeshFactory();
         if (!supportMeshFactory) {
             console.warn('❌ SupportMeshFactory not available for CAD wireframe refresh');
             return;

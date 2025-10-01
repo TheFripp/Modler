@@ -90,7 +90,6 @@ class SettingsHandler {
      * Handle request for current visual settings
      */
     handleGetVisualSettings(source) {
-        console.log('📨 SettingsHandler: Received get-visual-settings request');
         const configurationManager = this.getConfigManager();
         if (!configurationManager) {
             console.warn('❌ ConfigurationManager not available for getting visual settings');
@@ -111,7 +110,6 @@ class SettingsHandler {
             }
         };
 
-        console.log('📤 SettingsHandler: Sending visual-settings-response:', currentSettings);
 
         // ARCHITECTURE: Route through PropertyPanelSync (ONLY authorized postMessage source)
         const propertyPanelSync = this.getPropertyPanelSync();

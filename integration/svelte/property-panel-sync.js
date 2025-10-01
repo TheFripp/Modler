@@ -389,7 +389,8 @@ class PropertyPanelSync {
         const {
             throttle = true,
             panels = ['right'], // Default to property panel
-            includeContext = true
+            includeContext = true,
+            customData = null
         } = options;
 
         try {
@@ -425,6 +426,11 @@ class PropertyPanelSync {
             // Add container context if requested
             if (includeContext) {
                 data.containerContext = this.getContainerContext();
+            }
+
+            // Merge customData if provided (for tool state, settings, etc.)
+            if (customData) {
+                Object.assign(data, customData);
             }
 
             // Handle throttling for UI performance

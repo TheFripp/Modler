@@ -32,7 +32,6 @@ class ToolController {
             // Instantiate the tool with dependencies
             tool = new toolClass(this.selectionController, this.visualEffects);
             this.tools.set(name, tool);
-            logger.debug(`Tool '${name}' registered successfully`);
         } catch (error) {
             logger.error(`Error creating ${name} tool:`, error);
             throw error;
@@ -77,8 +76,6 @@ class ToolController {
         this.inputController.currentTool = toolName;
         this.activeTool = this.tools.get(toolName);
         this.activeToolName = toolName;
-
-        logger.debug(`Switched to tool: ${toolName}`);
 
         // Activate new tool
         if (this.activeTool && this.activeTool.activate) {
@@ -169,15 +166,15 @@ class ToolController {
             // Skip if any input field is focused (handled by InputController)
             const activeElement = document.activeElement;
             const isInputFocused = activeElement && (
-                activeElement.tagName === 'INPUT' || 
+                activeElement.tagName === 'INPUT' ||
                 activeElement.tagName === 'TEXTAREA' ||
                 activeElement.contentEditable === 'true'
             );
-            
+
             if (isInputFocused) {
                 return;
             }
-            
+
             switch (event.key) {
                 case 'f':
                 case 'F':
@@ -190,8 +187,48 @@ class ToolController {
                         return false;
                     }
                     break;
+
+                case 'z':
+                case 'Z':
+                    // Cmd+Z or Ctrl+Z: Undo
+                    // Cmd+Shift+Z or Ctrl+Shift+Z: Redo
+                    if (event.metaKey || event.ctrlKey) {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        event.stopImmediatePropagation();
+
+                        if (event.shiftKey) {
+                            this.redo();
+                        } else {
+                            this.undo();
+                        }
+                        return false;
+                    }
+                    break;
+
+                case 'y':
+                case 'Y':
+                    // Cmd+Y or Ctrl+Y: Redo (alternative)
+                    if (event.metaKey || event.ctrlKey) {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        event.stopImmediatePropagation();
+                        this.redo();
+                        return false;
+                    }
+                    break;
+
+                case 'Delete':
+                case 'Backspace':
+                    // Delete or Backspace: Delete selected objects
+                    // Prevent browser back navigation on Backspace
+                    event.preventDefault();
+                    event.stopPropagation();
+                    event.stopImmediatePropagation();
+                    this.deleteSelectedObjects();
+                    return false;
             }
-        });
+        }, true); // Use capture phase to handle before other listeners
     }
     
     /**
@@ -357,7 +394,77 @@ class ToolController {
         const tool = this.tools.get(toolName);
         return tool ? tool.getCapabilities() : null;
     }
-    
+
+    /**
+     * Undo the last command
+     */
+    undo() {
+        const historyManager = window.modlerComponents?.historyManager;
+
+        if (!historyManager) {
+            logger.warn('HistoryManager not available for undo');
+            return false;
+        }
+
+        const success = historyManager.undo();
+        return success;
+    }
+
+    /**
+     * Redo the last undone command
+     */
+    redo() {
+        const historyManager = window.modlerComponents?.historyManager;
+
+        if (!historyManager) {
+            logger.warn('HistoryManager not available for redo');
+            return false;
+        }
+
+        const success = historyManager.redo();
+        return success;
+    }
+
+    /**
+     * Delete currently selected objects
+     * Creates an undoable delete command through the history manager
+     */
+    deleteSelectedObjects() {
+        const selectedObjects = this.selectionController.getSelectedObjects();
+
+        if (selectedObjects.length === 0) {
+            logger.debug('No objects selected to delete');
+            return false;
+        }
+
+        // Convert meshes to object IDs
+        const sceneController = window.modlerComponents?.sceneController;
+        const objectIds = [];
+
+        selectedObjects.forEach(mesh => {
+            const objectData = sceneController.getObjectByMesh(mesh);
+            if (objectData) {
+                objectIds.push(objectData.id);
+            }
+        });
+
+        if (objectIds.length === 0) {
+            logger.warn('No valid objects found to delete');
+            return false;
+        }
+
+        // Create and execute delete command through history manager
+        const deleteCommand = new DeleteObjectCommand(objectIds);
+        const historyManager = window.modlerComponents?.historyManager;
+
+        if (historyManager) {
+            return historyManager.executeCommand(deleteCommand);
+        } else {
+            logger.error('HistoryManager not available for delete');
+            return false;
+        }
+    }
+
     /**
      * Shutdown all tools
      */

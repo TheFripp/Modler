@@ -96,6 +96,18 @@ function setupPostMessageFallback() {
 					return;
 				}
 
+				// Handle tool state updates (sent via PropertyPanelSync)
+				if (data.updateType === 'tool-state-update') {
+					if (data.toolState) {
+						const update: any = { activeTool: data.toolState.activeTool };
+						if (data.snapEnabled !== undefined) {
+							update.snapEnabled = data.snapEnabled;
+						}
+						toolState.set(update);
+					}
+					return; // Done processing tool state update
+				}
+
 				// Update selected objects in store with error handling
 				if (data.selectedObjects) {
 					try {
@@ -127,20 +139,20 @@ function setupPostMessageFallback() {
 			}
 		}
 
-		// Handle tool state updates
+		// Legacy: Handle tool state updates sent directly (backward compatibility)
 		else if (event.data.type === 'tool-state-update') {
 			// Tool state updates from keyboard shortcuts or direct tool switching
 			if (event.data.data && event.data.data.toolState) {
-				toolState.set(event.data.data.toolState);
-			} else {
-				console.warn('⚠️ Tool state update missing toolState data:', event.data);
+				const update: any = { activeTool: event.data.data.toolState.activeTool };
+				if (event.data.data.snapEnabled !== undefined) {
+					update.snapEnabled = event.data.data.snapEnabled;
+				}
+				toolState.set(update);
 			}
 		}
 
 		// Handle other message types as needed
 	});
-
-	console.log('✅ PostMessage listener setup for iframe communication');
 }
 
 /**

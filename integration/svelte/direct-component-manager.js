@@ -23,7 +23,6 @@ class DirectComponentManager {
         if (this.isInitialized) return;
 
         try {
-            console.log('🔧 Initializing Direct Component Manager...');
 
             // Import Svelte components dynamically
             await this.loadComponentModules();
@@ -32,7 +31,6 @@ class DirectComponentManager {
             await this.mountAllComponents();
 
             this.isInitialized = true;
-            console.log('✅ Direct Component Manager initialized successfully');
 
             // Initial data sync handled by Svelte bridge (threejs-bridge.ts)
             // No need for delayed refresh - race condition prone
@@ -59,7 +57,6 @@ class DirectComponentManager {
                 mainToolbar: 'MainToolbar'
             };
 
-            console.log('📦 Component modules loaded');
         } catch (error) {
             console.error('❌ Failed to load component modules:', error);
             throw error;
@@ -110,7 +107,6 @@ class DirectComponentManager {
                 initialData: toolbarData
             });
 
-            console.log('🎯 All components mounted successfully');
         } catch (error) {
             console.error('❌ Failed to mount components:', error);
             throw error;
@@ -162,7 +158,6 @@ class DirectComponentManager {
             mounted: true
         };
 
-        console.log(`✅ ${componentName} mounted in ${containerId}`);
     }
 
     /**
@@ -289,12 +284,10 @@ class DirectComponentManager {
         try {
             // Try ObjectStateManager first
             let objects = components?.objectStateManager?.getAllObjects?.() || [];
-            console.log('🔍 ObjectStateManager objects:', objects.length, objects);
 
             // If no objects from ObjectStateManager, try SceneController
             if (objects.length === 0) {
                 objects = components?.sceneController?.getAllObjects?.() || [];
-                console.log('🔍 SceneController objects:', objects.length, objects);
             }
 
             return objects;
@@ -334,7 +327,6 @@ class DirectComponentManager {
      * Refresh object data for all components (delayed initialization fix)
      */
     refreshObjectData() {
-        console.log('🔄 Refreshing object data for all components...');
 
         try {
             const components = window.modlerComponents;
@@ -344,7 +336,6 @@ class DirectComponentManager {
                 toolState: this.safeGetActiveTool(components)
             };
 
-            console.log('📊 Refreshed data:', refreshedData);
 
             // Send updated data to left panel
             this.sendToComponent('leftPanel', {
@@ -379,7 +370,6 @@ class DirectComponentManager {
 
         this.componentInstances = {};
         this.isInitialized = false;
-        console.log('🧹 Direct Component Manager destroyed');
     }
 }
 

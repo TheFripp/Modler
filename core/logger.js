@@ -150,6 +150,3 @@ const logger = new Logger(defaultLevel);
 // Expose globally
 window.logger = logger;
 window.Logger = Logger;
-
-// Log initial configuration
-logger.info(`Logger initialized with level: ${logger.getLevel()} (${isDevelopment ? 'development' : 'production'} mode)`);

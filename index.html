@@ -71,6 +71,10 @@
     <script src="application/managers/property-manager.js"></script>
     <script src="application/commands/base-command.js"></script>
     <script src="application/commands/delete-object-command.js"></script>
+    <script src="application/commands/create-object-command.js"></script>
+    <script src="application/commands/move-object-command.js"></script>
+    <script src="application/commands/push-face-command.js"></script>
+    <script src="application/commands/update-property-command.js"></script>
     <script src="application/commands/create-container-command.js"></script>
     <script src="application/commands/update-layout-property-command.js"></script>
     <script src="application/managers/history-manager.js"></script>
@@ -124,9 +128,6 @@
     <script>
         // Load parametric system after initial render (rarely used, can be deferred)
         window.addEventListener('load', () => {
-            // Logger should be available by now
-            logger.debug('Loading deferred systems (parametric)...');
-
             // Check if parametric is needed (future: load on first use)
             // For now, load after page is fully loaded
             const parametricScripts = [
@@ -136,13 +137,10 @@
                 'application/schemas/property-schema-registry.js'
             ];
 
-            parametricScripts.forEach((src, index) => {
+            parametricScripts.forEach((src) => {
                 const script = document.createElement('script');
                 script.src = src;
                 script.async = true;
-                if (index === parametricScripts.length - 1) {
-                    script.onload = () => logger.debug('Parametric system loaded');
-                }
                 document.body.appendChild(script);
             });
         });
