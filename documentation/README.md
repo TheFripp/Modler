@@ -7,6 +7,7 @@
 - **Project Context**: [`/core/project-context.md`](core/project-context.md) - Project background and status
 
 ## 🔧 Development Guides
+- **Transform vs Geometry**: [`/guides/transform-vs-geometry.md`](guides/transform-vs-geometry.md) - ⭐ **Essential guide for CAD operations**
 - **Tool Development**: [`/development/tool-guide.md`](development/tool-guide.md) - Tool development patterns
 - **Svelte UI Integration**: [`/development/svelte-ui-integration.md`](development/svelte-ui-integration.md) - Svelte UI development patterns and communication
 - **Centralization Patterns**: [`/development/centralization-patterns.md`](development/centralization-patterns.md) - Factory pattern decisions and rationale for architectural consistency
@@ -16,6 +17,7 @@
 - **Complexity Guidelines**: [`/development/complexity-guidelines.md`](development/complexity-guidelines.md) - Complexity management rules
 
 ## 🏗️ System Documentation
+- **Data Flow Architecture**: [`/architecture/data-flow-architecture.md`](architecture/data-flow-architecture.md) - ⭐ **Complete integration map: Tool → State → Geometry → UI**
 - **Selection System**: [`/systems/selection.md`](systems/selection.md) - Container-first selection patterns
 - **Bi-Directional Selection**: [`/systems/bi-directional-selection.md`](systems/bi-directional-selection.md) - UI ↔ Scene selection system with NavigationController integration
 - **Container System**: [`/systems/containers.md`](systems/containers.md) - Dual geometry containers and layout
