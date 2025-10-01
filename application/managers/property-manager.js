@@ -111,14 +111,6 @@ class PropertyManager {
             this.sceneController.updateLayout(container.id);
         }
 
-        // BYPASS ELIMINATED: Use ObjectStateManager instead of direct property panel calls
-        // ObjectStateManager already handles ObjectEventBus → PropertyPanelSync flow
-        if (objectStateManager && mesh?.userData?.modlerId) {
-            objectStateManager.notifyObjectModified(mesh.userData.modlerId, 'layout');
-        }
-
-        // Support meshes are now self-contained children - no sync needed
-
         // Use ObjectStateManager for unified state management
         const objectStateManager = window.modlerComponents?.objectStateManager;
         if (objectStateManager) {
