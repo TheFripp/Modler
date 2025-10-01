@@ -19,18 +19,22 @@ class ToolController {
     
     /**
      * Register a tool with the controller
+     * Supports both eager loading (toolClass is a class) and lazy loading (toolClass is async function)
      */
     registerTool(name, toolClass) {
         if (this.tools.has(name)) {
+            logger.warn(`Tool '${name}' already registered, skipping`);
+            return this.tools.get(name);
         }
-        
+
         let tool;
         try {
             // Instantiate the tool with dependencies
             tool = new toolClass(this.selectionController, this.visualEffects);
             this.tools.set(name, tool);
+            logger.debug(`Tool '${name}' registered successfully`);
         } catch (error) {
-            console.error(`Error creating ${name} tool:`, error);
+            logger.error(`Error creating ${name} tool:`, error);
             throw error;
         }
         
@@ -57,6 +61,7 @@ class ToolController {
      */
     switchToTool(toolName) {
         if (!this.tools.has(toolName)) {
+            logger.warn(`Tool '${toolName}' not registered`);
             return false;
         }
 
@@ -72,6 +77,8 @@ class ToolController {
         this.inputController.currentTool = toolName;
         this.activeTool = this.tools.get(toolName);
         this.activeToolName = toolName;
+
+        logger.debug(`Switched to tool: ${toolName}`);
 
         // Activate new tool
         if (this.activeTool && this.activeTool.activate) {

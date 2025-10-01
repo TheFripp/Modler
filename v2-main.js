@@ -50,14 +50,14 @@ async function initializeModlerV2(canvas) {
         setTimeout(() => {
             if (window.notifyObjectHierarchyChanged) {
                 window.notifyObjectHierarchyChanged();
-                console.log('✅ Initial hierarchy sync triggered for UI');
+                logger.info('✅ Initial hierarchy sync triggered for UI');
             }
         }, 100); // Small delay to ensure UI listeners are registered
 
         return true;
 
     } catch (error) {
-        console.error('V2 System initialization failed:', error.message);
+        logger.error('V2 System initialization failed:', error.message);
 
         // Emit failure event for integration systems
         window.dispatchEvent(new CustomEvent('modlerV2Ready', {
@@ -567,9 +567,9 @@ function createDemoObjects() {
     });
 
     if (objectData) {
-        console.log('✅ Demo Cube created through unified system');
+        logger.info('✅ Demo Cube created through unified system');
     } else {
-        console.error('❌ Failed to create Demo Cube');
+        logger.error('❌ Failed to create Demo Cube');
     }
 }
 

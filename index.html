@@ -42,6 +42,10 @@
     <!-- External Scripts -->
     <script src="vendor/three.min.js"></script>
     <script src="vendor/split.min.js"></script>
+
+    <!-- Core Logging System (Load FIRST for all other scripts) -->
+    <script src="core/logger.js"></script>
+
     <script src="foundation/scene-foundation.js"></script>
     <script src="scene/scene-controller.js"></script>
     <script src="scene/visual-effects.js"></script>
@@ -110,15 +114,38 @@
 
     <!-- Legacy V1 UI scripts removed - replaced by Svelte UI -->
 
-    <!-- Parametric Property System (Phase 3 Extensions) -->
-    <script src="application/parametric/formula-evaluator.js"></script>
-    <script src="application/parametric/dependency-graph.js"></script>
-    <script src="application/parametric/constraint-solver.js"></script>
-    <script src="application/schemas/property-schema-registry.js"></script>
-    <!-- Example moved to documentation/examples/parametric-chair-example.js -->
+    <!-- Parametric Property System: Deferred loading (see bottom of file) -->
 
     <!-- Svelte UI Main Integration (Load AFTER v2-main.js) -->
     <script src="integration/svelte/settings-handler.js"></script>
     <script src="integration/svelte/main-integration.js"></script>
+
+    <!-- Performance Optimization: Deferred loading for non-critical systems -->
+    <script>
+        // Load parametric system after initial render (rarely used, can be deferred)
+        window.addEventListener('load', () => {
+            // Logger should be available by now
+            logger.debug('Loading deferred systems (parametric)...');
+
+            // Check if parametric is needed (future: load on first use)
+            // For now, load after page is fully loaded
+            const parametricScripts = [
+                'application/parametric/formula-evaluator.js',
+                'application/parametric/dependency-graph.js',
+                'application/parametric/constraint-solver.js',
+                'application/schemas/property-schema-registry.js'
+            ];
+
+            parametricScripts.forEach((src, index) => {
+                const script = document.createElement('script');
+                script.src = src;
+                script.async = true;
+                if (index === parametricScripts.length - 1) {
+                    script.onload = () => logger.debug('Parametric system loaded');
+                }
+                document.body.appendChild(script);
+            });
+        });
+    </script>
 </body>
 </html>
