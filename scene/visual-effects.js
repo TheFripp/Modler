@@ -527,9 +527,14 @@ class VisualEffects {
         // padding.width affects both -X and +X sides equally
         // padding.height affects both -Y and +Y sides equally
         // padding.depth affects both -Z and +Z sides equally
-        const paddedWidth = containerSize.x - (padding.width * 2);
-        const paddedHeight = containerSize.y - (padding.height * 2);
-        const paddedDepth = containerSize.z - (padding.depth * 2);
+        // Ensure padding values are valid numbers, default to 0 if not
+        const paddingWidth = (typeof padding.width === 'number' && !isNaN(padding.width)) ? padding.width : 0;
+        const paddingHeight = (typeof padding.height === 'number' && !isNaN(padding.height)) ? padding.height : 0;
+        const paddingDepth = (typeof padding.depth === 'number' && !isNaN(padding.depth)) ? padding.depth : 0;
+
+        const paddedWidth = containerSize.x - (paddingWidth * 2);
+        const paddedHeight = containerSize.y - (paddingHeight * 2);
+        const paddedDepth = containerSize.z - (paddingDepth * 2);
 
         // Only show if padding is positive and doesn't exceed container size
         if (paddedWidth <= 0 || paddedHeight <= 0 || paddedDepth <= 0) {
@@ -554,6 +559,21 @@ class VisualEffects {
 
     updatePaddingBox(box, width, height, depth, position) {
         if (!box) return;
+
+        // Validate dimensions to prevent NaN geometries
+        if (!isFinite(width) || !isFinite(height) || !isFinite(depth) ||
+            width <= 0 || height <= 0 || depth <= 0) {
+            console.warn('VisualEffects: Invalid padding box dimensions', { width, height, depth });
+            box.visible = false;
+            return;
+        }
+
+        // Validate position to prevent NaN transforms
+        if (!position || !isFinite(position.x) || !isFinite(position.y) || !isFinite(position.z)) {
+            console.warn('VisualEffects: Invalid padding box position', position);
+            box.visible = false;
+            return;
+        }
 
         // Create new box geometry
         const boxGeometry = this.geometryFactory.createBoxGeometry(width, height, depth);
