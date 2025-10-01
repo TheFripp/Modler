@@ -7,7 +7,7 @@ class ObjectVisualizer {
         // Visual state tracking
         this.objectStates = new Map(); // object -> current state
         this.edgeHighlights = new Map(); // object -> edge mesh
-        this.faceHighlights = new Map(); // object -> face highlight meshes
+        // faceHighlights removed - now using pre-created support meshes
 
         // New unified systems
         this.geometryFactory = new GeometryFactory();
@@ -270,78 +270,45 @@ class ObjectVisualizer {
 
     /**
      * Show face highlight for tools (push, move, etc.)
+     * ARCHITECTURE: Uses pre-created support mesh (create once, show/hide pattern)
      */
     showFaceHighlight(object, face, color = null) {
         if (!object || !face) return;
 
-        const key = `${object.id}_face_${face.a}_${face.b}_${face.c}`;
-
-        // Don't create duplicate highlights
-        if (this.faceHighlights.has(key)) return;
-
-        try {
-            // Use Visual Effects system to create proper face geometry (maintains visual consistency)
-            const visualEffects = window.modlerComponents?.visualEffects;
-            if (!visualEffects) {
-                console.warn('ObjectVisualizer: Visual Effects system not available for face geometry creation');
-                return;
-            }
-
-            // Create hit object for Visual Effects system
-            const hit = { object, face };
-            const faceGeometry = visualEffects.createFaceGeometry(hit, 'auto');
-
-            if (!faceGeometry) {
-                console.warn('ObjectVisualizer: Failed to create face geometry');
-                return;
-            }
-
-            // Create highlight mesh with consistent visual style
-            const material = this.faceHighlightMaterial.clone();
-            if (color !== null) {
-                material.color.setHex(color);
-            }
-            // If color is null, use the material's default color (selection color)
-
-            const faceMesh = this.resourcePool.getMeshHighlight(faceGeometry, material);
-            faceMesh.raycast = () => {}; // Non-raycastable
-
-            // INSEPARABLE ARCHITECTURE: Make face highlight a direct child of the object
-            // This guarantees face highlights always move with object, regardless of hierarchy
-            object.add(faceMesh);
-
-            // Store reference
-            this.faceHighlights.set(key, faceMesh);
-
-        } catch (error) {
-            console.warn('Failed to create face highlight:', error);
+        // ARCHITECTURE: Use pre-created support mesh
+        const supportMeshes = object.userData?.supportMeshes;
+        if (!supportMeshes?.faceHighlight) {
+            console.warn('ObjectVisualizer: Object missing support meshes');
+            return;
         }
+
+        // Position the pre-created face highlight for this face
+        const supportMeshFactory = window.modlerComponents?.supportMeshFactory;
+        if (supportMeshFactory) {
+            const hit = { object, face };
+            supportMeshFactory.positionFaceHighlightForHit(supportMeshes.faceHighlight, hit);
+        }
+
+        // Update color if provided
+        if (color !== null && supportMeshes.faceHighlight.material) {
+            supportMeshes.faceHighlight.material.color.setHex(color);
+        }
+
+        // Show the pre-created mesh
+        supportMeshes.faceHighlight.visible = true;
     }
 
     /**
      * Hide face highlight
+     * ARCHITECTURE: Hides pre-created support mesh (no disposal needed)
      */
     hideFaceHighlight(object, face) {
         if (!object || !face) return;
 
-        const key = `${object.id}_face_${face.a}_${face.b}_${face.c}`;
-        const faceMesh = this.faceHighlights.get(key);
-
-        if (faceMesh) {
-            // INSEPARABLE ARCHITECTURE: Face mesh parent is now the object itself
-            if (faceMesh.parent) {
-                faceMesh.parent.remove(faceMesh);
-            }
-
-            if (faceMesh.geometry) {
-                faceMesh.geometry.dispose();
-            }
-
-            if (faceMesh.material) {
-                faceMesh.material.dispose();
-            }
-
-            this.faceHighlights.delete(key);
+        // ARCHITECTURE: Simply hide the pre-created support mesh
+        const supportMeshes = object.userData?.supportMeshes;
+        if (supportMeshes?.faceHighlight) {
+            supportMeshes.faceHighlight.visible = false;
         }
     }
 

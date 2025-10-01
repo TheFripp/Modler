@@ -9,6 +9,7 @@ class VisualEffects {
         this.currentHighlight = null;
         this.highlightMesh = null;
         this.rectanglePreview = null;
+        this.axisHighlightMesh = null; // Reusable axis highlight mesh (create once)
 
         // Use injected factories (Phase 1 - Factory Consolidation)
         // Fallback to new instances for backward compatibility during transition
@@ -157,21 +158,34 @@ class VisualEffects {
         const axisColor = configManager?.get('visual.effects.axisHighlight.color') || '#00ff88';
         const axisOpacity = configManager?.get('visual.effects.axisHighlight.opacity') || 0.3;
 
-        const axisMaterial = this.materialManager.createAxisHighlightMaterial({
-            color: axisColor,
-            opacity: axisOpacity
-        });
+        // ARCHITECTURE: Create axis highlight mesh once, reuse it
+        if (!this.axisHighlightMesh) {
+            const axisMaterial = this.materialManager.createAxisHighlightMaterial({
+                color: axisColor,
+                opacity: axisOpacity
+            });
+            this.axisHighlightMesh = this.resourcePool.getMeshHighlight(faceGeometry, axisMaterial);
 
-        this.highlightMesh = this.resourcePool.getMeshHighlight(faceGeometry, axisMaterial);
-        this.highlightMesh.position.copy(selectedObject.position);
-        this.highlightMesh.rotation.copy(selectedObject.rotation);
-        this.highlightMesh.scale.copy(selectedObject.scale);
-
-        const scene = window.modlerComponents?.scene;
-        if (scene) {
-            scene.add(this.highlightMesh);
+            const scene = window.modlerComponents?.scene;
+            if (scene) {
+                scene.add(this.axisHighlightMesh);
+            }
+        } else {
+            // Reuse existing mesh, update geometry
+            if (this.axisHighlightMesh.geometry !== faceGeometry) {
+                // Return old geometry to pool
+                this.geometryFactory.returnGeometry(this.axisHighlightMesh.geometry, 'face');
+                this.axisHighlightMesh.geometry = faceGeometry;
+            }
         }
 
+        // Update transform to match object
+        this.axisHighlightMesh.position.copy(selectedObject.position);
+        this.axisHighlightMesh.rotation.copy(selectedObject.rotation);
+        this.axisHighlightMesh.scale.copy(selectedObject.scale);
+        this.axisHighlightMesh.visible = true;
+
+        this.highlightMesh = this.axisHighlightMesh;
         this.currentHighlight = {
             object: selectedObject,
             axis: axis,
@@ -192,6 +206,12 @@ class VisualEffects {
                     supportMeshes.faceHighlight.visible = false;
                     isPreCreatedMesh = true;
                 }
+            }
+
+            // Check if this is the reusable axis highlight mesh
+            if (this.highlightMesh === this.axisHighlightMesh) {
+                this.axisHighlightMesh.visible = false;
+                isPreCreatedMesh = true; // Don't dispose, keep for reuse
             }
 
             // Clean up legacy highlight if not pre-created
@@ -344,56 +364,60 @@ class VisualEffects {
     showRectanglePreview(startPos, currentPos) {
         if (!startPos || !currentPos) return;
 
-        this.clearRectanglePreview();
-
         const width = Math.abs(currentPos.x - startPos.x);
         const depth = Math.abs(currentPos.z - startPos.z);
         const minSize = 0.01;
 
-        if (width < minSize || depth < minSize) return;
+        if (width < minSize || depth < minSize) {
+            if (this.rectanglePreview) {
+                this.rectanglePreview.visible = false;
+            }
+            return;
+        }
 
-        const geometry = new THREE.PlaneGeometry(width, depth);
-        const edges = new THREE.EdgesGeometry(geometry);
+        // ARCHITECTURE: Create preview mesh once, update geometry on changes
+        if (!this.rectanglePreview) {
+            const configManager = window.modlerComponents?.configurationManager;
+            const configColor = configManager?.get('visual.boxCreation.color') || '#00ff00';
+            const color = parseInt(configColor.replace('#', ''), 16);
+            const lineWidth = configManager?.get('visual.effects.wireframe.lineWidth') || 1;
 
-        const configManager = window.modlerComponents?.configurationManager;
-        const configColor = configManager?.get('visual.boxCreation.color') || '#00ff00';
-        const color = parseInt(configColor.replace('#', ''), 16);
+            const material = this.materialManager.createPreviewWireframeMaterial({
+                color: color,
+                linewidth: lineWidth
+            });
 
-        const lineWidth = configManager?.get('visual.effects.wireframe.lineWidth') || 1;
+            // Create with initial dimensions
+            const geometry = new THREE.PlaneGeometry(width, depth);
+            const edges = new THREE.EdgesGeometry(geometry);
 
-        const material = this.materialManager.createPreviewWireframeMaterial({
-            color: color,
-            linewidth: lineWidth
-        });
+            this.rectanglePreview = this.resourcePool.getLineMesh(edges, material);
+            this.rectanglePreview.rotation.x = -Math.PI / 2;
+            this.scene.add(this.rectanglePreview);
 
-        this.rectanglePreview = this.resourcePool.getLineMesh(edges, material);
+            this.geometryFactory.returnGeometry(geometry, 'plane');
+        } else {
+            // Update existing geometry
+            const geometry = new THREE.PlaneGeometry(width, depth);
+            const edges = new THREE.EdgesGeometry(geometry);
 
+            // Return old geometry and update
+            this.geometryFactory.returnGeometry(this.rectanglePreview.geometry, 'edge');
+            this.rectanglePreview.geometry = edges;
+            this.geometryFactory.returnGeometry(geometry, 'plane');
+        }
+
+        // Update position
         const centerX = (startPos.x + currentPos.x) / 2;
         const centerZ = (startPos.z + currentPos.z) / 2;
         this.rectanglePreview.position.set(centerX, 0.001, centerZ);
-        this.rectanglePreview.rotation.x = -Math.PI / 2;
-
-        this.scene.add(this.rectanglePreview);
+        this.rectanglePreview.visible = true;
     }
 
     clearRectanglePreview() {
+        // ARCHITECTURE: Just hide the preview, keep for reuse
         if (this.rectanglePreview) {
-            // Return to resource pool if pooled
-            if (this.rectanglePreview.userData?.pooled) {
-                this.resourcePool.returnLineMesh(this.rectanglePreview);
-            } else {
-                // Legacy cleanup for non-pooled meshes
-                if (this.rectanglePreview.parent) {
-                    this.rectanglePreview.parent.remove(this.rectanglePreview);
-                }
-                if (this.rectanglePreview.geometry) {
-                    this.geometryFactory.returnGeometry(this.rectanglePreview.geometry, 'wireframe');
-                }
-                if (this.rectanglePreview.material) {
-                    this.materialManager.disposeMaterial(this.rectanglePreview.material);
-                }
-            }
-            this.rectanglePreview = null;
+            this.rectanglePreview.visible = false;
         }
     }
 

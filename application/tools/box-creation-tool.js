@@ -232,8 +232,6 @@ class BoxCreationTool {
             return;
         }
 
-        this.cleanupVisuals(); // Remove existing preview (preserve positions)
-
         const width = Math.abs(this.currentPosition.x - this.startPosition.x);
         const depth = Math.abs(this.currentPosition.z - this.startPosition.z);
         const height = this.currentHeight;
@@ -244,44 +242,45 @@ class BoxCreationTool {
         const actualDepth = Math.max(depth, minSize);
         const actualHeight = Math.max(height, minSize);
 
-        // Create proper face-edge wireframe like selection boxes and containers
-        let boxGeometry, edgeGeometry, material;
-        try {
-            boxGeometry = this.geometryFactory.createBoxGeometry(actualWidth, actualHeight, actualDepth);
-            edgeGeometry = this.geometryFactory.createEdgeGeometryFromSource(boxGeometry);
-            // Get configurable color from configuration manager
+        // ARCHITECTURE: Create preview mesh once, update geometry on changes
+        if (!this.previewBox) {
+            // First-time creation
             const configManager = window.modlerComponents?.configurationManager;
             const configColor = configManager?.get('visual.boxCreation.color') || '#00ff00';
 
-            // Use MaterialManager for consistent wireframe material
-            material = this.materialManager.createPreviewWireframeMaterial({
+            const material = this.materialManager.createPreviewWireframeMaterial({
                 color: configColor,
                 opacity: 0.8
             });
 
-            this.previewBox = new THREE.LineSegments(edgeGeometry, material);
+            const boxGeometry = this.geometryFactory.createBoxGeometry(actualWidth, actualHeight, actualDepth);
+            const edgeGeometry = this.geometryFactory.createEdgeGeometryFromSource(boxGeometry);
 
-            // Return the box geometry to pool as we only need the edges
+            this.previewBox = this.resourcePool.getLineMesh(edgeGeometry, material);
+
+            const scene = window.modlerComponents?.sceneFoundation?.scene;
+            if (scene) {
+                scene.add(this.previewBox);
+            }
+
             this.geometryFactory.returnGeometry(boxGeometry, 'box');
-        } catch (error) {
-            if (boxGeometry) this.geometryFactory.returnGeometry(boxGeometry, 'box');
-            if (edgeGeometry) this.geometryFactory.returnGeometry(edgeGeometry, 'edge');
-            if (material) this.materialManager.disposeMaterial(material);
-            return;
+        } else {
+            // Update existing preview with new geometry
+            const boxGeometry = this.geometryFactory.createBoxGeometry(actualWidth, actualHeight, actualDepth);
+            const edgeGeometry = this.geometryFactory.createEdgeGeometryFromSource(boxGeometry);
+
+            // Return old geometry and update
+            this.geometryFactory.returnGeometry(this.previewBox.geometry, 'edge');
+            this.previewBox.geometry = edgeGeometry;
+            this.geometryFactory.returnGeometry(boxGeometry, 'box');
         }
 
         // Position preview
         const centerX = (this.startPosition.x + this.currentPosition.x) / 2;
         const centerZ = (this.startPosition.z + this.currentPosition.z) / 2;
-        // Offset Y slightly above ground to prevent z-fighting with floor grid
-        const centerY = actualHeight / 2 + 0.001; // Small offset to prevent flickering
+        const centerY = actualHeight / 2 + 0.001;
         this.previewBox.position.set(centerX, centerY, centerZ);
-
-        // Add to scene
-        const scene = window.modlerComponents?.sceneFoundation?.scene;
-        if (scene) {
-            scene.add(this.previewBox);
-        }
+        this.previewBox.visible = true;
     }
 
     updatePreview() {
@@ -428,23 +427,9 @@ class BoxCreationTool {
 
     // Clean up only visual elements (preserve positions during active creation)
     cleanupVisuals() {
-        const scene = window.modlerComponents?.sceneFoundation?.scene;
-        if (this.previewBox && scene) {
-            // Remove from scene first
-            scene.remove(this.previewBox);
-
-            // Return geometry and material to pools safely
-            try {
-                if (this.previewBox.geometry) {
-                    this.geometryFactory.returnGeometry(this.previewBox.geometry, 'edge');
-                }
-                if (this.previewBox.material) {
-                    this.materialManager.disposeMaterial(this.previewBox.material);
-                }
-            } catch (error) {
-            }
-
-            this.previewBox = null;
+        // ARCHITECTURE: Just hide the preview, keep for reuse
+        if (this.previewBox) {
+            this.previewBox.visible = false;
         }
 
         this.visualEffects.clearHighlight();
