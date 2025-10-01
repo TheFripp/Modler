@@ -150,6 +150,20 @@ class DirectComponentManager {
 
         container.appendChild(iframe);
 
+        // Expose modlerComponents to iframe window after it loads
+        iframe.addEventListener('load', () => {
+            try {
+                // Only works for same-origin iframes
+                if (iframe.contentWindow && window.modlerComponents) {
+                    iframe.contentWindow.modlerComponents = window.modlerComponents;
+                    console.log(`✅ Exposed modlerComponents to ${componentName} iframe`);
+                }
+            } catch (error) {
+                // Cross-origin - can't access iframe contentWindow
+                console.warn(`⚠️ Cannot expose modlerComponents to ${componentName} iframe (cross-origin)`);
+            }
+        });
+
         // Store reference for communication
         this.componentInstances[componentName] = {
             iframe,
