@@ -229,21 +229,21 @@
 								onclick={() => selectLayoutAxis('x')}
 								class="px-3 py-2 text-xs font-medium border rounded-md transition-all {$displayObject.autoLayout?.enabled && $displayObject.autoLayout?.direction === 'x' ? 'bg-[#2E2E2E] text-white border-[#3E3E3E] shadow-sm' : 'bg-[#1A1A1A] text-muted-foreground border-[#2E2E2E] hover:bg-[#212121] hover:text-foreground'}"
 							>
-								Width (X)
+								Width
 							</button>
 							<button
 								type="button"
 								onclick={() => selectLayoutAxis('y')}
 								class="px-3 py-2 text-xs font-medium border rounded-md transition-all {$displayObject.autoLayout?.enabled && $displayObject.autoLayout?.direction === 'y' ? 'bg-[#2E2E2E] text-white border-[#3E3E3E] shadow-sm' : 'bg-[#1A1A1A] text-muted-foreground border-[#2E2E2E] hover:bg-[#212121] hover:text-foreground'}"
 							>
-								Height (Y)
+								Height
 							</button>
 							<button
 								type="button"
 								onclick={() => selectLayoutAxis('z')}
 								class="px-3 py-2 text-xs font-medium border rounded-md transition-all {$displayObject.autoLayout?.enabled && $displayObject.autoLayout?.direction === 'z' ? 'bg-[#2E2E2E] text-white border-[#3E3E3E] shadow-sm' : 'bg-[#1A1A1A] text-muted-foreground border-[#2E2E2E] hover:bg-[#212121] hover:text-foreground'}"
 							>
-								Depth (Z)
+								Depth
 							</button>
 						</div>
 					</div>
@@ -265,10 +265,10 @@
 
 					<!-- Padding Controls -->
 					<div class="space-y-2">
-						<h4 class="text-xs font-medium text-foreground/80 uppercase tracking-wide">Padding (Inset)</h4>
+						<h4 class="text-xs font-medium text-foreground/80 uppercase tracking-wide">Padding</h4>
 						<div class="grid grid-cols-3 gap-2">
 							<InlineInput
-								label="Width (X)"
+								label="W"
 								type="number"
 								value={$displayObject.autoLayout?.padding?.width ?? 0.1}
 								objectId={getObjectIdForUpdate()}
@@ -277,7 +277,7 @@
 								step={0.1}
 							/>
 							<InlineInput
-								label="Height (Y)"
+								label="H"
 								type="number"
 								value={$displayObject.autoLayout?.padding?.height ?? 0.1}
 								objectId={getObjectIdForUpdate()}
@@ -286,7 +286,7 @@
 								step={0.1}
 							/>
 							<InlineInput
-								label="Depth (Z)"
+								label="D"
 								type="number"
 								value={$displayObject.autoLayout?.padding?.depth ?? 0.1}
 								objectId={getObjectIdForUpdate()}
