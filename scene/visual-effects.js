@@ -529,11 +529,11 @@ class VisualEffects {
             return;
         }
 
-        // Calculate bounds of all children in the container (in local space)
-        let minX = Infinity, minY = Infinity, minZ = Infinity;
-        let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
-        let hasChildren = false;
+        // ARCHITECTURE: Check if we can use cached padding wire without recalculation
+        let paddingBox = mesh.getObjectByName('paddingVisualization');
 
+        // Build current children snapshot (IDs, positions, sizes)
+        const currentChildrenState = [];
         mesh.children.forEach(child => {
             // Skip support meshes (wireframes, highlights, padding viz itself)
             if (child.name && (child.name.includes('wireframe') ||
@@ -543,28 +543,73 @@ class VisualEffects {
             }
 
             if (child.geometry) {
-                hasChildren = true;
                 child.geometry.computeBoundingBox();
                 const childBBox = child.geometry.boundingBox;
                 if (childBBox) {
-                    // Get bounds in local space (child.position already accounts for position)
                     const childSize = new THREE.Vector3();
                     childBBox.getSize(childSize);
 
-                    minX = Math.min(minX, child.position.x - childSize.x / 2);
-                    maxX = Math.max(maxX, child.position.x + childSize.x / 2);
-                    minY = Math.min(minY, child.position.y - childSize.y / 2);
-                    maxY = Math.max(maxY, child.position.y + childSize.y / 2);
-                    minZ = Math.min(minZ, child.position.z - childSize.z / 2);
-                    maxZ = Math.max(maxZ, child.position.z + childSize.z / 2);
+                    currentChildrenState.push({
+                        id: child.userData.objectId || child.uuid,
+                        posX: child.position.x,
+                        posY: child.position.y,
+                        posZ: child.position.z,
+                        sizeX: childSize.x,
+                        sizeY: childSize.y,
+                        sizeZ: childSize.z
+                    });
                 }
             }
         });
 
-        if (!hasChildren) {
+        if (currentChildrenState.length === 0) {
             this.hidePaddingVisualization(mesh);
             return;
         }
+
+        // Check if children state matches cached state (skip recalculation if unchanged)
+        if (paddingBox && paddingBox.userData.childrenState) {
+            const cached = paddingBox.userData.childrenState;
+            if (cached.length === currentChildrenState.length) {
+                let allMatch = true;
+                const tolerance = 0.0001;
+
+                for (let i = 0; i < cached.length; i++) {
+                    const c = cached[i];
+                    const curr = currentChildrenState[i];
+
+                    if (c.id !== curr.id ||
+                        Math.abs(c.posX - curr.posX) > tolerance ||
+                        Math.abs(c.posY - curr.posY) > tolerance ||
+                        Math.abs(c.posZ - curr.posZ) > tolerance ||
+                        Math.abs(c.sizeX - curr.sizeX) > tolerance ||
+                        Math.abs(c.sizeY - curr.sizeY) > tolerance ||
+                        Math.abs(c.sizeZ - curr.sizeZ) > tolerance) {
+                        allMatch = false;
+                        break;
+                    }
+                }
+
+                // Children haven't changed - keep existing padding wire
+                if (allMatch) {
+                    paddingBox.visible = true;
+                    return;
+                }
+            }
+        }
+
+        // Children changed - recalculate bounds
+        let minX = Infinity, minY = Infinity, minZ = Infinity;
+        let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
+
+        currentChildrenState.forEach(child => {
+            minX = Math.min(minX, child.posX - child.sizeX / 2);
+            maxX = Math.max(maxX, child.posX + child.sizeX / 2);
+            minY = Math.min(minY, child.posY - child.sizeY / 2);
+            maxY = Math.max(maxY, child.posY + child.sizeY / 2);
+            minZ = Math.min(minZ, child.posZ - child.sizeZ / 2);
+            maxZ = Math.max(maxZ, child.posZ + child.sizeZ / 2);
+        });
 
         // Calculate padding box dimensions (wraps children tightly)
         const paddingBoxWidth = maxX - minX;
@@ -584,50 +629,19 @@ class VisualEffects {
             return;
         }
 
-        // ARCHITECTURE: Create padding box once, reuse and update ONLY when children change
-        let paddingBox = mesh.getObjectByName('paddingVisualization');
-
+        // Create or update padding box
         if (!paddingBox) {
             // First-time creation: single wireframe box that wraps children
             paddingBox = this.createPaddingBox(1, 1, 1, new THREE.Vector3(), 0xff9900, 0.5);
             paddingBox.name = 'paddingVisualization';
-            // Store the children bounds so we can detect if they changed
-            paddingBox.userData.childrenBounds = {
-                width: paddingBoxWidth,
-                height: paddingBoxHeight,
-                depth: paddingBoxDepth,
-                centerX: paddingBoxCenter.x,
-                centerY: paddingBoxCenter.y,
-                centerZ: paddingBoxCenter.z
-            };
             mesh.add(paddingBox);
-            this.updatePaddingBox(paddingBox, paddingBoxWidth, paddingBoxHeight, paddingBoxDepth, paddingBoxCenter);
-        } else {
-            // Check if children bounds changed (with small tolerance for floating point)
-            const bounds = paddingBox.userData.childrenBounds || {};
-            const tolerance = 0.001;
-            const boundsChanged =
-                Math.abs(bounds.width - paddingBoxWidth) > tolerance ||
-                Math.abs(bounds.height - paddingBoxHeight) > tolerance ||
-                Math.abs(bounds.depth - paddingBoxDepth) > tolerance ||
-                Math.abs(bounds.centerX - paddingBoxCenter.x) > tolerance ||
-                Math.abs(bounds.centerY - paddingBoxCenter.y) > tolerance ||
-                Math.abs(bounds.centerZ - paddingBoxCenter.z) > tolerance;
-
-            // Only update if children actually moved/resized
-            if (boundsChanged) {
-                paddingBox.userData.childrenBounds = {
-                    width: paddingBoxWidth,
-                    height: paddingBoxHeight,
-                    depth: paddingBoxDepth,
-                    centerX: paddingBoxCenter.x,
-                    centerY: paddingBoxCenter.y,
-                    centerZ: paddingBoxCenter.z
-                };
-                this.updatePaddingBox(paddingBox, paddingBoxWidth, paddingBoxHeight, paddingBoxDepth, paddingBoxCenter);
-            }
         }
 
+        // Store current children state for future comparisons
+        paddingBox.userData.childrenState = currentChildrenState;
+
+        // Update padding box geometry to wrap children
+        this.updatePaddingBox(paddingBox, paddingBoxWidth, paddingBoxHeight, paddingBoxDepth, paddingBoxCenter);
         paddingBox.visible = true;
     }
 
