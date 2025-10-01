@@ -46,9 +46,9 @@
 		const autoLayout = {
 			enabled: !(currentDirection === axis && isCurrentlyEnabled),
 			direction: (currentDirection === axis && isCurrentlyEnabled) ? '' : axis,
-			gap: $displayObject.autoLayout?.gap ?? 0.1,
+			gap: $displayObject.autoLayout?.gap ?? 0,
 			padding: $displayObject.autoLayout?.padding ?? {
-				width: 0.1, height: 0.1, depth: 0.1
+				width: 0, height: 0, depth: 0
 			}
 		};
 
@@ -285,7 +285,7 @@
 						<InlineInput
 							label="Gap"
 							type="number"
-							value={$displayObject.autoLayout?.gap ?? 0.1}
+							value={$displayObject.autoLayout?.gap ?? 0}
 							objectId={getObjectIdForUpdate()}
 							property="autoLayout.gap"
 							min={0}
@@ -300,7 +300,7 @@
 							<InlineInput
 								label="W"
 								type="number"
-								value={$displayObject.autoLayout?.padding?.width ?? 0.1}
+								value={$displayObject.autoLayout?.padding?.width ?? 0}
 								objectId={getObjectIdForUpdate()}
 								property="autoLayout.padding.width"
 								min={0}
@@ -309,7 +309,7 @@
 							<InlineInput
 								label="H"
 								type="number"
-								value={$displayObject.autoLayout?.padding?.height ?? 0.1}
+								value={$displayObject.autoLayout?.padding?.height ?? 0}
 								objectId={getObjectIdForUpdate()}
 								property="autoLayout.padding.height"
 								min={0}
@@ -318,7 +318,7 @@
 							<InlineInput
 								label="D"
 								type="number"
-								value={$displayObject.autoLayout?.padding?.depth ?? 0.1}
+								value={$displayObject.autoLayout?.padding?.depth ?? 0}
 								objectId={getObjectIdForUpdate()}
 								property="autoLayout.padding.depth"
 								min={0}
