@@ -515,99 +515,84 @@ class VisualEffects {
     showPaddingVisualization(mesh, padding) {
         if (!mesh || !padding) return;
 
-        // Hide any existing padding visualization
-        this.hidePaddingVisualization(mesh);
-
         // Get object bounds
         mesh.geometry.computeBoundingBox();
         const bbox = mesh.geometry.boundingBox;
         if (!bbox) return;
 
-        // Create padding wireframes for each side
-        const paddingGroup = this.resourcePool.getGroup();
-        paddingGroup.name = 'paddingVisualization';
-
         const size = bbox.getSize(new THREE.Vector3());
         const center = bbox.getCenter(new THREE.Vector3());
 
-        // Create individual padding boxes for each side
-        if (padding.top > 0) {
-            const topBox = this.createPaddingBox(
-                size.x, padding.top, size.z,
-                new THREE.Vector3(center.x, bbox.max.y + padding.top/2, center.z),
-                0xff9900, 0.3
-            );
-            paddingGroup.add(topBox);
+        // ARCHITECTURE: Create padding group once, reuse and update
+        let paddingGroup = mesh.getObjectByName('paddingVisualization');
+
+        if (!paddingGroup) {
+            // First-time creation: create group with 6 padding box meshes
+            paddingGroup = this.resourcePool.getGroup();
+            paddingGroup.name = 'paddingVisualization';
+
+            // Create all 6 padding boxes (top, bottom, left, right, front, back)
+            const sides = ['top', 'bottom', 'left', 'right', 'front', 'back'];
+            sides.forEach(side => {
+                const box = this.createPaddingBox(1, 1, 1, new THREE.Vector3(), 0xff9900, 0.3);
+                box.name = `padding_${side}`;
+                paddingGroup.add(box);
+            });
+
+            mesh.add(paddingGroup);
         }
 
-        if (padding.bottom > 0) {
-            const bottomBox = this.createPaddingBox(
-                size.x, padding.bottom, size.z,
-                new THREE.Vector3(center.x, bbox.min.y - padding.bottom/2, center.z),
-                0xff9900, 0.3
-            );
-            paddingGroup.add(bottomBox);
-        }
+        // Update positions and visibility of all padding boxes
+        this.updatePaddingBox(paddingGroup, 'top', padding.top > 0,
+            size.x, padding.top, size.z,
+            new THREE.Vector3(center.x, bbox.max.y + padding.top/2, center.z));
 
-        if (padding.left > 0) {
-            const leftBox = this.createPaddingBox(
-                padding.left, size.y, size.z,
-                new THREE.Vector3(bbox.min.x - padding.left/2, center.y, center.z),
-                0xff9900, 0.3
-            );
-            paddingGroup.add(leftBox);
-        }
+        this.updatePaddingBox(paddingGroup, 'bottom', padding.bottom > 0,
+            size.x, padding.bottom, size.z,
+            new THREE.Vector3(center.x, bbox.min.y - padding.bottom/2, center.z));
 
-        if (padding.right > 0) {
-            const rightBox = this.createPaddingBox(
-                padding.right, size.y, size.z,
-                new THREE.Vector3(bbox.max.x + padding.right/2, center.y, center.z),
-                0xff9900, 0.3
-            );
-            paddingGroup.add(rightBox);
-        }
+        this.updatePaddingBox(paddingGroup, 'left', padding.left > 0,
+            padding.left, size.y, size.z,
+            new THREE.Vector3(bbox.min.x - padding.left/2, center.y, center.z));
 
-        if (padding.front > 0) {
-            const frontBox = this.createPaddingBox(
-                size.x, size.y, padding.front,
-                new THREE.Vector3(center.x, center.y, bbox.max.z + padding.front/2),
-                0xff9900, 0.3
-            );
-            paddingGroup.add(frontBox);
-        }
+        this.updatePaddingBox(paddingGroup, 'right', padding.right > 0,
+            padding.right, size.y, size.z,
+            new THREE.Vector3(bbox.max.x + padding.right/2, center.y, center.z));
 
-        if (padding.back > 0) {
-            const backBox = this.createPaddingBox(
-                size.x, size.y, padding.back,
-                new THREE.Vector3(center.x, center.y, bbox.min.z - padding.back/2),
-                0xff9900, 0.3
-            );
-            paddingGroup.add(backBox);
-        }
+        this.updatePaddingBox(paddingGroup, 'front', padding.front > 0,
+            size.x, size.y, padding.front,
+            new THREE.Vector3(center.x, center.y, bbox.max.z + padding.front/2));
 
-        // Add to mesh
-        mesh.add(paddingGroup);
+        this.updatePaddingBox(paddingGroup, 'back', padding.back > 0,
+            size.x, size.y, padding.back,
+            new THREE.Vector3(center.x, center.y, bbox.min.z - padding.back/2));
+
+        paddingGroup.visible = true;
+    }
+
+    updatePaddingBox(group, side, visible, width, height, depth, position) {
+        const box = group.getObjectByName(`padding_${side}`);
+        if (!box) return;
+
+        box.visible = visible;
+        if (visible) {
+            // Update geometry
+            const newGeometry = this.geometryFactory.createBoxGeometry(width, height, depth);
+            if (box.geometry) {
+                this.geometryFactory.returnGeometry(box.geometry, 'box');
+            }
+            box.geometry = newGeometry;
+            box.position.copy(position);
+        }
     }
 
     hidePaddingVisualization(mesh) {
         if (!mesh) return;
 
-        // Find and remove existing padding visualization
-        const existingPadding = mesh.getObjectByName('paddingVisualization');
-        if (existingPadding) {
-            // Return all meshes to visualization pool
-            existingPadding.traverse((child) => {
-                // Return meshes to visualization pool (padding boxes)
-                if (child.isMesh && child.userData?.pooled) {
-                    this.resourcePool.returnMeshHighlight(child);
-                }
-            });
-
-            // Return the group itself to pool
-            mesh.remove(existingPadding);
-            if (existingPadding.userData?.pooled) {
-                this.resourcePool.returnGroup(existingPadding);
-            }
+        // ARCHITECTURE: Just hide the padding group, keep for reuse
+        const paddingGroup = mesh.getObjectByName('paddingVisualization');
+        if (paddingGroup) {
+            paddingGroup.visible = false;
         }
     }
 

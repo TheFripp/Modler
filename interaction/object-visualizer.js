@@ -505,16 +505,9 @@ class ObjectVisualizer {
         this.removeEdgeHighlight(object);
         this.removeHoverEffect(object);
 
-        // Clean up face highlights for this object
-        const keysToRemove = [];
-        for (const [key, mesh] of this.faceHighlights) {
-            if (key.startsWith(`${object.id}_face_`)) {
-                if (mesh.parent) mesh.parent.remove(mesh);
-                this.cleanupHighlightMesh(mesh);
-                keysToRemove.push(key);
-            }
-        }
-        keysToRemove.forEach(key => this.faceHighlights.delete(key));
+        // ARCHITECTURE: Face highlights are now part of support meshes (object children)
+        // They are automatically cleaned up when the object is removed
+        // No manual cleanup needed here
 
         this.objectStates.delete(object);
     }
@@ -523,24 +516,26 @@ class ObjectVisualizer {
      * Destroy visualizer and clean up all resources
      */
     destroy() {
-        // Clean up all highlights
+        // Clean up all edge highlights
         for (const [object, edgeMesh] of this.edgeHighlights) {
-            this.unregisterFromMeshSync(object, edgeMesh);
-            if (edgeMesh.parent) {
-                edgeMesh.parent.remove(edgeMesh);
+            // Check if this is a pre-created support mesh
+            const supportMeshes = object.userData?.supportMeshes;
+            if (supportMeshes?.selectionWireframe === edgeMesh) {
+                // Support mesh - just hide it, cleanup handled by object removal
+                edgeMesh.visible = false;
+            } else {
+                // Legacy wireframe - clean up manually
+                if (edgeMesh.parent) {
+                    edgeMesh.parent.remove(edgeMesh);
+                }
+                this.cleanupHighlightMesh(edgeMesh);
             }
-            this.cleanupHighlightMesh(edgeMesh);
         }
         this.edgeHighlights.clear();
 
-        // Clean up face highlights - INSEPARABLE ARCHITECTURE: parent is the object itself
-        for (const [key, faceMesh] of this.faceHighlights) {
-            if (faceMesh.parent) {
-                faceMesh.parent.remove(faceMesh);
-            }
-            this.cleanupHighlightMesh(faceMesh);
-        }
-        this.faceHighlights.clear();
+        // ARCHITECTURE: Face highlights are now part of support meshes (object children)
+        // They are automatically cleaned up when objects are removed
+        // No manual cleanup needed here
 
         this.objectStates.clear();
     }
