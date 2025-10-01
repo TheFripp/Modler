@@ -515,29 +515,68 @@ class VisualEffects {
     showPaddingVisualization(mesh, padding) {
         if (!mesh || !padding) return;
 
-        // Get container bounds
-        mesh.geometry.computeBoundingBox();
-        const bbox = mesh.geometry.boundingBox;
-        if (!bbox) return;
-
-        const containerSize = bbox.getSize(new THREE.Vector3());
-        const containerCenter = bbox.getCenter(new THREE.Vector3());
-
-        // Calculate inset box (padding creates space INSIDE the container)
-        // padding.width affects both -X and +X sides equally
-        // padding.height affects both -Y and +Y sides equally
-        // padding.depth affects both -Z and +Z sides equally
         // Ensure padding values are valid numbers, default to 0 if not
         const paddingWidth = (typeof padding.width === 'number' && !isNaN(padding.width)) ? padding.width : 0;
         const paddingHeight = (typeof padding.height === 'number' && !isNaN(padding.height)) ? padding.height : 0;
         const paddingDepth = (typeof padding.depth === 'number' && !isNaN(padding.depth)) ? padding.depth : 0;
 
-        const paddedWidth = containerSize.x - (paddingWidth * 2);
-        const paddedHeight = containerSize.y - (paddingHeight * 2);
-        const paddedDepth = containerSize.z - (paddingDepth * 2);
+        // If no padding, hide visualization
+        if (paddingWidth === 0 && paddingHeight === 0 && paddingDepth === 0) {
+            this.hidePaddingVisualization(mesh);
+            return;
+        }
 
-        // Only show if padding is positive and doesn't exceed container size
-        if (paddedWidth <= 0 || paddedHeight <= 0 || paddedDepth <= 0) {
+        // Calculate bounds of all children in the container (in local space)
+        let minX = Infinity, minY = Infinity, minZ = Infinity;
+        let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
+        let hasChildren = false;
+
+        mesh.children.forEach(child => {
+            // Skip support meshes (wireframes, highlights, padding viz itself)
+            if (child.name && (child.name.includes('wireframe') ||
+                              child.name.includes('highlight') ||
+                              child.name === 'paddingVisualization')) {
+                return;
+            }
+
+            if (child.geometry) {
+                hasChildren = true;
+                child.geometry.computeBoundingBox();
+                const childBBox = child.geometry.boundingBox;
+                if (childBBox) {
+                    // Get bounds in local space (child.position already accounts for position)
+                    const childSize = new THREE.Vector3();
+                    childBBox.getSize(childSize);
+
+                    minX = Math.min(minX, child.position.x - childSize.x / 2);
+                    maxX = Math.max(maxX, child.position.x + childSize.x / 2);
+                    minY = Math.min(minY, child.position.y - childSize.y / 2);
+                    maxY = Math.max(maxY, child.position.y + childSize.y / 2);
+                    minZ = Math.min(minZ, child.position.z - childSize.z / 2);
+                    maxZ = Math.max(maxZ, child.position.z + childSize.z / 2);
+                }
+            }
+        });
+
+        if (!hasChildren) {
+            this.hidePaddingVisualization(mesh);
+            return;
+        }
+
+        // Calculate padding box dimensions (wraps children tightly)
+        const paddingBoxWidth = maxX - minX;
+        const paddingBoxHeight = maxY - minY;
+        const paddingBoxDepth = maxZ - minZ;
+
+        // Calculate padding box center (in local space)
+        const paddingBoxCenter = new THREE.Vector3(
+            (minX + maxX) / 2,
+            (minY + maxY) / 2,
+            (minZ + maxZ) / 2
+        );
+
+        // Only show if dimensions are valid
+        if (paddingBoxWidth <= 0 || paddingBoxHeight <= 0 || paddingBoxDepth <= 0) {
             this.hidePaddingVisualization(mesh);
             return;
         }
@@ -546,14 +585,14 @@ class VisualEffects {
         let paddingBox = mesh.getObjectByName('paddingVisualization');
 
         if (!paddingBox) {
-            // First-time creation: single inset wireframe box
+            // First-time creation: single wireframe box that wraps children
             paddingBox = this.createPaddingBox(1, 1, 1, new THREE.Vector3(), 0xff9900, 0.5);
             paddingBox.name = 'paddingVisualization';
             mesh.add(paddingBox);
         }
 
-        // Update the inset box dimensions and position (centered in container)
-        this.updatePaddingBox(paddingBox, paddedWidth, paddedHeight, paddedDepth, containerCenter);
+        // Update the padding box to wrap children (container will be this box + padding on all sides)
+        this.updatePaddingBox(paddingBox, paddingBoxWidth, paddingBoxHeight, paddingBoxDepth, paddingBoxCenter);
         paddingBox.visible = true;
     }
 
