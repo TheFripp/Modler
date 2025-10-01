@@ -104,8 +104,9 @@ class LayoutEngine {
         // Center the entire layout around the layout anchor (or origin if no anchor)
         const centeredPositions = this.centerLayoutPositions(positions, objectSizes, axis, layoutAnchor);
 
-        // Apply padding after centering
-        const finalPositions = this.applyPaddingToAxis(centeredPositions, axis, paddingOffset);
+        // Note: Padding does NOT offset object positions - it only affects container size
+        // Objects stay centered, container expands around them with padding space
+        const finalPositions = centeredPositions;
 
         // Calculate bounds for the final layout (pass layoutConfig to include padding in size)
         const layoutBounds = this.calculateLayoutBounds(objects, finalPositions, layoutConfig, fullContainerSize);
