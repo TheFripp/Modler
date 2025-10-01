@@ -111,14 +111,13 @@ class PropertyManager {
             this.sceneController.updateLayout(container.id);
         }
 
-        // Use ObjectStateManager for unified state management
-        const objectStateManager = window.modlerComponents?.objectStateManager;
-        if (objectStateManager) {
-            // Sync object state after layout update
-            objectStateManager.syncObjectFromSceneController(objectData.id);
-        } else {
-            // Fallback to SceneController notification
-            this.sceneController.notifyObjectModified(objectData.id);
+        // Notify about the layout change via ObjectEventBus
+        if (window.objectEventBus) {
+            window.objectEventBus.emit('object:layout-updated', {
+                objectId: objectData.id,
+                containerId: container.id,
+                fillProperty: { axis, state: newState }
+            });
         }
 
         // Trigger property panel refresh for all affected objects
