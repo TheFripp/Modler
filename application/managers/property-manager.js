@@ -131,7 +131,7 @@ class PropertyManager {
     refreshLayoutPropertyPanels(container) {
         if (!container || !this.sceneController) return;
 
-        const children = this.sceneController.getChildren(container.id);
+        const children = this.sceneController.getChildObjects(container.id);
         if (!children || children.length === 0) return;
 
         // Refresh property panel if any child is currently selected
@@ -142,13 +142,13 @@ class PropertyManager {
         const shouldRefresh = children.some(child => selectedIds.includes(child.id));
 
         if (shouldRefresh) {
-            // BYPASS ELIMINATED: Use ObjectStateManager instead of direct property panel calls
+            // Trigger UI refresh via ObjectEventBus
             setTimeout(() => {
-                const objectStateManager = window.modlerComponents?.objectStateManager;
-                if (objectStateManager && selectedObjects[0]?.userData?.modlerId) {
-                    objectStateManager.notifyObjectModified(selectedObjects[0].userData.modlerId, 'property-refresh');
-                } else {
-                    console.warn('⚠️ PropertyManager: ObjectStateManager not available for property refresh');
+                if (window.objectEventBus) {
+                    window.objectEventBus.emit('object:properties-changed', {
+                        objectIds: selectedIds,
+                        source: 'fill-property'
+                    });
                 }
             }, 100); // Small delay to allow layout calculations to complete
         }
