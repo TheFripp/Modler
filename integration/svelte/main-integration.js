@@ -690,6 +690,10 @@
         if (property === 'autoLayout.enabled' && value) {
             const currentObject = objectStateManager.getObject(objectId);
             if (currentObject?.isContainer && !currentObject.autoLayout?.direction) {
+                // Initialize autoLayout object if it doesn't exist
+                if (!updates.autoLayout) {
+                    updates.autoLayout = {};
+                }
                 updates.autoLayout.direction = 'x'; // Default direction
             }
         }
@@ -768,12 +772,20 @@
                 handlePropertyUpdate(data.objectId, data.property, data.value);
             } else if (type === 'visual-settings-changed') {
                 handleVisualSettingsUpdate(data.settings);
+            } else if (type === 'get-visual-settings') {
+                handleGetVisualSettings(event.source);
             } else if (type === 'scene-settings-changed') {
                 handleSceneSettingsUpdate(data.settings);
+            } else if (type === 'get-scene-settings') {
+                handleGetSceneSettings(event.source);
             } else if (type === 'cad-wireframe-settings-changed') {
                 handleCadWireframeSettingsUpdate(data.settings);
+            } else if (type === 'get-cad-wireframe-settings') {
+                handleGetCadWireframeSettings(event.source);
             } else if (type === 'interface-settings-changed') {
                 handleInterfaceSettingsUpdate(data.settings);
+            } else if (type === 'get-interface-settings') {
+                handleGetInterfaceSettings(event.source);
             }
         });
 

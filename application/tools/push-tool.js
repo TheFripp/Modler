@@ -96,6 +96,11 @@ class PushTool {
                 if (!isLayoutEnabled && !isFixedMode) {
                     return false; // Only block containers in hug mode without layout
                 }
+            } else if (objectData && !objectData.isContainer) {
+                // CRITICAL: Block highlighting child objects inside layout-enabled containers
+                if (!this.canPushChildObject(targetObject)) {
+                    return false;
+                }
             }
         }
 
@@ -156,6 +161,12 @@ class PushTool {
 
         // Prevent pushing containers in 'hug' mode
         if (isContainerPush && !this.canPushContainer(targetObject)) {
+            return false;
+        }
+
+        // CRITICAL: Prevent pushing objects inside layout-enabled containers
+        if (!isContainerPush && !this.canPushChildObject(targetObject)) {
+            console.warn('PushTool: Cannot push objects inside layout-enabled containers');
             return false;
         }
 
@@ -709,6 +720,28 @@ class PushTool {
         const isFixedMode = objectData.sizingMode === 'fixed';
 
         return isLayoutEnabled || isFixedMode;
+    }
+
+    /**
+     * Check if a child object can be pushed (not inside a layout-enabled container)
+     */
+    canPushChildObject(targetObject) {
+        const sceneController = window.modlerComponents?.sceneController;
+        if (!sceneController || !targetObject) return false;
+
+        const objectData = sceneController.getObjectByMesh(targetObject);
+        if (!objectData) return false;
+
+        // If object has no parent container, it can be pushed
+        if (!objectData.parentContainer) return true;
+
+        // Check if parent container has layout enabled
+        const parentContainer = sceneController.getObject(objectData.parentContainer);
+        if (!parentContainer) return true; // Parent not found, allow push
+
+        // BLOCK pushing if parent has active layout (layout controls child dimensions/positions)
+        const parentHasLayout = parentContainer.autoLayout && parentContainer.autoLayout.enabled;
+        return !parentHasLayout;
     }
 
     /**

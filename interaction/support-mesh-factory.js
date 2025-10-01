@@ -41,6 +41,17 @@ class SupportMeshFactory {
     }
 
     /**
+     * Refresh base materials to pick up new configuration values
+     * Called by MaterialManager when configuration changes
+     */
+    refreshBaseMaterials() {
+        // Note: We DON'T recreate materials here because MaterialManager.updateMaterialsOfType
+        // already updates the existing material instances. The materials are shared references,
+        // so updates to them automatically apply to all objects using them.
+        // This method exists for future use if we need to handle material recreation.
+    }
+
+    /**
      * Create all support meshes for any object (unified for regular objects and containers)
      */
     createObjectSupportMeshes(mainMesh) {
@@ -57,11 +68,11 @@ class SupportMeshFactory {
                 this.cleanupSupportMeshes(mainMesh.userData.supportMeshes, mainMesh);
             }
 
-            // Create minimal support meshes - faceHighlight, interactiveMesh, and cadWireframe for containers
+            // Create minimal support meshes - faceHighlight and interactiveMesh only
+            // Containers use their LayoutGeometry wireframe, not CAD wireframe
             const supportMeshes = {
                 faceHighlight: this.createFaceHighlight(mainMesh), // Use existing method with orange selection color
-                interactiveMesh: this.createContainerInteractiveMesh(mainMesh), // Needed for proper raycasting in tools
-                cadWireframe: this.createCadWireframe(mainMesh) // CAD wireframes for better edge visibility
+                interactiveMesh: this.createContainerInteractiveMesh(mainMesh) // Needed for proper raycasting in tools
             };
 
             // Add face highlight and interactive mesh as children
@@ -72,10 +83,6 @@ class SupportMeshFactory {
             if (supportMeshes.interactiveMesh) {
                 mainMesh.add(supportMeshes.interactiveMesh);
                 supportMeshes.interactiveMesh.visible = false; // Hidden by default, used for raycasting
-            }
-            if (supportMeshes.cadWireframe) {
-                mainMesh.add(supportMeshes.cadWireframe);
-                supportMeshes.cadWireframe.visible = true; // Visible by default for CAD wireframes
             }
 
             // Store support meshes with face highlight and interactive mesh
@@ -125,13 +132,28 @@ class SupportMeshFactory {
             console.warn('❌ Failed to create edge geometry for selection wireframe:', mainMesh.name);
             return null;
         }
-        const wireframe = this.resourcePool.getLineMesh(edgeGeometry, this.materials.selectionWireframe);
+        // Get fresh material from MaterialManager to pick up current config values
+        const material = this.materialManager.createSelectionEdgeMaterial();
 
-        // Scale slightly larger to ensure visibility outside mesh
-        wireframe.scale.setScalar(1.002);
+        // CRITICAL: Force material update to ensure it renders properly
+        material.needsUpdate = true;
+
+        const wireframe = this.resourcePool.getLineMesh(edgeGeometry, material);
+
+        // CRITICAL: Compute bounding sphere to prevent frustum culling issues
+        // EdgesGeometry may have stale/incorrect bounding data
+        edgeGeometry.computeBoundingSphere();
+        edgeGeometry.computeBoundingBox();
+
+        // Scale larger to ensure visibility outside mesh (sits on top of faces)
+        wireframe.scale.setScalar(1.01);
         wireframe.renderOrder = 999; // Render on top of geometry
         wireframe.raycast = () => {}; // Non-raycastable
         wireframe.userData.supportMeshType = 'selectionWireframe';
+
+        // Ensure proper rendering settings
+        wireframe.matrixAutoUpdate = true;
+        wireframe.frustumCulled = true;
 
         return wireframe;
     }
@@ -148,13 +170,29 @@ class SupportMeshFactory {
         if (!edgeGeometry) {
             return null;
         }
-        const wireframe = this.resourcePool.getLineMesh(edgeGeometry, this.materials.cadWireframe);
 
-        // Scale slightly larger to ensure visibility outside mesh
-        wireframe.scale.setScalar(1.001);
+        // Get fresh material from MaterialManager to pick up current config values
+        const material = this.materialManager.createCadEdgeMaterial();
+
+        // CRITICAL: Force material update to ensure it renders properly
+        material.needsUpdate = true;
+
+        const wireframe = this.resourcePool.getLineMesh(edgeGeometry, material);
+
+        // CRITICAL: Compute bounding sphere to prevent frustum culling issues
+        // EdgesGeometry may have stale/incorrect bounding data
+        edgeGeometry.computeBoundingSphere();
+        edgeGeometry.computeBoundingBox();
+
+        // Scale larger to ensure visibility outside mesh (sits on top of faces)
+        wireframe.scale.setScalar(1.005);
         wireframe.renderOrder = 998; // Render on top but below selection wireframe
         wireframe.raycast = () => {}; // Non-raycastable
         wireframe.userData.supportMeshType = 'cadWireframe';
+
+        // Ensure proper rendering settings
+        wireframe.matrixAutoUpdate = true;
+        wireframe.frustumCulled = true;
 
         return wireframe;
     }
@@ -166,7 +204,7 @@ class SupportMeshFactory {
         if (!mainMesh.geometry) return null;
 
         const edgeGeometry = this.geometryFactory.createEdgeGeometry(mainMesh.geometry);
-        const wireframe = new THREE.LineSegments(edgeGeometry, this.materials.containerWireframe);
+        const wireframe = this.resourcePool.getLineMesh(edgeGeometry, this.materials.containerWireframe);
 
         wireframe.position.set(0, 0.001, 0); // Small Y offset
         wireframe.raycast = () => {}; // Non-raycastable
@@ -182,7 +220,9 @@ class SupportMeshFactory {
         // Create generic plane geometry using GeometryFactory
         const faceGeometry = this.geometryFactory.createPlaneGeometry(1, 1);
 
-        const faceHighlight = new THREE.Mesh(faceGeometry, this.materials.faceHighlight);
+        // Get fresh material from MaterialManager to pick up current config values
+        const material = this.materialManager.createFaceHighlightMaterial();
+        const faceHighlight = this.resourcePool.getMeshHighlight(faceGeometry, material);
         faceHighlight.position.set(0, 0, 0); // Initial position - will be set when first shown
         faceHighlight.raycast = () => {}; // Non-raycastable
         faceHighlight.userData.supportMeshType = 'faceHighlight';
@@ -227,7 +267,7 @@ class SupportMeshFactory {
         faceGeometry.computeBoundingBox();
         const geometryCenter = faceGeometry.boundingBox.getCenter(new THREE.Vector3());
 
-        const interactiveMesh = new THREE.Mesh(faceGeometry, this.materials.containerInteractive);
+        const interactiveMesh = this.resourcePool.getMeshHighlight(faceGeometry, this.materials.containerInteractive);
 
 
         interactiveMesh.position.set(0, 0, 0);

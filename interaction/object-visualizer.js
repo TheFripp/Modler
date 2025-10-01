@@ -303,7 +303,7 @@ class ObjectVisualizer {
             }
             // If color is null, use the material's default color (selection color)
 
-            const faceMesh = new THREE.Mesh(faceGeometry, material);
+            const faceMesh = this.resourcePool.getMeshHighlight(faceGeometry, material);
             faceMesh.raycast = () => {}; // Non-raycastable
 
             // INSEPARABLE ARCHITECTURE: Make face highlight a direct child of the object
@@ -374,14 +374,14 @@ class ObjectVisualizer {
      * Create thick line group for visible line width
      */
     createThickLineGroup(edgeGeometry, lineWidth, material) {
-        const group = new THREE.Group();
+        const group = this.resourcePool.getGroup();
 
         // Create multiple offset lines for thickness effect
         const offsets = this.generateLineOffsets(lineWidth);
 
         offsets.forEach(offset => {
             const offsetGeometry = this.offsetEdgeGeometry(edgeGeometry, offset);
-            const lineMesh = new THREE.LineSegments(offsetGeometry, material);
+            const lineMesh = this.resourcePool.getLineMesh(offsetGeometry, material);
             group.add(lineMesh);
         });
 
@@ -465,7 +465,7 @@ class ObjectVisualizer {
                 const offsets = this.generateLineOffsets(lineWidth);
                 offsets.forEach(offset => {
                     const offsetGeometry = this.offsetEdgeGeometry(edgeGeometry, offset);
-                    const lineMesh = new THREE.LineSegments(offsetGeometry, this.edgeMaterial);
+                    const lineMesh = this.resourcePool.getLineMesh(offsetGeometry, this.edgeMaterial);
                     relatedMesh.add(lineMesh);
                 });
 

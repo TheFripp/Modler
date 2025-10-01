@@ -42,15 +42,20 @@
 		const currentDirection = $displayObject.autoLayout?.direction;
 		const isCurrentlyEnabled = $displayObject.autoLayout?.enabled;
 
-		// If clicking the same direction that's already active, toggle off (disable layout)
-		if (currentDirection === axis && isCurrentlyEnabled) {
-			propertyController.updateProperty(objectId, 'autoLayout.enabled', false);
-			propertyController.updateProperty(objectId, 'autoLayout.direction', '');
-		} else {
-			// Enable layout and set new direction
-			propertyController.updateProperty(objectId, 'autoLayout.enabled', true);
-			propertyController.updateProperty(objectId, 'autoLayout.direction', axis);
-		}
+		// Build complete autoLayout object
+		const autoLayout = {
+			enabled: !(currentDirection === axis && isCurrentlyEnabled),
+			direction: (currentDirection === axis && isCurrentlyEnabled) ? '' : axis,
+			gap: $displayObject.autoLayout?.gap ?? 0.1,
+			padding: $displayObject.autoLayout?.padding ?? {
+				top: 0.1, bottom: 0.1, left: 0.1, right: 0.1, front: 0.1, back: 0.1
+			}
+		};
+
+		// Single unified update through ObjectStateManager pipeline
+		// PropertyFormatConverter handles nested object conversion
+		// ObjectStateManager expands to flat paths and triggers bidirectional propagation
+		updateThreeJSProperty(objectId, 'autoLayout', autoLayout, 'property-panel');
 	}
 
 	// Mixed value helpers for individual inputs
@@ -222,21 +227,21 @@
 							<button
 								type="button"
 								onclick={() => selectLayoutAxis('x')}
-								class="px-3 py-2 text-xs border border-[#2E2E2E] rounded-md hover:bg-[#212121] transition-colors {$displayObject.autoLayout?.enabled && $displayObject.autoLayout?.direction === 'x' ? 'bg-[#212121] text-white border-[#2E2E2E]' : 'bg-[#171717]'}"
+								class="px-3 py-2 text-xs font-medium border rounded-md transition-all {$displayObject.autoLayout?.enabled && $displayObject.autoLayout?.direction === 'x' ? 'bg-[#2E2E2E] text-white border-[#3E3E3E] shadow-sm' : 'bg-[#1A1A1A] text-muted-foreground border-[#2E2E2E] hover:bg-[#212121] hover:text-foreground'}"
 							>
 								Width (X)
 							</button>
 							<button
 								type="button"
 								onclick={() => selectLayoutAxis('y')}
-								class="px-3 py-2 text-xs border border-[#2E2E2E] rounded-md hover:bg-[#212121] transition-colors {$displayObject.autoLayout?.enabled && $displayObject.autoLayout?.direction === 'y' ? 'bg-[#212121] text-white border-[#2E2E2E]' : 'bg-[#171717]'}"
+								class="px-3 py-2 text-xs font-medium border rounded-md transition-all {$displayObject.autoLayout?.enabled && $displayObject.autoLayout?.direction === 'y' ? 'bg-[#2E2E2E] text-white border-[#3E3E3E] shadow-sm' : 'bg-[#1A1A1A] text-muted-foreground border-[#2E2E2E] hover:bg-[#212121] hover:text-foreground'}"
 							>
 								Height (Y)
 							</button>
 							<button
 								type="button"
 								onclick={() => selectLayoutAxis('z')}
-								class="px-3 py-2 text-xs border border-[#2E2E2E] rounded-md hover:bg-[#212121] transition-colors {$displayObject.autoLayout?.enabled && $displayObject.autoLayout?.direction === 'z' ? 'bg-[#212121] text-white border-[#2E2E2E]' : 'bg-[#171717]'}"
+								class="px-3 py-2 text-xs font-medium border rounded-md transition-all {$displayObject.autoLayout?.enabled && $displayObject.autoLayout?.direction === 'z' ? 'bg-[#2E2E2E] text-white border-[#3E3E3E] shadow-sm' : 'bg-[#1A1A1A] text-muted-foreground border-[#2E2E2E] hover:bg-[#212121] hover:text-foreground'}"
 							>
 								Depth (Z)
 							</button>
@@ -244,41 +249,37 @@
 					</div>
 
 
-					<!-- Gap Control -->
-					{#if $displayObject.autoLayout?.enabled}
-						{@const gapMixed = getMixedValue('autoLayout.gap')}
-						<div class="space-y-2">
-							<h4 class="text-xs font-medium text-foreground/80 uppercase tracking-wide">Gap</h4>
-							<InlineInput
-								label="Gap"
-								type="number"
-								value={gapMixed.displayValue}
-								placeholder={gapMixed.placeholder}
-								objectId={getObjectIdForUpdate()}
-								property="autoLayout.gap"
-								class={gapMixed.class}
-							/>
-						</div>
+					<!-- Gap and Padding Controls - Always show for containers -->
+					<div class="space-y-2">
+						<h4 class="text-xs font-medium text-foreground/80 uppercase tracking-wide">Gap</h4>
+						<InlineInput
+							label="Gap"
+							type="number"
+							value={$displayObject.autoLayout?.gap ?? 0.1}
+							objectId={getObjectIdForUpdate()}
+							property="autoLayout.gap"
+							min={0}
+							step={0.1}
+						/>
+					</div>
 
-						<!-- Padding Controls -->
-						<div class="space-y-2">
-							<h4 class="text-xs font-medium text-foreground/80 uppercase tracking-wide">Padding</h4>
-							<div class="grid grid-cols-2 gap-2">
-								{#each ['top', 'bottom', 'left', 'right', 'front', 'back'] as side}
-									{@const paddingMixed = getMixedValue(`autoLayout.padding.${side}`)}
-									<InlineInput
-										label={side.charAt(0).toUpperCase() + side.slice(1)}
-										type="number"
-										value={paddingMixed.displayValue}
-										placeholder={paddingMixed.placeholder}
-										objectId={getObjectIdForUpdate()}
-										property={`autoLayout.padding.${side}`}
-										class={paddingMixed.class}
-									/>
-								{/each}
-							</div>
+					<!-- Padding Controls -->
+					<div class="space-y-2">
+						<h4 class="text-xs font-medium text-foreground/80 uppercase tracking-wide">Padding</h4>
+						<div class="grid grid-cols-2 gap-2">
+							{#each ['top', 'bottom', 'left', 'right', 'front', 'back'] as side}
+								<InlineInput
+									label={side.charAt(0).toUpperCase() + side.slice(1)}
+									type="number"
+									value={$displayObject.autoLayout?.padding?.[side] ?? 0.1}
+									objectId={getObjectIdForUpdate()}
+									property={`autoLayout.padding.${side}`}
+									min={0}
+									step={0.1}
+								/>
+							{/each}
 						</div>
-					{/if}
+					</div>
 
 					<div class="text-xs text-muted-foreground italic">
 						{$displayObject.autoLayout?.enabled

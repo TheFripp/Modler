@@ -74,27 +74,39 @@ class MaterialManager {
         this.registerConfigCallback('visual.selection.color', (newValue) => {
             this.updateMaterialsOfType(this.materialTypes.SELECTION_EDGE, 'color', newValue);
             this.updateMaterialsOfType(this.materialTypes.FACE_HIGHLIGHT, 'color', newValue);
+            this.invalidateCacheForType(this.materialTypes.SELECTION_EDGE);
+            this.invalidateCacheForType(this.materialTypes.FACE_HIGHLIGHT);
         });
 
         this.registerConfigCallback('visual.selection.lineWidth', (newValue) => {
             this.updateMaterialsOfType(this.materialTypes.SELECTION_EDGE, 'linewidth', newValue);
+            this.invalidateCacheForType(this.materialTypes.SELECTION_EDGE);
         });
 
         this.registerConfigCallback('visual.selection.opacity', (newValue) => {
             this.updateMaterialsOfType(this.materialTypes.SELECTION_EDGE, 'opacity', newValue);
+            this.invalidateCacheForType(this.materialTypes.SELECTION_EDGE);
+        });
+
+        this.registerConfigCallback('visual.selection.faceHighlightOpacity', (newValue) => {
+            this.updateMaterialsOfType(this.materialTypes.FACE_HIGHLIGHT, 'opacity', newValue);
+            this.invalidateCacheForType(this.materialTypes.FACE_HIGHLIGHT);
         });
 
         // Container materials
         this.registerConfigCallback('visual.containers.wireframeColor', (newValue) => {
             this.updateMaterialsOfType(this.materialTypes.CONTAINER_WIREFRAME, 'color', newValue);
+            this.invalidateCacheForType(this.materialTypes.CONTAINER_WIREFRAME);
         });
 
         this.registerConfigCallback('visual.containers.lineWidth', (newValue) => {
             this.updateMaterialsOfType(this.materialTypes.CONTAINER_WIREFRAME, 'linewidth', newValue);
+            this.invalidateCacheForType(this.materialTypes.CONTAINER_WIREFRAME);
         });
 
         this.registerConfigCallback('visual.containers.opacity', (newValue) => {
             this.updateMaterialsOfType(this.materialTypes.CONTAINER_WIREFRAME, 'opacity', newValue);
+            this.invalidateCacheForType(this.materialTypes.CONTAINER_WIREFRAME);
         });
 
         // Face highlight materials
@@ -116,14 +128,17 @@ class MaterialManager {
         // CAD wireframe materials
         this.registerConfigCallback('visual.cad.wireframe.color', (newValue) => {
             this.updateMaterialsOfType(this.materialTypes.CAD_WIREFRAME, 'color', newValue);
+            this.invalidateCacheForType(this.materialTypes.CAD_WIREFRAME);
         });
 
         this.registerConfigCallback('visual.cad.wireframe.lineWidth', (newValue) => {
             this.updateMaterialsOfType(this.materialTypes.CAD_WIREFRAME, 'linewidth', newValue);
+            this.invalidateCacheForType(this.materialTypes.CAD_WIREFRAME);
         });
 
         this.registerConfigCallback('visual.cad.wireframe.opacity', (newValue) => {
             this.updateMaterialsOfType(this.materialTypes.CAD_WIREFRAME, 'opacity', newValue);
+            this.invalidateCacheForType(this.materialTypes.CAD_WIREFRAME);
         });
 
         // Configuration callbacks registered
@@ -162,7 +177,7 @@ class MaterialManager {
             opacity: options.opacity || configManager?.get('visual.selection.opacity') || 0.8,
             renderOrder: options.renderOrder || configManager?.get('visual.selection.renderOrder') || 999,
             transparent: true,
-            depthTest: false,  // Render on top of geometry
+            depthTest: true,   // Enable depth test - hide back edges
             depthWrite: false, // Don't write to depth buffer
             ...options
         };
@@ -258,7 +273,7 @@ class MaterialManager {
         // Build configuration
         const config = {
             color: options.color || configManager?.get('visual.selection.color') || '#ff6600',
-            opacity: options.opacity || configManager?.get('visual.effects.materials.face.opacity') || 0.6,
+            opacity: options.opacity || configManager?.get('visual.selection.faceHighlightOpacity') || 0.3,
             renderOrder: options.renderOrder || configManager?.get('visual.effects.materials.face.renderOrder') || 1000,
             side: THREE.DoubleSide,
             transparent: true,
@@ -428,7 +443,7 @@ class MaterialManager {
             lineWidth: options.lineWidth || configManager?.get('visual.cad.wireframe.lineWidth') || 1,
             opacity: options.opacity !== undefined ? options.opacity : (configManager?.get('visual.cad.wireframe.opacity') !== undefined ? configManager.get('visual.cad.wireframe.opacity') : 0.8),
             transparent: true,
-            depthTest: false,  // Render on top of geometry
+            depthTest: true,   // Enable depth test - hide back edges
             depthWrite: false, // Don't write to depth buffer
             ...options
         };
@@ -619,6 +634,27 @@ class MaterialManager {
 
         this.stats.created++;
         return material;
+    }
+
+    /**
+     * Invalidate cached materials of a specific type
+     * This ensures new objects get fresh materials with current config values
+     * @param {string} type - Material type to invalidate
+     */
+    invalidateCacheForType(type) {
+        const keysToRemove = [];
+
+        for (const [key, material] of this.materialCache.entries()) {
+            if (material.userData?.materialManagerType === type) {
+                keysToRemove.push(key);
+            }
+        }
+
+        keysToRemove.forEach(key => this.materialCache.delete(key));
+
+        if (keysToRemove.length > 0) {
+            // Cache invalidated for type (logging removed to reduce console noise)
+        }
     }
 
     /**

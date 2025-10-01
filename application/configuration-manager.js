@@ -38,6 +38,7 @@ class ConfigurationManager {
                     color: '#ff6600',
                     lineWidth: 2,
                     opacity: 0.8,
+                    faceHighlightOpacity: 0.3,
                     renderOrder: 999
                 },
                 containers: {
@@ -48,8 +49,8 @@ class ConfigurationManager {
                 },
                 cad: {
                     wireframe: {
-                        color: '#666666',
-                        opacity: 0.5,
+                        color: '#888888',
+                        opacity: 0.8,
                         lineWidth: 1
                     }
                 },
@@ -219,6 +220,11 @@ class ConfigurationManager {
 
         this.subscribe('visual.selection.renderOrder', () => {
             this.refreshSelectionVisualization();
+        });
+
+        this.subscribe('visual.selection.faceHighlightOpacity', () => {
+            // Face highlight material opacity is updated automatically by MaterialManager
+            // No visualization refresh needed since face highlights are only visible on hover
         });
 
         // Subscribe to CAD wireframe visual changes for real-time updates

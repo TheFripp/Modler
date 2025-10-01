@@ -456,7 +456,8 @@ function createFadeOutGrid(majorColor, minorColor) {
     const material = new THREE.LineBasicMaterial({
         vertexColors: true,
         transparent: true,
-        opacity: 0.8
+        opacity: 0.8,
+        depthWrite: false  // Prevent z-fighting with wireframes at ground level
     });
 
     // Create the grid mesh

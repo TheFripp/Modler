@@ -14,6 +14,7 @@ class VisualEffects {
         // Fallback to new instances for backward compatibility during transition
         this.geometryFactory = geometryFactory || new GeometryFactory();
         this.materialManager = materialManager || new MaterialManager();
+        this.resourcePool = new VisualizationResourcePool();
 
         // Material setup handled by support mesh system
         this.registerWithConfigurationManager();
@@ -161,7 +162,7 @@ class VisualEffects {
             opacity: axisOpacity
         });
 
-        this.highlightMesh = new THREE.Mesh(faceGeometry, axisMaterial);
+        this.highlightMesh = this.resourcePool.getMeshHighlight(faceGeometry, axisMaterial);
         this.highlightMesh.position.copy(selectedObject.position);
         this.highlightMesh.rotation.copy(selectedObject.rotation);
         this.highlightMesh.scale.copy(selectedObject.scale);
@@ -195,11 +196,17 @@ class VisualEffects {
 
             // Clean up legacy highlight if not pre-created
             if (!isPreCreatedMesh) {
-                if (this.highlightMesh.parent) {
-                    this.highlightMesh.parent.remove(this.highlightMesh);
-                }
-                if (this.highlightMesh.geometry) {
-                    this.geometryFactory.returnGeometry(this.highlightMesh.geometry, 'face');
+                // Return mesh to resource pool if pooled
+                if (this.highlightMesh.userData?.pooled) {
+                    this.resourcePool.returnMeshHighlight(this.highlightMesh);
+                } else {
+                    // Legacy cleanup for non-pooled meshes
+                    if (this.highlightMesh.parent) {
+                        this.highlightMesh.parent.remove(this.highlightMesh);
+                    }
+                    if (this.highlightMesh.geometry) {
+                        this.geometryFactory.returnGeometry(this.highlightMesh.geometry, 'face');
+                    }
                 }
             }
 
@@ -359,7 +366,7 @@ class VisualEffects {
             linewidth: lineWidth
         });
 
-        this.rectanglePreview = new THREE.LineSegments(edges, material);
+        this.rectanglePreview = this.resourcePool.getLineMesh(edges, material);
 
         const centerX = (startPos.x + currentPos.x) / 2;
         const centerZ = (startPos.z + currentPos.z) / 2;
@@ -371,14 +378,20 @@ class VisualEffects {
 
     clearRectanglePreview() {
         if (this.rectanglePreview) {
-            if (this.rectanglePreview.parent) {
-                this.rectanglePreview.parent.remove(this.rectanglePreview);
-            }
-            if (this.rectanglePreview.geometry) {
-                this.geometryFactory.returnGeometry(this.rectanglePreview.geometry, 'wireframe');
-            }
-            if (this.rectanglePreview.material) {
-                this.materialManager.disposeMaterial(this.rectanglePreview.material);
+            // Return to resource pool if pooled
+            if (this.rectanglePreview.userData?.pooled) {
+                this.resourcePool.returnLineMesh(this.rectanglePreview);
+            } else {
+                // Legacy cleanup for non-pooled meshes
+                if (this.rectanglePreview.parent) {
+                    this.rectanglePreview.parent.remove(this.rectanglePreview);
+                }
+                if (this.rectanglePreview.geometry) {
+                    this.geometryFactory.returnGeometry(this.rectanglePreview.geometry, 'wireframe');
+                }
+                if (this.rectanglePreview.material) {
+                    this.materialManager.disposeMaterial(this.rectanglePreview.material);
+                }
             }
             this.rectanglePreview = null;
         }
@@ -390,15 +403,15 @@ class VisualEffects {
         const configManager = window.modlerComponents?.configurationManager;
         const lineWidth = configManager?.get('visual.effects.wireframe.lineWidth') || 1;
 
-        const geometry = new THREE.BoxGeometry(width, height, depth);
-        const edges = new THREE.EdgesGeometry(geometry);
+        const geometry = this.geometryFactory.createBoxGeometry(width, height, depth);
+        const edges = this.geometryFactory.createEdgeGeometryFromSource(geometry);
         const material = this.materialManager.createPreviewWireframeMaterial({
             color: color,
             linewidth: lineWidth,
             opacity: opacity
         });
 
-        const edgesMesh = new THREE.LineSegments(edges, material);
+        const edgesMesh = this.resourcePool.getLineMesh(edges, material);
         edgesMesh.position.copy(position);
 
         this.geometryFactory.returnGeometry(geometry, 'box');
@@ -409,7 +422,7 @@ class VisualEffects {
         const configManager = window.modlerComponents?.configurationManager;
         const lineWidth = configManager?.get('visual.effects.wireframe.lineWidth') || 1;
 
-        const group = new THREE.Group();
+        const group = this.resourcePool.getGroup();
         group.position.copy(position);
 
         const halfWidth = width / 2;
@@ -459,7 +472,7 @@ class VisualEffects {
             geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
 
             const material = (layoutDirection === direction) ? reducedOpacityMaterial : fullOpacityMaterial;
-            const lineSegments = new THREE.LineSegments(geometry, material);
+            const lineSegments = this.resourcePool.getLineMesh(geometry, material);
 
             lineSegments.userData.direction = direction;
             lineSegments.userData.isLayoutDirection = (layoutDirection === direction);
@@ -487,7 +500,7 @@ class VisualEffects {
         if (!bbox) return;
 
         // Create padding wireframes for each side
-        const paddingGroup = new THREE.Group();
+        const paddingGroup = this.resourcePool.getGroup();
         paddingGroup.name = 'paddingVisualization';
 
         const size = bbox.getSize(new THREE.Vector3());
@@ -558,29 +571,34 @@ class VisualEffects {
         // Find and remove existing padding visualization
         const existingPadding = mesh.getObjectByName('paddingVisualization');
         if (existingPadding) {
-            // Return all geometries and materials to pools
+            // Return all meshes to visualization pool
             existingPadding.traverse((child) => {
-                if (child.geometry) this.geometryFactory.returnGeometry(child.geometry, 'edge');
-                if (child.material) {
-                    if (Array.isArray(child.material)) {
-                        child.material.forEach(mat => this.materialManager.disposeMaterial(mat));
-                    } else {
-                        this.materialManager.disposeMaterial(child.material);
-                    }
+                // Return meshes to visualization pool (padding boxes)
+                if (child.isMesh && child.userData?.pooled) {
+                    this.resourcePool.returnMeshHighlight(child);
                 }
             });
+
+            // Return the group itself to pool
             mesh.remove(existingPadding);
+            if (existingPadding.userData?.pooled) {
+                this.resourcePool.returnGroup(existingPadding);
+            }
         }
     }
 
     createPaddingBox(width, height, depth, position, color, opacity) {
-        const geometry = new THREE.BoxGeometry(width, height, depth);
+        // Get geometry from factory (pooled resource)
+        const geometry = this.geometryFactory.createBoxGeometry(width, height, depth);
+
+        // Get material from manager
         const material = this.materialManager.createPaddingVisualizationMaterial({
             color: color,
             opacity: opacity
         });
 
-        const box = new THREE.Mesh(geometry, material);
+        // Get mesh from visualization pool (proper resource pooling)
+        const box = this.resourcePool.getMeshHighlight(geometry, material);
         box.position.copy(position);
         return box;
     }

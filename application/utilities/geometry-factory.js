@@ -190,11 +190,12 @@ class GeometryFactory {
             // Generate cache key based on geometry characteristics
             const geometryKey = this.generateGeometryKey(sourceGeometry);
 
-            // Check pool
-            const pooledGeometry = this.getFromPool('boxEdges', geometryKey);
-            if (pooledGeometry) {
-                return pooledGeometry;
-            }
+            // Check pool - but DON'T use pooled edge geometries as they have stale bounding data
+            // Edge geometries are lightweight and should be recreated each time
+            // const pooledGeometry = this.getFromPool('boxEdges', geometryKey);
+            // if (pooledGeometry) {
+            //     return pooledGeometry;
+            // }
 
             // Ensure geometry is properly prepared for EdgesGeometry
             if (!sourceGeometry.attributes.position) {
@@ -205,8 +206,8 @@ class GeometryFactory {
             // Create new edge geometry with error handling
             const edgeGeometry = new THREE.EdgesGeometry(sourceGeometry, options.thresholdAngle);
 
-            // Store in pool and track
-            this.storeInPool('boxEdges', geometryKey, edgeGeometry);
+            // Don't pool edge geometries - they have bounding data issues
+            // this.storeInPool('boxEdges', geometryKey, edgeGeometry);
             this.trackGeometry(edgeGeometry, { type: 'edges', key: geometryKey });
 
             this.stats.created++;

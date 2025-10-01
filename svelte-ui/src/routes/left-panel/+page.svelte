@@ -17,7 +17,8 @@
 		selection: {
 			color: '#ff6600',
 			lineWidth: 2,
-			opacity: 80
+			opacity: 80,
+			faceHighlightOpacity: 30
 		},
 		containers: {
 			wireframeColor: '#00ff00',
@@ -568,8 +569,8 @@
 			? `visual.selection.${property}`
 			: `visual.containers.${property}`;
 
-		// Convert percentage to decimal for opacity
-		const actualValue = property === 'opacity' ? value / 100 : value;
+		// Convert percentage to decimal for opacity properties
+		const actualValue = (property === 'opacity' || property === 'faceHighlightOpacity') ? value / 100 : value;
 
 		// Send individual setting update through unified communication system
 		const settings = {
@@ -678,33 +679,34 @@
 
 	function loadSettingsFromConfig() {
 		// Use PostMessage to request settings from parent window (avoids cross-origin issues)
-		// Send requests for all setting types
-		window.parent.postMessage({ type: 'get-visual-settings' }, '*');
-		window.parent.postMessage({ type: 'get-cad-wireframe-settings' }, '*');
-		window.parent.postMessage({ type: 'get-scene-settings' }, '*');
-		window.parent.postMessage({ type: 'get-interface-settings' }, '*');
+		console.log('🔄 Requesting settings from parent window...');
 
-		// Listen for responses
+		// Listen for responses BEFORE sending requests
 		const handleSettingsResponse = (event: MessageEvent) => {
 			if (event.data.type === 'visual-settings-response') {
+				console.log('✅ Received visual settings:', event.data.settings);
 				const settings = event.data.settings;
 				visualSettings.selection.color = settings.selection.color;
 				visualSettings.selection.lineWidth = settings.selection.lineWidth;
 				visualSettings.selection.opacity = settings.selection.opacity * 100;
+				visualSettings.selection.faceHighlightOpacity = (settings.selection.faceHighlightOpacity || 0.3) * 100;
 				visualSettings.containers.wireframeColor = settings.containers.wireframeColor;
 				visualSettings.containers.lineWidth = settings.containers.lineWidth;
 				visualSettings.containers.opacity = settings.containers.opacity * 100;
 			} else if (event.data.type === 'cad-wireframe-settings-response') {
+				console.log('✅ Received CAD wireframe settings:', event.data.settings);
 				const settings = event.data.settings;
 				cadWireframeSettings.color = settings.color;
 				cadWireframeSettings.lineWidth = settings.lineWidth;
 				cadWireframeSettings.opacity = settings.opacity * 100;
 			} else if (event.data.type === 'scene-settings-response') {
+				console.log('✅ Received scene settings:', event.data.settings);
 				const settings = event.data.settings;
 				sceneSettings.backgroundColor = settings.backgroundColor;
 				sceneSettings.gridMainColor = settings.gridMainColor;
 				sceneSettings.gridSubColor = settings.gridSubColor;
 			} else if (event.data.type === 'interface-settings-response') {
+				console.log('✅ Received interface settings:', event.data.settings);
 				const settings = event.data.settings;
 				interfaceSettings.accentColor = settings.accentColor;
 				interfaceSettings.toolbarOpacity = settings.toolbarOpacity * 100;
@@ -712,6 +714,12 @@
 		};
 
 		window.addEventListener('message', handleSettingsResponse);
+
+		// Send requests for all setting types
+		window.parent.postMessage({ type: 'get-visual-settings' }, '*');
+		window.parent.postMessage({ type: 'get-cad-wireframe-settings' }, '*');
+		window.parent.postMessage({ type: 'get-scene-settings' }, '*');
+		window.parent.postMessage({ type: 'get-interface-settings' }, '*');
 	}
 
 	onMount(() => {
@@ -921,6 +929,15 @@
 										max={100}
 									/>
 								</div>
+								<InlineInput
+									label="Face highlight"
+									type="number"
+									bind:value={visualSettings.selection.faceHighlightOpacity}
+									onchange={() => updateVisualSettings('selection', 'faceHighlightOpacity', visualSettings.selection.faceHighlightOpacity)}
+									min={0}
+									max={100}
+									step={1}
+								/>
 							</div>
 						</div>
 

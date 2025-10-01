@@ -27,7 +27,7 @@ class LayoutGeometry {
         // Use injected factories (factories are now required - no fallback access)
         const gFactory = geometryFactory;
         const mManager = materialManager;
-        const resourcePool = window.modlerComponents?.resourcePool;
+        const resourcePool = window.modlerComponents?.resourcePool || new VisualizationResourcePool();
 
         // NEW ARCHITECTURE: Create solid BoxGeometry as main mesh (like regular objects)
         let containerGeometry;

@@ -97,6 +97,11 @@ class PropertyFormatConverter {
      */
     convertToInternal(property, value, inputUnit = null) {
         try {
+            // Handle nested autoLayout object
+            if (property === 'autoLayout' && typeof value === 'object' && value !== null) {
+                return this.convertAutoLayoutToInternal(value);
+            }
+
             const propertyType = this.propertyTypes[property] || 'unknown';
 
             switch (propertyType) {
@@ -419,6 +424,43 @@ class PropertyFormatConverter {
      */
     convertStringFromInternal(stringValue, formatted = false) {
         return stringValue || '';
+    }
+
+    /**
+     * Convert nested autoLayout object to internal format
+     * Handles: { enabled, direction, gap, padding: { top, bottom, ... } }
+     * @private
+     */
+    convertAutoLayoutToInternal(autoLayoutObj) {
+        const converted = {};
+        const errors = [];
+
+        for (const [key, val] of Object.entries(autoLayoutObj)) {
+            if (key === 'padding' && typeof val === 'object' && val !== null) {
+                // Handle nested padding object
+                converted.padding = {};
+                for (const [side, sideVal] of Object.entries(val)) {
+                    const result = this.convertToInternal(`autoLayout.padding.${side}`, sideVal);
+                    converted.padding[side] = result.value;
+                    if (!result.isValid) {
+                        errors.push(`autoLayout.padding.${side}: ${result.error}`);
+                    }
+                }
+            } else {
+                // Handle simple properties: enabled, direction, gap
+                const result = this.convertToInternal(`autoLayout.${key}`, val);
+                converted[key] = result.value;
+                if (!result.isValid) {
+                    errors.push(`autoLayout.${key}: ${result.error}`);
+                }
+            }
+        }
+
+        return {
+            value: converted,
+            isValid: errors.length === 0,
+            error: errors.length > 0 ? errors.join('; ') : undefined
+        };
     }
 
     /**

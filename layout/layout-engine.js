@@ -543,9 +543,22 @@ class LayoutEngine {
             maxZ = Math.max(maxZ, pos.z + size.z / 2);
         });
 
+        // Add padding to bounds if provided in layout config
+        let paddingAdjustment = { x: 0, y: 0, z: 0 };
+        if (layoutConfig && layoutConfig.padding) {
+            const p = layoutConfig.padding;
+            paddingAdjustment.x = (p.left || 0) + (p.right || 0);
+            paddingAdjustment.y = (p.bottom || 0) + (p.top || 0);
+            paddingAdjustment.z = (p.back || 0) + (p.front || 0);
+        }
+
         const min = new THREE.Vector3(minX, minY, minZ);
         const max = new THREE.Vector3(maxX, maxY, maxZ);
-        const size = new THREE.Vector3(maxX - minX, maxY - minY, maxZ - minZ);
+        const size = new THREE.Vector3(
+            (maxX - minX) + paddingAdjustment.x,
+            (maxY - minY) + paddingAdjustment.y,
+            (maxZ - minZ) + paddingAdjustment.z
+        );
 
         return { min, max, size };
     }

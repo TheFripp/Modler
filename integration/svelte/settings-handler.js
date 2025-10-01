@@ -75,6 +75,7 @@ class SettingsHandler {
      * Handle request for current visual settings
      */
     handleGetVisualSettings(source) {
+        console.log('📨 SettingsHandler: Received get-visual-settings request');
         const configurationManager = this.getConfigManager();
         if (!configurationManager) {
             console.warn('❌ ConfigurationManager not available for getting visual settings');
@@ -85,7 +86,8 @@ class SettingsHandler {
             selection: {
                 color: configurationManager.get('visual.selection.color') || '#ff6600',
                 lineWidth: configurationManager.get('visual.selection.lineWidth') || 2,
-                opacity: configurationManager.get('visual.selection.opacity') || 0.8
+                opacity: configurationManager.get('visual.selection.opacity') || 0.8,
+                faceHighlightOpacity: configurationManager.get('visual.selection.faceHighlightOpacity') || 0.3
             },
             containers: {
                 wireframeColor: configurationManager.get('visual.containers.wireframeColor') || '#00ff00',
@@ -94,6 +96,7 @@ class SettingsHandler {
             }
         };
 
+        console.log('📤 SettingsHandler: Sending visual-settings-response:', currentSettings);
         source.postMessage({
             type: 'visual-settings-response',
             settings: currentSettings

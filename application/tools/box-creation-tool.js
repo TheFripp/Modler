@@ -157,6 +157,12 @@ class BoxCreationTool {
         }
         this.creationObject.geometry = newGeometry;
 
+        // CRITICAL: Update support meshes (wireframes) to match new geometry
+        const supportMeshFactory = window.modlerComponents?.supportMeshFactory;
+        if (supportMeshFactory && this.creationObject.userData.supportMeshes) {
+            supportMeshFactory.updateSupportMeshGeometries(this.creationObject);
+        }
+
         // Make material opaque
         this.creationObject.material.opacity = 1.0;
         this.creationObject.material.transparent = false;

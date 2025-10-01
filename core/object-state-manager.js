@@ -287,8 +287,11 @@ class ObjectStateManager extends EventTarget {
             }
         }
 
-        // Apply updates to local state
-        this.applyUpdates(object, updates);
+        // Apply updates to local state and track which properties changed
+        const changedProperties = this.applyUpdates(object, updates);
+
+        // Store changed properties for use in propagateChanges
+        object._changedProperties = changedProperties;
 
         // Validate format after updates if ObjectDataFormat is available
         if (this.objectDataFormat) {
@@ -318,6 +321,9 @@ class ObjectStateManager extends EventTarget {
      * Note: Geometry properties proxy to SceneController (single source of truth)
      */
     applyUpdates(object, updates) {
+        // Track which top-level properties were changed
+        const changedProperties = new Set();
+
         // PASS 1: Expand nested objects into flat paths
         // Must be done BEFORE iterating to process, otherwise forEach snapshot misses new keys
         const expandedUpdates = {};
@@ -329,6 +335,19 @@ class ObjectStateManager extends EventTarget {
                     // Expand nested object into flat paths
                     Object.entries(value).forEach(([axis, axisValue]) => {
                         expandedUpdates[`${path}.${axis}`] = axisValue;
+                    });
+                    return; // Skip adding the nested object itself
+                } else if (path === 'autoLayout') {
+                    // Expand autoLayout nested object (enabled, direction, gap, padding)
+                    Object.entries(value).forEach(([key, val]) => {
+                        if (key === 'padding' && typeof val === 'object' && val !== null) {
+                            // Handle nested padding object
+                            Object.entries(val).forEach(([side, sideVal]) => {
+                                expandedUpdates[`${path}.${key}.${side}`] = sideVal;
+                            });
+                        } else {
+                            expandedUpdates[`${path}.${key}`] = val;
+                        }
                     });
                     return; // Skip adding the nested object itself
                 }
@@ -343,6 +362,10 @@ class ObjectStateManager extends EventTarget {
         const rotationUpdates = {};
 
         Object.entries(expandedUpdates).forEach(([path, value]) => {
+            // Track top-level property that changed
+            const topLevelProp = path.split('.')[0];
+            changedProperties.add(topLevelProp);
+
             // Handle flat path format (e.g., 'position.x': 5)
             if (path.startsWith('dimensions.')) {
                 const axis = path.split('.')[1];
@@ -354,10 +377,20 @@ class ObjectStateManager extends EventTarget {
                 const axis = path.split('.')[1];
                 rotationUpdates[axis] = value;
             } else if (path.includes('.')) {
-                // Other nested properties (e.g., "autoLayout.gap", "material.color")
-                const [parent, child] = path.split('.');
-                if (!object[parent]) object[parent] = {};
-                object[parent][child] = value;
+                // Other nested properties (e.g., "autoLayout.gap", "autoLayout.padding.top")
+                const parts = path.split('.');
+                let current = object;
+
+                // Navigate/create nested structure
+                for (let i = 0; i < parts.length - 1; i++) {
+                    if (!current[parts[i]]) {
+                        current[parts[i]] = {};
+                    }
+                    current = current[parts[i]];
+                }
+
+                // Set the final value
+                current[parts[parts.length - 1]] = value;
             } else {
                 // Direct property
                 object[path] = value;
@@ -374,6 +407,8 @@ class ObjectStateManager extends EventTarget {
         if (Object.keys(rotationUpdates).length > 0) {
             object._pendingRotationUpdates = rotationUpdates;
         }
+
+        return changedProperties;
     }
 
     /**
@@ -442,6 +477,9 @@ class ObjectStateManager extends EventTarget {
                 if (sceneObject?.dimensions) {
                     object.dimensions = { ...sceneObject.dimensions };
                 }
+
+                // BOTTOM-UP PROPAGATION: Child dimensions changed → schedule parent layout update
+                this.scheduleParentLayoutUpdate(object.id);
             }
 
             // Apply position updates
@@ -474,18 +512,39 @@ class ObjectStateManager extends EventTarget {
                 }
             }
 
-            // Update container layout if needed
-            if (object.isContainer && object.autoLayout?.enabled) {
-                this.sceneController.updateLayout(object.id);
-            }
-
-            // Sync non-geometry properties to SceneController
+            // Sync non-geometry properties to SceneController first (needed for layout)
             const sceneObject = this.sceneController.getObject(object.id);
             if (sceneObject) {
                 sceneObject.name = object.name;
                 if (object.autoLayout) {
                     sceneObject.autoLayout = object.autoLayout;
                 }
+            }
+
+            // Update container layout if needed (TOP-DOWN PROPAGATION)
+            // Trigger if: container has layout enabled OR autoLayout properties just changed
+            const autoLayoutChanged = object._changedProperties?.has('autoLayout');
+            if (object.isContainer && sceneObject && (object.autoLayout?.enabled || autoLayoutChanged)) {
+                const layoutResult = this.sceneController.updateLayout(object.id);
+
+                // Resize container to fit the laid out objects
+                if (layoutResult && layoutResult.success && layoutResult.layoutBounds) {
+                    const containerCrudManager = window.modlerComponents?.containerCrudManager;
+                    if (containerCrudManager) {
+                        containerCrudManager.resizeContainerToLayoutBounds(sceneObject, layoutResult.layoutBounds);
+                    }
+                }
+
+                // Show padding visualization if padding is set
+                const visualEffects = window.modlerComponents?.visualEffects;
+                if (visualEffects && object.autoLayout.padding) {
+                    visualEffects.showPaddingVisualization(sceneObject.mesh, object.autoLayout.padding);
+                } else if (visualEffects) {
+                    visualEffects.hidePaddingVisualization(sceneObject.mesh);
+                }
+
+                // BOTTOM-UP PROPAGATION: Container size changed → schedule grandparent layout update
+                this.scheduleParentLayoutUpdate(object.id);
             }
         });
     }
@@ -649,6 +708,96 @@ class ObjectStateManager extends EventTarget {
             console.error('ObjectStateManager: Failed to serialize hierarchy for PostMessage:', error);
             return this.hierarchy;
         }
+    }
+
+    /**
+     * BIDIRECTIONAL HIERARCHICAL PROPAGATION
+     * Schedules layout updates for parent containers when child changes
+     */
+    scheduleParentLayoutUpdate(childObjectId) {
+        const childObject = this.sceneController?.getObject(childObjectId);
+        if (!childObject || !childObject.parentContainer) return;
+
+        const parentContainer = this.sceneController.getObject(childObject.parentContainer);
+        if (!parentContainer?.autoLayout?.enabled) return;
+
+        // Initialize scheduled updates set
+        if (!this.scheduledLayoutUpdates) {
+            this.scheduledLayoutUpdates = new Set();
+        }
+
+        // Add parent to scheduled updates
+        this.scheduledLayoutUpdates.add(childObject.parentContainer);
+
+        // Process in next frame (after current propagation completes)
+        if (!this.layoutUpdateScheduled) {
+            this.layoutUpdateScheduled = true;
+            requestAnimationFrame(() => {
+                this.processScheduledLayouts();
+                this.layoutUpdateScheduled = false;
+            });
+        }
+    }
+
+    /**
+     * Process all scheduled layout updates (bottom-up order)
+     * Deepest containers are updated first to ensure proper propagation
+     */
+    processScheduledLayouts() {
+        if (!this.scheduledLayoutUpdates || this.scheduledLayoutUpdates.size === 0) return;
+
+        // Sort by container depth (deepest first)
+        const sorted = Array.from(this.scheduledLayoutUpdates).sort((a, b) => {
+            const depthA = this.getContainerDepth(a);
+            const depthB = this.getContainerDepth(b);
+            return depthB - depthA; // Descending order (deepest first)
+        });
+
+        // Update each container's layout
+        sorted.forEach(containerId => {
+            const container = this.sceneController.getObject(containerId);
+            if (container?.autoLayout?.enabled) {
+                // Trigger layout recalculation
+                const layoutResult = this.sceneController.updateLayout(containerId);
+
+                // Resize container to fit new layout
+                if (layoutResult?.success && layoutResult.layoutBounds) {
+                    const containerCrudManager = window.modlerComponents?.containerCrudManager;
+                    if (containerCrudManager) {
+                        containerCrudManager.resizeContainerToLayoutBounds(container, layoutResult.layoutBounds);
+                    }
+                }
+
+                // If this container is in a parent container, schedule parent update
+                if (container.parentContainer) {
+                    const grandparent = this.sceneController.getObject(container.parentContainer);
+                    if (grandparent?.autoLayout?.enabled) {
+                        this.scheduledLayoutUpdates.add(container.parentContainer);
+                    }
+                }
+            }
+        });
+
+        this.scheduledLayoutUpdates.clear();
+    }
+
+    /**
+     * Get container nesting depth (0 for root-level containers)
+     */
+    getContainerDepth(containerId) {
+        let depth = 0;
+        let current = this.sceneController?.getObject(containerId);
+
+        while (current?.parentContainer) {
+            depth++;
+            current = this.sceneController.getObject(current.parentContainer);
+            if (depth > 50) {
+                console.error('ObjectStateManager: Detected circular parent chain for container', containerId);
+                break;
+            }
+        }
+
+        return depth;
     }
 }
 
