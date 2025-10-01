@@ -674,6 +674,15 @@
                 case 'snap-toggle':
                     handleSnapToggle();
                     break;
+                case 'fill-button-check':
+                    handleFillButtonCheck(event.source, data.objectId);
+                    break;
+                case 'fill-button-toggle':
+                    handleFillButtonToggle(data.objectId, data.axis);
+                    break;
+                case 'fill-button-get-states':
+                    handleFillButtonGetStates(event.source, data.objectId);
+                    break;
                 case 'cad-wireframe-settings-changed':
                     handleCadWireframeSettingsUpdate(data.settings);
                     break;
@@ -912,6 +921,48 @@
 
     // Expose snap toggle for UI components
     window.toggleSnapping = handleSnapToggle;
+
+    /**
+     * Handle fill button visibility check from PropertyPanel
+     */
+    function handleFillButtonCheck(source, objectId) {
+        const propertyManager = window.modlerComponents?.propertyManager;
+        if (!propertyManager) {
+            source.postMessage({ type: 'fill-button-check-response', data: { shouldShow: false } }, '*');
+            return;
+        }
+
+        const shouldShow = propertyManager.isInLayoutContainer(objectId);
+        source.postMessage({ type: 'fill-button-check-response', data: { objectId, shouldShow } }, '*');
+    }
+
+    /**
+     * Handle fill button state request from PropertyPanel
+     */
+    function handleFillButtonGetStates(source, objectId) {
+        const propertyManager = window.modlerComponents?.propertyManager;
+        if (!propertyManager) {
+            source.postMessage({ type: 'fill-button-states-response', data: { states: {} } }, '*');
+            return;
+        }
+
+        const states = {
+            x: propertyManager.isAxisFilled(objectId, 'x'),
+            y: propertyManager.isAxisFilled(objectId, 'y'),
+            z: propertyManager.isAxisFilled(objectId, 'z')
+        };
+        source.postMessage({ type: 'fill-button-states-response', data: { objectId, states } }, '*');
+    }
+
+    /**
+     * Handle fill button toggle from PropertyPanel
+     */
+    function handleFillButtonToggle(objectId, axis) {
+        const propertyManager = window.modlerComponents?.propertyManager;
+        if (propertyManager) {
+            propertyManager.toggleFillProperty(axis);
+        }
+    }
 
     /**
      * Send tool state update to all panels

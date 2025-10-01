@@ -71,79 +71,63 @@
 		};
 	}
 
-	// Fill functionality for dimensions
-	function shouldShowFillButtons(): boolean {
-		if (!$displayObject || $displayObject.isContainer) {
-			return false;
-		}
+	// Fill button state
+	let showFillButtons = false;
+	let fillButtonStates = { x: false, y: false, z: false };
 
-		// Safely check for PropertyManager - handle undefined gracefully
-		try {
-			const modlerComponents = (window as any).modlerComponents;
-			if (!modlerComponents) {
-				console.log('🔍 Fill buttons: modlerComponents not available yet');
-				return false;
-			}
-
-			const hasPropertyManager = modlerComponents.propertyManager?.initialized;
-			console.log('🔍 Fill buttons: PropertyManager available?', hasPropertyManager);
-			if (!hasPropertyManager) {
-				return false;
-			}
-
-			// Check if object is in a layout-enabled container
-			const inLayoutContainer = modlerComponents.propertyManager.isInLayoutContainer($displayObject.id);
-			console.log('🔍 Fill buttons: in layout container?', inLayoutContainer);
-			return inLayoutContainer;
-		} catch (error) {
-			console.warn('🔍 Fill buttons: Error accessing PropertyManager', error);
-			return false;
-		}
+	// Request fill button state via PostMessage when displayObject changes
+	$: if ($displayObject && !$displayObject.isContainer) {
+		requestFillButtonState($displayObject.id);
+	} else {
+		showFillButtons = false;
 	}
 
-	function getFillStates(): { x?: boolean; y?: boolean; z?: boolean } {
-		if (!$displayObject) return {};
+	function requestFillButtonState(objectId: string) {
+		// Send request to parent window via PostMessage
+		window.parent.postMessage({
+			type: 'fill-button-check',
+			data: { objectId }
+		}, '*');
 
-		try {
-			const modlerComponents = (window as any).modlerComponents;
-			if (!modlerComponents?.propertyManager) return {};
-
-			const pm = modlerComponents.propertyManager;
-			return {
-				x: pm.isAxisFilled($displayObject.id, 'x'),
-				y: pm.isAxisFilled($displayObject.id, 'y'),
-				z: pm.isAxisFilled($displayObject.id, 'z')
-			};
-		} catch (error) {
-			return {};
-		}
+		window.parent.postMessage({
+			type: 'fill-button-get-states',
+			data: { objectId }
+		}, '*');
 	}
+
+	// Listen for fill button responses
+	onMount(() => {
+		const handleFillButtonResponse = (event: MessageEvent) => {
+			if (event.data.type === 'fill-button-check-response') {
+				showFillButtons = event.data.data.shouldShow;
+			} else if (event.data.type === 'fill-button-states-response') {
+				fillButtonStates = event.data.data.states || { x: false, y: false, z: false };
+			}
+		};
+
+		window.addEventListener('message', handleFillButtonResponse);
+		return () => window.removeEventListener('message', handleFillButtonResponse);
+	});
 
 	function handleFillToggle(axis: 'x' | 'y' | 'z') {
-		try {
-			const modlerComponents = (window as any).modlerComponents;
-			if (modlerComponents?.propertyManager) {
-				modlerComponents.propertyManager.toggleFillProperty(axis);
-			}
-		} catch (error) {
-			console.warn('Fill toggle failed:', error);
-		}
+		if (!$displayObject) return;
+
+		// Send toggle request via PostMessage
+		window.parent.postMessage({
+			type: 'fill-button-toggle',
+			data: { objectId: $displayObject.id, axis }
+		}, '*');
+
+		// Optimistically update local state
+		fillButtonStates[axis] = !fillButtonStates[axis];
+
+		// Request fresh state after a short delay
+		setTimeout(() => requestFillButtonState($displayObject.id), 100);
 	}
 
 	function handleFillHover(axis: 'x' | 'y' | 'z' | null) {
-		try {
-			const modlerComponents = (window as any).modlerComponents;
-			const visualEffects = modlerComponents?.visualEffects;
-			if (!visualEffects) return;
-
-			if (axis) {
-				visualEffects.showAxisFaceHighlight(axis);
-			} else {
-				visualEffects.clearHighlight();
-			}
-		} catch (error) {
-			// Silently fail for hover events
-		}
+		// TODO: Implement face highlighting via PostMessage if needed
+		// For now, just skip hover effects
 	}
 
 	// Initialize unit system on mount
@@ -224,8 +208,8 @@
 						propertyBase="dimensions"
 						labels={{ x: 'W', y: 'H', z: 'D' }}
 						idPrefix="dim"
-						showFillButtons={shouldShowFillButtons()}
-						fillStates={getFillStates()}
+						showFillButtons={showFillButtons}
+						fillStates={fillButtonStates}
 						onFillToggle={handleFillToggle}
 						onFillHover={handleFillHover}
 					/>
