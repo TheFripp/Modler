@@ -287,7 +287,7 @@ function convertFromFlatProperties(sourceData) {
             enabled: sourceData['autoLayout.enabled'] || false,
             direction: sourceData['autoLayout.direction'] || null,
             gap: sourceData['autoLayout.gap'] || 0,
-            padding: sourceData['autoLayout.padding'] || { top: 0, bottom: 0, left: 0, right: 0, front: 0, back: 0 }
+            padding: sourceData['autoLayout.padding'] || { width: 0, height: 0, depth: 0 }
         },
 
         parentContainer: sourceData.parentContainer || null
@@ -336,7 +336,7 @@ function convertFromThreeJS(threeObject) {
             transparent: threeObject.material?.transparent || false
         },
 
-        autoLayout: userData.autoLayout || { enabled: false, direction: null, gap: 0, padding: { top: 0, bottom: 0, left: 0, right: 0, front: 0, back: 0 } },
+        autoLayout: userData.autoLayout || { enabled: false, direction: null, gap: 0, padding: { width: 0, height: 0, depth: 0 } },
         parentContainer: userData.parentContainer || null
     };
 
@@ -374,7 +374,7 @@ function convertFromObjectStateManager(stateData) {
             transparent: stateData.material?.transparent || false
         },
 
-        autoLayout: stateData.autoLayout || { enabled: false, direction: null, gap: 0, padding: { top: 0, bottom: 0, left: 0, right: 0, front: 0, back: 0 } },
+        autoLayout: stateData.autoLayout || { enabled: false, direction: null, gap: 0, padding: { width: 0, height: 0, depth: 0 } },
         parentContainer: stateData.parentContainer || null
     };
 
@@ -398,7 +398,7 @@ function convertBestEffort(sourceData) {
         dimensions: sourceData.dimensions || { x: 1, y: 1, z: 1 },
 
         material: sourceData.material || { color: '#888888', opacity: 1, transparent: false },
-        autoLayout: sourceData.autoLayout || { enabled: false, direction: null, gap: 0, padding: { top: 0, bottom: 0, left: 0, right: 0, front: 0, back: 0 } },
+        autoLayout: sourceData.autoLayout || { enabled: false, direction: null, gap: 0, padding: { width: 0, height: 0, depth: 0 } },
         parentContainer: sourceData.parentContainer || null
     };
 }
@@ -473,7 +473,7 @@ function ensureStandardFormat(objectData, options = {}) {
             enabled: false,
             direction: null,
             gap: 0,
-            padding: { top: 0, bottom: 0, left: 0, right: 0, front: 0, back: 0 }
+            padding: { width: 0, height: 0, depth: 0 }
         };
     }
 
@@ -513,7 +513,7 @@ function createEmptyObjectData(id = null) {
             enabled: false,
             direction: null,
             gap: 0,
-            padding: { top: 0, bottom: 0, left: 0, right: 0, front: 0, back: 0 }
+            padding: { width: 0, height: 0, depth: 0 }
         },
 
         parentContainer: null,

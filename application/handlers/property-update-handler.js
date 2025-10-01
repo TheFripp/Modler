@@ -51,7 +51,7 @@ class PropertyUpdateHandler {
                     enabled: false,
                     direction: null,
                     gap: 0,
-                    padding: { top: 0, bottom: 0, left: 0, right: 0, front: 0, back: 0 }
+                    padding: { width: 0, height: 0, depth: 0 }
                 };
             }
 
@@ -118,7 +118,7 @@ class PropertyUpdateHandler {
      * Check if a property change should trigger layout mode activation
      */
     isLayoutProperty(property) {
-        const layoutProperties = ['direction', 'gap', 'padding.top', 'padding.bottom', 'padding.left', 'padding.right', 'padding.front', 'padding.back'];
+        const layoutProperties = ['direction', 'gap', 'padding.width', 'padding.height', 'padding.depth'];
         return layoutProperties.includes(property);
     }
 

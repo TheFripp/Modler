@@ -408,7 +408,7 @@ class SceneController {
      * @param {Object} layoutConfig - Layout configuration
      * @param {string} layoutConfig.direction - Layout direction ('x', 'y', 'z', 'xy', 'xyz')
      * @param {number} layoutConfig.gap - Gap between objects in world units
-     * @param {Object} layoutConfig.padding - Padding configuration {top, bottom, left, right, front, back}
+     * @param {Object} layoutConfig.padding - Padding configuration {width, height, depth} - inset from container walls
      * @returns {boolean} True if layout was successfully enabled
      */
     enableAutoLayout(containerId, layoutConfig) {
@@ -426,7 +426,7 @@ class SceneController {
             enabled: true,
             direction: layoutConfig.direction || 'x',
             gap: layoutConfig.gap || 0,
-            padding: layoutConfig.padding || { top: 0, bottom: 0, left: 0, right: 0, front: 0, back: 0 },
+            padding: layoutConfig.padding || { width: 0, height: 0, depth: 0 },
             ...layoutConfig
         };
 

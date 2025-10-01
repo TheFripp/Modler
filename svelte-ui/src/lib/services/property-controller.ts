@@ -13,12 +13,9 @@ export type PropertyPath =
 	| `autoLayout.enabled`
 	| `autoLayout.direction`
 	| `autoLayout.gap`
-	| `autoLayout.padding.top`
-	| `autoLayout.padding.bottom`
-	| `autoLayout.padding.left`
-	| `autoLayout.padding.right`
-	| `autoLayout.padding.front`
-	| `autoLayout.padding.back`;
+	| `autoLayout.padding.width`
+	| `autoLayout.padding.height`
+	| `autoLayout.padding.depth`;
 
 export interface PropertyConstraints {
 	min?: number;
@@ -122,13 +119,10 @@ class PropertyController {
 		});
 		this.constraints.set('autoLayout.gap', { step: 0.1, min: 0 });
 
-		// Padding constraints
-		this.constraints.set('autoLayout.padding.top', { step: 0.1, min: 0 });
-		this.constraints.set('autoLayout.padding.bottom', { step: 0.1, min: 0 });
-		this.constraints.set('autoLayout.padding.left', { step: 0.1, min: 0 });
-		this.constraints.set('autoLayout.padding.right', { step: 0.1, min: 0 });
-		this.constraints.set('autoLayout.padding.front', { step: 0.1, min: 0 });
-		this.constraints.set('autoLayout.padding.back', { step: 0.1, min: 0 });
+		// Padding constraints (inset padding on width/height/depth axes)
+		this.constraints.set('autoLayout.padding.width', { step: 0.1, min: 0 });
+		this.constraints.set('autoLayout.padding.height', { step: 0.1, min: 0 });
+		this.constraints.set('autoLayout.padding.depth', { step: 0.1, min: 0 });
 	}
 
 	/**

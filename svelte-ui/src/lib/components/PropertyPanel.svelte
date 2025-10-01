@@ -48,7 +48,7 @@
 			direction: (currentDirection === axis && isCurrentlyEnabled) ? '' : axis,
 			gap: $displayObject.autoLayout?.gap ?? 0.1,
 			padding: $displayObject.autoLayout?.padding ?? {
-				top: 0.1, bottom: 0.1, left: 0.1, right: 0.1, front: 0.1, back: 0.1
+				width: 0.1, height: 0.1, depth: 0.1
 			}
 		};
 
@@ -265,19 +265,35 @@
 
 					<!-- Padding Controls -->
 					<div class="space-y-2">
-						<h4 class="text-xs font-medium text-foreground/80 uppercase tracking-wide">Padding</h4>
-						<div class="grid grid-cols-2 gap-2">
-							{#each ['top', 'bottom', 'left', 'right', 'front', 'back'] as side}
-								<InlineInput
-									label={side.charAt(0).toUpperCase() + side.slice(1)}
-									type="number"
-									value={$displayObject.autoLayout?.padding?.[side] ?? 0.1}
-									objectId={getObjectIdForUpdate()}
-									property={`autoLayout.padding.${side}`}
-									min={0}
-									step={0.1}
-								/>
-							{/each}
+						<h4 class="text-xs font-medium text-foreground/80 uppercase tracking-wide">Padding (Inset)</h4>
+						<div class="grid grid-cols-3 gap-2">
+							<InlineInput
+								label="Width (X)"
+								type="number"
+								value={$displayObject.autoLayout?.padding?.width ?? 0.1}
+								objectId={getObjectIdForUpdate()}
+								property="autoLayout.padding.width"
+								min={0}
+								step={0.1}
+							/>
+							<InlineInput
+								label="Height (Y)"
+								type="number"
+								value={$displayObject.autoLayout?.padding?.height ?? 0.1}
+								objectId={getObjectIdForUpdate()}
+								property="autoLayout.padding.height"
+								min={0}
+								step={0.1}
+							/>
+							<InlineInput
+								label="Depth (Z)"
+								type="number"
+								value={$displayObject.autoLayout?.padding?.depth ?? 0.1}
+								objectId={getObjectIdForUpdate()}
+								property="autoLayout.padding.depth"
+								min={0}
+								step={0.1}
+							/>
 						</div>
 					</div>
 

@@ -267,10 +267,9 @@ class LayoutEngine {
                 // Use layout axis fill calculation
                 adjustedSize.x = Math.max(fillSizePerObject, 0.1);
             } else if (containerSize) {
-                // Fill based on container size minus padding for any axis
-                const paddingLeft = (padding.left || 0);
-                const paddingRight = (padding.right || 0);
-                const availableX = containerSize.x - paddingLeft - paddingRight;
+                // Fill based on container size minus padding (inset on both sides)
+                const paddingWidth = (padding.width || 0);
+                const availableX = containerSize.x - (paddingWidth * 2);
                 adjustedSize.x = Math.max(availableX, 0.1);
             } else {
                 adjustedSize.x = baseSize.x;
@@ -286,10 +285,9 @@ class LayoutEngine {
                 // Use layout axis fill calculation
                 adjustedSize.y = Math.max(fillSizePerObject, 0.1);
             } else if (containerSize) {
-                // Fill based on container size minus padding for any axis
-                const paddingTop = (padding.top || 0);
-                const paddingBottom = (padding.bottom || 0);
-                const availableY = containerSize.y - paddingTop - paddingBottom;
+                // Fill based on container size minus padding (inset on both sides)
+                const paddingHeight = (padding.height || 0);
+                const availableY = containerSize.y - (paddingHeight * 2);
                 adjustedSize.y = Math.max(availableY, 0.1);
             } else {
                 adjustedSize.y = baseSize.y;
@@ -304,10 +302,9 @@ class LayoutEngine {
                 // Use layout axis fill calculation
                 adjustedSize.z = Math.max(fillSizePerObject, 0.1);
             } else if (containerSize) {
-                // Fill based on container size minus padding for any axis
-                const paddingFront = (padding.front || 0);
-                const paddingBack = (padding.back || 0);
-                const availableZ = containerSize.z - paddingFront - paddingBack;
+                // Fill based on container size minus padding (inset on both sides)
+                const paddingDepth = (padding.depth || 0);
+                const availableZ = containerSize.z - (paddingDepth * 2);
                 adjustedSize.z = Math.max(availableZ, 0.1);
             } else {
                 adjustedSize.z = baseSize.z;
@@ -367,17 +364,17 @@ class LayoutEngine {
     /**
      * Get total padding along an axis
      * @param {string} axis - Layout axis
-     * @param {Object} padding - Padding configuration
-     * @returns {number} Total padding (start + end)
+     * @param {Object} padding - Padding configuration {width, height, depth}
+     * @returns {number} Total padding (both sides of axis)
      */
     static getTotalPadding(axis, padding) {
-        const defaultPadding = { top: 0, bottom: 0, left: 0, right: 0, front: 0, back: 0 };
+        const defaultPadding = { width: 0, height: 0, depth: 0 };
         const p = { ...defaultPadding, ...padding };
 
         switch (axis) {
-            case 'x': return p.left + p.right;
-            case 'y': return p.top + p.bottom;
-            case 'z': return p.front + p.back;
+            case 'x': return p.width * 2;  // padding affects both -X and +X sides
+            case 'y': return p.height * 2; // padding affects both -Y and +Y sides
+            case 'z': return p.depth * 2;  // padding affects both -Z and +Z sides
             default: return 0;
         }
     }
@@ -385,17 +382,18 @@ class LayoutEngine {
     /**
      * Get padding offset for layout axis
      * @param {string} axis - Layout axis
-     * @param {Object} padding - Padding configuration
-     * @returns {number} Padding offset for starting position
+     * @param {Object} padding - Padding configuration {width, height, depth}
+     * @returns {number} Padding offset for starting position (single-sided value)
      */
     static getPaddingOffset(axis, padding) {
-        const defaultPadding = { top: 0, bottom: 0, left: 0, right: 0, front: 0, back: 0 };
+        const defaultPadding = { width: 0, height: 0, depth: 0 };
         const p = { ...defaultPadding, ...padding };
 
+        // Since padding is inset and affects both sides equally, offset is just the single padding value
         switch (axis) {
-            case 'x': return p.left;
-            case 'y': return p.bottom;
-            case 'z': return p.back;
+            case 'x': return p.width;
+            case 'y': return p.height;
+            case 'z': return p.depth;
             default: return 0;
         }
     }
@@ -481,18 +479,16 @@ class LayoutEngine {
     /**
      * Apply padding to grid positions
      * @param {Array} positions - Array of position vectors
-     * @param {Object} padding - Padding configuration
+     * @param {Object} padding - Padding configuration {width, height, depth}
      * @returns {Array} Positions with padding applied
      */
     static applyPadding(positions, padding) {
-        const defaultPadding = { top: 0, bottom: 0, left: 0, right: 0, front: 0, back: 0 };
+        const defaultPadding = { width: 0, height: 0, depth: 0 };
         const p = { ...defaultPadding, ...padding };
 
-        return positions.map(pos => new THREE.Vector3(
-            pos.x + (p.right - p.left) / 2,
-            pos.y + (p.top - p.bottom) / 2,
-            pos.z + (p.front - p.back) / 2
-        ));
+        // Since padding is symmetric on both sides, no offset needed for grid layouts
+        // Grid layouts are already centered, padding only affects container sizing
+        return positions;
     }
     
     /**
@@ -544,12 +540,13 @@ class LayoutEngine {
         });
 
         // Add padding to bounds if provided in layout config
+        // Padding creates inset space, affecting both sides of each axis equally
         let paddingAdjustment = { x: 0, y: 0, z: 0 };
         if (layoutConfig && layoutConfig.padding) {
             const p = layoutConfig.padding;
-            paddingAdjustment.x = (p.left || 0) + (p.right || 0);
-            paddingAdjustment.y = (p.bottom || 0) + (p.top || 0);
-            paddingAdjustment.z = (p.back || 0) + (p.front || 0);
+            paddingAdjustment.x = (p.width || 0) * 2;  // width affects both sides
+            paddingAdjustment.y = (p.height || 0) * 2; // height affects both sides
+            paddingAdjustment.z = (p.depth || 0) * 2;  // depth affects both sides
         }
 
         const min = new THREE.Vector3(minX, minY, minZ);
