@@ -200,6 +200,7 @@ class PropertyPanelSync {
             )
         );
 
+        // Subscribe to LIFECYCLE events (object create/delete)
         this.subscriptions.push(
             this.eventBus.subscribe(
                 this.eventBus.EVENT_TYPES.LIFECYCLE,
@@ -627,14 +628,13 @@ class PropertyPanelSync {
             );
 
             // Serialize objects safely for PostMessage transmission
+            const ObjectDataFormat = window.ObjectDataFormat;
             const serializedObjects = [];
-            if (this.serializer) {
+
+            if (ObjectDataFormat) {
                 for (const objData of filteredObjects) {
                     try {
-                        const serialized = this.serializer.serializeForPostMessage(objData.mesh, {
-                            includeHierarchy: true,
-                            changeType: 'hierarchy'
-                        });
+                        const serialized = ObjectDataFormat.serializeForPostMessage(objData);
                         if (serialized) {
                             serializedObjects.push(serialized);
                         }
@@ -643,7 +643,7 @@ class PropertyPanelSync {
                     }
                 }
             } else {
-                console.warn('PropertyPanelSync: Serializer not available, cannot serialize hierarchy');
+                console.warn('PropertyPanelSync: ObjectDataFormat not available, cannot serialize hierarchy');
                 return;
             }
 

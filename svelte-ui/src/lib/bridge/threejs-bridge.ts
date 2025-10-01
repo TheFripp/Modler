@@ -80,7 +80,8 @@ export function initializeBridge() {
 function setupPostMessageFallback() {
 	window.addEventListener('message', (event) => {
 		// Verify origin for security (allow any localhost port for development)
-		if (!event.origin.startsWith('http://localhost:')) {
+		// Also allow 'null' origin when parent page is loaded from file:// protocol
+		if (!event.origin.startsWith('http://localhost:') && event.origin !== 'null') {
 			console.warn('⚠️ PostMessage rejected - invalid origin:', event.origin);
 			return;
 		}

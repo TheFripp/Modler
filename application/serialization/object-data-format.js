@@ -196,6 +196,7 @@ function serializeForPostMessage(objectData) {
             selectable: objectData.selectable,
             children: objectData.children ? [...objectData.children] : [],
             parent: objectData.parent,
+            parentContainer: objectData.parentContainer,
             layoutMode: objectData.layoutMode,
             gap: objectData.gap,
             padding: objectData.padding,

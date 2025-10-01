@@ -69,8 +69,6 @@
 		!obj.name?.toLowerCase().includes('interactive')
 	);
 
-
-
 	// Build tree structure from flat hierarchy with recursive nesting
 	$: treeStructure = buildTreeStructure(filteredHierarchy);
 
@@ -86,7 +84,6 @@
 	let customObjectOrder = new Map(); // Maps parentId to array of ordered object IDs
 
 	function buildTreeStructure(objects) {
-
 		// Create a map of all objects for easy lookup
 		const objectMap = new Map();
 		objects.forEach(obj => {
@@ -111,30 +108,30 @@
 			}
 		});
 
-		// Apply custom ordering recursively
+		// Apply UI-only ordering (no backend sortIndex)
 		function applyOrderingToLevel(objects, parentId) {
+			// Check if we have custom ordering for this level
 			const order = customObjectOrder.get(parentId || 'root');
 			if (order && order.length > 0) {
 				objects.sort((a, b) => {
 					const aIndex = order.indexOf(a.id);
 					const bIndex = order.indexOf(b.id);
-					// If not in custom order, maintain original position
+					// If not in custom order, maintain creation order
 					if (aIndex === -1 && bIndex === -1) return 0;
 					if (aIndex === -1) return 1;
 					if (bIndex === -1) return -1;
 					return aIndex - bIndex;
 				});
 			}
+			// Otherwise maintain creation order (no sorting)
 
 			// Recursively apply ordering to children and auto-expand containers
 			objects.forEach(obj => {
-				if (obj.isContainer) {
-					if (obj.children.length > 0) {
-						applyOrderingToLevel(obj.children, obj.id);
-						// Auto-expand containers that have children
-						expandedContainers.add(obj.id);
-					}
-					// Note: containers without children can still be manually expanded via toggle
+				if (obj.isContainer && obj.children && obj.children.length > 0) {
+					// Auto-expand containers that have children
+					expandedContainers.add(obj.id);
+					// Recursively apply ordering to children
+					applyOrderingToLevel(obj.children, obj.id);
 				}
 			});
 		}
@@ -357,36 +354,13 @@
 	}
 
 	function reorderObjectAtRoot(draggedObj, targetObj, position) {
-		// Update local ordering state
+		// Update local ordering state (UI-only, no backend sync)
 		updateLocalObjectOrder('root', draggedObj.id, targetObj.id, position);
-
-		// Use unified communication system instead of direct PostMessage
-		const data = {
-			draggedObjectId: draggedObj.id,
-			targetObjectId: targetObj.id,
-			position: position // 'before' or 'after'
-		};
-
-		unifiedCommunication.sendObjectMovement('reorder-root', data).catch(error => {
-			console.error('Failed to send reorder at root command:', error);
-		});
 	}
 
 	function reorderObjectInContainer(draggedObj, targetObj, position) {
-		// Update local ordering state
+		// Update local ordering state (UI-only, no backend sync)
 		updateLocalObjectOrder(targetObj.parentContainer, draggedObj.id, targetObj.id, position);
-
-		// Use unified communication system instead of direct PostMessage
-		const data = {
-			draggedObjectId: draggedObj.id,
-			targetObjectId: targetObj.id,
-			containerId: targetObj.parentContainer,
-			position: position // 'before' or 'after'
-		};
-
-		unifiedCommunication.sendObjectMovement('reorder-container', data).catch(error => {
-			console.error('Failed to send reorder in container command:', error);
-		});
 	}
 
 	/**
@@ -577,15 +551,10 @@
 			[configPath]: actualValue
 		};
 
-		// Use unified communication system instead of direct PostMessage
+		// Use unified communication system (handles both PostMessage and CustomEvents)
 		unifiedCommunication.sendVisualSettings('visual', settings).catch(error => {
 			console.error('Failed to send visual settings update:', error);
 		});
-
-		// Also trigger local event for immediate feedback
-		window.dispatchEvent(new CustomEvent('visual-settings-changed', {
-			detail: { settings }
-		}));
 	}
 
 	// System toolbar functionality (consolidated)
@@ -620,15 +589,10 @@
 			[configPath]: actualValue
 		};
 
-		// Use unified communication system instead of direct PostMessage
+		// Use unified communication system (handles both PostMessage and CustomEvents)
 		unifiedCommunication.sendVisualSettings('cad-wireframe', settings).catch(error => {
 			console.error('Failed to send CAD wireframe settings update:', error);
 		});
-
-		// Also trigger local event for immediate feedback
-		window.dispatchEvent(new CustomEvent('cad-wireframe-settings-changed', {
-			detail: { settings }
-		}));
 	}
 
 	function updateSceneSettings(property: string, value: any) {
@@ -637,26 +601,15 @@
 		// Map property to proper config path
 		const configPath = `scene.${property}`;
 
-		console.log('🎨 Left Panel: updateSceneSettings called', { property, value, configPath });
-
 		// Send individual setting update through unified communication system
 		const settings = {
 			[configPath]: value
 		};
 
-		console.log('🎨 Left Panel: Sending via unifiedCommunication', settings);
-
-		// Use unified communication system for scene settings
-		unifiedCommunication.sendVisualSettings('scene', settings).then(success => {
-			console.log('🎨 Left Panel: sendVisualSettings result:', success);
-		}).catch(error => {
+		// Use unified communication system (handles both PostMessage and CustomEvents)
+		unifiedCommunication.sendVisualSettings('scene', settings).catch(error => {
 			console.error('Failed to send scene settings update:', error);
 		});
-
-		// Also trigger local event for immediate feedback
-		window.dispatchEvent(new CustomEvent('scene-settings-changed', {
-			detail: { settings }
-		}));
 	}
 
 	function updateInterfaceSettings(property: string, value: any) {
@@ -692,19 +645,16 @@
 				visualSettings.containers.lineWidth = settings.containers.lineWidth;
 				visualSettings.containers.opacity = settings.containers.opacity * 100;
 			} else if (event.data.type === 'cad-wireframe-settings-response') {
-				console.log('✅ Received CAD wireframe settings:', event.data.settings);
 				const settings = event.data.settings;
 				cadWireframeSettings.color = settings.color;
 				cadWireframeSettings.lineWidth = settings.lineWidth;
 				cadWireframeSettings.opacity = settings.opacity * 100;
 			} else if (event.data.type === 'scene-settings-response') {
-				console.log('✅ Received scene settings:', event.data.settings);
 				const settings = event.data.settings;
 				sceneSettings.backgroundColor = settings.backgroundColor;
 				sceneSettings.gridMainColor = settings.gridMainColor;
 				sceneSettings.gridSubColor = settings.gridSubColor;
 			} else if (event.data.type === 'interface-settings-response') {
-				console.log('✅ Received interface settings:', event.data.settings);
 				const settings = event.data.settings;
 				interfaceSettings.accentColor = settings.accentColor;
 				interfaceSettings.toolbarOpacity = settings.toolbarOpacity * 100;

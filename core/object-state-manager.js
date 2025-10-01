@@ -28,7 +28,6 @@ class ObjectStateManager extends EventTarget {
         // SINGLE SOURCE OF TRUTH: All object state lives here
         this.objects = new Map(); // objectId -> complete object state
         this.selection = new Set(); // Set of selected object IDs
-        this.hierarchy = []; // Flat array of all objects for UI
 
         // System references for propagation
         this.sceneController = null;
@@ -106,12 +105,28 @@ class ObjectStateManager extends EventTarget {
         // Set up SelectionController integration if available
         this.setupSelectionControllerIntegration();
 
+        // Listen for hierarchy changes from SceneController
+        this.setupHierarchyChangeListener();
+
         // Make ObjectStateManager globally available immediately
         if (window.modlerComponents) {
             window.modlerComponents.objectStateManager = this;
         } else {
             console.warn('ObjectStateManager: window.modlerComponents not available');
         }
+    }
+
+    /**
+     * REMOVED: Hierarchy change listener
+     *
+     * This was causing race conditions with PropertyPanelSync.
+     * PropertyPanelSync now listens directly to SceneController HIERARCHY events
+     * and reads fresh data from SceneController.getAllObjects().
+     *
+     * ObjectStateManager no longer maintains a duplicate hierarchy state.
+     */
+    setupHierarchyChangeListener() {
+        // Listener removed - PropertyPanelSync handles hierarchy updates directly from SceneController
     }
 
     /**
@@ -195,8 +210,6 @@ class ObjectStateManager extends EventTarget {
 
             this.objects.set(objectData.id, standardizedData);
         });
-
-        this.rebuildHierarchy();
     }
 
     /**
@@ -269,9 +282,6 @@ class ObjectStateManager extends EventTarget {
         importedObject.mesh = objectData.mesh;
 
         this.objects.set(objectData.id, importedObject);
-
-        // CRITICAL: Rebuild hierarchy and emit events to trigger UI updates
-        this.rebuildHierarchy();
 
         // Emit HIERARCHY event to notify PropertyPanelSync and other listeners
         if (window.objectEventBus) {
@@ -543,14 +553,10 @@ class ObjectStateManager extends EventTarget {
      * Update UI systems (Svelte stores, property panel)
      */
     updateUISystems(changedObjects) {
-        // Rebuild hierarchy for object list
-        this.rebuildHierarchy();
-
         // Emit update events for UI systems
         this.dispatchEvent(new CustomEvent('objects-changed', {
             detail: {
                 objects: changedObjects,
-                hierarchy: this.hierarchy,
                 selection: Array.from(this.selection)
             }
         }));
@@ -596,14 +602,6 @@ class ObjectStateManager extends EventTarget {
         return window.objectEventBus.EVENT_TYPES.MATERIAL;
     }
 
-    /**
-     * Rebuild hierarchy array for UI consumption
-     */
-    rebuildHierarchy() {
-        this.hierarchy = Array.from(this.objects.values())
-            .filter(obj => obj.name !== 'Floor Grid' && !obj.name?.toLowerCase().includes('grid'))
-            .sort((a, b) => a.name.localeCompare(b.name));
-    }
 
     /**
      * Selection management
@@ -638,12 +636,6 @@ class ObjectStateManager extends EventTarget {
         return Array.from(this.selection);
     }
 
-    /**
-     * Get hierarchy for object list
-     */
-    getHierarchy() {
-        return this.hierarchy;
-    }
 
     /**
      * Safe serialization wrapper for PostMessage
@@ -681,13 +673,6 @@ class ObjectStateManager extends EventTarget {
         return this.safeSerializeForPostMessage(Array.from(this.objects.values()), 'objects');
     }
 
-    /**
-     * Get hierarchy in PostMessage-ready format
-     * @returns {Array<Object>} PostMessage-safe hierarchy
-     */
-    getHierarchyForPostMessage() {
-        return this.safeSerializeForPostMessage(this.hierarchy, 'hierarchy');
-    }
 
     /**
      * BIDIRECTIONAL HIERARCHICAL PROPAGATION

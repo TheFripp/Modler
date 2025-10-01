@@ -733,13 +733,16 @@ class SceneController {
 
         // BYPASS ELIMINATED: Use ObjectEventBus instead of legacy window.notifyObjectModified
         if (window.objectEventBus) {
+            console.log('🔔 SceneController emitting hierarchy event:', objectId, '→', parentId);
             window.objectEventBus.emit(
-                window.objectEventBus.EVENT_TYPES?.HIERARCHY_CHANGED || 'object:hierarchy-changed',
+                window.objectEventBus.EVENT_TYPES?.HIERARCHY || 'object:hierarchy',
+                objectId,
                 {
-                    objectId: obj.mesh.userData.modlerId,
+                    action: 'parent-changed',
                     newParentId: parentId,
-                    changeType: 'parent-changed'
-                }
+                    oldParentId: obj.parentContainer
+                },
+                { immediate: true, source: 'SceneController.setParentContainer' }
             );
         }
 

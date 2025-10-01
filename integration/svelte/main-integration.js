@@ -131,12 +131,11 @@
             // Detect iframe mode
             iframeMode = window !== window.parent;
 
-            if (iframeMode) {
-                setupIframeMessageHandling();
-            } else {
-                // Running in direct mode (logging removed to reduce console noise)
-                setupDirectMessageHandling();
+            // Setup unified message handling for both modes
+            setupUnifiedMessageHandling();
 
+            if (!iframeMode) {
+                // Running in direct mode (logging removed to reduce console noise)
                 // Initialize UI system with automatic fallback
                 await initializeUISystem();
 
@@ -296,6 +295,17 @@
             if (window.PropertyPanelSync) {
                 propertyPanelSync = new window.PropertyPanelSync(window.objectEventBus, directComponentManager);
                 window.modlerComponents.propertyPanelSync = propertyPanelSync;
+
+                // Expose global hierarchy notification function for backward compatibility
+                window.notifyObjectHierarchyChanged = function() {
+                    console.log('🔔 notifyObjectHierarchyChanged called [direct mode]');
+                    if (propertyPanelSync && propertyPanelSync.refreshCompleteHierarchy) {
+                        console.log('   ✅ Calling refreshCompleteHierarchy()');
+                        propertyPanelSync.refreshCompleteHierarchy();
+                    } else {
+                        console.warn('   ⚠️ PropertyPanelSync.refreshCompleteHierarchy not available');
+                    }
+                };
             }
 
             return true;
@@ -338,6 +348,17 @@
             if (window.PropertyPanelSync) {
                 propertyPanelSync = new window.PropertyPanelSync(window.objectEventBus, panelManager);
                 window.modlerComponents.propertyPanelSync = propertyPanelSync;
+
+                // Expose global hierarchy notification function for backward compatibility
+                window.notifyObjectHierarchyChanged = function() {
+                    console.log('🔔 notifyObjectHierarchyChanged called [iframe mode]');
+                    if (propertyPanelSync && propertyPanelSync.refreshCompleteHierarchy) {
+                        console.log('   ✅ Calling refreshCompleteHierarchy()');
+                        propertyPanelSync.refreshCompleteHierarchy();
+                    } else {
+                        console.warn('   ⚠️ PropertyPanelSync.refreshCompleteHierarchy not available');
+                    }
+                };
             }
 
             // Step 6: Create and show iframe panels
@@ -456,8 +477,8 @@
                 objectStateManager.getObject(objectId)
             ).filter(Boolean);
 
-            const postMessageHierarchy = objectStateManager.getHierarchyForPostMessage ?
-                objectStateManager.getHierarchyForPostMessage() : hierarchy;
+            // Hierarchy is already from SceneController (single source of truth)
+            const postMessageHierarchy = hierarchy;
 
             // Notify UI systems with standard format
             notifyUISystems({
@@ -483,20 +504,21 @@
                 return objectData;
             }).filter(Boolean);
 
-            // Get current hierarchy for context
-            const hierarchy = objectStateManager.getHierarchy();
+            // Get current hierarchy from SceneController (single source of truth)
+            const sceneController = window.modlerComponents?.sceneController;
+            const hierarchy = sceneController ? sceneController.getAllObjects() : [];
 
-            // Use standard format directly from ObjectStateManager
-            // NO MORE FLAT PROPERTIES - ObjectStateManager already provides standard format
+            // Serialize hierarchy for PostMessage (remove circular references)
+            const ObjectDataFormat = window.ObjectDataFormat;
+            const postMessageHierarchy = hierarchy.map(obj =>
+                ObjectDataFormat ? ObjectDataFormat.serializeForPostMessage(obj) : obj
+            ).filter(Boolean);
 
             // Get PostMessage-ready data directly from ObjectStateManager
             const postMessageSelectedObjects = selectedObjectsData.map(obj =>
                 objectStateManager.getObjectForPostMessage ?
                 objectStateManager.getObjectForPostMessage(obj.id) : obj
             ).filter(Boolean);
-
-            const postMessageHierarchy = objectStateManager.getHierarchyForPostMessage ?
-                objectStateManager.getHierarchyForPostMessage() : hierarchy;
 
             // Notify UI systems with standard format data
             notifyUISystems({
@@ -522,75 +544,8 @@
         }
 
         // Setting up ObjectEventBus listeners for unified data flow
-
-        // Listen to object lifecycle events (create, delete)
-        window.objectEventBus.subscribe('object:lifecycle', (event) => {
-
-            if (event.changeData.action === 'create') {
-                // Object created - ensure ObjectStateManager is synchronized
-                setTimeout(() => {
-                    // Trigger re-import to capture newly created objects
-                    if (objectStateManager.importFromSceneController) {
-                        objectStateManager.importFromSceneController();
-                    }
-
-                    // Get the newly created object data for property panels
-                    const newObject = objectStateManager.getObject(event.objectId);
-                    const postMessageNewObject = objectStateManager.getObjectForPostMessage ?
-                        objectStateManager.getObjectForPostMessage(event.objectId) : newObject;
-                    const postMessageHierarchy = objectStateManager.getHierarchyForPostMessage ?
-                        objectStateManager.getHierarchyForPostMessage() : objectStateManager.getHierarchy();
-
-                    // Notify UI of new object with standard format data
-                    notifyUISystems({
-                        type: 'data-update',
-                        data: {
-                            selectedObjects: [],
-                            objectHierarchy: postMessageHierarchy,
-                            updateType: 'object-created',
-                            newObjectId: event.objectId,
-                            newObjectData: postMessageNewObject
-                        }
-                    });
-
-                    // Also send object list update
-                    notifyUISystems({
-                        type: 'object-list-update',
-                        data: {
-                            hierarchy: postMessageHierarchy,
-                            updateType: 'object-added',
-                            addedObjectId: event.objectId
-                        }
-                    });
-                }, 50); // Small delay to ensure object is fully processed
-            }
-
-            if (event.changeData.action === 'delete') {
-                // Object deleted - notify UI to update
-                const postMessageHierarchy = objectStateManager.getHierarchyForPostMessage ?
-                    objectStateManager.getHierarchyForPostMessage() : objectStateManager.getHierarchy();
-
-                notifyUISystems({
-                    type: 'data-update',
-                    data: {
-                        selectedObjects: [],
-                        objectHierarchy: postMessageHierarchy,
-                        updateType: 'object-deleted',
-                        deletedObjectId: event.objectId
-                    }
-                });
-
-                // Also send object list update
-                notifyUISystems({
-                    type: 'object-list-update',
-                    data: {
-                        hierarchy: postMessageHierarchy,
-                        updateType: 'object-removed',
-                        removedObjectId: event.objectId
-                    }
-                });
-            }
-        });
+        // NOTE: LIFECYCLE events (create/delete) are handled by PropertyPanelSync
+        // This avoids duplicate hierarchy updates sent to UI
 
         // Listen to transform events (position, rotation, scale changes)
         window.objectEventBus.subscribe('object:transform', (event) => {
@@ -694,11 +649,15 @@
     // ==================================================================================
 
     /**
-     * Setup PostMessage handling for iframe mode
+     * Setup unified PostMessage handling for both iframe and direct modes
+     * Consolidated from duplicate setupIframeMessageHandling() and setupDirectMessageHandling()
      */
-    function setupIframeMessageHandling() {
+    function setupUnifiedMessageHandling() {
+        // Single PostMessage listener handles both iframe and direct modes
         window.addEventListener('message', (event) => {
-            if (!event.origin.startsWith('http://localhost:')) {
+            // Only validate origin in iframe mode (when we're the child)
+            const isInIframe = window !== window.parent;
+            if (isInIframe && !event.origin.startsWith('http://localhost:')) {
                 console.warn('⚠️ PostMessage rejected - invalid origin:', event.origin);
                 return;
             }
@@ -740,57 +699,6 @@
                     handleGetInterfaceSettings(event.source);
                     break;
             }
-        });
-    }
-
-    /**
-     * Setup direct message handling for non-iframe mode
-     */
-    function setupDirectMessageHandling() {
-        // Listen to postMessage calls in direct mode (from iframes)
-        window.addEventListener('message', (event) => {
-            const { type, data } = event.data;
-
-            if (type === 'property-update') {
-                handlePropertyUpdate(data.objectId, data.property, data.value);
-            } else if (type === 'tool-activation') {
-                activateTool(data.toolName);
-            } else if (type === 'snap-toggle') {
-                handleSnapToggle();
-            } else if (type === 'visual-settings-changed') {
-                handleVisualSettingsUpdate(data.settings);
-            } else if (type === 'get-visual-settings') {
-                handleGetVisualSettings(event.source);
-            } else if (type === 'scene-settings-changed') {
-                handleSceneSettingsUpdate(data.settings);
-            } else if (type === 'get-scene-settings') {
-                handleGetSceneSettings(event.source);
-            } else if (type === 'cad-wireframe-settings-changed') {
-                handleCadWireframeSettingsUpdate(data.settings);
-            } else if (type === 'get-cad-wireframe-settings') {
-                handleGetCadWireframeSettings(event.source);
-            } else if (type === 'interface-settings-changed') {
-                handleInterfaceSettingsUpdate(data.settings);
-            } else if (type === 'get-interface-settings') {
-                handleGetInterfaceSettings(event.source);
-            }
-        });
-
-        // Listen for window custom events dispatched by PropertyPanelSync
-        window.addEventListener('visual-settings-changed', (event) => {
-            handleVisualSettingsUpdate(event.detail.settings);
-        });
-
-        window.addEventListener('scene-settings-changed', (event) => {
-            handleSceneSettingsUpdate(event.detail.settings);
-        });
-
-        window.addEventListener('cad-wireframe-settings-changed', (event) => {
-            handleCadWireframeSettingsUpdate(event.detail.settings);
-        });
-
-        window.addEventListener('interface-settings-changed', (event) => {
-            handleInterfaceSettingsUpdate(event.detail.settings);
         });
 
         // Make handlePropertyUpdate globally available for direct calls

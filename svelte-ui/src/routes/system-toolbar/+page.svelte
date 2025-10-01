@@ -60,15 +60,10 @@
 			[configPath]: value
 		};
 
-		// Use unified communication system instead of direct PostMessage
+		// Use unified communication system (handles both PostMessage and CustomEvents)
 		unifiedCommunication.sendVisualSettings('cad-wireframe', settings).catch(error => {
 			console.error('Failed to send CAD wireframe settings update:', error);
 		});
-
-		// Also trigger local event for immediate feedback
-		window.dispatchEvent(new CustomEvent('cad-wireframe-settings-changed', {
-			detail: { settings }
-		}));
 	}
 
 	function handleClickOutside(event: MouseEvent) {

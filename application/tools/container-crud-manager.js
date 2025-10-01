@@ -283,10 +283,8 @@ class ContainerCrudManager {
             }
         }
 
-        // Trigger hierarchy update to refresh the object list
-        if (window.notifyObjectHierarchyChanged) {
-            window.notifyObjectHierarchyChanged();
-        }
+        // Hierarchy updates handled automatically by PropertyPanelSync listening to HIERARCHY events
+        // Manual calls removed to avoid race conditions with event-driven updates
     }
     
     /**
@@ -369,10 +367,7 @@ class ContainerCrudManager {
 
         // Legacy meshSynchronizer removed - support meshes now self-contained children
 
-        // Trigger hierarchy update for new Svelte UI
-        if (window.notifyObjectHierarchyChanged) {
-            window.notifyObjectHierarchyChanged();
-        }
+        // Hierarchy updates handled automatically by PropertyPanelSync listening to events
 
         // Legacy support for old object list
         if (window.populateObjectList) {
@@ -446,10 +441,7 @@ class ContainerCrudManager {
 
         // Legacy meshSynchronizer removed - support meshes now self-contained children
 
-        // Update UI hierarchies
-        if (window.notifyObjectHierarchyChanged) {
-            window.notifyObjectHierarchyChanged();
-        }
+        // Hierarchy updates handled automatically by PropertyPanelSync listening to events
 
         // Legacy support for old object list
         if (window.populateObjectList) {
@@ -519,10 +511,7 @@ class ContainerCrudManager {
             this.resizeContainerToFitChildren(parentContainer, null, true);
         }
 
-        // Trigger hierarchy update for new Svelte UI
-        if (window.notifyObjectHierarchyChanged) {
-            window.notifyObjectHierarchyChanged();
-        }
+        // Hierarchy updates handled automatically by PropertyPanelSync listening to events
 
         return true;
     }

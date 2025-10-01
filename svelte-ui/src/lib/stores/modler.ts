@@ -200,28 +200,25 @@ export function initializeModlerBridge(components: any) {
 	// Direct ObjectStateManager listeners removed to eliminate race conditions
 	// Selection and hierarchy updates handled by threejs-bridge.ts via PostMessage
 
+	// Set up initial state sync
+	if (components.sceneController) {
+		// Get initial hierarchy from SceneController (single source of truth)
+		const allObjects = components.sceneController.getAllObjects();
+		objectHierarchy.set(allObjects);
+	}
+
 	const objectStateManager = components.objectStateManager;
 	if (objectStateManager) {
-		// Set up initial state sync from ObjectStateManager (one-time only)
-		const initialHierarchy = objectStateManager.getHierarchy();
-		objectHierarchy.set(initialHierarchy);
-
+		// Get initial selection from ObjectStateManager
 		const initialSelection = objectStateManager.getSelection();
 		const initialSelectedObjects = initialSelection.map((objectId: string) =>
 			objectStateManager.getObject(objectId)
 		).filter(Boolean);
 		selectedObjects.set(initialSelectedObjects);
-	} else {
-		// Fallback to legacy sync methods if ObjectStateManager not available
-		if (components.selectionController) {
-			const initialSelection = components.selectionController.getSelectedObjects();
-			selectedObjects.set(initialSelection.map(convertThreeObjectToObjectData));
-		}
-
-		if (components.sceneController) {
-			const allObjects = components.sceneController.getAllObjects();
-			objectHierarchy.set(allObjects);
-		}
+	} else if (components.selectionController) {
+		// Fallback to SelectionController if ObjectStateManager not available
+		const initialSelection = components.selectionController.getSelectedObjects();
+		selectedObjects.set(initialSelection.map(convertThreeObjectToObjectData));
 	}
 }
 
