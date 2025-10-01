@@ -32,12 +32,9 @@ class PropertyFormatConverter {
             'dimensions.y': 'dimension',
             'dimensions.z': 'dimension',
             'autoLayout.gap': 'dimension',
-            'autoLayout.padding.top': 'dimension',
-            'autoLayout.padding.bottom': 'dimension',
-            'autoLayout.padding.left': 'dimension',
-            'autoLayout.padding.right': 'dimension',
-            'autoLayout.padding.front': 'dimension',
-            'autoLayout.padding.back': 'dimension',
+            'autoLayout.padding.width': 'dimension',
+            'autoLayout.padding.height': 'dimension',
+            'autoLayout.padding.depth': 'dimension',
 
             // Color properties
             'material.color': 'color',
@@ -428,7 +425,7 @@ class PropertyFormatConverter {
 
     /**
      * Convert nested autoLayout object to internal format
-     * Handles: { enabled, direction, gap, padding: { top, bottom, ... } }
+     * Handles: { enabled, direction, gap, padding: { width, height, depth } }
      * @private
      */
     convertAutoLayoutToInternal(autoLayoutObj) {
