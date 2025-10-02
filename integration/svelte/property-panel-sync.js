@@ -355,8 +355,11 @@ class PropertyPanelSync {
         try {
             this.stats.eventsProcessed++;
 
-            // Hierarchy events affect the entire object tree
+            // Hierarchy events affect the entire object tree - update left panel
             this.refreshCompleteHierarchy();
+
+            // NOTE: Property panel updates are handled by objects-changed event via main-integration
+            // No need to refresh here as it would create duplicate updates and cause flickering
 
         } catch (error) {
             console.error('PropertyPanelSync.handleHierarchyEvent error:', error);

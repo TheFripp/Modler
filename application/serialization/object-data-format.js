@@ -53,6 +53,7 @@ const STANDARD_OBJECT_DATA_SCHEMA = {
         gap: 'number',
         padding: 'object'
     },
+    calculatedGap: 'number|undefined', // Dynamic gap value in space-between mode
 
     // State flags
     selected: 'boolean',
@@ -172,7 +173,7 @@ function validateObjectData(objectData) {
 
 /**
  * Serialize ObjectData for PostMessage transmission
- * Removes non-serializable properties while preserving all data
+ * UPDATED: Now uses schema-driven serialization to prevent missing properties
  * @param {Object} objectData - Standard ObjectData
  * @returns {Object} PostMessage-safe object
  */
@@ -180,7 +181,22 @@ function serializeForPostMessage(objectData) {
     if (!objectData) return null;
 
     try {
-        // Manual serialization to avoid circular references
+        // Use schema-driven serialization if available (preferred)
+        if (window.SchemaSerializer) {
+            const serialized = window.SchemaSerializer.serializeWithSchema(
+                objectData,
+                STANDARD_OBJECT_DATA_SCHEMA,
+                { createNewReferences: true }
+            );
+
+            // Add runtime metadata
+            serialized.formatVersion = OBJECT_DATA_FORMAT_VERSION;
+            serialized.lastModified = Date.now();
+
+            return serialized;
+        }
+
+        // Fallback to manual serialization (backwards compatibility)
         const serialized = {
             id: objectData.id,
             name: objectData.name,
@@ -198,8 +214,13 @@ function serializeForPostMessage(objectData) {
             parent: objectData.parent,
             parentContainer: objectData.parentContainer,
             layoutMode: objectData.layoutMode,
+            autoLayout: objectData.autoLayout ? {
+                ...objectData.autoLayout,
+                padding: objectData.autoLayout.padding ? { ...objectData.autoLayout.padding } : undefined
+            } : undefined,
             gap: objectData.gap,
             padding: objectData.padding,
+            calculatedGap: objectData.calculatedGap,
             constraints: objectData.constraints ? { ...objectData.constraints } : undefined,
             userData: objectData.userData ? { ...objectData.userData } : {},
             createdAt: objectData.createdAt,
@@ -290,6 +311,8 @@ function convertFromFlatProperties(sourceData) {
             padding: sourceData['autoLayout.padding'] || { width: 0, height: 0, depth: 0 }
         },
 
+        calculatedGap: sourceData.calculatedGap, // Include dynamic gap value
+
         parentContainer: sourceData.parentContainer || null
     };
 
@@ -337,6 +360,7 @@ function convertFromThreeJS(threeObject) {
         },
 
         autoLayout: userData.autoLayout || { enabled: false, direction: null, gap: 0, padding: { width: 0, height: 0, depth: 0 } },
+        calculatedGap: userData.calculatedGap, // Include dynamic gap value
         parentContainer: userData.parentContainer || null
     };
 
@@ -375,6 +399,7 @@ function convertFromObjectStateManager(stateData) {
         },
 
         autoLayout: stateData.autoLayout || { enabled: false, direction: null, gap: 0, padding: { width: 0, height: 0, depth: 0 } },
+        calculatedGap: stateData.calculatedGap, // Include dynamic gap value
         parentContainer: stateData.parentContainer || null
     };
 

@@ -236,7 +236,21 @@ function validateAndNormalizeObjectData(objectData: any): ObjectData {
 	if (objectData.formatVersion === '1.0.0' ||
 		(objectData.position && typeof objectData.position === 'object' &&
 		 objectData.rotation && typeof objectData.rotation === 'object')) {
-		return objectData as ObjectData;
+		// IMPORTANT: Create new object reference to trigger Svelte reactivity
+		// Even though data is in correct format, we need new references for all nested objects
+		const result = {
+			...objectData,
+			position: { ...objectData.position },
+			rotation: { ...objectData.rotation },
+			scale: objectData.scale ? { ...objectData.scale } : undefined,
+			dimensions: { ...objectData.dimensions },
+			material: objectData.material ? { ...objectData.material } : undefined,
+			autoLayout: objectData.autoLayout ? {
+				...objectData.autoLayout,
+				padding: objectData.autoLayout.padding ? { ...objectData.autoLayout.padding } : undefined
+			} : undefined
+		} as ObjectData;
+		return result;
 	}
 
 	// Handle legacy flat format as fallback (should not happen with new system)

@@ -1,239 +1,140 @@
 /**
- * Push Tool - Face-Based Geometry Modification
+ * Push Tool - Face-Based Geometry Modification (Simplified)
+ *
+ * Unified approach for both containers and regular objects using vertex manipulation.
+ * Face highlight tracks the moving face for seamless visual feedback.
  */
 class PushTool {
     constructor(selectionController, visualEffects) {
         this.selectionController = selectionController;
         this.visualEffects = visualEffects;
-
         this.faceToolBehavior = new BaseFaceToolBehavior(selectionController, visualEffects, 'push');
+        this.eventHandler = new BaseFaceToolEventHandler(this, this.faceToolBehavior, selectionController);
 
-        // Core push state - simplified
-        this.active = false;
+        // Core push state
+        this.isPushing = false;
         this.pushedObject = null;
         this.pushedFace = null;
         this.faceNormal = null;
-        this.startPosition = null;
         this.pushAxis = null;
         this.pushDirection = 1;
-        this.isContainerPush = false;
-        this.originalContainerSize = null;
 
-        // Movement tracking - simplified
-        this.lastMousePosition = null;
+        // Movement tracking
+        this.startMousePos = null;
+        this.lastMousePos = null;
         this.cumulativeAmount = 0;
-        this.rawCursorMovement = 0;
-        this.lastPushDelta = undefined;
-        this.originalGeometry = null;
 
-        // Unified state management system
+        // Undo state
+        this.initialDimensions = null;
+        this.initialPosition = null;
+
+        // State management
         this.objectStateManager = null;
-
-        // Initialize ObjectStateManager after components are loaded
         setTimeout(() => {
             this.objectStateManager = window.modlerComponents?.objectStateManager;
         }, 50);
-
-
-        // Cached objects for performance
-        this.cache = {
-            tempVector1: new THREE.Vector3(),
-            tempVector2: new THREE.Vector3(),
-            tempVector3: new THREE.Vector3(),
-            tempVector4: new THREE.Vector3()
-        };
-    }
-
-    // State management helpers
-    resetPushState() {
-        this.active = false;
-        this.pushedObject = null;
-        this.pushedFace = null;
-        this.faceNormal = null;
-        this.startPosition = null;
-        this.pushAxis = null;
-        this.pushDirection = 1;
-        this.isContainerPush = false;
-        this.originalContainerSize = null;
-        this.actualPushedMesh = null;
-    }
-
-    resetMovementState() {
-        this.lastMousePosition = null;
-        this.cumulativeAmount = 0;
-        this.rawCursorMovement = 0;
-        this.lastPushDelta = undefined;
     }
 
     onHover(hit) {
-        if (this.active) {
-            this.updatePushMovement();
+        if (this.isPushing) {
+            // During push, only update push movement - don't update face highlighting
+            // Face highlight is being tracked separately via trackFaceHighlightToPushedFace
+            this.updatePush();
         } else {
-            // Check if we should show face highlighting
+            // Normal hover behavior when not pushing
             if (this.shouldShowFaceHighlight(hit)) {
-                console.log('PushTool: shouldShowFaceHighlight = true, calling handleFaceDetection');
                 this.faceToolBehavior.handleFaceDetection(hit);
             } else {
-                console.log('PushTool: shouldShowFaceHighlight = false, clearing hover');
                 this.faceToolBehavior.clearHover();
             }
         }
     }
 
     shouldShowFaceHighlight(hit) {
-        if (!hit || !hit.object) {
-            console.log('PushTool shouldShow: No hit');
-            return false;
-        }
-
-        const targetObject = this.faceToolBehavior.getTargetObject(hit);
-        if (!targetObject) {
-            console.log('PushTool shouldShow: No targetObject');
-            return false;
-        }
-
-        // Check if this is a container and determine if it should be highlightable
-        const sceneController = window.modlerComponents?.sceneController;
-        if (sceneController && targetObject.userData && targetObject.userData.id) {
-            const objectData = sceneController.getObjectByMesh(targetObject);
-            if (objectData && objectData.isContainer) {
-                // Allow highlighting if container is in layout mode OR fixed sizing mode
-                const isLayoutEnabled = objectData.autoLayout && objectData.autoLayout.enabled;
-                const isFixedMode = objectData.sizingMode === 'fixed';
-
-                console.log(`PushTool shouldShow: Container ${objectData.name}, layout=${isLayoutEnabled}, fixed=${isFixedMode}`);
-
-                if (!isLayoutEnabled && !isFixedMode) {
-                    console.log('PushTool shouldShow: Container in hug mode - blocking');
-                    return false; // Only block containers in hug mode without layout
-                }
-            } else if (objectData && !objectData.isContainer) {
-                const canPush = this.canPushChildObject(targetObject);
-                console.log(`PushTool shouldShow: Child object ${objectData.name}, canPush=${canPush}`);
-                // CRITICAL: Block highlighting child objects inside layout-enabled containers
-                if (!canPush) {
-                    return false;
-                }
-            }
-        }
-
-        console.log('PushTool shouldShow: Allowing highlight');
-        return true; // Allow highlighting for everything else
-    }
-
-    onMouseDown(hit, event) {
-        if (!hit || !hit.object || !hit.face) return false;
-
-        if (this.active) {
-            this.endFacePush();
-            return true;
-        }
-
-        // Check if we should allow pushing this object
-        if (!this.shouldShowFaceHighlight(hit)) {
-            return false; // Allow camera to engage
-        }
+        if (!hit || !hit.object) return false;
 
         const targetObject = this.faceToolBehavior.getTargetObject(hit);
         if (!targetObject) return false;
 
-        this.startFacePush(hit);
+        // Check if this is a container
+        const sceneController = window.modlerComponents?.sceneController;
+        if (sceneController && targetObject.userData?.id) {
+            const objectData = sceneController.getObjectByMesh(targetObject);
+            if (objectData?.isContainer) {
+                // Only allow push on containers in layout mode
+                const isLayoutEnabled = objectData.autoLayout?.enabled;
+                if (!isLayoutEnabled) {
+                    return false; // Block containers in hug mode
+                }
+            } else if (objectData && !objectData.isContainer) {
+                // Block child objects inside layout-enabled containers
+                if (objectData.parentContainer) {
+                    const parent = sceneController.getObject(objectData.parentContainer);
+                    if (parent?.autoLayout?.enabled) {
+                        return false;
+                    }
+                }
+            }
+        }
+
         return true;
     }
 
+    onMouseDown(hit, event) {
+        const operationCallbacks = BaseFaceToolEventHandler.createOperationCallbacks({
+            isActiveCheck: () => this.isPushing,
+            startCallback: (hit) => this.startPush(hit),
+            operationName: 'push'
+        });
+        return this.eventHandler.handleMouseDown(hit, event, operationCallbacks);
+    }
+
     onMouseUp(hit, event) {
-        if (this.active) {
-            this.endFacePush();
-            return true;
-        }
-        return false;
+        const operationCallbacks = BaseFaceToolEventHandler.createOperationCallbacks({
+            isActiveCheck: () => this.isPushing,
+            endCallback: () => this.stopPush()
+        });
+        return this.eventHandler.handleMouseUp(hit, event, operationCallbacks);
     }
 
     onClick(hit, event) {
-        // Empty space clicks should ALWAYS deselect, regardless of tool state
-        if (!hit || !hit.object) {
-            this.selectionController.handleEmptySpaceClick(event);
-            return;
-        }
-
-        // If tool is active, don't handle object clicks
-        if (this.active) return;
-
-        // Use immediate selection like other tools for consistent behavior
-        this.selectionController.handleObjectClick(hit.object, event, { toolType: 'PushTool' });
+        const operationCallbacks = BaseFaceToolEventHandler.createOperationCallbacks({
+            isActiveCheck: () => this.isPushing
+        });
+        this.eventHandler.handleClick(hit, event, operationCallbacks);
     }
 
     onDoubleClick(hit, event) {
-        if (this.active) {
-            this.endFacePush();
+        if (this.isPushing) {
+            this.stopPush();
         }
     }
 
     /**
-     * Start face pushing operation
+     * Start push operation
      */
-    startFacePush(hit) {
+    startPush(hit) {
         const targetObject = this.faceToolBehavior.getTargetObject(hit);
+        if (!targetObject) return;
 
-        // Check if this is a container push operation
-        const isContainerPush = this.isContainerPushOperation(hit, targetObject);
-
-        // Prevent pushing containers in 'hug' mode
-        if (isContainerPush && !this.canPushContainer(targetObject)) {
-            return false;
-        }
-
-        // CRITICAL: Prevent pushing objects inside layout-enabled containers
-        if (!isContainerPush && !this.canPushChildObject(targetObject)) {
-            console.warn('PushTool: Cannot push objects inside layout-enabled containers');
-            return false;
-        }
-
-        this.active = true;
+        this.isPushing = true;
         this.pushedObject = targetObject;
         this.pushedFace = hit.face;
-        this.startPosition = new THREE.Vector3().copy(hit.point);
-        this.isContainerPush = isContainerPush;
+        this.cumulativeAmount = 0;
+
+        // Face highlight stays visible during push
+        // Note: It may visually lag slightly during fast drags as it's positioned at face center
+        // which changes as vertices move. Wireframe provides accurate feedback.
+        // Face highlight repositions correctly when push completes.
 
         // Get face normal in world space
-        const worldNormal = new THREE.Vector3().copy(hit.face.normal);
-
-        // Handle both container architectures for normal transformation
-        const isContainerCollision = hit.object.userData.isContainerCollision;
-        const isContainerInteractive = hit.object.userData.isContainerInteractive;
-
-        if (isContainerInteractive && hit.object.userData.containerMesh) {
-            // NEW ARCHITECTURE: Interactive mesh with containerMesh reference
-            worldNormal.transformDirection(hit.object.userData.containerMesh.matrixWorld);
-        } else if (isContainerCollision && hit.object.parent) {
-            // OLD ARCHITECTURE: Collision mesh is child of container
-            worldNormal.transformDirection(hit.object.matrixWorld);
-        } else {
-            // Regular objects or fallback
-            worldNormal.transformDirection(hit.object.matrixWorld);
-        }
-        worldNormal.normalize();
+        const worldNormal = this.faceToolBehavior.getWorldFaceNormal(hit);
         this.faceNormal = worldNormal;
 
         // Determine push axis and direction
         this.determinePushAxis(worldNormal);
 
-        if (isContainerPush) {
-            this.originalContainerSize = this.getContainerSize(targetObject);
-        } else {
-            // For non-container pushes, we need to find the actual geometry to modify
-            const actualMesh = this.resolveActualMeshForPush(hit, targetObject);
-            if (actualMesh && actualMesh.geometry) {
-                this.originalGeometry = actualMesh.geometry.clone();
-                // Store reference to the actual mesh for geometry modifications
-                this.actualPushedMesh = actualMesh;
-            } else {
-                this.originalGeometry = targetObject.geometry.clone();
-                this.actualPushedMesh = targetObject;
-            }
-        }
-
-        // Store initial dimensions and position for undo
+        // Store initial state for undo
         const sceneController = window.modlerComponents?.sceneController;
         const objectData = sceneController?.getObjectByMesh(targetObject);
         if (objectData) {
@@ -245,24 +146,20 @@ class PushTool {
             } : null;
         }
 
-        // Store initial mouse position for movement calculation
+        // Store initial mouse position
         const inputController = window.modlerComponents?.inputController;
         if (inputController) {
-            this.lastMousePosition = inputController.mouse.clone();
+            this.startMousePos = inputController.mouse.clone();
+            this.lastMousePos = inputController.mouse.clone();
         }
 
-        // Reset cumulative push amount and direction tracking for new operation
-        this.cumulativeAmount = 0;
-        this.rawCursorMovement = 0;
-        this.lastPushDelta = undefined;
-
-        // Enable standard snap detection
+        // Enable snap detection
         const snapController = window.modlerComponents?.snapController;
         if (snapController) {
             snapController.requestSnapDetection();
         }
 
-        // Set cursor to indicate pushing mode
+        // Set cursor
         const canvas = window.modlerComponents?.sceneFoundation?.canvas;
         if (canvas) {
             canvas.style.cursor = 'move';
@@ -270,7 +167,7 @@ class PushTool {
     }
 
     /**
-     * Determine which axis and direction the face push affects
+     * Determine push axis and direction from face normal
      */
     determinePushAxis(normal) {
         const absX = Math.abs(normal.x);
@@ -290,607 +187,370 @@ class PushTool {
     }
 
     /**
-     * Update push movement during mouse move using 3D projection
-     *
-     * Calculates incremental face movement based on cursor delta and applies
-     * snap integration with offset prevention. Uses raw cursor tracking to
-     * maintain smooth cursor-face attachment across snap transitions.
-     *
-     * @private
+     * Update push during mouse movement
      */
-    updatePushMovement() {
-        const movementDelta = this.calculateMovementDelta();
-        if (!movementDelta) return;
+    updatePush() {
+        const delta = this.calculateMovementDelta();
+        if (!delta || Math.abs(delta) < 0.0001) return;
 
-        const incrementalDelta = this.processSnapDetection(movementDelta);
-        this.modifyGeometryIncremental(incrementalDelta);
-        this.refreshVisualFeedback();
-        this.syncContainerUpdates();
+        // Modify geometry using unified approach
+        this.modifyGeometry(delta);
+
+        // Track face highlight to follow pushed face
+        this.updateFaceHighlight(delta);
+
+        // Update container layout if needed
+        this.updateContainerLayout();
+
+        // Note: Don't call updateDimensionDisplay() during drag - it triggers
+        // objectStateManager.updateObject() which calls updateObjectDimensions()
+        // which resets the geometry to centered bounds via scaleGeometryAlongAxis().
+        // We update dimensions directly in modifyGeometry() and finalize in stopPush().
     }
 
+    /**
+     * Calculate movement delta from mouse movement
+     */
     calculateMovementDelta() {
         const inputController = window.modlerComponents?.inputController;
         const camera = window.modlerComponents?.sceneFoundation?.camera;
 
-        if (!MovementUtils.validateMovementPrerequisites({
-            inputController, camera, object: this.pushedObject, lastMousePosition: this.lastMousePosition
-        })) return null;
+        if (!inputController || !camera || !this.lastMousePos) return null;
 
-        const movement = MovementUtils.calculateMouseMovement(inputController, this.lastMousePosition);
-        if (!movement) return null;
+        const currentMouse = inputController.mouse;
+        const mouseDelta = new THREE.Vector2().subVectors(currentMouse, this.lastMousePos);
 
+        if (mouseDelta.length() < 0.0001) return null;
+
+        // Project mouse movement to world space
         const worldMovement = MovementUtils.calculateWorldMovement(
-            movement.delta, this.pushedObject.position, this.faceNormal, camera
+            mouseDelta,
+            this.pushedObject.position,
+            this.faceNormal,
+            camera
         );
+
         if (!worldMovement) return null;
 
-        const pushDelta = MovementUtils.getAxisMovement(worldMovement, this.pushAxis);
-        this.lastMousePosition.copy(movement.current);
-        this.rawCursorMovement += pushDelta;
+        // Get movement along push axis
+        const axisDelta = MovementUtils.getAxisMovement(worldMovement, this.pushAxis);
 
-        this.handleDirectionChange(pushDelta);
-        return pushDelta;
-    }
+        this.lastMousePos.copy(currentMouse);
+        this.cumulativeAmount += axisDelta;
 
-    handleDirectionChange(pushDelta) {
-        if (this.lastPushDelta !== undefined) {
-            const directionChanged = (this.lastPushDelta > 0) !== (pushDelta > 0);
-            if (directionChanged && Math.abs(pushDelta) > 0.001) {
-                // Clear cache on direction change
-                if (window.PositionTransform && this.pushedObject?.uuid) {
-                    window.PositionTransform.clearCacheForObject(this.pushedObject.uuid);
-                }
-            }
-        }
-        this.lastPushDelta = pushDelta;
-    }
-
-    processSnapDetection(pushDelta) {
-        const snapController = window.modlerComponents?.snapController;
-        if (snapController && snapController.getEnabled()) {
-            const snapPoint = snapController.getCurrentSnapPoint();
-            if (snapPoint) {
-                const snapAdjustedTotal = this.calculateSnapAdjustedPushAmount(snapPoint);
-                const incrementalDelta = snapAdjustedTotal - this.cumulativeAmount;
-                this.cumulativeAmount = snapAdjustedTotal;
-                return incrementalDelta;
-            }
-        }
-
-        const incrementalDelta = this.rawCursorMovement - this.cumulativeAmount;
-        this.cumulativeAmount = this.rawCursorMovement;
-        return incrementalDelta;
-    }
-
-
-    syncContainerUpdates() {
-        if (this.isContainerPush) {
-            // Container push: Full container repositioning and resizing
-            MovementUtils.updateParentContainer(this.pushedObject, false, null, null, true, false);
-
-            // Trigger layout recalculation if pushing a container in layout mode
-            const sceneController = window.modlerComponents?.sceneController;
-            if (sceneController && this.pushedObject.userData && this.pushedObject.userData.id) {
-                const objectData = sceneController.getObjectByMesh(this.pushedObject);
-                if (objectData && objectData.isContainer && objectData.autoLayout && objectData.autoLayout.enabled) {
-                    // Update layout to adapt container content to new size
-                    sceneController.updateLayout(objectData.id);
-                }
-            }
-        } else {
-            // Individual object push: Lightweight real-time updates
-            this.updateContainerForObjectPush(false, true); // false = not final, true = real-time
-        }
+        return axisDelta;
     }
 
     /**
-     * Modify object geometry incrementally for real-time pushing
-     *
-     * Handles both container resizing and regular vertex manipulation.
-     * For containers: resizes container geometry and triggers layout updates.
-     * For regular objects: performs incremental vertex manipulation.
-     *
-     * @param {number} delta - Incremental movement amount in world units
+     * Modify geometry using unified resize system
      */
-    modifyGeometryIncremental(delta) {
+    modifyGeometry(delta) {
         if (!this.pushedObject || Math.abs(delta) < 0.0001) return;
 
-        if (this.isContainerPush) {
-            this.modifyContainerGeometry();
-        } else {
-            this.modifyRegularGeometry(delta);
-        }
-    }
-
-    modifyContainerGeometry() {
-        if (!this.pushedObject || !this.originalContainerSize) return;
-
-        // Calculate new container size
-        const newSize = this.cache.tempVector1.copy(this.originalContainerSize);
-        const sizeChange = this.cumulativeAmount;
-
-        if (this.pushAxis === 'x') {
-            newSize.x = Math.max(0.1, this.originalContainerSize.x + sizeChange);
-        } else if (this.pushAxis === 'y') {
-            newSize.y = Math.max(0.1, this.originalContainerSize.y + sizeChange);
-        } else if (this.pushAxis === 'z') {
-            newSize.z = Math.max(0.1, this.originalContainerSize.z + sizeChange);
-        }
-
-        // Delegate to centralized container service via ContainerCrudManager
-        const containerCrudManager = window.modlerComponents?.containerCrudManager;
-        if (containerCrudManager) {
-            containerCrudManager.updateContainerForPushTool(this.pushedObject, newSize);
-        } else {
-            console.error('PushTool: ContainerCrudManager not available for container update');
-        }
-    }
-
-    /**
-     * Modify regular object geometry using centralized GeometryUtils
-     * @param {number} delta - Incremental movement amount in world units
-     */
-    modifyRegularGeometry(delta) {
-        // Use actualPushedMesh for geometry modifications (handles interactive/collision meshes)
-        const meshToModify = this.actualPushedMesh || this.pushedObject;
-        if (!meshToModify || !meshToModify.geometry) return;
-
-        // Use centralized GeometryUtils for face-based pushing
         const geometryUtils = window.GeometryUtils;
         if (!geometryUtils) {
             console.warn('PushTool: GeometryUtils not available');
             return;
         }
 
-        // Perform face push using centralized utility
-        const success = geometryUtils.pushGeometryFace(
-            meshToModify.geometry,
+        // Get current dimensions
+        const currentDims = geometryUtils.getGeometryDimensions(this.pushedObject.geometry);
+        if (!currentDims) return;
+
+        // Calculate new dimension after delta
+        const newDimension = currentDims[this.pushAxis] + delta;
+
+        // Check minimum size for containers in layout mode
+        const sceneController = window.modlerComponents?.sceneController;
+        if (sceneController && this.pushedObject.userData?.id) {
+            const objectData = sceneController.getObjectByMesh(this.pushedObject);
+            if (objectData?.isContainer && objectData.autoLayout?.enabled) {
+                // Get minimum size needed to contain all children
+                const children = sceneController.getChildObjects(objectData.id);
+
+                if (children.length > 0) {
+                    const minSize = this.calculateMinimumContainerSize(children, this.pushAxis, objectData.autoLayout);
+
+                    if (newDimension < minSize) {
+                        // Don't allow pushing smaller than contents
+                        return;
+                    }
+                }
+            }
+        }
+
+        // Determine anchor mode from push direction
+        // pushDirection > 0 means pushing +face, so MIN face stays fixed
+        // pushDirection < 0 means pushing -face, so MAX face stays fixed
+        const anchorMode = this.pushDirection > 0 ? 'min' : 'max';
+
+        // Use unified resize with anchor mode
+        const success = geometryUtils.resizeGeometry(
+            this.pushedObject.geometry,
             this.pushAxis,
-            this.pushDirection,
-            delta
+            newDimension,
+            anchorMode
         );
 
         if (success) {
-            // Refresh visual feedback - this will handle all mesh synchronization
-            this.refreshVisualFeedback();
-        }
-    }
 
-    refreshVisualFeedback() {
-        // Use actualPushedMesh for geometry updates (handles interactive/collision meshes)
-        const meshToUpdate = this.actualPushedMesh || this.pushedObject;
+            // Update all support meshes (wireframes, etc.) - unified for containers and objects
+            geometryUtils.updateSupportMeshGeometries(this.pushedObject, false);
 
-        // Update support mesh geometries to match modified main geometry
-        const geometryUtils = window.GeometryUtils;
-        if (geometryUtils && meshToUpdate) {
-            // Real-time updates: Update support meshes centrally during push operations for immediate feedback
-            geometryUtils.updateSupportMeshGeometries(meshToUpdate);
-        }
-
-        // Update face highlighting to match new geometry
-        this.updateFaceHighlighting();
-
-        // Update SceneController object data dimensions from modified geometry
-        if (meshToUpdate?.userData?.id) {
-            this.updateObjectDataDimensions(meshToUpdate.userData.id, meshToUpdate);
-        }
-
-        // Sync geometry changes to pushedObject if they're different objects
-        if (meshToUpdate !== this.pushedObject && meshToUpdate?.geometry && this.pushedObject?.geometry) {
-            // Copy the modified geometry to the selected object for proper serialization
-            this.pushedObject.geometry = meshToUpdate.geometry;
-        }
-
-        // Update dimensions through unified state management
-        if (this.objectStateManager && this.pushedObject?.userData?.id) {
-            const dimensions = window.GeometryUtils?.getGeometryDimensions(meshToUpdate.geometry);
-            if (dimensions) {
-                this.objectStateManager.updateObject(this.pushedObject.userData.id, {
-                    dimensions: {
-                        x: dimensions.x,
-                        y: dimensions.y,
-                        z: dimensions.z
-                    }
-                });
-            }
-        }
-    }
-
-    updateFaceHighlighting() {
-        const hoverState = this.faceToolBehavior.getHoverState();
-        if (hoverState.isActive) {
-            const targetObject = this.faceToolBehavior.getTargetObject(hoverState.hit);
-            if (targetObject === this.pushedObject) {
-                // Use support mesh face highlight - show/hide only during push operations
-                const supportMeshes = this.pushedObject.userData.supportMeshes;
-                if (supportMeshes?.faceHighlight) {
-                    // ARCHITECTURE COMPLIANCE: During push operations, only show - NO repositioning
-                    // Face highlight was positioned when hover started, now it moves naturally with geometry
-                    supportMeshes.faceHighlight.visible = true;
-                } else {
-                    // Fallback to Visual Effects for objects without support meshes
-                    this.visualEffects.clearHighlight();
-                    this.visualEffects.showFaceHighlight(hoverState.hit);
-                }
-            }
-        }
-    }
-
-
-
-
-
-
-
-    /**
-     * Calculate snap-adjusted push amount for smooth snap transitions
-     */
-    calculateSnapAdjustedPushAmount(snapPoint) {
-        if (!snapPoint?.worldPos || !this.faceNormal || !this.startPosition) {
-            return this.cumulativeAmount;
-        }
-
-        const currentFacePos = this.cache.tempVector1
-            .copy(this.startPosition)
-            .addScaledVector(this.faceNormal, this.cumulativeAmount);
-
-        const snapAdjustment = this.cache.tempVector2
-            .subVectors(snapPoint.worldPos, currentFacePos)
-            .dot(this.faceNormal);
-
-        return Math.abs(snapAdjustment) > 0.01 ?
-            this.cumulativeAmount + snapAdjustment :
-            this.cumulativeAmount;
-    }
-
-
-
-    /**
-     * End face push operation
-     */
-    endFacePush() {
-        const pushedObject = this.pushedObject; // Store reference before clearing
-        const initialDimensions = this.initialDimensions;
-        const initialPosition = this.initialPosition;
-
-        // Record which axis was manipulated for Tab key focus
-        if (this.pushFaceNormal && pushedObject && window.inputFocusManager) {
-            const dominantAxis = this.getDominantAxisFromNormal(this.pushFaceNormal);
-            const objectId = pushedObject.userData?.objectId || pushedObject.userData?.id || pushedObject.id;
-            window.inputFocusManager.recordManipulation(objectId, `dimensions.${dominantAxis}`);
-        }
-
-        // Register push as undoable command
-        if (pushedObject && initialDimensions && initialPosition) {
+            // Update scene data dimensions
             const sceneController = window.modlerComponents?.sceneController;
-            const objectData = sceneController?.getObjectByMesh(pushedObject);
-
-            if (objectData) {
-                const finalDimensions = objectData.dimensions ? { ...objectData.dimensions } : null;
-                const finalPosition = {
-                    x: pushedObject.position.x,
-                    y: pushedObject.position.y,
-                    z: pushedObject.position.z
-                };
-
-                // Only create command if dimensions actually changed
-                const hasChanged = finalDimensions && (
-                    Math.abs(finalDimensions.x - initialDimensions.x) > 0.001 ||
-                    Math.abs(finalDimensions.y - initialDimensions.y) > 0.001 ||
-                    Math.abs(finalDimensions.z - initialDimensions.z) > 0.001
-                );
-
-                if (hasChanged) {
-                    const historyManager = window.modlerComponents?.historyManager;
-                    if (historyManager) {
-                        const command = new PushFaceCommand(
-                            objectData.id,
-                            initialDimensions,
-                            finalDimensions,
-                            initialPosition,
-                            finalPosition
-                        );
-
-                        historyManager.undoStack.push(command);
-                        historyManager.clearRedoStack();
-                        historyManager.trimHistory();
-                        historyManager.notifyHistoryChanged();
-
-                        logger.debug(`📝 Registered push in history: ${objectData.id}`);
-                    }
+            if (sceneController && this.pushedObject.userData?.id) {
+                const objectData = sceneController.getObjectByMesh(this.pushedObject);
+                if (objectData) {
+                    const dims = geometryUtils.getGeometryDimensions(this.pushedObject.geometry);
+                    objectData.dimensions = { x: dims.x, y: dims.y, z: dims.z };
                 }
             }
         }
+    }
 
-        this.resetPushState();
-        this.resetMovementState();
-        // Reset visual state
-
-        // Clear snap detection
-        const snapController = window.modlerComponents?.snapController;
-        if (snapController) {
-            snapController.clearCurrentSnapPoint();
+    /**
+     * Update face highlight to track pushed face
+     * Note: We hide it during push since the wireframe provides visual feedback
+     */
+    updateFaceHighlight(delta) {
+        // Update face highlight to follow the pushed face
+        // The face highlight needs to be repositioned as the geometry changes
+        const geometryUtils = window.GeometryUtils;
+        if (geometryUtils && this.pushedObject) {
+            // Update face highlight position (but not full geometry rebuild during drag)
+            geometryUtils.updateSupportMeshGeometries(this.pushedObject, true);
         }
+    }
+
+    /**
+     * Update container layout for containers in layout mode
+     * Called during push to provide real-time visual feedback for fill objects
+     */
+    updateContainerLayout() {
+        const sceneController = window.modlerComponents?.sceneController;
+        if (!sceneController || !this.pushedObject?.userData?.id) return;
+
+        const objectData = sceneController.getObjectByMesh(this.pushedObject);
+        if (!objectData?.isContainer || !objectData.autoLayout?.enabled) return;
+
+        // CRITICAL: Pass push context to layout update
+        // This ensures fill objects resize from the correct edge (not center)
+        const pushContext = {
+            axis: this.pushAxis,
+            anchorMode: this.pushDirection > 0 ? 'min' : 'max'
+        };
+
+        sceneController.updateLayout(objectData.id, pushContext);
+    }
+
+    /**
+     * Update dimension display in property panel
+     */
+    updateDimensionDisplay() {
+        if (!this.objectStateManager || !this.pushedObject.userData?.id) return;
+
+        const geometryUtils = window.GeometryUtils;
+        if (!geometryUtils) return;
+
+        const dimensions = geometryUtils.getGeometryDimensions(this.pushedObject.geometry);
+        if (dimensions) {
+            this.objectStateManager.updateObject(this.pushedObject.userData.id, {
+                dimensions: { x: dimensions.x, y: dimensions.y, z: dimensions.z }
+            });
+        }
+    }
+
+    /**
+     * Stop push operation and finalize
+     */
+    stopPush() {
+        if (!this.isPushing) return;
+
+        const pushedObject = this.pushedObject;
+
+        // Finalize geometry and recalculate face highlight position
+        if (pushedObject) {
+            const geometryUtils = window.GeometryUtils;
+            if (geometryUtils) {
+                // Now update face highlight for final geometry (updateFaceHighlight = true)
+                geometryUtils.updateSupportMeshGeometries(pushedObject, true);
+            }
+
+            // Final dimension update
+            // Source 'push-tool' tells ObjectStateManager to skip layout update
+            // Positions stay fixed, fill objects already resized during drag
+            if (this.objectStateManager && pushedObject.userData?.id) {
+                const dimensions = geometryUtils?.getGeometryDimensions(pushedObject.geometry);
+                if (dimensions) {
+                    this.objectStateManager.updateObject(pushedObject.userData.id, {
+                        dimensions: { x: dimensions.x, y: dimensions.y, z: dimensions.z }
+                    }, 'push-tool');
+                }
+            }
+
+            // Register undo action
+            this.registerUndoAction(pushedObject);
+        }
+
+        // Clear hover state
+        this.faceToolBehavior.clearHover();
+
+        // Reset state
+        this.resetState();
 
         // Reset cursor
         const canvas = window.modlerComponents?.sceneFoundation?.canvas;
         if (canvas) {
             canvas.style.cursor = 'default';
         }
-
-        // Final updates for pushed object
-        if (pushedObject && this.selectionController.isSelected(pushedObject)) {
-            // Update SceneController object data dimensions for final state
-            if (pushedObject?.userData?.id) {
-                this.updateObjectDataDimensions(pushedObject.userData.id, pushedObject);
-            }
-
-            // Update support meshes and notify system - handles property panel updates automatically
-            const geometryUtils = window.GeometryUtils;
-            if (geometryUtils) {
-                geometryUtils.updateSupportMeshGeometries(pushedObject);
-            }
-
-            // Final dimension update through unified state management
-            if (this.objectStateManager && pushedObject.userData?.id) {
-                const dimensions = window.GeometryUtils?.getGeometryDimensions(pushedObject.geometry);
-                if (dimensions) {
-                    this.objectStateManager.updateObject(pushedObject.userData.id, {
-                        dimensions: {
-                            x: dimensions.x,
-                            y: dimensions.y,
-                            z: dimensions.z
-                        }
-                    });
-                }
-            }
-        }
-
-        // Clear any existing highlights and hover states to ensure clean state
-        this.faceToolBehavior.clearHover();
-
-        // Final container updates based on push type
-        if (this.isContainerPush) {
-            // Container push: Full container repositioning and resizing
-            MovementUtils.updateParentContainer(pushedObject, true, null, null, false, false);
-        } else {
-            // Individual object push: Final container update with directional adjustment
-            this.updateContainerForObjectPush(true);
-        }
     }
-
 
     /**
-     * Update SceneController object data dimensions using centralized GeometryUtils
+     * Register undo action for history
      */
-    updateObjectDataDimensions(objectId, mesh) {
-        if (!mesh || !mesh.geometry) return;
+    registerUndoAction(pushedObject) {
+        const historyController = window.modlerComponents?.historyController;
+        if (!historyController) return;
 
-        const sceneController = window.modlerComponents?.sceneController;
-        if (!sceneController) return;
+        const geometryUtils = window.GeometryUtils;
+        const finalDimensions = geometryUtils?.getGeometryDimensions(pushedObject.geometry);
 
-        const objectData = sceneController.getObject(objectId);
-        if (!objectData) return;
-
-        // Use centralized GeometryUtils for dimension calculation
-        const dimensions = window.GeometryUtils?.getGeometryDimensions(mesh.geometry);
-        if (dimensions) {
-            // Update SceneController object data
-            objectData.dimensions = dimensions;
-
-            // Also update mesh userData for consistency
-            if (!mesh.userData.dimensions) {
-                mesh.userData.dimensions = {};
-            }
-            Object.assign(mesh.userData.dimensions, dimensions);
+        if (this.initialDimensions && finalDimensions) {
+            historyController.push({
+                execute: () => {
+                    this.objectStateManager?.updateObject(pushedObject.userData.id, {
+                        dimensions: finalDimensions
+                    });
+                },
+                undo: () => {
+                    this.objectStateManager?.updateObject(pushedObject.userData.id, {
+                        dimensions: this.initialDimensions
+                    });
+                },
+                description: `Push ${pushedObject.userData.id}`
+            });
         }
     }
 
-    clearHover() {
+    /**
+     * Calculate minimum container size to fit all children
+     * CRITICAL: Only considers non-fill objects, since fill objects resize to fit
+     */
+    calculateMinimumContainerSize(children, axis, autoLayout) {
+        const layoutEngine = window.LayoutEngine;
+        if (!layoutEngine || !autoLayout) {
+            return 0;
+        }
+
+        // Calculate the minimum size needed along the layout axis
+        const direction = autoLayout.direction;
+        const paddingValue = autoLayout.padding || 0;
+
+        // CRITICAL: In space-between mode (no fill objects), gaps are flexible (can be zero)
+        // Only use fixed gap when there are fill objects
+        const sizeProperty = `size${axis.toUpperCase()}`;
+        const hasFillObjects = children.some(child =>
+            child.layoutProperties?.[sizeProperty] === 'fill'
+        );
+        const gap = hasFillObjects ? (autoLayout.gap || 0) : 0;
+
+        // CRITICAL FIX: Padding might be an object {top, right, bottom, left} or a number
+        // For the given axis, we need to extract the appropriate padding values
+        let paddingStart = 0;
+        let paddingEnd = 0;
+
+        if (typeof paddingValue === 'object' && paddingValue !== null) {
+            // Padding is an object - extract values based on axis
+            if (axis === 'x') {
+                paddingStart = paddingValue.left || 0;
+                paddingEnd = paddingValue.right || 0;
+            } else if (axis === 'y') {
+                paddingStart = paddingValue.bottom || 0;
+                paddingEnd = paddingValue.top || 0;
+            } else if (axis === 'z') {
+                paddingStart = paddingValue.front || 0;
+                paddingEnd = paddingValue.back || 0;
+            }
+        } else if (typeof paddingValue === 'number') {
+            // Padding is a single number - use for both sides
+            paddingStart = paddingValue;
+            paddingEnd = paddingValue;
+        }
+
+        const totalPadding = paddingStart + paddingEnd;
+        let minSize = totalPadding; // Start with padding on both sides
+
+        // CRITICAL: Filter out fill objects - they don't contribute to minimum size
+        // Only non-fill (fixed-size) objects matter for minimum size calculation
+        const nonFillChildren = children.filter(child => {
+            return !child.layoutProperties || child.layoutProperties[sizeProperty] !== 'fill';
+        });
+
+        if (direction === axis) {
+            // Layout direction matches push axis - sum all non-fill child sizes + gaps
+            nonFillChildren.forEach((child, index) => {
+                const childDims = child.dimensions || { x: 1, y: 1, z: 1 };
+                minSize += childDims[axis];
+            });
+            // Add gaps between ALL children (including fill), not just non-fill
+            if (children.length > 1) {
+                minSize += gap * (children.length - 1);
+            }
+        } else {
+            // Layout direction perpendicular to push axis - find maximum non-fill child size
+            let maxChildSize = 0;
+            nonFillChildren.forEach(child => {
+                const childDims = child.dimensions || { x: 1, y: 1, z: 1 };
+                maxChildSize = Math.max(maxChildSize, childDims[axis]);
+            });
+            minSize += maxChildSize;
+        }
+
+        return minSize;
+    }
+
+    /**
+     * Reset tool state
+     */
+    resetState() {
+        this.isPushing = false;
+        this.pushedObject = null;
+        this.pushedFace = null;
+        this.faceNormal = null;
+        this.pushAxis = null;
+        this.pushDirection = 1;
+        this.startMousePos = null;
+        this.lastMousePos = null;
+        this.cumulativeAmount = 0;
+        this.initialDimensions = null;
+        this.initialPosition = null;
+    }
+
+    /**
+     * Cleanup on tool deactivation
+     */
+    deactivate() {
+        if (this.isPushing) {
+            this.stopPush();
+        }
         this.faceToolBehavior.clearHover();
     }
 
+    /**
+     * Check if tool has active face highlighting
+     */
     hasActiveHighlight() {
         return this.faceToolBehavior.hasActiveHighlight();
     }
 
     /**
-     * Tool activation wrapper for ToolController compatibility
+     * Get tool name
      */
-    activate() {
-        this.onToolActivate();
-    }
-
-    /**
-     * Tool deactivation wrapper for ToolController compatibility
-     */
-    deactivate() {
-        this.onToolDeactivate();
-    }
-
-    onToolActivate() {
-        // No special activation logic needed for push tool
-    }
-
-    /**
-     * Resolve the actual mesh to modify for push operations
-     * Handles interactive/collision meshes by finding the real object geometry
-     */
-    resolveActualMeshForPush(hit, targetObject) {
-        const sceneController = window.modlerComponents?.sceneController;
-        if (!sceneController) return targetObject;
-
-        const isContainerInteractive = hit.object.userData.isContainerInteractive;
-        const isContainerCollision = hit.object.userData.isContainerCollision;
-
-        // If we're hitting an interactive or collision mesh, find the actual object
-        if (isContainerInteractive || isContainerCollision) {
-            // For interactive meshes, check if they have a reference to the actual object
-            if (hit.object.userData.actualObject) {
-                return hit.object.userData.actualObject;
-            }
-
-            // For collision meshes, the actual object might be a sibling or parent
-            if (hit.object.parent) {
-                // Look for siblings that are the actual object (not collision/interactive meshes)
-                const siblings = hit.object.parent.children;
-                for (const sibling of siblings) {
-                    if (!sibling.userData.isContainerInteractive &&
-                        !sibling.userData.isContainerCollision &&
-                        sibling.geometry) {
-                        return sibling;
-                    }
-                }
-            }
-
-            // Fallback: try to find object by ID from scene controller
-            const objectId = hit.object.userData.objectId || hit.object.userData.id;
-            if (objectId) {
-                const objectData = sceneController.getObject(objectId);
-                if (objectData && objectData.mesh) {
-                    return objectData.mesh;
-                }
-            }
-        }
-
-        // Default: return the target object
-        return targetObject;
-    }
-
-    isContainerPushOperation(hit, targetObject) {
-        const sceneController = window.modlerComponents?.sceneController;
-        if (!sceneController || !targetObject) return false;
-
-        // Check if the target object itself is a container that's explicitly selected
-        const objectData = sceneController.getObjectByMesh(targetObject);
-        if (objectData && objectData.isContainer) {
-            // This is a container mesh - check if it's explicitly selected
-            if (this.selectionController.isSelected(targetObject)) {
-                return true; // Container push operation
-            }
-        }
-
-        // Check if we're hitting an interactive/collision mesh but the target resolved to a container
-        // This means getTargetObject() resolved to a container because it's selected
-        const isContainerInteractive = hit.object.userData.isContainerInteractive;
-        const isContainerCollision = hit.object.userData.isContainerCollision;
-
-        if ((isContainerInteractive || isContainerCollision) && objectData && objectData.isContainer) {
-            // We hit a container mesh and it resolved to a container - this is a container push
-            return true;
-        }
-
-        return false; // Regular object push operation
-    }
-
-    canPushContainer(targetObject) {
-        const sceneController = window.modlerComponents?.sceneController;
-        if (!sceneController || !targetObject) return false;
-
-        const objectData = sceneController.getObjectByMesh(targetObject);
-        if (!objectData || !objectData.isContainer) return true; // Allow pushing non-containers
-
-        // Allow pushing containers in layout mode OR fixed sizing mode
-        const isLayoutEnabled = objectData.autoLayout && objectData.autoLayout.enabled;
-        const isFixedMode = objectData.sizingMode === 'fixed';
-
-        return isLayoutEnabled || isFixedMode;
-    }
-
-    /**
-     * Check if a child object can be pushed (not inside a layout-enabled container)
-     */
-    canPushChildObject(targetObject) {
-        const sceneController = window.modlerComponents?.sceneController;
-        if (!sceneController || !targetObject) return false;
-
-        const objectData = sceneController.getObjectByMesh(targetObject);
-        if (!objectData) return false;
-
-        // If object has no parent container, it can be pushed
-        if (!objectData.parentContainer) return true;
-
-        // Check if parent container has layout enabled
-        const parentContainer = sceneController.getObject(objectData.parentContainer);
-        if (!parentContainer) return true; // Parent not found, allow push
-
-        // BLOCK pushing if parent has active layout (layout controls child dimensions/positions)
-        const parentHasLayout = parentContainer.autoLayout && parentContainer.autoLayout.enabled;
-        return !parentHasLayout;
-    }
-
-    /**
-     * Update container for individual object push using centralized MovementUtils
-     */
-    updateContainerForObjectPush(isFinalUpdate = false, isRealTime = false) {
-        if (!this.pushedObject) return;
-
-        // Use centralized MovementUtils for container updates
-        MovementUtils.updateParentContainer(
-            this.pushedObject,
-            isFinalUpdate, // realTime parameter
-            null, // throttleState (let MovementUtils handle)
-            null, // newContainerSize (let it calculate)
-            !isRealTime, // immediateVisuals (opposite of isRealTime)
-            false // preservePosition
-        );
-    }
-
-    /**
-     * Get container size using centralized GeometryUtils
-     * @param {THREE.Object3D} containerMesh - Container mesh object
-     * @returns {THREE.Vector3} Container size
-     */
-    getContainerSize(containerMesh) {
-        if (!containerMesh || !containerMesh.geometry) {
-            return new THREE.Vector3(1, 1, 1);
-        }
-
-        const dimensions = window.GeometryUtils?.getGeometryDimensions(containerMesh.geometry);
-        if (dimensions) {
-            return new THREE.Vector3(dimensions.x, dimensions.y, dimensions.z);
-        }
-
-        // Fallback
-        return new THREE.Vector3(1, 1, 1);
-    }
-
-    /**
-     * Tool deactivation using centralized event handler
-     */
-    onToolDeactivate() {
-        this.faceToolBehavior.clearHover();
-        if (this.active) {
-            this.endFacePush();
-        }
-    }
-
-    onSelectionChange(selectedObjects) {
-        const hoverState = this.faceToolBehavior.getHoverState();
-        if (hoverState.object && !selectedObjects.includes(hoverState.object)) {
-            this.clearHover();
-        }
-    }
-
-    /**
-     * Clear hover state using shared behavior
-     */
-
-    /**
-     * Get dominant axis from face normal vector
-     * @param {THREE.Vector3} normal - Face normal vector
-     * @returns {string} - 'x', 'y', or 'z'
-     */
-    getDominantAxisFromNormal(normal) {
-        const absX = Math.abs(normal.x);
-        const absY = Math.abs(normal.y);
-        const absZ = Math.abs(normal.z);
-
-        if (absX > absY && absX > absZ) return 'x';
-        if (absY > absZ) return 'y';
-        return 'z';
+    getName() {
+        return 'PushTool';
     }
 }
 
-// Export for use in main application
+// Export
 window.PushTool = PushTool;

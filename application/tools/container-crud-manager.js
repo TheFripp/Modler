@@ -50,19 +50,26 @@ class ContainerCrudManager {
     updateContainerGeometryWithFactories(containerData, size, newCenter = null, shouldReposition = true) {
         const { geometryFactory, materialManager } = this.getFactories();
 
-        // Get layout direction for wireframe visualization
-        const layoutDirection = containerData.autoLayout?.enabled && containerData.autoLayout?.direction ?
-            containerData.autoLayout.direction : null;
-
-        return LayoutGeometry.updateContainerGeometry(
+        // Layout direction no longer needed - layout-aware wireframes removed
+        const success = LayoutGeometry.updateContainerGeometry(
             containerData.mesh,
             size,
             newCenter || containerData.mesh.position,
             shouldReposition,
-            layoutDirection,
+            null, // layoutDirection parameter kept for compatibility but ignored
             geometryFactory,
             materialManager
         );
+
+        // ARCHITECTURE SIMPLIFICATION: Explicit wireframe update after geometry change
+        if (success) {
+            const geometryUtils = window.GeometryUtils;
+            if (geometryUtils) {
+                geometryUtils.updateSupportMeshGeometries(containerData.mesh);
+            }
+        }
+
+        return success;
     }
 
     /**

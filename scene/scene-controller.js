@@ -538,7 +538,7 @@ class SceneController {
      * @param {number} containerId - Container object ID
      * @returns {boolean} True if layout was successfully updated
      */
-    updateLayout(containerId) {
+    updateLayout(containerId, pushContext = null) {
         const container = this.objects.get(containerId);
 
         if (!container || !container.autoLayout || !container.autoLayout.enabled) {
@@ -550,24 +550,49 @@ class SceneController {
         if (children.length === 0) {
             return { success: true, reason: 'no children' };
         }
-        
+
         // This will be implemented when we create the layout engine
         if (window.LayoutEngine) {
             // Get container size for fill calculations
             const containerSize = this.getContainerSize(container);
 
-
             // Pass the layout anchor if it exists (preserves original center when switching to layout mode)
             const layoutAnchor = container.layoutAnchor || null;
-            const layoutResult = window.LayoutEngine.calculateLayout(children, container.autoLayout, containerSize, layoutAnchor);
+            const layoutResult = window.LayoutEngine.calculateLayout(children, container.autoLayout, containerSize, layoutAnchor, pushContext);
 
-            this.applyLayoutPositionsAndSizes(children, layoutResult.positions, layoutResult.sizes, container);
+            this.applyLayoutPositionsAndSizes(children, layoutResult.positions, layoutResult.sizes, container, pushContext);
+
+            // Store calculated gap directly on container for display (no recursion)
+            if (layoutResult.calculatedGap !== undefined) {
+                container.calculatedGap = layoutResult.calculatedGap;
+
+                // CRITICAL: Also update ObjectStateManager's copy so it's included in serialization
+                const objectStateManager = this.getObjectStateManager();
+                if (objectStateManager) {
+                    const osmObject = objectStateManager.getObject(container.id);
+                    if (osmObject) {
+                        osmObject.calculatedGap = layoutResult.calculatedGap;
+                    }
+                }
+
+                // Notify UI directly via event bus (triggers PostMessage with updated calculatedGap)
+                if (window.objectEventBus && container.id) {
+                    window.objectEventBus.emit(
+                        window.objectEventBus.EVENT_TYPES.HIERARCHY,
+                        {
+                            objectId: container.id,
+                            type: 'layout-property-changed',
+                            property: 'calculatedGap',
+                            value: layoutResult.calculatedGap
+                        }
+                    );
+                }
+            }
 
             // Use bounds directly from LayoutEngine (architectural improvement)
             const layoutBounds = layoutResult.bounds;
 
             return { success: true, layoutBounds };
-        } else {
         }
 
         return { success: false, reason: 'LayoutEngine not available' };
@@ -623,7 +648,7 @@ class SceneController {
      * @param {Array} sizes - Array of size vectors
      * @param {Object} container - Container object data
      */
-    applyLayoutPositionsAndSizes(objects, positions, sizes, container = null) {
+    applyLayoutPositionsAndSizes(objects, positions, sizes, container = null, pushContext = null) {
 
         if (objects.length !== positions.length || objects.length !== sizes.length) {
             return;
@@ -646,33 +671,62 @@ class SceneController {
                         // Validate dimension is a valid number
                         if (typeof newDim === 'number' && !isNaN(newDim) && newDim > 0) {
                             if (Math.abs(currentDim - newDim) > 0.001) {
-                                this.updateObjectDimensions(obj.id, axis, newDim);
+                                // CRITICAL: Determine anchor mode based on push context
+                                // If pushing on this axis, use push anchor mode
+                                // Otherwise, use center to maintain symmetric resize
+                                let anchorMode = 'center';
+                                if (pushContext && pushContext.axis === axis) {
+                                    anchorMode = pushContext.anchorMode;
+                                }
+
+                                this.updateObjectDimensions(obj.id, axis, newDim, anchorMode);
                             }
                         }
                     }
                 });
             }
 
-            // CRITICAL FIX: Use local positions when objects are children of container
-            // Layout positions are already relative to container coordinate space
-            if (container && container.mesh && obj.mesh.parent === container.mesh) {
-                // Object is child of container - use layout position directly as local position
-                obj.mesh.position.copy(layoutPosition);
+            // CRITICAL: During push operations, decide whether to update positions
+            // - With fill objects: Skip positions (objects stay fixed, fill resizes via anchor)
+            // - Without fill objects: Update positions (space-between redistribution)
+            const isDuringPush = pushContext !== null;
+            let shouldUpdatePosition = !isDuringPush; // Default: update unless pushing
 
-                // Update object data position to maintain consistency (world position)
-                obj.position = obj.mesh.getWorldPosition(new THREE.Vector3());
+            if (isDuringPush) {
+                // Check if ANY object in container has fill on push axis
+                const hasFillObjects = objects.some(o =>
+                    o.layoutProperties?.[`size${pushContext.axis.toUpperCase()}`] === 'fill'
+                );
 
-            } else {
-                // Object not in container hierarchy - use world position (fallback)
-                const containerPosition = container && container.mesh ? container.mesh.position : new THREE.Vector3(0, 0, 0);
-                const worldPosition = new THREE.Vector3()
-                    .copy(layoutPosition)
-                    .add(containerPosition);
-
-                obj.mesh.position.copy(worldPosition);
-                obj.position = worldPosition.clone();
-
+                // Only update positions if using space-between (no fill objects)
+                shouldUpdatePosition = !hasFillObjects;
             }
+
+            if (shouldUpdatePosition) {
+                // Normal layout update - apply positions
+                // CRITICAL FIX: Use local positions when objects are children of container
+                // Layout positions are already relative to container coordinate space
+                if (container && container.mesh && obj.mesh.parent === container.mesh) {
+                    // Object is child of container - use layout position directly as local position
+                    obj.mesh.position.copy(layoutPosition);
+
+                    // Update object data position to maintain consistency (world position)
+                    obj.position = obj.mesh.getWorldPosition(new THREE.Vector3());
+
+                } else {
+
+                    // Object not in container hierarchy - use world position (fallback)
+                    const containerPosition = container && container.mesh ? container.mesh.position : new THREE.Vector3(0, 0, 0);
+                    const worldPosition = new THREE.Vector3()
+                        .copy(layoutPosition)
+                        .add(containerPosition);
+
+                    obj.mesh.position.copy(worldPosition);
+                    obj.position = worldPosition.clone();
+
+                }
+            }
+            // During push: positions are NOT updated - objects stay where they are
 
             // Transform change notification handled by mesh synchronizer
         });
@@ -783,7 +837,7 @@ class SceneController {
      * @param {number} newDimension - New dimension value
      * @returns {boolean} - Success status
      */
-    updateObjectDimensions(objectId, axis, newDimension) {
+    updateObjectDimensions(objectId, axis, newDimension, anchorMode = 'center') {
         // Validate input parameters
         if (typeof newDimension !== 'number' || isNaN(newDimension) || newDimension <= 0) {
             console.warn('Cannot update dimensions: invalid dimension value', newDimension);
@@ -806,14 +860,14 @@ class SceneController {
                 return false;
             }
 
-            // Use GeometryUtils for CAD-style vertex manipulation
-            const success = GeometryUtils.scaleGeometryAlongAxis(geometry, axis, newDimension);
+            // Use UNIFIED resize method with anchor mode
+            const success = GeometryUtils.resizeGeometry(geometry, axis, newDimension, anchorMode);
             if (!success) {
-                console.error('Failed to scale geometry along axis:', axis);
+                console.error('Failed to resize geometry along axis:', axis);
                 return false;
             }
 
-            // Update support mesh geometries using GeometryUtils wrapper
+            // Update support mesh geometries (wireframes for both objects and containers)
             GeometryUtils.updateSupportMeshGeometries(mesh);
 
             // Update object metadata

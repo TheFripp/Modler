@@ -462,7 +462,7 @@
 
         // Listen to unified state changes
         objectStateManager.addEventListener('objects-changed', (event) => {
-            const { objects, hierarchy, selection } = event.detail;
+            const { objects, selection } = event.detail;
 
             // Skip full object updates during drag operations to prevent flickering
             // Individual property updates are still sent via object:property-changed
@@ -470,15 +470,22 @@
                 return;
             }
 
-            // Get PostMessage-ready data
+            // Get PostMessage-ready data for selected objects
             const postMessageSelection = selection.map(objectId =>
                 objectStateManager.getObjectForPostMessage ?
                 objectStateManager.getObjectForPostMessage(objectId) :
                 objectStateManager.getObject(objectId)
             ).filter(Boolean);
 
-            // Hierarchy is already from SceneController (single source of truth)
-            const postMessageHierarchy = hierarchy;
+            // Get current hierarchy from SceneController (single source of truth)
+            const sceneController = window.modlerComponents?.sceneController;
+            const hierarchy = sceneController ? sceneController.getAllObjects() : [];
+
+            // Serialize hierarchy for PostMessage (remove circular references)
+            const ObjectDataFormat = window.ObjectDataFormat;
+            const postMessageHierarchy = hierarchy.map(obj =>
+                ObjectDataFormat ? ObjectDataFormat.serializeForPostMessage(obj) : obj
+            ).filter(Boolean);
 
             // Notify UI systems with standard format
             notifyUISystems({

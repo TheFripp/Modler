@@ -30,6 +30,18 @@
 		return $multiSelection ? 'multi-selection' : $displayObject?.id || '';
 	}
 
+	// Reactive layout button states
+	$: isLayoutEnabled = $displayObject?.autoLayout?.enabled ?? false;
+	$: layoutDirection = $displayObject?.autoLayout?.direction ?? '';
+	$: isXActive = isLayoutEnabled && layoutDirection === 'x';
+	$: isYActive = isLayoutEnabled && layoutDirection === 'y';
+	$: isZActive = isLayoutEnabled && layoutDirection === 'z';
+
+	// Reactive gap value
+	$: gapValue = $displayObject?.calculatedGap !== undefined
+		? $displayObject.calculatedGap
+		: ($displayObject?.autoLayout?.gap ?? 0);
+
 	// Handle layout axis selection with toggle behavior
 	function selectLayoutAxis(axis: string) {
 		if (!$displayObject?.isContainer) return;
@@ -52,9 +64,8 @@
 			}
 		};
 
-		// Single unified update through ObjectStateManager pipeline
-		// PropertyFormatConverter handles nested object conversion
-		// ObjectStateManager expands to flat paths and triggers bidirectional propagation
+		// Send update to main window - synchronous propagation will update UI immediately
+		// No optimistic update needed - the roundtrip should be fast enough
 		updateThreeJSProperty(objectId, 'autoLayout', autoLayout, 'property-panel');
 	}
 
@@ -250,28 +261,33 @@
 				<div class="space-y-4">
 					<!-- Layout Direction (Custom Layout) -->
 					<div class="space-y-2">
-						<label class="block text-sm font-medium text-muted-foreground">Layout Direction</label>
+						<label class="block text-sm font-medium text-muted-foreground">
+							Layout Direction
+							{#if !isLayoutEnabled}
+								<span class="text-[10px] text-muted-foreground/60">(off)</span>
+							{/if}
+						</label>
 
 						<!-- All three buttons on same row -->
 						<div class="grid grid-cols-3 gap-2">
 							<button
 								type="button"
 								onclick={() => selectLayoutAxis('x')}
-								class="px-3 py-2 text-xs font-medium border rounded-md transition-all {$displayObject.autoLayout?.enabled && $displayObject.autoLayout?.direction === 'x' ? 'bg-[#2E2E2E] text-white border-[#3E3E3E] shadow-sm' : 'bg-[#1A1A1A] text-muted-foreground border-[#2E2E2E] hover:bg-[#212121] hover:text-foreground'}"
+								class="px-3 py-2 text-xs font-medium border-2 rounded-md transition-all {isXActive ? 'border-[#10B981] text-foreground shadow-sm' : 'border-[#2E2E2E] text-muted-foreground hover:border-[#404040] hover:text-foreground'}"
 							>
 								Width
 							</button>
 							<button
 								type="button"
 								onclick={() => selectLayoutAxis('y')}
-								class="px-3 py-2 text-xs font-medium border rounded-md transition-all {$displayObject.autoLayout?.enabled && $displayObject.autoLayout?.direction === 'y' ? 'bg-[#2E2E2E] text-white border-[#3E3E3E] shadow-sm' : 'bg-[#1A1A1A] text-muted-foreground border-[#2E2E2E] hover:bg-[#212121] hover:text-foreground'}"
+								class="px-3 py-2 text-xs font-medium border-2 rounded-md transition-all {isYActive ? 'border-[#10B981] text-foreground shadow-sm' : 'border-[#2E2E2E] text-muted-foreground hover:border-[#404040] hover:text-foreground'}"
 							>
 								Height
 							</button>
 							<button
 								type="button"
 								onclick={() => selectLayoutAxis('z')}
-								class="px-3 py-2 text-xs font-medium border rounded-md transition-all {$displayObject.autoLayout?.enabled && $displayObject.autoLayout?.direction === 'z' ? 'bg-[#2E2E2E] text-white border-[#3E3E3E] shadow-sm' : 'bg-[#1A1A1A] text-muted-foreground border-[#2E2E2E] hover:bg-[#212121] hover:text-foreground'}"
+								class="px-3 py-2 text-xs font-medium border-2 rounded-md transition-all {isZActive ? 'border-[#10B981] text-foreground shadow-sm' : 'border-[#2E2E2E] text-muted-foreground hover:border-[#404040] hover:text-foreground'}"
 							>
 								Depth
 							</button>
@@ -281,11 +297,16 @@
 
 					<!-- Gap and Padding Controls - Always show for containers -->
 					<div class="space-y-2">
-						<h4 class="text-xs font-medium text-foreground/80 uppercase tracking-wide">Gap</h4>
+						<h4 class="text-xs font-medium text-foreground/80 uppercase tracking-wide">
+							Gap
+							{#if $displayObject.calculatedGap !== undefined}
+								<span class="text-muted-foreground text-[10px]">(auto)</span>
+							{/if}
+						</h4>
 						<InlineInput
 							label="Gap"
 							type="number"
-							value={$displayObject.autoLayout?.gap ?? 0}
+							value={gapValue}
 							objectId={getObjectIdForUpdate()}
 							property="autoLayout.gap"
 							min={0}

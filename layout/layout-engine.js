@@ -9,9 +9,10 @@ class LayoutEngine {
      * @param {Object} layoutConfig - Layout configuration from container
      * @param {THREE.Vector3} containerSize - Optional container size for fill calculations
      * @param {THREE.Vector3} layoutAnchor - Optional anchor point to center layout around (default: origin)
+     * @param {Object} pushContext - Optional push context with {axis, anchorMode} for anchor-aware positioning
      * @returns {Object} Object with {positions: Array, sizes: Array}
      */
-    static calculateLayout(objects, layoutConfig, containerSize = null, layoutAnchor = null) {
+    static calculateLayout(objects, layoutConfig, containerSize = null, layoutAnchor = null, pushContext = null) {
         if (!objects || objects.length === 0) return { positions: [], sizes: [] };
 
 
@@ -29,11 +30,11 @@ class LayoutEngine {
 
         switch (direction) {
             case 'x':
-                return this.calculateLinearLayout(objects, 'x', gap, padding, axisSize, containerSize, layoutAnchor, layoutConfig);
+                return this.calculateLinearLayout(objects, 'x', gap, padding, axisSize, containerSize, layoutAnchor, layoutConfig, pushContext);
             case 'y':
-                return this.calculateLinearLayout(objects, 'y', gap, padding, axisSize, containerSize, layoutAnchor, layoutConfig);
+                return this.calculateLinearLayout(objects, 'y', gap, padding, axisSize, containerSize, layoutAnchor, layoutConfig, pushContext);
             case 'z':
-                return this.calculateLinearLayout(objects, 'z', gap, padding, axisSize, containerSize, layoutAnchor, layoutConfig);
+                return this.calculateLinearLayout(objects, 'z', gap, padding, axisSize, containerSize, layoutAnchor, layoutConfig, pushContext);
             case 'xy':
                 return this.calculateGridLayout(objects, 'xy', gap, padding, layoutConfig, layoutAnchor);
             case 'xyz':
@@ -56,9 +57,11 @@ class LayoutEngine {
      * @param {number} axisSize - Available container size along the axis (optional)
      * @param {THREE.Vector3} fullContainerSize - Full container size for fill calculations (optional)
      * @param {THREE.Vector3} layoutAnchor - Optional anchor point to center layout around (default: origin)
+     * @param {Object} layoutConfig - Layout configuration
+     * @param {Object} pushContext - Optional push context with {axis, anchorMode} for anchor-aware positioning
      * @returns {Array} Array of positions
      */
-    static calculateLinearLayout(objects, axis, gap, padding, axisSize = null, fullContainerSize = null, layoutAnchor = null, layoutConfig = null) {
+    static calculateLinearLayout(objects, axis, gap, padding, axisSize = null, fullContainerSize = null, layoutAnchor = null, layoutConfig = null, pushContext = null) {
         const positions = [];
         const paddingOffset = this.getPaddingOffset(axis, padding);
 
@@ -79,6 +82,24 @@ class LayoutEngine {
             return this.applySizingBehavior(obj, baseSize, axis, availableSpace, fillCount, fullContainerSize, padding);
         });
 
+        // CRITICAL: Choose gap strategy based on whether there are fill objects
+        let dynamicGap = gap;
+        if (fillCount === 0 && axisSize && objects.length > 1) {
+            // NO FILL OBJECTS: Use space-between distribution
+            // Calculate total size of all objects
+            const totalObjectSize = objectSizes.reduce((sum, size) => {
+                return sum + (axis === 'x' ? size.x : axis === 'y' ? size.y : size.z);
+            }, 0);
+
+            // Calculate available space for gaps
+            const paddingTotal = this.getTotalPadding(axis, padding);
+            const availableForGaps = axisSize - totalObjectSize - paddingTotal;
+
+            // Distribute space evenly between objects (space-between)
+            dynamicGap = Math.max(0, availableForGaps / (objects.length - 1));
+        }
+        // WITH FILL OBJECTS: Use fixed gap, fill objects resize to fit
+
         // Position objects (start from first object's half-size)
         let currentPosition = 0;
 
@@ -89,24 +110,24 @@ class LayoutEngine {
             // Position object center at current location plus half size
             if (axis === 'x') {
                 position.x = currentPosition + size.x / 2;
-                currentPosition += size.x + gap;
+                currentPosition += size.x + dynamicGap;
             } else if (axis === 'y') {
                 position.y = currentPosition + size.y / 2;
-                currentPosition += size.y + gap;
+                currentPosition += size.y + dynamicGap;
             } else if (axis === 'z') {
                 position.z = currentPosition + size.z / 2;
-                currentPosition += size.z + gap;
+                currentPosition += size.z + dynamicGap;
             }
 
             positions.push(position);
         });
 
-        // Center the entire layout around the layout anchor (or origin if no anchor)
-        const centeredPositions = this.centerLayoutPositions(positions, objectSizes, axis, layoutAnchor);
+        // Align layout based on push context (anchor mode) or center normally
+        const alignedPositions = this.alignLayoutPositions(positions, objectSizes, axis, layoutAnchor, pushContext, fullContainerSize);
 
         // Note: Padding does NOT offset object positions - it only affects container size
         // Objects stay centered, container expands around them with padding space
-        const finalPositions = centeredPositions;
+        const finalPositions = alignedPositions;
 
         // Calculate bounds for the final layout (pass layoutConfig to include padding in size)
         const layoutBounds = this.calculateLayoutBounds(objects, finalPositions, layoutConfig, fullContainerSize);
@@ -114,7 +135,8 @@ class LayoutEngine {
         return {
             positions: finalPositions,
             sizes: objectSizes,
-            bounds: layoutBounds
+            bounds: layoutBounds,
+            calculatedGap: dynamicGap // Return dynamic gap for property panel updates
         };
     }
     
@@ -399,6 +421,84 @@ class LayoutEngine {
         }
     }
     
+    /**
+     * Align layout positions based on push context or center normally
+     * @param {Array} positions - Array of position vectors
+     * @param {Array} sizes - Array of size vectors corresponding to positions
+     * @param {string} axis - Layout axis
+     * @param {THREE.Vector3} layoutAnchor - Optional anchor point to center layout around (default: origin)
+     * @param {Object} pushContext - Optional push context with {axis, anchorMode}
+     * @param {THREE.Vector3} containerSize - Container size for anchor-based alignment
+     * @returns {Array} Aligned positions
+     */
+    static alignLayoutPositions(positions, sizes, axis, layoutAnchor = null, pushContext = null, containerSize = null) {
+        if (positions.length === 0 || sizes.length === 0) return positions;
+
+        // Calculate actual layout bounds
+        let min = Infinity, max = -Infinity;
+        positions.forEach((pos, index) => {
+            const size = sizes[index];
+            if (!size) return;
+
+            let objMin, objMax;
+            if (axis === 'x') {
+                objMin = pos.x - size.x / 2;
+                objMax = pos.x + size.x / 2;
+            } else if (axis === 'y') {
+                objMin = pos.y - size.y / 2;
+                objMax = pos.y + size.y / 2;
+            } else if (axis === 'z') {
+                objMin = pos.z - size.z / 2;
+                objMax = pos.z + size.z / 2;
+            }
+
+            min = Math.min(min, objMin);
+            max = Math.max(max, objMax);
+        });
+
+        // Determine target alignment based on push context
+        let targetPosition = 0;
+
+        if (pushContext && pushContext.axis === axis && containerSize) {
+            // ANCHOR MODE: Align to min or max face based on anchor mode
+            // Container bounds in local space: [-containerSize/2, +containerSize/2]
+            const containerAxisSize = axis === 'x' ? containerSize.x : axis === 'y' ? containerSize.y : containerSize.z;
+            const containerMin = -containerAxisSize / 2;
+            const containerMax = containerAxisSize / 2;
+
+            if (pushContext.anchorMode === 'min') {
+                // MIN face stays fixed - align layout min to container min
+                targetPosition = containerMin - min;
+            } else if (pushContext.anchorMode === 'max') {
+                // MAX face stays fixed - align layout max to container max
+                targetPosition = containerMax - max;
+            } else {
+                // CENTER mode - use normal centering
+                const boundsCenter = (min + max) / 2;
+                targetPosition = -boundsCenter;
+            }
+        } else {
+            // NO PUSH CONTEXT: Normal centering behavior
+            const boundsCenter = (min + max) / 2;
+            let targetCenter = 0;
+            if (layoutAnchor) {
+                if (axis === 'x') targetCenter = layoutAnchor.x;
+                else if (axis === 'y') targetCenter = layoutAnchor.y;
+                else if (axis === 'z') targetCenter = layoutAnchor.z;
+            }
+            targetPosition = targetCenter - boundsCenter;
+        }
+
+        // Apply offset to all positions
+        return positions.map(pos => {
+            const alignedPos = pos.clone();
+            if (axis === 'x') alignedPos.x += targetPosition;
+            else if (axis === 'y') alignedPos.y += targetPosition;
+            else if (axis === 'z') alignedPos.z += targetPosition;
+            return alignedPos;
+        });
+    }
+
     /**
      * Center layout positions along the layout axis using actual bounds calculation
      * @param {Array} positions - Array of position vectors

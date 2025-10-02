@@ -543,6 +543,19 @@ function createDemoObjects() {
     if (!objectData) {
         logger.error('❌ Failed to create Demo Cube');
     }
+
+    // Add a second test cube
+    const geometry2 = geometryFactory ? geometryFactory.createBoxGeometry(1, 1, 1) : new THREE.BoxGeometry(1, 1, 1);
+    const material2 = materialManager ? materialManager.createMeshLambertMaterial({ color: 0xcccccc }) : new THREE.MeshLambertMaterial({ color: 0xcccccc });
+    const objectData2 = sc.addObject(geometry2, material2, {
+        name: 'Test Cube',
+        type: 'cube',
+        position: new THREE.Vector3(2, 1, 0)
+    });
+
+    if (!objectData2) {
+        logger.error('❌ Failed to create Test Cube');
+    }
 }
 
 /**

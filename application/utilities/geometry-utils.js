@@ -5,54 +5,15 @@ class GeometryUtils {
 
     /**
      * Scale geometry along a specific axis using CAD-style vertex manipulation
+     * @deprecated Use resizeGeometry(geometry, axis, newDimension, 'center') instead
      * @param {THREE.BufferGeometry} geometry - Target geometry
      * @param {string} axis - Axis to scale ('x', 'y', or 'z')
      * @param {number} newDimension - New dimension value
      * @returns {boolean} Success status
      */
     static scaleGeometryAlongAxis(geometry, axis, newDimension) {
-        if (!geometry || !geometry.getAttribute('position')) {
-            console.warn('GeometryUtils: Invalid geometry or missing position attribute');
-            return false;
-        }
-
-        try {
-            // Force geometry bounds recalculation
-            geometry.computeBoundingBox();
-            const bbox = geometry.boundingBox;
-
-            // Calculate current dimension and scale factor
-            const axisIndex = { x: 0, y: 1, z: 2 }[axis];
-            const currentDimension = bbox.max[axis] - bbox.min[axis];
-
-            if (currentDimension === 0) {
-                console.warn('GeometryUtils: Cannot scale along axis with zero dimension');
-                return false;
-            }
-
-            const scaleFactor = newDimension / currentDimension;
-            const center = (bbox.max[axis] + bbox.min[axis]) * 0.5;
-
-            // Modify vertices directly for true CAD behavior
-            const positions = geometry.getAttribute('position');
-            const vertices = positions.array;
-
-            for (let i = 0; i < vertices.length; i += 3) {
-                const vertexIndex = i + axisIndex;
-                const distanceFromCenter = vertices[vertexIndex] - center;
-                vertices[vertexIndex] = center + (distanceFromCenter * scaleFactor);
-            }
-
-            // Update geometry
-            positions.needsUpdate = true;
-            geometry.computeBoundingBox();
-
-            return true;
-
-        } catch (error) {
-            console.error('GeometryUtils: Failed to scale geometry along axis:', error);
-            return false;
-        }
+        // Forward to unified method
+        return this.resizeGeometry(geometry, axis, newDimension, 'center');
     }
 
     /**
@@ -113,9 +74,10 @@ class GeometryUtils {
      * Update support mesh geometries to match main geometry
      * Wrapper around SupportMeshFactory for consistent usage
      * @param {THREE.Mesh} mesh - Main mesh with support meshes
+     * @param {boolean} updateFaceHighlight - Whether to update face highlight position (default: true)
      * @returns {boolean} Success status
      */
-    static updateSupportMeshGeometries(mesh) {
+    static updateSupportMeshGeometries(mesh, updateFaceHighlight = true) {
         if (!mesh) {
             console.warn('GeometryUtils: Invalid mesh');
             return false;
@@ -124,7 +86,7 @@ class GeometryUtils {
         try {
             const supportMeshFactory = window.modlerComponents?.supportMeshFactory;
             if (supportMeshFactory) {
-                supportMeshFactory.updateSupportMeshGeometries(mesh);
+                supportMeshFactory.updateSupportMeshGeometries(mesh, updateFaceHighlight);
                 return true;
             } else {
                 console.warn('GeometryUtils: SupportMeshFactory not available');
@@ -153,6 +115,7 @@ class GeometryUtils {
 
     /**
      * Push a face of geometry along an axis (move one face while keeping opposite face fixed)
+     * @deprecated Use resizeGeometry() with anchorMode 'min' or 'max' instead
      * @param {THREE.BufferGeometry} geometry - Target geometry
      * @param {string} axis - Axis to push along ('x', 'y', or 'z')
      * @param {number} direction - Direction to push (1 for positive, -1 for negative)
@@ -160,78 +123,15 @@ class GeometryUtils {
      * @returns {boolean} Success status
      */
     static pushGeometryFace(geometry, axis, direction, delta) {
-        if (!this.validateGeometryForManipulation(geometry)) {
-            console.warn('GeometryUtils: Invalid geometry for face pushing');
-            return false;
-        }
+        // Calculate current dimension
+        const dims = this.getGeometryDimensions(geometry);
+        if (!dims) return false;
 
-        if (Math.abs(delta) < 0.0001) {
-            return true; // No change needed
-        }
+        const newDimension = dims[axis] + delta;
+        const anchorMode = direction > 0 ? 'min' : 'max';
 
-        try {
-            const positions = geometry.getAttribute('position');
-            const vertices = positions.array;
-            const axisIndex = this.getAxisIndex(axis);
-
-            if (axisIndex === null) {
-                console.warn('GeometryUtils: Invalid axis for face pushing:', axis);
-                return false;
-            }
-
-            // Calculate current geometry bounds
-            geometry.computeBoundingBox();
-            const bbox = geometry.boundingBox;
-            const minCoord = bbox.min[axis];
-            const maxCoord = bbox.max[axis];
-            const epsilon = 0.001;
-
-            // Determine which face we're pushing (max or min face)
-            const isPushingMaxFace = direction > 0;
-            const targetCoord = isPushingMaxFace ? maxCoord : minCoord;
-
-            // Calculate new bounds after the push
-            let newMinCoord, newMaxCoord;
-            if (isPushingMaxFace) {
-                newMinCoord = minCoord;
-                newMaxCoord = maxCoord + delta;
-            } else {
-                newMinCoord = minCoord + delta;
-                newMaxCoord = maxCoord;
-            }
-
-            // Validate that push doesn't create degenerate geometry
-            const newSize = newMaxCoord - newMinCoord;
-            if (newSize < 0.001 || newMinCoord >= newMaxCoord) {
-                console.warn('GeometryUtils: Push would create degenerate geometry');
-                return false;
-            }
-
-            // Move vertices on the target face
-            let verticesModified = 0;
-            for (let i = 0; i < vertices.length; i += 3) {
-                if (Math.abs(vertices[i + axisIndex] - targetCoord) < epsilon) {
-                    vertices[i + axisIndex] += delta;
-                    verticesModified++;
-                }
-            }
-
-            if (verticesModified === 0) {
-                console.warn('GeometryUtils: No vertices found on target face');
-                return false;
-            }
-
-            // Update geometry
-            positions.needsUpdate = true;
-            geometry.computeBoundingBox();
-            geometry.computeBoundingSphere();
-
-            return true;
-
-        } catch (error) {
-            console.error('GeometryUtils: Failed to push geometry face:', error);
-            return false;
-        }
+        // Forward to unified method
+        return this.resizeGeometry(geometry, axis, newDimension, anchorMode);
     }
 
     /**
@@ -242,6 +142,113 @@ class GeometryUtils {
     static getAxisIndex(axis) {
         const axisMap = { x: 0, y: 1, z: 2 };
         return axisMap[axis] !== undefined ? axisMap[axis] : null;
+    }
+
+    /**
+     * UNIFIED GEOMETRY RESIZE - Replaces scaleGeometryAlongAxis() and pushGeometryFace()
+     *
+     * Resize geometry along an axis with configurable anchor point.
+     * This is the single entry point for all dimension changes.
+     *
+     * @param {THREE.BufferGeometry} geometry - Target geometry
+     * @param {string} axis - Axis to resize ('x', 'y', or 'z')
+     * @param {number} newDimension - Target dimension value
+     * @param {string} anchorMode - Which face stays fixed: 'center' | 'min' | 'max'
+     *   - 'center': Scale from center (both faces move equally) - default for UI/layout
+     *   - 'min': Keep MIN face fixed, move MAX face (push in +direction)
+     *   - 'max': Keep MAX face fixed, move MIN face (push in -direction)
+     * @returns {boolean} Success status
+     */
+    static resizeGeometry(geometry, axis, newDimension, anchorMode = 'center') {
+        if (!this.validateGeometryForManipulation(geometry)) {
+            console.warn('GeometryUtils: Invalid geometry for resizing');
+            return false;
+        }
+
+        if (newDimension <= 0) {
+            console.warn('GeometryUtils: Invalid dimension value:', newDimension);
+            return false;
+        }
+
+        try {
+            const positions = geometry.getAttribute('position');
+            const vertices = positions.array;
+            const axisIndex = this.getAxisIndex(axis);
+
+            if (axisIndex === null) {
+                console.warn('GeometryUtils: Invalid axis:', axis);
+                return false;
+            }
+
+            // Calculate current bounds
+            geometry.computeBoundingBox();
+            const bbox = geometry.boundingBox;
+            const minCoord = bbox.min[axis];
+            const maxCoord = bbox.max[axis];
+            const currentDimension = maxCoord - minCoord;
+
+            if (currentDimension === 0) {
+                console.warn('GeometryUtils: Cannot resize along axis with zero dimension');
+                return false;
+            }
+
+            // Calculate transformation based on anchor mode
+            let newMinCoord, newMaxCoord;
+
+            switch (anchorMode) {
+                case 'center':
+                    // Scale from center - both faces move equally
+                    const center = (minCoord + maxCoord) * 0.5;
+                    const halfDimension = newDimension * 0.5;
+                    newMinCoord = center - halfDimension;
+                    newMaxCoord = center + halfDimension;
+                    break;
+
+                case 'min':
+                    // Keep MIN face fixed, move MAX face
+                    newMinCoord = minCoord;
+                    newMaxCoord = minCoord + newDimension;
+                    break;
+
+                case 'max':
+                    // Keep MAX face fixed, move MIN face
+                    newMaxCoord = maxCoord;
+                    newMinCoord = maxCoord - newDimension;
+                    break;
+
+                default:
+                    console.warn('GeometryUtils: Invalid anchor mode:', anchorMode);
+                    return false;
+            }
+
+            // Validate new bounds
+            if (newMinCoord >= newMaxCoord) {
+                console.warn('GeometryUtils: Invalid new bounds');
+                return false;
+            }
+
+            // Transform vertices
+            const epsilon = 0.001;
+            for (let i = 0; i < vertices.length; i += 3) {
+                const vertexIndex = i + axisIndex;
+                const oldCoord = vertices[vertexIndex];
+
+                // Map from old range to new range
+                const t = (oldCoord - minCoord) / currentDimension; // Normalized position [0,1]
+                vertices[vertexIndex] = newMinCoord + (t * newDimension);
+            }
+
+            // Update geometry
+            positions.needsUpdate = true;
+            geometry.computeBoundingBox();
+            geometry.computeBoundingSphere();
+
+            return true;
+
+        } catch (error) {
+            console.error('GeometryUtils: Failed to resize geometry:', error);
+            return false;
+        }
     }
 }
 

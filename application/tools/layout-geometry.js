@@ -59,59 +59,27 @@ class LayoutGeometry {
         mainMesh.userData.isContainer = true;
         mainMesh.userData.containerType = 'main';
 
-        // CONTAINER-FIRST SELECTION: Disable direct raycasting on container mesh
-        // Containers can only be selected via their child objects
-        mainMesh.raycast = () => {};
+        // CONTAINER-FIRST SELECTION: Conditionally enable raycasting based on selection state
+        // When NOT selected: raycast disabled (select via children)
+        // When selected: raycast enabled (allow face-based tools like push/move)
+        const originalRaycast = mainMesh.raycast.bind(mainMesh);
+        mainMesh.raycast = function(raycaster, intersects) {
+            const selectionController = window.modlerComponents?.selectionController;
+            if (selectionController && selectionController.isSelected(mainMesh)) {
+                // Container is selected - enable raycasting for face-based tools
+                originalRaycast(raycaster, intersects);
+            }
+            // Otherwise, raycast is blocked (select via children)
+        };
 
-        // Get container configuration for wireframe child
-        const configManager = window.modlerComponents?.configurationManager;
-        const wireframeColor = configManager ?
-            configManager.get('visual.containers.wireframeColor', '#00ff00') : '#00ff00';
-        const opacity = configManager ?
-            configManager.get('visual.containers.opacity', 0.8) : 0.8;
-        const renderOrder = configManager ?
-            configManager.get('visual.containers.renderOrder', 998) : 998;
-
-        // Create wireframe as CHILD of main mesh (consistent with objects)
-        let edgeGeometry;
-        if (gFactory) {
-            edgeGeometry = gFactory.createEdgeGeometryFromSource(containerGeometry);
-        } else {
-            edgeGeometry = new THREE.EdgesGeometry(containerGeometry);
-        }
-
-        // Use MaterialManager for wireframe material if available
-        let wireframeMaterial;
-        if (mManager) {
-            wireframeMaterial = mManager.createContainerWireframeMaterial({
-                color: wireframeColor,
-                opacity: opacity
-            });
-        } else {
-            wireframeMaterial = new THREE.LineBasicMaterial({
-                color: new THREE.Color(wireframeColor).getHex(),
-                transparent: true,
-                opacity: opacity
-            });
-        }
-
-        const wireframeChild = new THREE.LineSegments(edgeGeometry, wireframeMaterial);
-        wireframeChild.position.set(0, 0.001, 0); // Small Y offset to prevent z-fighting
-        wireframeChild.renderOrder = renderOrder;
-        wireframeChild.raycast = () => {}; // Non-raycastable (like object wireframes)
-        wireframeChild.userData.supportMeshType = 'wireframe';
-        wireframeChild.visible = false; // Hidden by default - shown only when container is selected
-
-        // Add wireframe as child
-        mainMesh.add(wireframeChild);
-
-        console.log('LayoutGeometry.createContainerGeometry - Solid main mesh with wireframe child created');
+        // ARCHITECTURE SIMPLIFICATION: Wireframe creation moved to SupportMeshFactory
+        // This ensures containers and objects follow identical wireframe management patterns
+        // SupportMeshFactory.createObjectSupportMeshes() will create the wireframe child
 
         return {
             mesh: mainMesh, // Return solid mesh as main (consistent with objects)
             geometry: containerGeometry, // Original solid geometry
             material: mainMaterial,
-            wireframeChild: wireframeChild, // Reference to wireframe child
             isInteractiveMeshSceneLevel: false // No longer needed - support meshes will be children
         };
     }
@@ -295,32 +263,15 @@ class LayoutGeometry {
             console.error('Container mesh not found for geometry update');
             return false;
         }
-        
-        // Container visibility is managed entirely by selection system
-        // Geometry updates should not interfere with visibility state
-        
-        // Get container configuration values
-        const configManager = window.modlerComponents?.configurationManager;
-        const wireframeColor = configManager ?
-            configManager.get('visual.containers.wireframeColor', '#00ff00') : '#00ff00';
-        const opacity = configManager ?
-            configManager.get('visual.containers.opacity', 0.8) : 0.8;
-        const lineWidth = configManager ?
-            configManager.get('visual.containers.lineWidth', 1) : 1;
-        const renderOrder = configManager ?
-            configManager.get('visual.containers.renderOrder', 998) : 998;
 
-        // Convert hex color to THREE.js color
-        const color = new THREE.Color(wireframeColor).getHex();
+        // ARCHITECTURE SIMPLIFICATION: This method now ONLY updates container geometry
+        // Wireframe updates are handled by SupportMeshFactory via GeometryUtils.updateSupportMeshGeometries()
+        // Caller is responsible for triggering wireframe update after geometry change
 
-        // Use injected factories (factories are now required - no fallback access)
+        // Use injected factories
         const gFactory = geometryFactory;
-        const mManager = materialManager;
 
-        // Try to create new wireframe using centralized function (prevents triangles)
-        const visualEffects = window.modlerComponents?.visualEffects;
-        let newEdgeGeometry, newMaterial;
-
+        // Create new solid BoxGeometry
         let newGeometry;
         if (gFactory) {
             newGeometry = gFactory.createBoxGeometry(newSize.x, newSize.y, newSize.z);
@@ -328,72 +279,6 @@ class LayoutGeometry {
             newGeometry = new THREE.BoxGeometry(newSize.x, newSize.y, newSize.z);
         }
 
-        if (visualEffects) {
-            let tempWireframe = null; // Declare variable to hold temporary wireframe
-
-            // Use layout-aware wireframe if layout direction is specified
-            if (layoutDirection && ['x', 'y', 'z'].includes(layoutDirection)) {
-                const layoutWireframe = this.createLayoutAwareWireframe(
-                    newSize.x, newSize.y, newSize.z,
-                    new THREE.Vector3(0, 0, 0), // Position will be set below
-                    color, // Use configured color
-                    opacity, // Use configured opacity
-                    layoutDirection, // Layout direction for opacity visualization
-                    mManager // Pass material manager
-                );
-                // For layout-aware wireframes, we'll replace the entire wireframe child
-                newEdgeGeometry = layoutWireframe;
-                newMaterial = null; // Group doesn't have a single material
-            } else {
-                // Use standard wireframe creation
-                tempWireframe = visualEffects.createPreviewBox(
-                    newSize.x, newSize.y, newSize.z,
-                    new THREE.Vector3(0, 0, 0), // Position will be set below
-                    color, // Use configured color
-                    opacity // Use configured opacity
-                );
-                newEdgeGeometry = tempWireframe.geometry;
-                newMaterial = tempWireframe.material;
-            }
-
-            // Update line width if supported
-            if (newMaterial && newMaterial.linewidth !== undefined) {
-                newMaterial.linewidth = lineWidth;
-            }
-
-            // Clean up the temporary wireframe object (we only needed its geometry and material)
-            if (tempWireframe) {
-                tempWireframe.geometry = null; // Don't dispose, we're using it
-                tempWireframe.material = null; // Don't dispose, we're using it
-            }
-        } else {
-            // Fallback to centralized systems or manual creation
-            console.warn('VisualEffects not available, using fallback wireframe update');
-            if (gFactory) {
-                newEdgeGeometry = gFactory.createEdgeGeometryFromSource(newGeometry);
-            } else {
-                newEdgeGeometry = new THREE.EdgesGeometry(newGeometry);
-            }
-
-            // Use MaterialManager for wireframe material if available
-            if (mManager) {
-                newMaterial = mManager.createContainerWireframeMaterial({
-                    color: wireframeColor,
-                    opacity: opacity
-                });
-                if (newMaterial.linewidth !== undefined) {
-                    newMaterial.linewidth = lineWidth;
-                }
-            } else {
-                newMaterial = new THREE.LineBasicMaterial({
-                    color: color, // Use configured color
-                    linewidth: lineWidth, // Use configured line width
-                    transparent: true,
-                    opacity: opacity // Use configured opacity
-                });
-            }
-        }
-        
         // Find interactive mesh - check both as child and at scene level
         let interactiveMesh = containerMesh.children.find(child =>
             child.userData.isContainerInteractive
@@ -412,53 +297,14 @@ class LayoutGeometry {
             }
         }
 
-        // NEW ARCHITECTURE: Update wireframe child, not main mesh
-        // Main mesh should always remain solid BoxGeometry with invisible material
-
         // Update main mesh geometry (solid BoxGeometry for raycasting)
         if (containerMesh.geometry) {
             containerMesh.geometry.dispose();
         }
-        containerMesh.geometry = newGeometry; // Keep as solid BoxGeometry
+        containerMesh.geometry = newGeometry;
 
-        // Find and update wireframe child
-        const wireframeChild = containerMesh.children.find(child =>
-            child.userData.supportMeshType === 'wireframe'
-        );
-
-        if (wireframeChild) {
-            // Handle layout-aware wireframes (groups) vs normal wireframes (line segments)
-            if (newEdgeGeometry.userData && newEdgeGeometry.userData.isLayoutAwareWireframe) {
-                // Layout-aware wireframe is a group - replace the entire wireframe child
-
-                // Dispose old wireframe geometry
-                if (wireframeChild.geometry) {
-                    wireframeChild.geometry.dispose();
-                }
-
-                // Remove old wireframe child and add new group
-                containerMesh.remove(wireframeChild);
-
-                // Add layout-aware wireframe group as new wireframe child
-                newEdgeGeometry.userData.supportMeshType = 'wireframe';
-                newEdgeGeometry.renderOrder = renderOrder;
-                containerMesh.add(newEdgeGeometry);
-            } else {
-                // Standard wireframe - update geometry and material as before
-
-                // Dispose old wireframe geometry
-                if (wireframeChild.geometry) {
-                    wireframeChild.geometry.dispose();
-                }
-
-                // Update wireframe child with new edge geometry and material
-                wireframeChild.geometry = newEdgeGeometry;
-                wireframeChild.material = newMaterial;
-                wireframeChild.renderOrder = renderOrder;
-            }
-        } else {
-            console.warn('updateContainerGeometry: wireframe child not found in container');
-        }
+        // Force matrix world update after geometry change
+        containerMesh.updateMatrixWorld(true);
 
         // Dispose old interactive mesh geometry
         if (interactiveMesh && interactiveMesh.geometry) {
@@ -503,24 +349,14 @@ class LayoutGeometry {
         
         // Visibility is entirely managed by selection system - don't interfere here
 
-        // Geometry update completed successfully
-        
-        // Optimize raycast for updated geometry (only if it's a geometry, not a Group)
-        if (newEdgeGeometry.computeBoundingBox) {
-            newEdgeGeometry.computeBoundingBox();
-            newEdgeGeometry.computeBoundingSphere();
-        }
+        // Optimize raycast for updated geometry
         newGeometry.computeBoundingBox();
         newGeometry.computeBoundingSphere();
-        
-        // Update support mesh geometries to match new container geometry
-        const geometryUtils = window.GeometryUtils;
-        if (geometryUtils) {
-            geometryUtils.updateSupportMeshGeometries(containerMesh);
-        }
 
-        // Support meshes are now children and inherit geometry changes automatically
-        
+        // ARCHITECTURE SIMPLIFICATION: Wireframe update removed from here
+        // Caller must explicitly call GeometryUtils.updateSupportMeshGeometries() after this method
+        // This prevents double updates and ensures single source of truth
+
         return true;
     }
 
@@ -584,106 +420,9 @@ class LayoutGeometry {
         return updatedCount > 0;
     }
 
-    /**
-     * Create layout-aware wireframe with direction-specific opacity (moved from VisualEffects)
-     * @param {number} width - Container width
-     * @param {number} height - Container height
-     * @param {number} depth - Container depth
-     * @param {THREE.Vector3} position - Container position
-     * @param {number} color - Wireframe color
-     * @param {number} opacity - Base opacity
-     * @param {string} layoutDirection - Layout direction for opacity adjustment
-     * @param {object} materialManager - Material manager instance (required)
-     * @returns {THREE.Group} Layout-aware wireframe group
-     */
-    static createLayoutAwareWireframe(width, height, depth, position, color = 0x00ff00, opacity = 0.8, layoutDirection = null, materialManager) {
-        const configManager = window.modlerComponents?.configurationManager;
-        const lineWidth = configManager?.get('visual.effects.wireframe.lineWidth') || 1;
-
-        const group = new THREE.Group();
-        group.position.copy(position);
-
-        const halfWidth = width / 2;
-        const halfHeight = height / 2;
-        const halfDepth = depth / 2;
-
-        const vertices = [
-            [-halfWidth, -halfHeight, halfDepth],   // 0
-            [halfWidth, -halfHeight, halfDepth],    // 1
-            [halfWidth, halfHeight, halfDepth],     // 2
-            [-halfWidth, halfHeight, halfDepth],    // 3
-            [-halfWidth, -halfHeight, -halfDepth],  // 4
-            [halfWidth, -halfHeight, -halfDepth],   // 5
-            [halfWidth, halfHeight, -halfDepth],    // 6
-            [-halfWidth, halfHeight, -halfDepth]    // 7
-        ];
-
-        const edgesByDirection = {
-            x: [[0, 1], [2, 3], [4, 5], [6, 7]], // Horizontal edges
-            y: [[0, 3], [1, 2], [4, 7], [5, 6]], // Vertical edges
-            z: [[0, 4], [1, 5], [2, 6], [3, 7]]  // Depth edges
-        };
-
-        // Create materials with different opacities
-        let fullOpacityMaterial, reducedOpacityMaterial;
-
-        if (materialManager) {
-            fullOpacityMaterial = materialManager.createPreviewWireframeMaterial({
-                color: color,
-                linewidth: lineWidth,
-                opacity: opacity
-            });
-            reducedOpacityMaterial = materialManager.createPreviewWireframeMaterial({
-                color: color,
-                linewidth: lineWidth,
-                opacity: opacity * 0.5
-            });
-        } else {
-            // Fallback material creation
-            fullOpacityMaterial = new THREE.LineBasicMaterial({
-                color: color,
-                linewidth: lineWidth,
-                transparent: true,
-                opacity: opacity
-            });
-            reducedOpacityMaterial = new THREE.LineBasicMaterial({
-                color: color,
-                linewidth: lineWidth,
-                transparent: true,
-                opacity: opacity * 0.5
-            });
-        }
-
-        // Create wireframe segments for each direction
-        Object.keys(edgesByDirection).forEach(direction => {
-            const edges = edgesByDirection[direction];
-            const positions = [];
-
-            edges.forEach(([startIdx, endIdx]) => {
-                const start = vertices[startIdx];
-                const end = vertices[endIdx];
-                positions.push(start[0], start[1], start[2]);
-                positions.push(end[0], end[1], end[2]);
-            });
-
-            const geometry = new THREE.BufferGeometry();
-            geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-
-            // Use reduced opacity for layout direction to show emphasis
-            const material = (layoutDirection === direction) ? reducedOpacityMaterial : fullOpacityMaterial;
-            const lineSegments = new THREE.LineSegments(geometry, material);
-
-            lineSegments.userData.direction = direction;
-            lineSegments.userData.isLayoutDirection = (layoutDirection === direction);
-
-            group.add(lineSegments);
-        });
-
-        group.userData.layoutDirection = layoutDirection;
-        group.userData.isLayoutAwareWireframe = true;
-
-        return group;
-    }
+    // REMOVED: createLayoutAwareWireframe() - Complexity removed
+    // Layout direction is now visible through child object arrangement
+    // All wireframes use simple EdgesGeometry managed by SupportMeshFactory
 
     /**
      * Create interactive face geometry from container wireframe

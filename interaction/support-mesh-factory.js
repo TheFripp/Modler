@@ -55,45 +55,34 @@ class SupportMeshFactory {
      * Create all support meshes for any object (unified for regular objects and containers)
      */
     createObjectSupportMeshes(mainMesh) {
-
         // Check if this is a container
         const isContainer = mainMesh.userData.isContainer;
 
-        // NEW ARCHITECTURE: Containers already have wireframe children from LayoutGeometry
-        // Skip support mesh creation for containers to prevent conflicts
-        if (isContainer) {
+        // ARCHITECTURE SIMPLIFICATION: Unified support mesh creation for containers and objects
+        // Containers now create wireframes just like objects (no special registration logic)
 
-            // CLEANUP: Remove any legacy support meshes from existing containers
-            if (mainMesh.userData.supportMeshes) {
-                this.cleanupSupportMeshes(mainMesh.userData.supportMeshes, mainMesh);
-            }
-
-            // Create minimal support meshes - faceHighlight and interactiveMesh only
-            // Containers use their LayoutGeometry wireframe, not CAD wireframe
-            const supportMeshes = {
-                faceHighlight: this.createFaceHighlight(mainMesh), // Use existing method with orange selection color
-                interactiveMesh: this.createContainerInteractiveMesh(mainMesh) // Needed for proper raycasting in tools
-            };
-
-            // Add face highlight and interactive mesh as children
-            if (supportMeshes.faceHighlight) {
-                mainMesh.add(supportMeshes.faceHighlight);
-                supportMeshes.faceHighlight.visible = false; // Hidden by default
-            }
-            if (supportMeshes.interactiveMesh) {
-                mainMesh.add(supportMeshes.interactiveMesh);
-                supportMeshes.interactiveMesh.visible = false; // Hidden by default, used for raycasting
-            }
-
-            // Store support meshes with face highlight and interactive mesh
-            mainMesh.userData.supportMeshes = supportMeshes;
-
-
-            return supportMeshes;
+        // CLEANUP: Remove any legacy support meshes if they exist
+        if (mainMesh.userData.supportMeshes) {
+            const oldSupportMeshes = mainMesh.userData.supportMeshes;
+            Object.entries(oldSupportMeshes).forEach(([key, mesh]) => {
+                if (mesh) {
+                    mainMesh.remove(mesh);
+                    if (mesh.geometry) {
+                        this.geometryFactory.returnGeometry(mesh.geometry, 'edge');
+                    }
+                    if (mesh.material && mesh.material !== this.materials.faceHighlight) {
+                        this.materialManager.disposeMaterial(mesh.material);
+                    }
+                }
+            });
         }
 
-        // Regular objects: Create support meshes as normal
-        const supportMeshes = {
+        // Create support meshes - containers and objects use same pattern
+        const supportMeshes = isContainer ? {
+            faceHighlight: this.createFaceHighlight(mainMesh),
+            interactiveMesh: this.createContainerInteractiveMesh(mainMesh),
+            cadWireframe: this.createContainerWireframe(mainMesh) // Containers use containerWireframe for ContainerVisualizer compatibility
+        } : {
             selectionWireframe: this.createSelectionWireframe(mainMesh),
             faceHighlight: this.createFaceHighlight(mainMesh),
             cadWireframe: this.createCadWireframe(mainMesh)
@@ -110,7 +99,13 @@ class SupportMeshFactory {
         }
         if (supportMeshes.cadWireframe) {
             mainMesh.add(supportMeshes.cadWireframe);
-            supportMeshes.cadWireframe.visible = true; // Visible by default for CAD wireframes
+            // Containers: hidden by default, shown when selected
+            // Objects: visible by default for CAD wireframes
+            supportMeshes.cadWireframe.visible = !isContainer;
+        }
+        if (supportMeshes.interactiveMesh) {
+            mainMesh.add(supportMeshes.interactiveMesh);
+            supportMeshes.interactiveMesh.visible = false; // Hidden by default, used for raycasting
         }
 
         // Store references for easy access
@@ -210,7 +205,7 @@ class SupportMeshFactory {
 
         wireframe.position.set(0, 0.001, 0); // Small Y offset
         wireframe.raycast = () => {}; // Non-raycastable
-        wireframe.userData.supportMeshType = 'containerWireframe';
+        wireframe.userData.supportMeshType = 'wireframe'; // ContainerVisualizer looks for 'wireframe'
 
         return wireframe;
     }

@@ -452,15 +452,19 @@ class ObjectStateManager extends EventTarget {
 
     /**
      * Batch updates and propagate to all systems
+     *
+     * For UI-initiated updates, propagate synchronously for immediate feedback.
+     * For tool/animation updates, could batch via requestAnimationFrame if needed.
      */
     scheduleUpdate() {
         if (this.updateScheduled) return;
 
         this.updateScheduled = true;
-        requestAnimationFrame(() => {
-            this.propagateChanges();
-            this.updateScheduled = false;
-        });
+
+        // Propagate synchronously for immediate UI feedback
+        // This eliminates the 1-frame delay that was causing flickering
+        this.propagateChanges();
+        this.updateScheduled = false;
     }
 
     /**
@@ -518,20 +522,65 @@ class ObjectStateManager extends EventTarget {
                 sceneObject.name = object.name;
                 if (object.autoLayout) {
                     sceneObject.autoLayout = object.autoLayout;
+
+                    // CRITICAL: If user manually sets gap, clear calculatedGap to use fixed gap
+                    if (object._changedProperties?.has('autoLayout.gap')) {
+                        sceneObject.calculatedGap = undefined;
+                        object.calculatedGap = undefined;
+                    }
                 }
             }
 
             // Update container layout if needed (TOP-DOWN PROPAGATION)
-            // Trigger if: container has layout enabled OR autoLayout properties just changed
             const autoLayoutChanged = object._changedProperties?.has('autoLayout');
-            if (object.isContainer && sceneObject && (object.autoLayout?.enabled || autoLayoutChanged)) {
-                const layoutResult = this.sceneController.updateLayout(object.id);
+            // Check if any autoLayout sub-property changed (gap, padding, direction, etc.)
+            const autoLayoutPropertyChanged = Array.from(object._changedProperties || []).some(prop =>
+                prop.startsWith('autoLayout.')
+            );
+            const isLayoutMode = object.autoLayout?.enabled;
 
-                // Resize container to fit the laid out objects
-                if (layoutResult && layoutResult.success && layoutResult.layoutBounds) {
-                    const containerCrudManager = this.getContainerCrudManager();
-                    if (containerCrudManager) {
-                        containerCrudManager.resizeContainerToLayoutBounds(sceneObject, layoutResult.layoutBounds);
+            if (object.isContainer && sceneObject) {
+                if (isLayoutMode) {
+                    // LAYOUT MODE: Container size is ground truth
+
+                    // SPECIAL CASE: Skip layout update if source is 'push-tool'
+                    // Push directly manipulates geometry, positions should not change
+                    const isPushOperation = this.pendingChanges.get(object.id) === 'push-tool';
+
+                    if (!isPushOperation && (autoLayoutChanged || autoLayoutPropertyChanged)) {
+                        const layoutResult = this.sceneController.updateLayout(object.id);
+
+                        // When first switching TO layout mode, resize container once
+                        // to establish initial size based on children. After that, no auto-resize.
+                        if (autoLayoutChanged && layoutResult?.success && layoutResult.layoutBounds) {
+                            const containerCrudManager = this.getContainerCrudManager();
+                            if (containerCrudManager) {
+                                containerCrudManager.resizeContainerToLayoutBounds(sceneObject, layoutResult.layoutBounds);
+
+                                // CRITICAL: Recalculate layout after resize to get correct gap for new size
+                                // This ensures space-between gap is calculated with the final container size
+                                this.sceneController.updateLayout(object.id);
+                            }
+                        }
+                    }
+                    // Push operations: Skip layout update entirely - geometry already updated
+
+                } else if (autoLayoutChanged || autoLayoutPropertyChanged) {
+                    // HUG MODE (or switching FROM layout mode to hug)
+                    // Clear calculatedGap when layout is disabled
+                    if (autoLayoutChanged && sceneObject.calculatedGap !== undefined) {
+                        sceneObject.calculatedGap = undefined;
+                        object.calculatedGap = undefined;
+                    }
+
+                    // Update layout and resize container to fit children
+                    const layoutResult = this.sceneController.updateLayout(object.id);
+
+                    if (layoutResult && layoutResult.success && layoutResult.layoutBounds) {
+                        const containerCrudManager = this.getContainerCrudManager();
+                        if (containerCrudManager) {
+                            containerCrudManager.resizeContainerToLayoutBounds(sceneObject, layoutResult.layoutBounds);
+                        }
                     }
                 }
 
@@ -554,6 +603,7 @@ class ObjectStateManager extends EventTarget {
      */
     updateUISystems(changedObjects) {
         // Emit update events for UI systems
+        // Note: main-integration will get hierarchy from SceneController and serialize it
         this.dispatchEvent(new CustomEvent('objects-changed', {
             detail: {
                 objects: changedObjects,
@@ -587,12 +637,30 @@ class ObjectStateManager extends EventTarget {
     }
 
     /**
-     * Determine appropriate event type for ObjectEventBus
+     * Determine appropriate event type for ObjectEventBus based on what actually changed
      */
     determineEventType(object) {
-        if (object.autoLayout?.enabled) {
+        // Check what properties actually changed, not just what exists on the object
+        const changedProps = object._changedProperties || new Set();
+
+        // Check for autoLayout changes (including sub-properties like autoLayout.gap)
+        const hasAutoLayoutChange = changedProps.has('autoLayout') ||
+            Array.from(changedProps).some(prop => prop.startsWith('autoLayout.'));
+
+        if (hasAutoLayoutChange) {
             return window.objectEventBus.EVENT_TYPES.HIERARCHY;
         }
+        if (changedProps.has('position') || changedProps.has('rotation')) {
+            return window.objectEventBus.EVENT_TYPES.TRANSFORM;
+        }
+        if (changedProps.has('dimensions')) {
+            return window.objectEventBus.EVENT_TYPES.GEOMETRY;
+        }
+        if (changedProps.has('material')) {
+            return window.objectEventBus.EVENT_TYPES.MATERIAL;
+        }
+
+        // Fallback: Check object structure (backward compatibility)
         if (object.position || object.rotation) {
             return window.objectEventBus.EVENT_TYPES.TRANSFORM;
         }
@@ -737,12 +805,19 @@ class ObjectStateManager extends EventTarget {
                 // Trigger layout recalculation
                 const layoutResult = this.sceneController.updateLayout(containerId);
 
-                // Resize container to fit new layout
+                // CRITICAL ARCHITECTURE: Only auto-resize in HUG mode
+                // In LAYOUT mode, container size is ground truth - no auto-resize
                 if (layoutResult?.success && layoutResult.layoutBounds) {
-                    const containerCrudManager = this.getContainerCrudManager();
-                    if (containerCrudManager) {
-                        containerCrudManager.resizeContainerToLayoutBounds(container, layoutResult.layoutBounds);
+                    const isLayoutMode = container.autoLayout?.enabled;
+
+                    if (!isLayoutMode) {
+                        // HUG MODE: Container wraps children
+                        const containerCrudManager = this.getContainerCrudManager();
+                        if (containerCrudManager) {
+                            containerCrudManager.resizeContainerToLayoutBounds(container, layoutResult.layoutBounds);
+                        }
                     }
+                    // LAYOUT MODE: No auto-resize
                 }
 
                 // OPTIMIZATION: Defer grandparent propagations to next frame
