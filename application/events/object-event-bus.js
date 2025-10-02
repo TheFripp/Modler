@@ -102,6 +102,36 @@ class ObjectEventBus {
                 return false;
             }
 
+            // SCHEMA VALIDATION: Validate event payload against schema
+            if (window.eventPayloadValidator) {
+                const validation = window.eventPayloadValidator.validate(eventType, changeData);
+
+                if (!validation.isValid) {
+                    console.error('❌ Event payload validation failed:', {
+                        eventType: eventType,
+                        objectId: objectId,
+                        errors: validation.errors,
+                        changeData: changeData,
+                        source: source
+                    });
+                    this.stats.errorCount++;
+                    // Continue with emission (graceful degradation)
+                }
+
+                // Use schema-defined emission preference if not explicitly overridden
+                if (validation.preference && !immediate && !batch) {
+                    const EVENT_PREFERENCES = window.EVENT_PREFERENCES || {};
+                    if (validation.preference === EVENT_PREFERENCES.IMMEDIATE) {
+                        immediate = true;
+                        throttle = false;
+                    } else if (validation.preference === EVENT_PREFERENCES.BATCH) {
+                        batch = true;
+                        throttle = false;
+                    }
+                    // throttle is already the default
+                }
+            }
+
             // Create event object
             const event = {
                 eventType,

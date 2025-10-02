@@ -671,6 +671,25 @@
 
             const { type, data } = event.data;
 
+            // SCHEMA VALIDATION: Validate incoming message against protocol schema
+            if (window.messageProtocolValidator) {
+                const validation = window.messageProtocolValidator.validate(
+                    type,
+                    data,
+                    window.MESSAGE_DIRECTION.UI_TO_MAIN
+                );
+
+                if (!validation.isValid) {
+                    console.error('❌ PostMessage validation failed:', {
+                        type: type,
+                        errors: validation.errors,
+                        data: data
+                    });
+                    // Log to stats but continue processing (graceful degradation)
+                    // In production, you might want to reject invalid messages entirely
+                }
+            }
+
             switch (type) {
                 case 'property-update':
                     handlePropertyUpdate(data.objectId, data.property, data.value, data.source);

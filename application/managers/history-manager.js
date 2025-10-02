@@ -78,6 +78,28 @@ class HistoryManager {
             return false;
         }
 
+        // SCHEMA VALIDATION: Validate command metadata if validator available
+        if (window.commandMetadataValidator && command.type) {
+            // Extract command parameters from command object (if available)
+            const commandParams = this.extractCommandParameters(command);
+            const validation = window.commandMetadataValidator.validate(command.type, commandParams);
+
+            if (!validation.isValid) {
+                console.error('❌ Command validation failed:', {
+                    commandType: command.type,
+                    commandId: command.id,
+                    errors: validation.errors
+                });
+                // Log but continue execution (graceful degradation)
+                // In strict mode, you might want to return false here
+            } else {
+                // Log command metadata for debugging
+                if (validation.metadata) {
+                    console.log(`✅ Command validated: ${command.type} (serializable: ${validation.metadata.serializable}, undoable: ${validation.metadata.undoable})`);
+                }
+            }
+        }
+
         this.isExecuting = true;
 
         try {
@@ -248,6 +270,115 @@ class HistoryManager {
             enabled: this.enabled,
             isExecuting: this.isExecuting
         };
+    }
+
+    /**
+     * Extract command parameters from command object for validation
+     * @private
+     */
+    extractCommandParameters(command) {
+        // Extract known command properties
+        const params = {};
+
+        // Common properties across all commands
+        if (command.objectId !== undefined) params.objectId = command.objectId;
+        if (command.objectType !== undefined) params.objectType = command.objectType;
+        if (command.property !== undefined) params.property = command.property;
+        if (command.oldValue !== undefined) params.oldValue = command.oldValue;
+        if (command.newValue !== undefined) params.newValue = command.newValue;
+        if (command.position !== undefined) params.position = command.position;
+        if (command.dimensions !== undefined) params.dimensions = command.dimensions;
+        if (command.oldPosition !== undefined) params.oldPosition = command.oldPosition;
+        if (command.newPosition !== undefined) params.newPosition = command.newPosition;
+        if (command.oldDimensions !== undefined) params.oldDimensions = command.oldDimensions;
+        if (command.newDimensions !== undefined) params.newDimensions = command.newDimensions;
+        if (command.faceNormal !== undefined) params.faceNormal = command.faceNormal;
+        if (command.pushDistance !== undefined) params.pushDistance = command.pushDistance;
+        if (command.containerId !== undefined) params.containerId = command.containerId;
+        if (command.autoLayout !== undefined) params.autoLayout = command.autoLayout;
+        if (command.material !== undefined) params.material = command.material;
+        if (command.name !== undefined) params.name = command.name;
+
+        return params;
+    }
+
+    /**
+     * Serialize history to JSON (for saving/loading)
+     * Only serializes commands that are marked as serializable in schema
+     * @returns {string} JSON string of serialized history
+     */
+    serializeHistory() {
+        if (!window.commandMetadataValidator) {
+            console.warn('Command metadata validator not available for serialization');
+            return null;
+        }
+
+        const serializedUndo = this.undoStack
+            .map(command => {
+                if (!command.type) return null;
+                const params = this.extractCommandParameters(command);
+                return window.commandMetadataValidator.serialize(command.type, params, {
+                    timestamp: command.timestamp,
+                    id: command.id
+                });
+            })
+            .filter(Boolean);
+
+        const serializedRedo = this.redoStack
+            .map(command => {
+                if (!command.type) return null;
+                const params = this.extractCommandParameters(command);
+                return window.commandMetadataValidator.serialize(command.type, params, {
+                    timestamp: command.timestamp,
+                    id: command.id
+                });
+            })
+            .filter(Boolean);
+
+        return JSON.stringify({
+            version: '1.0.0',
+            timestamp: Date.now(),
+            undoStack: serializedUndo,
+            redoStack: serializedRedo
+        });
+    }
+
+    /**
+     * Deserialize history from JSON (for loading)
+     * @param {string} jsonData - JSON string of serialized history
+     * @returns {boolean} True if deserialization succeeded
+     */
+    deserializeHistory(jsonData) {
+        if (!window.commandMetadataValidator) {
+            console.warn('Command metadata validator not available for deserialization');
+            return false;
+        }
+
+        try {
+            const data = JSON.parse(jsonData);
+
+            // Clear current history
+            this.clear();
+
+            // Deserialize commands (validation happens in deserialize)
+            const undoCommands = data.undoStack
+                .map(serialized => window.commandMetadataValidator.deserialize(serialized))
+                .filter(Boolean);
+
+            const redoCommands = data.redoStack
+                .map(serialized => window.commandMetadataValidator.deserialize(serialized))
+                .filter(Boolean);
+
+            // Note: Deserialized commands would need to be reconstructed as actual Command objects
+            // This is a simplified version - full implementation would need command factory
+            console.log(`Deserialized ${undoCommands.length} undo commands and ${redoCommands.length} redo commands`);
+
+            return true;
+
+        } catch (error) {
+            console.error('Failed to deserialize history:', error);
+            return false;
+        }
     }
 
     /**

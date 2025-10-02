@@ -365,6 +365,27 @@ class ConfigurationManager {
     set(keyPath, value, save = true) {
         const oldValue = this.get(keyPath);
 
+        // SCHEMA VALIDATION: Validate configuration value against schema
+        if (window.configurationSchemaValidator) {
+            const validation = window.configurationSchemaValidator.validate(keyPath, value);
+
+            if (!validation.isValid) {
+                console.error('❌ Configuration validation failed:', {
+                    key: keyPath,
+                    value: value,
+                    errors: validation.errors
+                });
+                // Reject invalid configuration values
+                return false;
+            }
+
+            // Use coerced value (e.g., string "5" → number 5)
+            if (validation.coercedValue !== value) {
+                console.log(`ℹ️ Configuration value coerced: ${keyPath} from ${typeof value} to ${typeof validation.coercedValue}`);
+                value = validation.coercedValue;
+            }
+        }
+
         // Update the configuration
         this.setNestedValue(this.config, keyPath, value);
 
