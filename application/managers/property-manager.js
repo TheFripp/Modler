@@ -130,11 +130,15 @@ class PropertyManager {
 
         // Notify about the layout change via ObjectEventBus
         if (window.objectEventBus) {
-            window.objectEventBus.emit('object:layout-updated', {
-                objectId: objectData.id,
-                containerId: container.id,
-                fillProperty: { axis, state: newState }
-            });
+            window.objectEventBus.emit(
+                'object:layout-updated',
+                objectData.id,
+                {
+                    containerId: container.id,
+                    affectedObjectIds: [objectData.id]
+                },
+                { source: 'fill-property-toggle' }
+            );
         }
 
         // Trigger property panel refresh for all affected objects
@@ -161,11 +165,16 @@ class PropertyManager {
         if (shouldRefresh) {
             // Trigger UI refresh via ObjectEventBus
             setTimeout(() => {
-                if (window.objectEventBus) {
-                    window.objectEventBus.emit('object:properties-changed', {
-                        objectIds: selectedIds,
-                        source: 'fill-property'
-                    });
+                if (window.objectEventBus && selectedIds.length > 0) {
+                    window.objectEventBus.emit(
+                        'object:properties-changed',
+                        selectedIds[0], // Use first object ID (multiple objects in changeData)
+                        {
+                            objectIds: selectedIds,
+                            source: 'fill-property'
+                        },
+                        { source: 'fill-property-refresh' }
+                    );
                 }
             }, 100); // Small delay to allow layout calculations to complete
         }

@@ -89,12 +89,32 @@ class MoveTool {
      * Handle mouse down events using centralized event handler
      */
     onMouseDown(hit, event) {
-        const operationCallbacks = BaseFaceToolEventHandler.createOperationCallbacks({
-            isActiveCheck: () => this.isDragging,
-            startCallback: (hit) => this.startFaceDrag(hit),
-            operationName: 'drag'
-        });
-        return this.eventHandler.handleMouseDown(hit, event, operationCallbacks);
+        // Only handle left mouse button
+        if (event.button !== 0) return false;
+
+        // Don't start new drag if already dragging
+        if (this.isDragging) return false;
+
+        // Check if clicking on a selected object
+        if (hit && hit.object) {
+            const targetObject = this.faceToolBehavior.getTargetObject(hit);
+            const isSelected = targetObject && this.selectionController.isSelected(targetObject);
+
+            // For containers, allow drag without face highlight requirement
+            if (isSelected) {
+                const sceneController = window.modlerComponents?.sceneController;
+                const objectData = sceneController?.getObjectByMesh(targetObject);
+                const isContainer = objectData?.isContainer;
+                const hasValidFace = this.faceToolBehavior.hasValidFaceHover(hit);
+
+                if (isContainer || hasValidFace) {
+                    this.startFaceDrag(hit);
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
     
     /**
@@ -612,9 +632,35 @@ class MoveTool {
 
     /**
      * Check if tool has active highlighting
+     * Move tool should allow moving ANY selected object, including containers in hug mode
      */
     hasActiveHighlight() {
-        return this.faceToolBehavior.hasActiveHighlight();
+        // Check base face highlight first
+        const baseHighlight = this.faceToolBehavior.hasActiveHighlight();
+        if (baseHighlight) return true;
+
+        // SPECIAL CASE: Allow moving selected containers even in hug mode
+        // (Push tool correctly blocks hug containers, but move tool should always work)
+        const hoveredObject = this.faceToolBehavior.hoveredObject;
+        const hoveredHit = this.faceToolBehavior.hoveredHit;
+
+        if (!hoveredObject || !hoveredHit) return false;
+
+        // Check if hovering over a selected object
+        const isSelected = this.selectionController.isSelected(hoveredObject);
+        if (!isSelected) return false;
+
+        // Check if it's a container (which might be in hug mode)
+        const sceneController = window.modlerComponents?.sceneController;
+        if (!sceneController) return isSelected;
+
+        const objectData = sceneController.getObjectByMesh(hoveredObject);
+        if (objectData && objectData.isContainer) {
+            // Container is selected - allow movement regardless of hug mode
+            return true;
+        }
+
+        return isSelected;
     }
 
     /**

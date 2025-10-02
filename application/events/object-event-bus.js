@@ -85,7 +85,7 @@ class ObjectEventBus {
      * @param {string} options.source - Source of the event for debugging
      */
     emit(eventType, objectId, changeData, options = {}) {
-        const {
+        let {
             throttle = true,
             batch = false,
             immediate = false,

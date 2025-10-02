@@ -12,6 +12,11 @@
 	// Tab state
 	let activeTab: 'objects' | 'settings' = 'objects';
 
+	// Watch for tab changes to settings and reload settings
+	$: if (activeTab === 'settings') {
+		loadSettingsFromConfig();
+	}
+
 	// Visual settings state
 	let visualSettings = {
 		selection: {
@@ -630,40 +635,57 @@
 		});
 	}
 
+	// Settings response handler (defined once, reused)
+	function handleSettingsResponse(event: MessageEvent) {
+		if (event.data.type === 'visual-settings-response') {
+			console.log('📥 Received visual-settings-response:', event.data.settings);
+			const settings = event.data.settings;
+			visualSettings = {
+				selection: {
+					color: settings.selection.color,
+					lineWidth: settings.selection.lineWidth,
+					opacity: settings.selection.opacity * 100,
+					faceHighlightOpacity: (settings.selection.faceHighlightOpacity || 0.3) * 100
+				},
+				containers: {
+					wireframeColor: settings.containers.wireframeColor,
+					lineWidth: settings.containers.lineWidth,
+					opacity: settings.containers.opacity * 100
+				}
+			};
+			console.log('✅ Updated visualSettings:', visualSettings);
+		} else if (event.data.type === 'cad-wireframe-settings-response') {
+			console.log('📥 Received cad-wireframe-settings-response:', event.data.settings);
+			const settings = event.data.settings;
+			cadWireframeSettings = {
+				color: settings.color,
+				lineWidth: settings.lineWidth,
+				opacity: settings.opacity * 100
+			};
+			console.log('✅ Updated cadWireframeSettings:', cadWireframeSettings);
+		} else if (event.data.type === 'scene-settings-response') {
+			console.log('📥 Received scene-settings-response:', event.data.settings);
+			const settings = event.data.settings;
+			sceneSettings = {
+				backgroundColor: settings.backgroundColor,
+				gridMainColor: settings.gridMainColor,
+				gridSubColor: settings.gridSubColor
+			};
+			console.log('✅ Updated sceneSettings:', sceneSettings);
+		} else if (event.data.type === 'interface-settings-response') {
+			console.log('📥 Received interface-settings-response:', event.data.settings);
+			const settings = event.data.settings;
+			interfaceSettings = {
+				accentColor: settings.accentColor,
+				toolbarOpacity: settings.toolbarOpacity * 100
+			};
+			console.log('✅ Updated interfaceSettings:', interfaceSettings);
+		}
+	}
+
 	function loadSettingsFromConfig() {
-		// Use PostMessage to request settings from parent window (avoids cross-origin issues)
-
-		// Listen for responses BEFORE sending requests
-		const handleSettingsResponse = (event: MessageEvent) => {
-			if (event.data.type === 'visual-settings-response') {
-				const settings = event.data.settings;
-				visualSettings.selection.color = settings.selection.color;
-				visualSettings.selection.lineWidth = settings.selection.lineWidth;
-				visualSettings.selection.opacity = settings.selection.opacity * 100;
-				visualSettings.selection.faceHighlightOpacity = (settings.selection.faceHighlightOpacity || 0.3) * 100;
-				visualSettings.containers.wireframeColor = settings.containers.wireframeColor;
-				visualSettings.containers.lineWidth = settings.containers.lineWidth;
-				visualSettings.containers.opacity = settings.containers.opacity * 100;
-			} else if (event.data.type === 'cad-wireframe-settings-response') {
-				const settings = event.data.settings;
-				cadWireframeSettings.color = settings.color;
-				cadWireframeSettings.lineWidth = settings.lineWidth;
-				cadWireframeSettings.opacity = settings.opacity * 100;
-			} else if (event.data.type === 'scene-settings-response') {
-				const settings = event.data.settings;
-				sceneSettings.backgroundColor = settings.backgroundColor;
-				sceneSettings.gridMainColor = settings.gridMainColor;
-				sceneSettings.gridSubColor = settings.gridSubColor;
-			} else if (event.data.type === 'interface-settings-response') {
-				const settings = event.data.settings;
-				interfaceSettings.accentColor = settings.accentColor;
-				interfaceSettings.toolbarOpacity = settings.toolbarOpacity * 100;
-			}
-		};
-
-		window.addEventListener('message', handleSettingsResponse);
-
-		// Send requests for all setting types
+		console.log('📤 Requesting settings from main app...');
+		// Send requests for all setting types (handler is registered in onMount)
 		window.parent.postMessage({ type: 'get-visual-settings' }, '*');
 		window.parent.postMessage({ type: 'get-cad-wireframe-settings' }, '*');
 		window.parent.postMessage({ type: 'get-scene-settings' }, '*');
@@ -684,6 +706,9 @@
 		// Initialize the bridge with Three.js for real-time synchronization
 		// MUST be called before anything else to set up PostMessage listener
 		initializeBridge();
+
+		// Register settings response handler (only once)
+		window.addEventListener('message', handleSettingsResponse);
 
 		// Load settings from ConfigurationManager (may fail in iframe due to CORS)
 		try {
@@ -737,6 +762,7 @@
 		// Cleanup
 		return () => {
 			document.removeEventListener('keydown', handleKeyDown);
+			window.removeEventListener('message', handleSettingsResponse);
 		};
 	});
 

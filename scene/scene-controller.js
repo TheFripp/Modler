@@ -135,16 +135,18 @@ class SceneController {
                 window.objectEventBus.EVENT_TYPES?.LIFECYCLE || 'object:lifecycle',
                 objectData.id,
                 {
-                    action: 'create',
+                    operation: 'created',
                     objectType: objectData.type,
-                    name: objectData.name,
-                    isContainer: objectData.isContainer,
-                    position: objectData.mesh ? {
-                        x: objectData.mesh.position.x,
-                        y: objectData.mesh.position.y,
-                        z: objectData.mesh.position.z
-                    } : null,
-                    dimensions: objectData.dimensions
+                    objectData: {
+                        name: objectData.name,
+                        isContainer: objectData.isContainer,
+                        position: objectData.mesh ? {
+                            x: objectData.mesh.position.x,
+                            y: objectData.mesh.position.y,
+                            z: objectData.mesh.position.z
+                        } : null,
+                        dimensions: objectData.dimensions
+                    }
                 },
                 { immediate: true, source: 'SceneController.addObject' }
             );
@@ -539,6 +541,7 @@ class SceneController {
      * @returns {boolean} True if layout was successfully updated
      */
     updateLayout(containerId, pushContext = null) {
+        console.log('📐 updateLayout called:', { containerId, hasPushContext: !!pushContext, pushContext });
         const container = this.objects.get(containerId);
 
         if (!container || !container.autoLayout || !container.autoLayout.enabled) {
@@ -579,12 +582,13 @@ class SceneController {
                 if (window.objectEventBus && container.id) {
                     window.objectEventBus.emit(
                         window.objectEventBus.EVENT_TYPES.HIERARCHY,
+                        container.id,
                         {
-                            objectId: container.id,
                             type: 'layout-property-changed',
                             property: 'calculatedGap',
                             value: layoutResult.calculatedGap
-                        }
+                        },
+                        { immediate: true, source: 'SceneController.updateLayout' }
                     );
                 }
             }
@@ -708,7 +712,9 @@ class SceneController {
                 // Layout positions are already relative to container coordinate space
                 if (container && container.mesh && obj.mesh.parent === container.mesh) {
                     // Object is child of container - use layout position directly as local position
+                    const oldPos = obj.mesh.position.clone();
                     obj.mesh.position.copy(layoutPosition);
+
 
                     // Update object data position to maintain consistency (world position)
                     obj.position = obj.mesh.getWorldPosition(new THREE.Vector3());
@@ -804,14 +810,14 @@ class SceneController {
 
         // BYPASS ELIMINATED: Use ObjectEventBus instead of legacy window.notifyObjectModified
         if (window.objectEventBus) {
-            console.log('🔔 SceneController emitting hierarchy event:', objectId, '→', parentId);
             window.objectEventBus.emit(
                 window.objectEventBus.EVENT_TYPES?.HIERARCHY || 'object:hierarchy',
                 objectId,
                 {
-                    action: 'parent-changed',
-                    newParentId: parentId,
-                    oldParentId: obj.parentContainer
+                    type: 'parent-changed',
+                    parentId: parentId,
+                    previousParentId: obj.parentContainer,
+                    childId: String(objectId)
                 },
                 { immediate: true, source: 'SceneController.setParentContainer' }
             );

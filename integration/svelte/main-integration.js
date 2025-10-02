@@ -722,6 +722,7 @@
                     handleVisualSettingsUpdate(data.settings);
                     break;
                 case 'get-visual-settings':
+                    console.log('📨 Received get-visual-settings request');
                     handleGetVisualSettings(event.source);
                     break;
                 case 'scene-settings-changed':

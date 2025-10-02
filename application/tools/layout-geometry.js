@@ -37,6 +37,10 @@ class LayoutGeometry {
             containerGeometry = new THREE.BoxGeometry(size.x, size.y, size.z);
         }
 
+        // CRITICAL FIX: Ensure geometry is centered at origin
+        // BoxGeometry should be centered by default, but explicitly center it to be safe
+        containerGeometry.center();
+
         // Create invisible material for main solid mesh using MaterialManager
         let mainMaterial;
         if (mManager) {
@@ -65,7 +69,9 @@ class LayoutGeometry {
         const originalRaycast = mainMesh.raycast.bind(mainMesh);
         mainMesh.raycast = function(raycaster, intersects) {
             const selectionController = window.modlerComponents?.selectionController;
-            if (selectionController && selectionController.isSelected(mainMesh)) {
+            const isSelected = selectionController && selectionController.isSelected(mainMesh);
+
+            if (isSelected) {
                 // Container is selected - enable raycasting for face-based tools
                 originalRaycast(raycaster, intersects);
             }
@@ -278,6 +284,11 @@ class LayoutGeometry {
         } else {
             newGeometry = new THREE.BoxGeometry(newSize.x, newSize.y, newSize.z);
         }
+
+        // CRITICAL FIX: Ensure geometry is centered at origin
+        // BoxGeometry should be centered by default, but explicitly center it to be safe
+        newGeometry.center();
+
 
         // Find interactive mesh - check both as child and at scene level
         let interactiveMesh = containerMesh.children.find(child =>

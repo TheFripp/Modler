@@ -288,7 +288,7 @@ class ObjectStateManager extends EventTarget {
             window.objectEventBus.emit(
                 window.objectEventBus.EVENT_TYPES.HIERARCHY,
                 objectData.id,
-                { action: 'import', objectName: objectData.name },
+                { type: 'child-added', childId: String(objectData.id) },
                 { immediate: true, source: 'ObjectStateManager.importObjectFromScene' }
             );
         }
@@ -627,10 +627,26 @@ class ObjectStateManager extends EventTarget {
             // Determine event type based on what changed
             const eventType = this.determineEventType(object);
 
+            // Build appropriate changeData based on event type
+            let changeData;
+            if (eventType === window.objectEventBus.EVENT_TYPES.HIERARCHY) {
+                // Hierarchy events need 'type' field, not 'changeType'
+                changeData = {
+                    type: 'layout-property-changed',
+                    source: source
+                };
+            } else {
+                // Other events can use generic changeType
+                changeData = {
+                    changeType: 'unified-update',
+                    source: source
+                };
+            }
+
             window.objectEventBus.emit(
                 eventType,
                 object.id,
-                { changeType: 'unified-update', source: source },
+                changeData,
                 { source: 'ObjectStateManager', throttle: false }
             );
         });

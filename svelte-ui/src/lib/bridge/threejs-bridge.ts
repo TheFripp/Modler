@@ -91,8 +91,6 @@ function setupPostMessageFallback() {
 			try {
 				const data = event.data.data;
 
-				console.log('🟢 PostMessage received in iframe:', event.data);
-
 				// Validate data structure
 				if (!data || typeof data !== 'object') {
 					console.warn('PostMessage: Invalid data structure received');
@@ -113,7 +111,6 @@ function setupPostMessageFallback() {
 
 				// Update selected objects in store with error handling
 				if (data.selectedObjects) {
-					console.log('🟢 Syncing selectedObjects:', data.selectedObjects);
 					try {
 						syncSelectionFromThreeJS(data.selectedObjects);
 					} catch (error) {

@@ -298,6 +298,8 @@ class HistoryManager {
         if (command.autoLayout !== undefined) params.autoLayout = command.autoLayout;
         if (command.material !== undefined) params.material = command.material;
         if (command.name !== undefined) params.name = command.name;
+        if (command.selectedObjects !== undefined) params.selectedObjects = command.selectedObjects;
+        if (command.containerData !== undefined) params.containerData = command.containerData;
 
         return params;
     }

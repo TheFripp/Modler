@@ -173,17 +173,17 @@ const EVENT_PAYLOAD_SCHEMA = {
                 description: 'Hierarchy change type: "parent-changed", "child-added", "child-removed", "layout-property-changed"'
             },
             parentId: {
-                type: 'string|null',
+                type: 'number|string|null',
                 required: false,
                 description: 'New parent object ID (null for root)'
             },
             childId: {
-                type: 'string',
+                type: 'number|string',
                 required: false,
                 description: 'Child object ID involved in change'
             },
             previousParentId: {
-                type: 'string|null',
+                type: 'number|string|null',
                 required: false,
                 description: 'Previous parent ID'
             },
@@ -196,6 +196,40 @@ const EVENT_PAYLOAD_SCHEMA = {
                 type: 'any',
                 required: false,
                 description: 'New value of the changed property'
+            }
+        }
+    },
+
+    'object:layout-updated': {
+        description: 'Container layout was recalculated and objects repositioned',
+        emissionPreference: EVENT_PREFERENCES.IMMEDIATE,
+        changeData: {
+            containerId: {
+                type: 'number|string',
+                required: true,
+                description: 'ID of the container whose layout was updated'
+            },
+            affectedObjectIds: {
+                type: 'array',
+                required: false,
+                description: 'Array of object IDs that were repositioned'
+            }
+        }
+    },
+
+    'object:properties-changed': {
+        description: 'Multiple object properties changed in batch',
+        emissionPreference: EVENT_PREFERENCES.IMMEDIATE,
+        changeData: {
+            objectIds: {
+                type: 'array',
+                required: true,
+                description: 'Array of object IDs that had properties changed'
+            },
+            source: {
+                type: 'string',
+                required: false,
+                description: 'Source of the property change (e.g., "fill-property")'
             }
         }
     },

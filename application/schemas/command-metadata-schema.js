@@ -102,28 +102,18 @@ const COMMAND_METADATA_SCHEMA = {
         description: 'Create a new container object',
         className: 'CreateContainerCommand',
         parameters: {
-            position: {
-                type: 'object',
-                required: true,
-                description: 'Container position {x, y, z}'
+            selectedObjects: {
+                type: 'array',
+                required: false,
+                description: 'Array of selected objects to group into container'
             },
-            dimensions: {
-                type: 'object',
-                required: true,
-                description: 'Container dimensions {x, y, z}'
-            },
-            autoLayout: {
+            containerData: {
                 type: 'object',
                 required: false,
-                description: 'Initial auto-layout configuration'
-            },
-            name: {
-                type: 'string',
-                required: false,
-                description: 'Container name'
+                description: 'Optional container data (populated during execute)'
             }
         },
-        serializable: true,
+        serializable: false, // Arrays of mesh objects can't be serialized
         undoable: true,
         affectsScene: true
     },
