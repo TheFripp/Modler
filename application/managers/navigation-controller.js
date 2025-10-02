@@ -399,9 +399,25 @@ class NavigationController {
             return true;
         }
 
-        // Double-click on child object - navigate to its container and select it
+        // Double-click on child object inside a nested container
         if (objectData.parentContainer) {
-            this.navigateToObject(objectData.id);
+            const parentContainer = sceneController.getObject(objectData.parentContainer);
+
+            // Check if parent container is currently selected
+            const currentSelection = this.selectionController.getSelectedObjects();
+            const isParentSelected = currentSelection.length === 1 &&
+                                    currentSelection[0].id === objectData.parentContainer;
+
+            if (isParentSelected) {
+                // Parent container is selected - navigate into it and select the object
+                this.navigateToObject(objectData.id);
+            } else {
+                // Parent container not selected - select it first (container-first selection)
+                this.selectionController.clearSelection();
+                if (parentContainer?.mesh) {
+                    this.selectionController.select(parentContainer.mesh);
+                }
+            }
             return true;
         }
 

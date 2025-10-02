@@ -68,37 +68,32 @@ class LayoutEngine {
         // Two-pass calculation for fill objects
         const { fixedObjects, fillObjects, totalFixedSize, fillCount } = this.categorizeObjects(objects, axis);
 
-        // Calculate available space for fill objects
+        // CRITICAL: Determine gap strategy FIRST (before sizing fill objects)
+        const isPushing = pushContext && pushContext.axis === axis;
+        let dynamicGap = gap;
         let availableSpace = axisSize;
-        if (availableSpace && fillCount > 0) {
+
+        if (axisSize && objects.length > 1 && isPushing && fillCount === 0) {
+            // PUSHING with NO FILL: Use space-between distribution
+            // First object at start edge, last object at end edge, gaps adjust
+
+            const paddingTotal = this.getTotalPadding(axis, padding);
+            const availableForGaps = axisSize - totalFixedSize - paddingTotal;
+            dynamicGap = Math.max(0, availableForGaps / (objects.length - 1));
+
+        } else if (axisSize && fillCount > 0) {
+            // WITH FILL OBJECTS: Use fixed gap, fill objects take remaining space
             const totalGaps = (objects.length - 1) * gap;
             const paddingTotal = this.getTotalPadding(axis, padding);
-            availableSpace = Math.max(0, availableSpace - totalFixedSize - totalGaps - paddingTotal);
+            availableSpace = Math.max(0, axisSize - totalFixedSize - totalGaps - paddingTotal);
         }
+        // NOT PUSHING and NO FILL: Use fixed gap
 
-        // Calculate sizes for all objects
+        // Calculate sizes for all objects using determined gap and availableSpace
         const objectSizes = objects.map(obj => {
             const baseSize = this.getObjectSize(obj);
             return this.applySizingBehavior(obj, baseSize, axis, availableSpace, fillCount, fullContainerSize, padding);
         });
-
-        // CRITICAL: Choose gap strategy based on whether there are fill objects
-        let dynamicGap = gap;
-        if (fillCount === 0 && axisSize && objects.length > 1) {
-            // NO FILL OBJECTS: Use space-between distribution
-            // Calculate total size of all objects
-            const totalObjectSize = objectSizes.reduce((sum, size) => {
-                return sum + (axis === 'x' ? size.x : axis === 'y' ? size.y : size.z);
-            }, 0);
-
-            // Calculate available space for gaps
-            const paddingTotal = this.getTotalPadding(axis, padding);
-            const availableForGaps = axisSize - totalObjectSize - paddingTotal;
-
-            // Distribute space evenly between objects (space-between)
-            dynamicGap = Math.max(0, availableForGaps / (objects.length - 1));
-        }
-        // WITH FILL OBJECTS: Use fixed gap, fill objects resize to fit
 
         // Position objects (start from first object's half-size)
         let currentPosition = 0;
@@ -123,7 +118,19 @@ class LayoutEngine {
         });
 
         // Align layout based on push context (anchor mode) or center normally
-        const alignedPositions = this.alignLayoutPositions(positions, objectSizes, axis, layoutAnchor, pushContext, fullContainerSize);
+        const alignedPositions = this.alignLayoutPositions(positions, objectSizes, axis, layoutAnchor, pushContext, fullContainerSize, padding);
+
+        if (!pushContext && alignedPositions.length > 0) {
+            console.log('📐 Layout calculated (no push):', {
+                axis,
+                gap: dynamicGap,
+                positions: alignedPositions.map((p, i) => ({
+                    object: i,
+                    position: p[axis],
+                    size: objectSizes[i][axis]
+                }))
+            });
+        }
 
         // Note: Padding does NOT offset object positions - it only affects container size
         // Objects stay centered, container expands around them with padding space
@@ -429,9 +436,10 @@ class LayoutEngine {
      * @param {THREE.Vector3} layoutAnchor - Optional anchor point to center layout around (default: origin)
      * @param {Object} pushContext - Optional push context with {axis, anchorMode}
      * @param {THREE.Vector3} containerSize - Container size for anchor-based alignment
+     * @param {Object} padding - Padding configuration
      * @returns {Array} Aligned positions
      */
-    static alignLayoutPositions(positions, sizes, axis, layoutAnchor = null, pushContext = null, containerSize = null) {
+    static alignLayoutPositions(positions, sizes, axis, layoutAnchor = null, pushContext = null, containerSize = null, padding = null) {
         if (positions.length === 0 || sizes.length === 0) return positions;
 
         // Calculate actual layout bounds
@@ -456,29 +464,32 @@ class LayoutEngine {
             max = Math.max(max, objMax);
         });
 
-        // Determine target alignment based on push context
+        // Determine target alignment
         let targetPosition = 0;
 
-        if (pushContext && pushContext.axis === axis && containerSize) {
-            // ANCHOR MODE: Align to min or max face based on anchor mode
-            // Container bounds in local space: [-containerSize/2, +containerSize/2]
+        // When container size exists: align first object to min edge (left/top/front)
+        // When no container size: center the layout (container will resize to hug)
+        const isPushing = pushContext && pushContext.axis === axis;
+
+        if (containerSize) {
+            // CONTAINER SIZE EXISTS: Align objects to edges
             const containerAxisSize = axis === 'x' ? containerSize.x : axis === 'y' ? containerSize.y : containerSize.z;
             const containerMin = -containerAxisSize / 2;
             const containerMax = containerAxisSize / 2;
 
-            if (pushContext.anchorMode === 'min') {
-                // MIN face stays fixed - align layout min to container min
-                targetPosition = containerMin - min;
-            } else if (pushContext.anchorMode === 'max') {
-                // MAX face stays fixed - align layout max to container max
-                targetPosition = containerMax - max;
+            // Get padding offset for this axis
+            const paddingOffset = padding ? this.getPaddingOffset(axis, padding) : 0;
+
+            if (isPushing && pushContext.anchorMode === 'max') {
+                // PUSHING from min face: align last object to max edge
+                targetPosition = (containerMax - paddingOffset) - max;
             } else {
-                // CENTER mode - use normal centering
-                const boundsCenter = (min + max) / 2;
-                targetPosition = -boundsCenter;
+                // DEFAULT or PUSHING from max face: align first object to min edge
+                targetPosition = (containerMin + paddingOffset) - min;
             }
+
         } else {
-            // NO PUSH CONTEXT: Normal centering behavior
+            // NO CONTAINER SIZE: Center the layout (container will resize to fit)
             const boundsCenter = (min + max) / 2;
             let targetCenter = 0;
             if (layoutAnchor) {

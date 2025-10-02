@@ -37,6 +37,7 @@ const DATA_TYPES = {
     ARRAY: 'array',
     ANY: 'any',
     STRING_OR_NULL: 'string|null',
+    NUMBER_OR_STRING: 'number|string',
     NUMBER_OR_UNDEFINED: 'number|undefined',
     OBJECT_ARRAY: 'object[]'
 };
@@ -58,7 +59,7 @@ const MESSAGE_PROTOCOL_SCHEMA = {
         direction: MESSAGE_DIRECTION.UI_TO_MAIN,
         description: 'Update a single property on an object',
         payload: {
-            objectId: { type: DATA_TYPES.STRING, required: true },
+            objectId: { type: DATA_TYPES.NUMBER_OR_STRING, required: true },
             property: { type: DATA_TYPES.STRING, required: true },
             value: { type: DATA_TYPES.ANY, required: true },
             source: { type: DATA_TYPES.STRING, required: false }
@@ -110,7 +111,7 @@ const MESSAGE_PROTOCOL_SCHEMA = {
         direction: MESSAGE_DIRECTION.UI_TO_MAIN,
         description: 'Check if fill buttons should be shown for an object',
         payload: {
-            objectId: { type: DATA_TYPES.STRING, required: true }
+            objectId: { type: DATA_TYPES.NUMBER_OR_STRING, required: true }
         },
         response: 'fill-button-check-response'
     },
@@ -119,7 +120,7 @@ const MESSAGE_PROTOCOL_SCHEMA = {
         direction: MESSAGE_DIRECTION.MAIN_TO_UI,
         description: 'Response with fill button visibility',
         payload: {
-            objectId: { type: DATA_TYPES.STRING, required: true },
+            objectId: { type: DATA_TYPES.NUMBER_OR_STRING, required: true },
             shouldShow: { type: DATA_TYPES.BOOLEAN, required: true }
         },
         response: null
@@ -129,7 +130,7 @@ const MESSAGE_PROTOCOL_SCHEMA = {
         direction: MESSAGE_DIRECTION.UI_TO_MAIN,
         description: 'Get current fill button states for axes',
         payload: {
-            objectId: { type: DATA_TYPES.STRING, required: true }
+            objectId: { type: DATA_TYPES.NUMBER_OR_STRING, required: true }
         },
         response: 'fill-button-states-response'
     },
@@ -138,7 +139,7 @@ const MESSAGE_PROTOCOL_SCHEMA = {
         direction: MESSAGE_DIRECTION.MAIN_TO_UI,
         description: 'Response with fill button states',
         payload: {
-            objectId: { type: DATA_TYPES.STRING, required: true },
+            objectId: { type: DATA_TYPES.NUMBER_OR_STRING, required: true },
             states: {
                 type: DATA_TYPES.OBJECT,
                 required: true,
@@ -156,10 +157,35 @@ const MESSAGE_PROTOCOL_SCHEMA = {
         direction: MESSAGE_DIRECTION.UI_TO_MAIN,
         description: 'Toggle fill property for an axis',
         payload: {
-            objectId: { type: DATA_TYPES.STRING, required: true },
+            objectId: { type: DATA_TYPES.NUMBER_OR_STRING, required: true },
             axis: { type: DATA_TYPES.STRING, required: true } // 'x', 'y', or 'z'
         },
         response: 'fill-button-states-response'
+    },
+
+    // ===========================
+    // OBJECT SELECTION
+    // ===========================
+
+    'object-select': {
+        direction: MESSAGE_DIRECTION.UI_TO_MAIN,
+        description: 'Select an object in the scene (from UI list)',
+        payload: {
+            objectId: { type: DATA_TYPES.NUMBER, required: true },
+            parentContainer: { type: DATA_TYPES.NUMBER_OR_STRING, required: false },
+            useNavigationController: { type: DATA_TYPES.BOOLEAN, required: false }
+        },
+        response: null // Selection state comes via data-update
+    },
+
+    'object-move-to-container': {
+        direction: MESSAGE_DIRECTION.UI_TO_MAIN,
+        description: 'Move an object to a different container or to scene root',
+        payload: {
+            objectId: { type: DATA_TYPES.NUMBER_OR_STRING, required: true },
+            targetContainerId: { type: DATA_TYPES.NUMBER_OR_STRING, required: false }
+        },
+        response: null // Hierarchy change comes via hierarchy-changed
     },
 
     // ===========================
@@ -170,7 +196,7 @@ const MESSAGE_PROTOCOL_SCHEMA = {
         direction: MESSAGE_DIRECTION.UI_TO_MAIN,
         description: 'Check if object is in a layout-enabled container',
         payload: {
-            objectId: { type: DATA_TYPES.STRING, required: true }
+            objectId: { type: DATA_TYPES.NUMBER_OR_STRING, required: true }
         },
         response: 'layout-mode-response'
     },
@@ -179,7 +205,7 @@ const MESSAGE_PROTOCOL_SCHEMA = {
         direction: MESSAGE_DIRECTION.MAIN_TO_UI,
         description: 'Response with layout mode status',
         payload: {
-            objectId: { type: DATA_TYPES.STRING, required: true },
+            objectId: { type: DATA_TYPES.NUMBER_OR_STRING, required: true },
             inLayoutMode: { type: DATA_TYPES.BOOLEAN, required: true }
         },
         response: null
@@ -456,6 +482,15 @@ class MessageProtocolValidator {
         // Handle null/undefined optional types
         if (expectedType === DATA_TYPES.STRING_OR_NULL && value === null) return errors;
         if (expectedType === DATA_TYPES.NUMBER_OR_UNDEFINED && value === undefined) return errors;
+
+        // Handle union types (number|string)
+        if (expectedType === DATA_TYPES.NUMBER_OR_STRING) {
+            const actualType = typeof value;
+            if (actualType !== 'number' && actualType !== 'string') {
+                errors.push(`Field "${fieldName}" in "${messageType}" has wrong type: expected number or string, got ${actualType}`);
+            }
+            return errors;
+        }
 
         // Validate basic types
         const actualType = Array.isArray(value) ? 'array' : typeof value;

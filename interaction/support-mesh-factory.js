@@ -200,8 +200,27 @@ class SupportMeshFactory {
     createContainerWireframe(mainMesh) {
         if (!mainMesh.geometry) return null;
 
+        // Check if this container is nested inside another container
+        const sceneController = window.modlerComponents?.sceneController;
+        let isNested = false;
+        if (sceneController && mainMesh.userData?.id) {
+            const objectData = sceneController.getObjectByMesh(mainMesh);
+            isNested = objectData?.parentContainer != null;
+        }
+
+        // Clone base material and adjust opacity for nested containers
+        let material;
+        if (isNested) {
+            // Clone the material and reduce opacity to 50%
+            material = this.materials.containerWireframe.clone();
+            material.opacity = this.materials.containerWireframe.opacity * 0.5;
+            material.needsUpdate = true;
+        } else {
+            material = this.materials.containerWireframe;
+        }
+
         const edgeGeometry = this.geometryFactory.createEdgeGeometry(mainMesh.geometry);
-        const wireframe = this.resourcePool.getLineMesh(edgeGeometry, this.materials.containerWireframe);
+        const wireframe = this.resourcePool.getLineMesh(edgeGeometry, material);
 
         wireframe.position.set(0, 0.001, 0); // Small Y offset
         wireframe.raycast = () => {}; // Non-raycastable

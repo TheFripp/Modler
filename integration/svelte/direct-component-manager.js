@@ -139,8 +139,8 @@ class DirectComponentManager {
             throw new Error(`Unknown component: ${componentName}`);
         }
 
-        // Use Svelte dev server URL (port 5173 per vite.config.ts)
-        iframe.src = `http://localhost:5173${route}`;
+        // Use Svelte dev server URL (port 5174 - Vite auto-switched from 5173)
+        iframe.src = `http://localhost:5174${route}`;
         iframe.style.cssText = `
             width: 100%;
             height: 100%;

@@ -284,26 +284,82 @@ class PushTool {
         // pushDirection < 0 means pushing -face, so MAX face stays fixed
         const anchorMode = this.pushDirection > 0 ? 'min' : 'max';
 
-        // Use unified resize with anchor mode
-        const success = geometryUtils.resizeGeometry(
-            this.pushedObject.geometry,
-            this.pushAxis,
-            newDimension,
-            anchorMode
-        );
+        // Check if this is a container (reuse sceneController from above)
+        const objectData2 = sceneController?.getObjectByMesh(this.pushedObject);
+        const isContainer = objectData2?.isContainer;
+
+        let success;
+        if (isContainer) {
+            // CONTAINERS: Replace geometry instead of modifying vertices
+            // This keeps geometry centered and avoids accumulating offsets
+            const geometryFactory = window.modlerComponents?.geometryFactory;
+            if (!geometryFactory) {
+                console.warn('PushTool: GeometryFactory not available');
+                return;
+            }
+
+            // Calculate position shift to keep anchor face fixed
+            const shiftAmount = (newDimension - currentDims[this.pushAxis]) / 2;
+            const positionShift = this.pushDirection > 0 ? shiftAmount : -shiftAmount;
+
+            // Create new centered geometry
+            const oldGeometry = this.pushedObject.geometry;
+            const newGeometry = geometryFactory.createBoxGeometry(
+                this.pushAxis === 'x' ? newDimension : currentDims.x,
+                this.pushAxis === 'y' ? newDimension : currentDims.y,
+                this.pushAxis === 'z' ? newDimension : currentDims.z
+            );
+
+            // Replace geometry
+            this.pushedObject.geometry = newGeometry;
+            geometryFactory.returnGeometry(oldGeometry, 'box');
+
+            // Shift position to keep anchor face fixed
+            this.pushedObject.position[this.pushAxis] += positionShift;
+
+            // CRITICAL: When container moves, children (in local coords) move with it in world space
+            // To keep children visually in place, shift their local positions by opposite amount
+            if (sceneController && this.pushedObject.userData?.id) {
+                const children = sceneController.getChildObjects(this.pushedObject.userData.id);
+                if (children.length > 0) {
+                    console.log(`  📦 Container shifted by ${positionShift.toFixed(3)} on ${this.pushAxis}, counter-shifting ${children.length} children`);
+                }
+                children.forEach(child => {
+                    if (child.mesh) {
+                        const oldPos = child.mesh.position[this.pushAxis];
+                        child.mesh.position[this.pushAxis] -= positionShift;
+                        console.log(`    ↔️  ${child.name}: ${oldPos.toFixed(3)} → ${child.mesh.position[this.pushAxis].toFixed(3)}`);
+                    }
+                });
+            }
+
+            success = true;
+        } else {
+            // REGULAR OBJECTS: Use vertex manipulation (existing behavior)
+            success = geometryUtils.resizeGeometry(
+                this.pushedObject.geometry,
+                this.pushAxis,
+                newDimension,
+                anchorMode
+            );
+        }
 
         if (success) {
 
             // Update all support meshes (wireframes, etc.) - unified for containers and objects
             geometryUtils.updateSupportMeshGeometries(this.pushedObject, false);
 
-            // Update scene data dimensions
-            const sceneController = window.modlerComponents?.sceneController;
+            // Update scene data dimensions and position
             if (sceneController && this.pushedObject.userData?.id) {
-                const objectData = sceneController.getObjectByMesh(this.pushedObject);
-                if (objectData) {
+                const finalObjectData = objectData2 || objectData;
+                if (finalObjectData) {
                     const dims = geometryUtils.getGeometryDimensions(this.pushedObject.geometry);
-                    objectData.dimensions = { x: dims.x, y: dims.y, z: dims.z };
+                    finalObjectData.dimensions = { x: dims.x, y: dims.y, z: dims.z };
+
+                    // Update position for containers
+                    if (isContainer) {
+                        finalObjectData.position = this.pushedObject.position.clone();
+                    }
                 }
             }
         }
@@ -334,14 +390,132 @@ class PushTool {
         const objectData = sceneController.getObjectByMesh(this.pushedObject);
         if (!objectData?.isContainer || !objectData.autoLayout?.enabled) return;
 
-        // CRITICAL: Pass push context to layout update
-        // This ensures fill objects resize from the correct edge (not center)
-        const pushContext = {
-            axis: this.pushAxis,
-            anchorMode: this.pushDirection > 0 ? 'min' : 'max'
-        };
+        // Get layout direction
+        const layoutDirection = objectData.autoLayout.direction || 'x';
 
-        sceneController.updateLayout(objectData.id, pushContext);
+        // Only update layout if pushing on the layout axis
+        // Pushing on other axes should not affect object positions along the layout axis
+        if (this.pushAxis !== layoutDirection) {
+            // Pushing perpendicular to layout direction - don't recalculate layout
+            // Objects should stay in their current positions along the layout axis
+            return;
+        }
+
+        // Check if there are fill objects in the layout
+        const children = sceneController.getChildObjects(objectData.id);
+        const hasFillObjects = children.some(child => {
+            const sizeProperty = `size${this.pushAxis.toUpperCase()}`;
+            return child.layoutProperties?.[sizeProperty] === 'fill';
+        });
+
+        if (hasFillObjects) {
+            // WITH FILL OBJECTS: Don't recalculate layout (positions would shift)
+            // Instead, directly resize fill objects based on new container size
+            console.log('🔵 Push with fill objects - resizing fill objects only, NOT updating layout');
+            this.updateFillObjectsDuringPush(objectData, children);
+        } else {
+            // NO FILL OBJECTS: Use space-between distribution
+            console.log('🔵 Push without fill objects - updating layout with space-between');
+            const pushContext = {
+                axis: this.pushAxis,
+                anchorMode: this.pushDirection > 0 ? 'min' : 'max'
+            };
+            sceneController.updateLayout(objectData.id, pushContext);
+        }
+    }
+
+    /**
+     * Update fill objects directly during push without recalculating layout
+     */
+    updateFillObjectsDuringPush(containerData, children) {
+        const geometryUtils = window.GeometryUtils;
+        if (!geometryUtils) return;
+
+        const containerSize = geometryUtils.getGeometryDimensions(this.pushedObject.geometry);
+        if (!containerSize) return;
+
+        const layoutConfig = containerData.autoLayout;
+        const gap = layoutConfig.gap || 0;
+        const padding = layoutConfig.padding || {};
+
+        // Calculate available space for fill objects
+        const axis = this.pushAxis;
+        const containerAxisSize = containerSize[axis];
+        const paddingTotal = (padding.width || 0) * 2; // Simplified - should use axis-specific padding
+
+        let totalFixedSize = 0;
+        let fillCount = 0;
+
+        children.forEach(child => {
+            const sizeProperty = `size${axis.toUpperCase()}`;
+            if (child.layoutProperties?.[sizeProperty] === 'fill') {
+                fillCount++;
+            } else if (child.mesh?.geometry) {
+                const dims = geometryUtils.getGeometryDimensions(child.mesh.geometry);
+                totalFixedSize += dims[axis];
+            }
+        });
+
+        if (fillCount === 0) return;
+
+        const totalGaps = (children.length - 1) * gap;
+        const availableSpace = Math.max(0, containerAxisSize - totalFixedSize - totalGaps - paddingTotal);
+        const fillSizePerObject = availableSpace / fillCount;
+
+        // Resize fill objects
+        const geometryFactory = window.modlerComponents?.geometryFactory;
+        if (!geometryFactory) return;
+
+        console.log(`  🔄 Updating ${fillCount} fill objects, ${children.length - fillCount} fixed objects`);
+
+        children.forEach(child => {
+            const sizeProperty = `size${axis.toUpperCase()}`;
+            const oldPos = child.mesh?.position.clone();
+
+            if (child.layoutProperties?.[sizeProperty] === 'fill' && child.mesh) {
+                const currentDims = geometryUtils.getGeometryDimensions(child.mesh.geometry);
+                const newDimension = Math.max(fillSizePerObject, 0.1);
+
+                // FILL OBJECTS: Replace geometry instead of vertex manipulation
+                // This keeps geometry centered and avoids position shifts
+                const oldPos = child.mesh.position.clone();
+                const oldGeometry = child.mesh.geometry;
+                const newGeometry = geometryFactory.createBoxGeometry(
+                    axis === 'x' ? newDimension : currentDims.x,
+                    axis === 'y' ? newDimension : currentDims.y,
+                    axis === 'z' ? newDimension : currentDims.z
+                );
+
+                // Replace geometry
+                child.mesh.geometry = newGeometry;
+                geometryFactory.returnGeometry(oldGeometry, 'box');
+
+                // Update support meshes
+                geometryUtils.updateSupportMeshGeometries(child.mesh, false);
+
+                // Update object data
+                child.dimensions[axis] = newDimension;
+
+                console.log(`  📏 Resized fill object ${child.name}:`, {
+                    axis,
+                    oldSize: currentDims[axis],
+                    newSize: newDimension,
+                    oldPos: oldPos[axis],
+                    newPos: child.mesh.position[axis],
+                    positionChanged: Math.abs(oldPos[axis] - child.mesh.position[axis]) > 0.001
+                });
+            } else if (child.mesh && oldPos) {
+                // FIXED OBJECT - should NOT move
+                if (Math.abs(oldPos[axis] - child.mesh.position[axis]) > 0.001) {
+                    console.warn(`  ⚠️ Fixed object ${child.name} MOVED:`, {
+                        axis,
+                        oldPos: oldPos[axis],
+                        newPos: child.mesh.position[axis],
+                        delta: child.mesh.position[axis] - oldPos[axis]
+                    });
+                }
+            }
+        });
     }
 
     /**
