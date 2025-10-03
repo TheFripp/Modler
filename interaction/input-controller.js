@@ -88,8 +88,22 @@ class InputController {
             return; // Skip tool hover when camera is active
         }
 
-        // Perform raycast and delegate to current tool
+        // Perform raycast
         const hit = this.raycast();
+
+        // Check if Option/Alt key is held for measurement mode
+        const measurementTool = window.modlerComponents?.measurementTool;
+        if (measurementTool && (event.altKey || this.keys.has('Alt'))) {
+            // Measurement mode active
+            const selectedObjects = this.selectionController?.getSelectedObjects() || [];
+            measurementTool.onHover(hit, selectedObjects);
+            return; // Skip normal tool behavior
+        } else if (measurementTool && !event.altKey && !this.keys.has('Alt')) {
+            // Option key released - clear measurement
+            measurementTool.clearMeasurement();
+        }
+
+        // Delegate to current tool
         const tool = this.toolBehaviors[this.currentTool];
 
         if (tool && tool.onHover) {
@@ -231,6 +245,15 @@ class InputController {
 
     onKeyUp(event) {
         this.keys.delete(event.code);
+
+        // Forward to active tool if it has onKeyUp handler
+        const currentToolName = this.getCurrentTool();
+        if (currentToolName && this.toolBehaviors[currentToolName]) {
+            const tool = this.toolBehaviors[currentToolName];
+            if (tool && tool.onKeyUp && tool.onKeyUp(event)) {
+                return; // Tool handled the event
+            }
+        }
     }
 
     // Unified raycasting with smart object prioritization

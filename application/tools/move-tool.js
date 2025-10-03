@@ -20,6 +20,10 @@ class MoveTool {
         this.dragFaceNormal = null;
         this.lastMousePos = null;
 
+        // Duplication mode state
+        this.isDuplicationMode = false;
+        this.ghostObject = null;
+
         // Unified state management system
         this.objectStateManager = null;
 
@@ -149,7 +153,39 @@ class MoveTool {
         const operationCallbacks = { isOperationActive: () => this.isDragging };
         this.eventHandler.handleDoubleClick(hit, event, operationCallbacks);
     }
-    
+
+    /**
+     * Handle key down events - monitor Command/Meta key for duplication mode
+     */
+    onKeyDown(event) {
+        // Check for Command/Meta key (Mac: ⌘, Windows: Win key) - track it even before dragging starts
+        if (event.key === 'Meta' || event.code === 'MetaLeft' || event.code === 'MetaRight') {
+            // If already dragging, enter duplication mode immediately
+            if (this.isDragging && !this.isDuplicationMode) {
+                this.enterDuplicationMode();
+            }
+            // If not dragging, the key state is tracked by InputController
+            // and will be checked when drag starts
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * Handle key up events - monitor Command/Meta key release
+     */
+    onKeyUp(event) {
+        // Check for Command/Meta key release
+        if (event.key === 'Meta' || event.code === 'MetaLeft' || event.code === 'MetaRight') {
+            // Exit duplication mode if currently in it
+            if (this.isDuplicationMode && this.isDragging) {
+                this.exitDuplicationMode();
+            }
+            return true;
+        }
+        return false;
+    }
+
     /**
      * Update object position through unified state management
      */
@@ -310,12 +346,18 @@ class MoveTool {
             }
         }
         
-        // Store initial mouse position
+        // Store initial mouse position and check for Option key
         const inputController = window.modlerComponents?.inputController;
         if (inputController) {
             this.lastMousePos = inputController.mouse.clone();
+
+            // Check if Command/Meta key is already pressed when starting drag
+            const isCommandPressed = inputController.keys?.has('MetaLeft') || inputController.keys?.has('MetaRight') || false;
+            if (isCommandPressed) {
+                this.enterDuplicationMode();
+            }
         }
-        
+
         // Clear the highlight since we're now dragging
         this.faceToolBehavior.clearHover();
 
@@ -323,7 +365,7 @@ class MoveTool {
         if (targetObject?.userData?.supportMeshes?.interactiveMesh && !targetObject.userData.isContainer) {
             targetObject.userData.supportMeshes.interactiveMesh.visible = true;
         }
-        
+
     }
     
     /**
@@ -448,12 +490,81 @@ class MoveTool {
     }
 
     /**
+     * Enter duplication mode - create ghost object at original position
+     * Visual: dragged object = duplicate (being positioned), ghost = original (stays at start)
+     */
+    enterDuplicationMode() {
+        if (!this.dragObject || this.isDuplicationMode) return;
+
+        this.isDuplicationMode = true;
+
+        // Store current position of dragged object
+        const currentDragPosition = this.dragObject.position.clone();
+
+        // Create ghost object at START position to show where original will stay
+        const sceneController = window.modlerComponents?.sceneController;
+        const objectData = sceneController?.getObjectByMesh(this.dragObject);
+
+        if (objectData) {
+            // Create a temporary ghost wireframe (not pooled - short-lived visualization)
+            const ghostEdgesGeometry = new THREE.EdgesGeometry(this.dragObject.geometry);
+            const ghostMaterial = new THREE.LineBasicMaterial({
+                color: 0x888888,
+                opacity: 0.5,
+                transparent: true
+            });
+
+            this.ghostObject = new THREE.LineSegments(ghostEdgesGeometry, ghostMaterial);
+            this.ghostObject.position.copy(this.dragStartPosition);
+            this.ghostObject.rotation.copy(this.dragObject.rotation);
+            this.ghostObject.scale.copy(this.dragObject.scale);
+
+            // Add to scene
+            const scene = window.modlerComponents?.sceneFoundation?.scene;
+            if (scene) {
+                scene.add(this.ghostObject);
+            }
+        }
+
+        // Keep dragged object at its current position (it represents the duplicate being created)
+        this.dragObject.position.copy(currentDragPosition);
+    }
+
+    /**
+     * Exit duplication mode - return to normal move mode
+     */
+    exitDuplicationMode() {
+        if (!this.isDuplicationMode) return;
+
+        this.isDuplicationMode = false;
+
+        // Remove and dispose ghost object
+        if (this.ghostObject) {
+            const scene = window.modlerComponents?.sceneFoundation?.scene;
+            if (scene) {
+                scene.remove(this.ghostObject);
+            }
+
+            // Dispose temporary ghost resources
+            if (this.ghostObject.geometry) {
+                this.ghostObject.geometry.dispose();
+            }
+            if (this.ghostObject.material) {
+                this.ghostObject.material.dispose();
+            }
+
+            this.ghostObject = null;
+        }
+    }
+
+    /**
      * End face-based dragging operation
      */
     endFaceDrag() {
         if (!this.isDragging) return;
 
         const draggedObject = this.dragObject; // Store reference before clearing
+        const wasDuplicationMode = this.isDuplicationMode;
 
         // Record which axis was manipulated for Tab key focus
         if (this.dragFaceNormal && draggedObject && window.inputFocusManager) {
@@ -469,42 +580,124 @@ class MoveTool {
             fieldNavigationManager.unregisterNavigationWorkflow('move-tool-drag');
         }
 
-        // CRITICAL: Sync final position to ObjectStateManager before clearing drag state
-        // This ensures system state, UI panels, and events get the final position
-        if (draggedObject && this.objectStateManager) {
+        // Handle duplication mode vs normal move
+        if (wasDuplicationMode && draggedObject) {
+            // DUPLICATION MODE: Create duplicate at final position, keep original at start
             const sceneController = window.modlerComponents?.sceneController;
             const objectData = sceneController?.getObjectByMesh?.(draggedObject);
-            const objectId = objectData?.id || draggedObject.uuid;
 
-            const finalPosition = {
-                x: draggedObject.position.x,
-                y: draggedObject.position.y,
-                z: draggedObject.position.z
-            };
+            if (objectData && sceneController) {
+                const finalPosition = {
+                    x: draggedObject.position.x,
+                    y: draggedObject.position.y,
+                    z: draggedObject.position.z
+                };
 
-            this.objectStateManager.updateObject(objectId, {
-                position: finalPosition
-            });
-
-            // Register move as undoable command
-            const historyManager = window.modlerComponents?.historyManager;
-            if (historyManager && this.dragStartPosition) {
-                // Only create command if position actually changed
+                // Check if actually moved
                 const hasMoved =
                     Math.abs(finalPosition.x - this.dragStartPosition.x) > 0.001 ||
                     Math.abs(finalPosition.y - this.dragStartPosition.y) > 0.001 ||
                     Math.abs(finalPosition.z - this.dragStartPosition.z) > 0.001;
 
                 if (hasMoved) {
-                    const command = new MoveObjectCommand(objectId, this.dragStartPosition, finalPosition);
-                    historyManager.undoStack.push(command);
-                    historyManager.clearRedoStack();
-                    historyManager.trimHistory();
-                    historyManager.notifyHistoryChanged();
+                    // Move original object back to start position
+                    draggedObject.position.copy(this.dragStartPosition);
+                    draggedObject.updateMatrixWorld(true);
 
-                    logger.debug(`📝 Registered move in history: ${objectId}`);
+                    // Update original object's position in state
+                    this.objectStateManager?.updateObject(objectData.id, {
+                        position: this.dragStartPosition
+                    });
+
+                    // Duplicate the object at the final position
+                    const geometryFactory = window.modlerComponents?.geometryFactory;
+                    if (geometryFactory) {
+                        // Create COMPLETELY NEW geometry by cloning original geometry
+                        // This ensures the duplicate is independent and not sharing geometry reference
+                        const newGeometry = draggedObject.geometry.clone();
+
+                        // Create NEW material by cloning original material
+                        // This ensures materials are independent
+                        const newMaterial = draggedObject.material.clone();
+
+                        // Create duplicate with same properties but as independent object
+                        // NOTE: For future component instancing feature, we would add:
+                        // - isMasterComponent flag for original
+                        // - masterComponentId reference for instances
+                        // - one-way property sync from master to instances
+
+                        // Prepare rotation - convert from degrees to THREE.Euler
+                        const rotationEuler = objectData.rotation
+                            ? new THREE.Euler(
+                                THREE.MathUtils.degToRad(objectData.rotation.x || 0),
+                                THREE.MathUtils.degToRad(objectData.rotation.y || 0),
+                                THREE.MathUtils.degToRad(objectData.rotation.z || 0),
+                                'XYZ'
+                              )
+                            : new THREE.Euler(0, 0, 0, 'XYZ');
+
+                        const duplicateData = sceneController.addObject(newGeometry, newMaterial, {
+                            name: `${objectData.name} copy`,
+                            type: objectData.type,
+                            position: finalPosition,
+                            rotation: rotationEuler,
+                            dimensions: { ...objectData.dimensions },  // Clone dimensions object
+                            parentContainer: objectData.parentContainer,
+                            layoutProperties: objectData.layoutProperties ? { ...objectData.layoutProperties } : undefined
+                        });
+
+                        if (duplicateData) {
+                            // Select the new duplicate
+                            this.selectionController.clearSelection();
+                            this.selectionController.select(duplicateData.mesh);
+                        }
+                    }
                 }
             }
+        } else {
+            // NORMAL MOVE MODE: Update position
+            // CRITICAL: Sync final position to ObjectStateManager before clearing drag state
+            // This ensures system state, UI panels, and events get the final position
+            if (draggedObject && this.objectStateManager) {
+                const sceneController = window.modlerComponents?.sceneController;
+                const objectData = sceneController?.getObjectByMesh?.(draggedObject);
+                const objectId = objectData?.id || draggedObject.uuid;
+
+                const finalPosition = {
+                    x: draggedObject.position.x,
+                    y: draggedObject.position.y,
+                    z: draggedObject.position.z
+                };
+
+                this.objectStateManager.updateObject(objectId, {
+                    position: finalPosition
+                });
+
+                // Register move as undoable command
+                const historyManager = window.modlerComponents?.historyManager;
+                if (historyManager && this.dragStartPosition) {
+                    // Only create command if position actually changed
+                    const hasMoved =
+                        Math.abs(finalPosition.x - this.dragStartPosition.x) > 0.001 ||
+                        Math.abs(finalPosition.y - this.dragStartPosition.y) > 0.001 ||
+                        Math.abs(finalPosition.z - this.dragStartPosition.z) > 0.001;
+
+                    if (hasMoved) {
+                        const command = new MoveObjectCommand(objectId, this.dragStartPosition, finalPosition);
+                        historyManager.undoStack.push(command);
+                        historyManager.clearRedoStack();
+                        historyManager.trimHistory();
+                        historyManager.notifyHistoryChanged();
+
+                        logger.debug(`📝 Registered move in history: ${objectId}`);
+                    }
+                }
+            }
+        }
+
+        // Clear duplication mode and ghost
+        if (this.isDuplicationMode) {
+            this.exitDuplicationMode();
         }
 
         // Clear drag state

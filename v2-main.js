@@ -181,6 +181,15 @@ function initializeApplication() {
         modlerV2Components.inputController
     );
 
+    // Initialize MeasurementTool for Option+hover measurements
+    modlerV2Components.measurementTool = new MeasurementTool();
+    modlerV2Components.measurementTool.initialize(
+        modlerV2Components.sceneController,
+        modlerV2Components.sceneFoundation.camera,
+        modlerV2Components.sceneFoundation.scene,
+        modlerV2Components.sceneFoundation.renderer
+    );
+
     // Move gizmo snap registration removed - face-based movement doesn't need grid snapping
 
     // Register SnapVisualizer with SnapController for centralized visual control

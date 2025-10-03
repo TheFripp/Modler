@@ -277,7 +277,7 @@ class MaterialManager {
             renderOrder: options.renderOrder || configManager?.get('visual.effects.materials.face.renderOrder') || 1000,
             side: THREE.DoubleSide,
             transparent: true,
-            depthTest: false,
+            depthTest: true,
             depthWrite: false,
             ...options
         };
@@ -651,10 +651,6 @@ class MaterialManager {
         }
 
         keysToRemove.forEach(key => this.materialCache.delete(key));
-
-        if (keysToRemove.length > 0) {
-            // Cache invalidated for type (logging removed to reduce console noise)
-        }
     }
 
     /**
