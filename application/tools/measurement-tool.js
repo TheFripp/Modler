@@ -18,7 +18,57 @@ class MeasurementTool {
         this.labelColor = '#ff0000'; // Red
         this.dashSize = 0.2;
         this.gapSize = 0.1;
-        this.lineSpacing = 0.01; // Spacing between parallel lines for thickness
+        this.screenSpaceLineWidth = 3; // Target width in screen pixels
+
+        // Current measurement state for Tab key focus
+        this.currentEdgeAxis = null; // 'x', 'y', or 'z' - which dimension is being measured
+        this.currentObject = null; // The object being measured
+    }
+
+    /**
+     * Calculate screen-space perpendicular offset vector for parallel line spacing
+     * Returns a world-space vector that represents a perpendicular offset in screen space
+     */
+    getScreenSpacePerpendicularOffset(position, lineStart, lineEnd, pixelOffset) {
+        if (!this.camera || !this.renderer) {
+            return this.camera.up.clone().multiplyScalar(0.01);
+        }
+
+        const canvas = this.renderer.domElement;
+
+        // Project line endpoints to screen space
+        const screenStart = lineStart.clone().project(this.camera);
+        const screenEnd = lineEnd.clone().project(this.camera);
+
+        // Calculate line direction in screen space (normalized device coordinates)
+        const screenLineDir = new THREE.Vector2(
+            screenEnd.x - screenStart.x,
+            screenEnd.y - screenStart.y
+        ).normalize();
+
+        // Get perpendicular direction in screen space (rotate 90 degrees)
+        const screenPerpDir = new THREE.Vector2(-screenLineDir.y, screenLineDir.x);
+
+        // Convert pixel offset to NDC (Normalized Device Coordinates)
+        const ndcOffsetX = (pixelOffset / canvas.clientWidth) * 2;
+        const ndcOffsetY = (pixelOffset / canvas.clientHeight) * 2;
+
+        // Project position to screen space
+        const screenPos = position.clone().project(this.camera);
+
+        // Create offset position in screen space
+        const screenOffset = new THREE.Vector3(
+            screenPos.x + screenPerpDir.x * ndcOffsetX,
+            screenPos.y + screenPerpDir.y * ndcOffsetY,
+            screenPos.z
+        );
+
+        // Unproject both points back to world space
+        const worldPos = position.clone();
+        const worldOffset = screenOffset.unproject(this.camera);
+
+        // Return the offset vector
+        return worldOffset.clone().sub(worldPos);
     }
 
     /**
@@ -64,9 +114,18 @@ class MeasurementTool {
         if (selectedObjects.length === 0) {
             this.showEdgeMeasurement(intersect);
         }
-        // Case 2: Has selection - show distance to hovered object
+        // Case 2: Has selection - check if hovering the same object or different object
         else if (selectedObjects.length > 0) {
-            this.showObjectDistance(selectedObjects[0], intersect.object);
+            const selectedObject = selectedObjects[0];
+            const hoveredObject = intersect.object;
+
+            // If hovering the same selected object, show edge measurement
+            if (selectedObject === hoveredObject) {
+                this.showEdgeMeasurement(intersect);
+            } else {
+                // Different object - show distance measurement
+                this.showObjectDistance(selectedObject, hoveredObject);
+            }
         }
     }
 
@@ -95,6 +154,24 @@ class MeasurementTool {
 
         // Calculate edge length
         const length = edge.start.distanceTo(edge.end);
+
+        // Determine which axis this edge aligns with
+        const edgeDirection = edge.end.clone().sub(edge.start);
+        const absDir = new THREE.Vector3(
+            Math.abs(edgeDirection.x),
+            Math.abs(edgeDirection.y),
+            Math.abs(edgeDirection.z)
+        );
+
+        // Store the axis for Tab key functionality
+        if (absDir.x > absDir.y && absDir.x > absDir.z) {
+            this.currentEdgeAxis = 'x';
+        } else if (absDir.y > absDir.z) {
+            this.currentEdgeAxis = 'y';
+        } else {
+            this.currentEdgeAxis = 'z';
+        }
+        this.currentObject = object;
 
         // Create visualization with face normal
         this.createEdgeMeasurementVisual(edge.start, edge.end, length, edge.direction);
@@ -154,8 +231,47 @@ class MeasurementTool {
         this.createFaceNormalMeasurementVisual(
             measurementData.startPoint,
             measurementData.endPoint,
-            measurementData.distance
+            measurementData.distance,
+            measurementData.needsStartConnector,
+            measurementData.needsEndConnector,
+            selectedObject,
+            hoveredObject
         );
+    }
+
+    /**
+     * Check if an edge is a real geometry edge (not a diagonal across a face)
+     * For box geometry, real edges are axis-aligned in LOCAL space
+     * @param {BufferGeometry} geometry - The geometry to check
+     * @param {number} v1 - First vertex index
+     * @param {number} v2 - Second vertex index
+     * @returns {boolean} True if this is a real edge (not diagonal)
+     */
+    isGeometryEdge(geometry, v1, v2) {
+        const position = geometry.getAttribute('position');
+
+        // Get vertex positions in LOCAL space (before world transform)
+        const p1 = new THREE.Vector3().fromBufferAttribute(position, v1);
+        const p2 = new THREE.Vector3().fromBufferAttribute(position, v2);
+
+        // Calculate edge direction in local space
+        const direction = p2.clone().sub(p1);
+        const absDir = new THREE.Vector3(
+            Math.abs(direction.x),
+            Math.abs(direction.y),
+            Math.abs(direction.z)
+        );
+
+        // Edge is axis-aligned in local space if two components are nearly zero
+        const threshold = 0.001;
+        const zeroComponents =
+            (absDir.x < threshold ? 1 : 0) +
+            (absDir.y < threshold ? 1 : 0) +
+            (absDir.z < threshold ? 1 : 0);
+
+        // Real edges have at least 2 zero components (axis-aligned)
+        // Diagonals have all 3 components non-zero
+        return zeroComponents >= 2;
     }
 
     /**
@@ -182,33 +298,19 @@ class MeasurementTool {
 
         // Get three edges of the triangle
         const edges = [
-            { start: a.clone(), end: b.clone() },
-            { start: b.clone(), end: c.clone() },
-            { start: c.clone(), end: a.clone() }
+            { start: a.clone(), end: b.clone(), indices: [face.a, face.b] },
+            { start: b.clone(), end: c.clone(), indices: [face.b, face.c] },
+            { start: c.clone(), end: a.clone(), indices: [face.c, face.a] }
         ];
 
-        // For box geometry, only measure edges that are aligned to axes (not diagonals)
-        // Filter out diagonal edges by checking if edge is axis-aligned
-        const axisAlignedEdges = edges.filter(edge => {
-            const direction = edge.end.clone().sub(edge.start);
-            const absDir = new THREE.Vector3(
-                Math.abs(direction.x),
-                Math.abs(direction.y),
-                Math.abs(direction.z)
-            );
-
-            // Edge is axis-aligned if two components are nearly zero
-            const threshold = 0.01;
-            const axisCount =
-                (absDir.x < threshold ? 1 : 0) +
-                (absDir.y < threshold ? 1 : 0) +
-                (absDir.z < threshold ? 1 : 0);
-
-            return axisCount >= 2; // At least 2 components are zero = axis-aligned
+        // Find edges that are shared between multiple faces (real geometry edges)
+        // Diagonal edges only appear in one triangle, real edges appear in 2+ triangles
+        const realEdges = edges.filter(edge => {
+            return this.isGeometryEdge(geometry, edge.indices[0], edge.indices[1]);
         });
 
-        // Use axis-aligned edges if available, otherwise fall back to all edges
-        const candidateEdges = axisAlignedEdges.length > 0 ? axisAlignedEdges : edges;
+        // Use real geometry edges if found, otherwise use all edges
+        const candidateEdges = realEdges.length > 0 ? realEdges : edges;
 
         // Find closest edge to intersection point
         let closestEdge = null;
@@ -260,28 +362,82 @@ class MeasurementTool {
             return null;
         }
 
-        // Use the center of the selected object's face
-        const faceCenter = new THREE.Vector3();
+        // Calculate measurement position using overlap region and camera-facing logic
+        const measurementPosition = new THREE.Vector3();
         const axes = ['x', 'y', 'z'].filter(a => a !== axis);
+        const cameraPos = this.camera.position;
 
-        // Set perpendicular axes to selected object's center
         for (let a of axes) {
             const selectedMin = selectedBox.min[a];
             const selectedMax = selectedBox.max[a];
-            faceCenter[a] = (selectedMin + selectedMax) / 2;
+            const hoveredMin = hoveredBox.min[a];
+            const hoveredMax = hoveredBox.max[a];
+
+            // Calculate overlap region
+            const overlapMin = Math.max(selectedMin, hoveredMin);
+            const overlapMax = Math.min(selectedMax, hoveredMax);
+
+            if (a === 'y') {
+                // Y-axis: Always use the lowest point (bottom)
+                measurementPosition[a] = overlapMin;
+            } else {
+                // X/Z axes: Use camera-facing side, but only if camera is above the overlap
+                // This prevents measurements from appearing below the objects
+                const overlapCenter = (overlapMin + overlapMax) / 2;
+                const toCameraDir = cameraPos[a] - overlapCenter;
+
+                // If camera is roughly at the same level or below, default to the edge closest to camera
+                if (Math.abs(toCameraDir) < 0.1) {
+                    // Camera aligned with overlap - use max side (camera-facing)
+                    measurementPosition[a] = overlapMax;
+                } else {
+                    measurementPosition[a] = toCameraDir > 0 ? overlapMax : overlapMin;
+                }
+            }
         }
 
-        // Start point: selected object's face at face center
-        const startPoint = faceCenter.clone();
-        startPoint[axis] = normal[axis] > 0 ? selectedBox.max[axis] : selectedBox.min[axis];
+        // Find actual closest surface points along the separation axis
+        // Use measurementPosition for perpendicular coordinates
+        const startPoint = measurementPosition.clone();
+        const endPoint = measurementPosition.clone();
 
-        // End point: extend along normal from start point to hovered object's face
-        const endPoint = faceCenter.clone();
-        endPoint[axis] = normal[axis] > 0 ? hoveredBox.min[axis] : hoveredBox.max[axis];
+        // Set the separation axis coordinate to the facing surfaces
+        if (normal.x !== 0) {
+            startPoint.x = normal.x > 0 ? selectedBox.max.x : selectedBox.min.x;
+            endPoint.x = normal.x > 0 ? hoveredBox.min.x : hoveredBox.max.x;
+        } else if (normal.y !== 0) {
+            startPoint.y = normal.y > 0 ? selectedBox.max.y : selectedBox.min.y;
+            endPoint.y = normal.y > 0 ? hoveredBox.min.y : hoveredBox.max.y;
+        } else {
+            startPoint.z = normal.z > 0 ? selectedBox.max.z : selectedBox.min.z;
+            endPoint.z = normal.z > 0 ? hoveredBox.min.z : hoveredBox.max.z;
+        }
 
-        const distance = startPoint.distanceTo(endPoint);
+        const distance = Math.abs(endPoint[axis] - startPoint[axis]);
 
-        return { startPoint, endPoint, distance, normal };
+        // Check if the offset measurement line position is within object bounds
+        // Only show connectors if the offset position is OUTSIDE the object
+        // When the offset position is ON the object edge, we don't need a connector going INTO it
+        const needsStartConnector = !this.isPointWithinObjectBounds(measurementPosition, selectedBox, axis);
+        const needsEndConnector = !this.isPointWithinObjectBounds(measurementPosition, hoveredBox, axis);
+
+        return { startPoint, endPoint, distance, normal, needsStartConnector, needsEndConnector };
+    }
+
+    /**
+     * Check if a point's perpendicular position is within object bounds
+     */
+    isPointWithinObjectBounds(point, box, excludeAxis) {
+        const axes = ['x', 'y', 'z'].filter(a => a !== excludeAxis);
+        const tolerance = 0.001;
+
+        for (let a of axes) {
+            // Check if point is between min and max on this axis
+            if (point[a] < box.min[a] - tolerance || point[a] > box.max[a] + tolerance) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /**
@@ -374,19 +530,30 @@ class MeasurementTool {
         const offsetStart = start.clone();
         const offsetEnd = end.clone();
 
-        // Get the face normal from the intersection
+        // Calculate offset direction perpendicular to edge in the face plane
         const face = this.currentFace;
         let normalDirection;
 
         if (face && face.normal) {
-            // Use the face normal for offset direction
-            normalDirection = face.normal.clone().normalize();
+            // Calculate direction perpendicular to both edge and face normal
+            // This gives us a direction in the plane of the face, perpendicular to the edge
+            const edgeDirection = end.clone().sub(start).normalize();
+            const faceNormal = face.normal.clone().normalize();
+
+            // Cross product: perpendicular to both edge and face normal
+            normalDirection = edgeDirection.clone().cross(faceNormal).normalize();
+
+            // Make sure it points away from the face (outward)
+            // Use face normal to determine which direction is "out"
+            if (normalDirection.dot(faceNormal) < 0) {
+                normalDirection.negate();
+            }
         } else {
             // Fallback: use perpendicular to edge direction
             normalDirection = this.getPerpendicularVector(direction);
         }
 
-        // Offset 0.5 units in the normal direction
+        // Offset 0.5 units in the calculated direction
         const offsetAmount = 0.5;
         const offset = normalDirection.multiplyScalar(offsetAmount);
         offsetStart.add(offset);
@@ -412,13 +579,13 @@ class MeasurementTool {
         endConnector.renderOrder = 999;
         group.add(endConnector);
 
-        // Create multiple lines for thickness (WebGL linewidth doesn't work on most platforms)
+        // Create multiple lines for thickness using screen-space perpendicular offsets
         const numLines = 3;
-        const lineSpacing = 0.003;
+        const midPoint = offsetStart.clone().add(offsetEnd).multiplyScalar(0.5);
 
         for (let i = 0; i < numLines; i++) {
-            const lineOffset = (i - (numLines - 1) / 2) * lineSpacing;
-            const offsetVec = this.camera.up.clone().multiplyScalar(lineOffset);
+            const pixelOffset = (i - (numLines - 1) / 2) * 1; // 1 pixel spacing between lines
+            const offsetVec = this.getScreenSpacePerpendicularOffset(midPoint, offsetStart, offsetEnd, pixelOffset);
 
             const start1 = offsetStart.clone().add(offsetVec);
             const end1 = offsetEnd.clone().add(offsetVec);
@@ -459,8 +626,8 @@ class MeasurementTool {
         });
 
         for (let i = 0; i < numLines; i++) {
-            const lineOffset = (i - (numLines - 1) / 2) * lineSpacing;
-            const offsetVec = this.camera.up.clone().multiplyScalar(lineOffset);
+            const pixelOffset = (i - (numLines - 1) / 2) * 1; // 1 pixel spacing
+            const offsetVec = this.getScreenSpacePerpendicularOffset(midPoint, offsetStart, offsetEnd, pixelOffset);
 
             const startCapGeometry = new THREE.BufferGeometry().setFromPoints([
                 startCap1.clone().add(offsetVec),
@@ -480,10 +647,9 @@ class MeasurementTool {
         }
         // DEVELOPMENT_VALIDATOR_IGNORE_END
 
-        // Add 3D text label at the offset line's midpoint (centered on the line, not above)
-        const midPoint = offsetStart.clone().add(offsetEnd).multiplyScalar(0.5);
-        const label = this.create3DLabel(length.toFixed(1), midPoint);
-        label.position.y -= 0.05; // Remove the upward offset so it's centered on the line
+        // Add 3D text label at the offset line's midpoint (centered on the line)
+        const edgeLabelPos = offsetStart.clone().add(offsetEnd).multiplyScalar(0.5);
+        const label = this.create3DLabel(length.toFixed(1), edgeLabelPos);
         group.add(label);
 
         // Add to scene
@@ -496,65 +662,90 @@ class MeasurementTool {
     /**
      * Create visual for face normal measurement
      */
-    createFaceNormalMeasurementVisual(startPoint, endPoint, distance) {
+    createFaceNormalMeasurementVisual(startPoint, endPoint, distance, needsStartConnector, needsEndConnector, selectedObject, hoveredObject) {
         this.clearMeasurement();
 
         const group = new THREE.Group();
 
-        // Calculate the direction from start to end (along face normal)
+        // Use the SAME logic as edge measurements for consistency
+        // Calculate measurement direction
         const measurementDirection = endPoint.clone().sub(startPoint).normalize();
 
-        // Calculate perpendicular offset direction
-        let perpendicular = measurementDirection.clone().cross(new THREE.Vector3(0, 1, 0)).normalize();
+        // Get the midpoint to determine the face normal direction
+        const midPoint = startPoint.clone().add(endPoint).multiplyScalar(0.5);
 
-        // If the cross product is near zero (measurement is vertical), use a different approach
+        // Calculate perpendicular offset direction (same as edge measurements)
+        // Use the cross product with camera up vector to get a perpendicular direction
+        let perpendicular = measurementDirection.clone().cross(this.camera.up).normalize();
+
+        // If cross product is too small, use a different approach
         if (perpendicular.length() < 0.1) {
             perpendicular = measurementDirection.clone().cross(new THREE.Vector3(1, 0, 0)).normalize();
+            if (perpendicular.length() < 0.1) {
+                perpendicular = new THREE.Vector3(0, 0, 1);
+            }
         }
 
-        // Offset amount: 0.5 units perpendicular (this is the extension from face)
+        // Make sure perpendicular points toward camera
+        const toCamera = this.camera.position.clone().sub(midPoint);
+        if (perpendicular.dot(toCamera) < 0) {
+            perpendicular.negate();
+        }
+
+        // Offset amount: 0.5 units perpendicular (same as edge measurements)
         const offsetAmount = 0.5;
 
-        // Pattern: Start from face -> extend perpendicular -> then along measurement direction to end
-        // offsetStart is perpendicular from the start point (selected object's face center)
+        // Offset the measurement line
         const offsetStart = startPoint.clone().add(perpendicular.clone().multiplyScalar(offsetAmount));
-
-        // offsetEnd is at the same perpendicular offset, but at the end measurement position
         const offsetEnd = endPoint.clone().add(perpendicular.clone().multiplyScalar(offsetAmount));
+
+        // Determine if we need connectors by checking if offset line is outside object bounds
+        // Connectors should only appear when the measurement line is positioned outside the object
+        const axis = Math.abs(endPoint.x - startPoint.x) > 0.001 ? 'x'
+                   : Math.abs(endPoint.y - startPoint.y) > 0.001 ? 'y' : 'z';
+
+        const selectedBox = new THREE.Box3().setFromObject(selectedObject);
+        const hoveredBox = new THREE.Box3().setFromObject(hoveredObject);
+
+        // Check if the perpendicular offset pushes the line outside the object bounds
+        const actualNeedsStartConnector = !this.isPointWithinObjectBounds(offsetStart, selectedBox, axis);
+        const actualNeedsEndConnector = !this.isPointWithinObjectBounds(offsetEnd, hoveredBox, axis);
 
         // Bracket extension length
         const extensionLength = 0.3;
 
         // DEVELOPMENT_VALIDATOR_IGNORE_START: Measurement visuals are temporary overlays, not pooled resources
         const numLines = 3;
-        const lineSpacing = this.lineSpacing;
+        const lineMidPoint = offsetStart.clone().add(offsetEnd).multiplyScalar(0.5);
 
-        // 1. Thin solid line from startPoint to offsetStart (perpendicular extension from face)
+        // 1. Thin solid line from startPoint to offsetStart (only if needed)
         const extensionMaterial = new THREE.LineBasicMaterial({
             color: this.lineColor,
             linewidth: 1,
             depthTest: false,
             transparent: true,
-            opacity: 0.7
+            opacity: 0.5  // 50% opacity
         });
 
-        for (let i = 0; i < numLines; i++) {
-            const lineOffset = (i - (numLines - 1) / 2) * lineSpacing;
-            const offsetVec = this.camera.up.clone().multiplyScalar(lineOffset);
+        if (actualNeedsStartConnector) {
+            for (let i = 0; i < numLines; i++) {
+                const pixelOffset = (i - (numLines - 1) / 2) * 1; // 1 pixel spacing
+                const offsetVec = this.getScreenSpacePerpendicularOffset(lineMidPoint, offsetStart, offsetEnd, pixelOffset);
 
-            const extensionGeometry = new THREE.BufferGeometry().setFromPoints([
-                startPoint.clone().add(offsetVec),
-                offsetStart.clone().add(offsetVec)
-            ]);
-            const extensionLine = new THREE.Line(extensionGeometry, extensionMaterial);
-            extensionLine.renderOrder = 999;
-            group.add(extensionLine);
+                const extensionGeometry = new THREE.BufferGeometry().setFromPoints([
+                    startPoint.clone().add(offsetVec),
+                    offsetStart.clone().add(offsetVec)
+                ]);
+                const extensionLine = new THREE.Line(extensionGeometry, extensionMaterial);
+                extensionLine.renderOrder = 999;
+                group.add(extensionLine);
+            }
         }
 
         // 2. Dashed line from offsetStart to offsetEnd (main measurement along face normal)
         for (let i = 0; i < numLines; i++) {
-            const lineOffset = (i - (numLines - 1) / 2) * lineSpacing;
-            const offsetVec = this.camera.up.clone().multiplyScalar(lineOffset);
+            const pixelOffset = (i - (numLines - 1) / 2) * 1; // 1 pixel spacing
+            const offsetVec = this.getScreenSpacePerpendicularOffset(lineMidPoint, offsetStart, offsetEnd, pixelOffset);
 
             const start1 = offsetStart.clone().add(offsetVec);
             const end1 = offsetEnd.clone().add(offsetVec);
@@ -575,21 +766,23 @@ class MeasurementTool {
             group.add(line);
         }
 
-        // 3. Thin solid line from offsetEnd to endPoint (connector to hovered object)
-        for (let i = 0; i < numLines; i++) {
-            const lineOffset = (i - (numLines - 1) / 2) * lineSpacing;
-            const offsetVec = this.camera.up.clone().multiplyScalar(lineOffset);
+        // 3. Thin solid line from offsetEnd to endPoint (only if needed)
+        if (actualNeedsEndConnector) {
+            for (let i = 0; i < numLines; i++) {
+                const pixelOffset = (i - (numLines - 1) / 2) * 1; // 1 pixel spacing
+                const offsetVec = this.getScreenSpacePerpendicularOffset(lineMidPoint, offsetStart, offsetEnd, pixelOffset);
 
-            const endConnectorGeometry = new THREE.BufferGeometry().setFromPoints([
-                offsetEnd.clone().add(offsetVec),
-                endPoint.clone().add(offsetVec)
-            ]);
-            const endConnector = new THREE.Line(endConnectorGeometry, extensionMaterial);
-            endConnector.renderOrder = 999;
-            group.add(endConnector);
+                const endConnectorGeometry = new THREE.BufferGeometry().setFromPoints([
+                    offsetEnd.clone().add(offsetVec),
+                    endPoint.clone().add(offsetVec)
+                ]);
+                const endConnector = new THREE.Line(endConnectorGeometry, extensionMaterial);
+                endConnector.renderOrder = 999;
+                group.add(endConnector);
+            }
         }
 
-        // 4. Create bracket at offsetStart (perpendicular to the DASHED LINE, not measurement direction)
+        // 4. Create brackets at measurement line ends (only when connectors are shown)
         const bracketMaterial = new THREE.LineBasicMaterial({
             color: this.lineColor,
             linewidth: 1,
@@ -598,49 +791,51 @@ class MeasurementTool {
             opacity: 0.9
         });
 
-        // Bracket direction should be perpendicular to the dashed line (which goes from offsetStart to offsetEnd)
-        // The dashed line direction is measurementDirection
-        // Perpendicular to that in the horizontal/perpendicular plane
-        const dashedLineDir = measurementDirection.clone();
-        const bracketDir = perpendicular.clone(); // This is perpendicular to the measurement direction
+        // Bracket direction should be perpendicular to the dashed line
+        const bracketDir = perpendicular.clone();
 
-        const bracketStart1 = offsetStart.clone().sub(bracketDir.clone().multiplyScalar(extensionLength / 2));
-        const bracketStart2 = offsetStart.clone().add(bracketDir.clone().multiplyScalar(extensionLength / 2));
+        // Only draw start bracket if we have a start connector
+        if (actualNeedsStartConnector) {
+            const bracketStart1 = offsetStart.clone().sub(bracketDir.clone().multiplyScalar(extensionLength / 2));
+            const bracketStart2 = offsetStart.clone().add(bracketDir.clone().multiplyScalar(extensionLength / 2));
 
-        for (let i = 0; i < numLines; i++) {
-            const lineOffset = (i - (numLines - 1) / 2) * lineSpacing;
-            const offsetVec = this.camera.up.clone().multiplyScalar(lineOffset);
+            for (let i = 0; i < numLines; i++) {
+                const pixelOffset = (i - (numLines - 1) / 2) * 1; // 1 pixel spacing
+                const offsetVec = this.getScreenSpacePerpendicularOffset(lineMidPoint, offsetStart, offsetEnd, pixelOffset);
 
-            const bracketStartGeometry = new THREE.BufferGeometry().setFromPoints([
-                bracketStart1.clone().add(offsetVec),
-                bracketStart2.clone().add(offsetVec)
-            ]);
-            const bracketStartLine = new THREE.Line(bracketStartGeometry, bracketMaterial);
-            bracketStartLine.renderOrder = 999;
-            group.add(bracketStartLine);
+                const bracketStartGeometry = new THREE.BufferGeometry().setFromPoints([
+                    bracketStart1.clone().add(offsetVec),
+                    bracketStart2.clone().add(offsetVec)
+                ]);
+                const bracketStartLine = new THREE.Line(bracketStartGeometry, bracketMaterial);
+                bracketStartLine.renderOrder = 999;
+                group.add(bracketStartLine);
+            }
         }
 
-        // 5. Create bracket at offsetEnd
-        const bracketEnd1 = offsetEnd.clone().sub(bracketDir.clone().multiplyScalar(extensionLength / 2));
-        const bracketEnd2 = offsetEnd.clone().add(bracketDir.clone().multiplyScalar(extensionLength / 2));
+        // Only draw end bracket if we have an end connector
+        if (actualNeedsEndConnector) {
+            const bracketEnd1 = offsetEnd.clone().sub(bracketDir.clone().multiplyScalar(extensionLength / 2));
+            const bracketEnd2 = offsetEnd.clone().add(bracketDir.clone().multiplyScalar(extensionLength / 2));
 
-        for (let i = 0; i < numLines; i++) {
-            const lineOffset = (i - (numLines - 1) / 2) * lineSpacing;
-            const offsetVec = this.camera.up.clone().multiplyScalar(lineOffset);
+            for (let i = 0; i < numLines; i++) {
+                const pixelOffset = (i - (numLines - 1) / 2) * 1; // 1 pixel spacing
+                const offsetVec = this.getScreenSpacePerpendicularOffset(lineMidPoint, offsetStart, offsetEnd, pixelOffset);
 
-            const bracketEndGeometry = new THREE.BufferGeometry().setFromPoints([
-                bracketEnd1.clone().add(offsetVec),
-                bracketEnd2.clone().add(offsetVec)
-            ]);
-            const bracketEndLine = new THREE.Line(bracketEndGeometry, bracketMaterial);
-            bracketEndLine.renderOrder = 999;
-            group.add(bracketEndLine);
+                const bracketEndGeometry = new THREE.BufferGeometry().setFromPoints([
+                    bracketEnd1.clone().add(offsetVec),
+                    bracketEnd2.clone().add(offsetVec)
+                ]);
+                const bracketEndLine = new THREE.Line(bracketEndGeometry, bracketMaterial);
+                bracketEndLine.renderOrder = 999;
+                group.add(bracketEndLine);
+            }
         }
         // DEVELOPMENT_VALIDATOR_IGNORE_END
 
         // Add 3D text label at the midpoint of the dashed line
-        const midPoint = offsetStart.clone().add(offsetEnd).multiplyScalar(0.5);
-        const label = this.create3DLabel(distance.toFixed(1), midPoint);
+        const labelPosition = offsetStart.clone().add(offsetEnd).multiplyScalar(0.5);
+        const label = this.create3DLabel(distance.toFixed(1), labelPosition);
         group.add(label);
 
         // Add to scene
@@ -654,17 +849,18 @@ class MeasurementTool {
      * Create 3D text label (using CSS2DRenderer would be better, but using sprite for now)
      */
     create3DLabel(text, position) {
-        // Create canvas for text - square padding, minimal size
+        // Create canvas for text - compact with minimal padding
         const canvas = document.createElement('canvas');
         const context = canvas.getContext('2d');
-        canvas.width = 60;
-        canvas.height = 28;
+        canvas.width = 42;  // Tighter width
+        canvas.height = 24; // Tighter height
 
-        // Draw rounded rectangle background with equal padding
-        const padding = 6;
+        // Draw rounded rectangle background with minimal padding
+        const paddingX = 1.5; // Minimal horizontal padding
+        const paddingY = 6;   // Moderate vertical padding
         context.fillStyle = this.labelColor;
         context.beginPath();
-        context.roundRect(padding, padding, canvas.width - padding * 2, canvas.height - padding * 2, 4);
+        context.roundRect(0, 0, canvas.width, canvas.height, 3);
         context.fill();
 
         // Draw text - normal weight, smaller font
@@ -684,8 +880,8 @@ class MeasurementTool {
         });
         const sprite = new THREE.Sprite(spriteMaterial);
         sprite.position.copy(position);
-        sprite.position.y += 0.05; // Offset slightly up for visibility
-        sprite.scale.set(0.075, 0.035, 1); // Tighter width with equal padding
+        // No offset - position should be exactly where requested
+        sprite.scale.set(0.053, 0.03, 1); // Compact size matching reduced canvas
         sprite.renderOrder = 1000; // Render after lines
 
         return sprite;

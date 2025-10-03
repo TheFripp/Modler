@@ -73,6 +73,9 @@ class PropertyPanelSync {
         this.uiThrottleMap = new Map(); // eventType+objectId -> timeout
         this.UI_THROTTLE_DELAY = 33; // ~30fps for UI updates (smoother than 60fps for UI)
 
+        // Selection change tracking (prevents unnecessary UI updates)
+        this.lastSerializedSelection = [];
+
         // Initialization state tracking
         this.initialized = false;
         this.initializationRetries = 0;
@@ -107,11 +110,8 @@ class PropertyPanelSync {
             } else {
                 this.initializationRetries = 0;
 
-                // Send initial hierarchy to left panel after successful initialization
-                // Wait longer to ensure iframes are fully loaded and message listeners are ready
-                setTimeout(() => {
-                    this.refreshCompleteHierarchy();
-                }, 1000); // Increased delay to 1 second to ensure iframes are ready
+                // Initial hierarchy will be sent when left panel sends 'left-panel-ready' message
+                // This ensures the panel's message listener is fully registered before we send data
             }
         } catch (error) {
             console.error('PropertyPanelSync: Component initialization failed:', error);
@@ -246,6 +246,10 @@ class PropertyPanelSync {
 
     /**
      * Handle geometry events (dimension changes, vertex modifications)
+     *
+     * DISABLED for selected objects: ObjectStateManager.refreshSelectionUI now handles
+     * real-time updates for selected objects via direct store updates.
+     * This handler would compete and cause flickering with stale data.
      */
     handleGeometryEvent(event) {
         try {
@@ -256,21 +260,13 @@ class PropertyPanelSync {
             const object = this.getObjectById(event.objectId);
             if (!object) return;
 
-            // Check if object is currently selected
-            if (!this.isObjectSelected(object)) return;
+            // SKIP selected objects - they're handled by ObjectStateManager.refreshSelectionUI
+            // This prevents competing updates with potentially stale data
+            if (this.isObjectSelected(object)) return;
 
-            // Serialize with geometry optimization for PostMessage (forces fresh calculation)
-            const serializedData = this.serializer.serializeForPostMessage(object, {
-                changeType: 'geometry',
-                useCache: false
-            });
-            if (!serializedData) return;
-
-            // Send to UI with geometry-specific update type
-            this.sendToUI('object-modified-geometry', [serializedData], {
-                throttle: true,
-                panels: ['right'] // Property panel for dimension updates
-            });
+            // For non-selected objects, we don't need to update UI
+            // (per user requirement: only selected objects need real-time updates)
+            return;
 
         } catch (error) {
             console.error('PropertyPanelSync.handleGeometryEvent error:', error);
@@ -280,6 +276,10 @@ class PropertyPanelSync {
 
     /**
      * Handle material events (color, opacity changes)
+     *
+     * DISABLED for selected objects: ObjectStateManager.refreshSelectionUI now handles
+     * real-time updates for selected objects via direct store updates.
+     * This handler would compete and cause flickering with stale data.
      */
     handleMaterialEvent(event) {
         try {
@@ -289,22 +289,13 @@ class PropertyPanelSync {
             const object = this.getObjectById(event.objectId);
             if (!object) return;
 
-            // Check if object is currently selected
-            if (!this.isObjectSelected(object)) return;
+            // SKIP selected objects - they're handled by ObjectStateManager.refreshSelectionUI
+            // This prevents competing updates with potentially stale data
+            if (this.isObjectSelected(object)) return;
 
-            // Serialize with material optimization for PostMessage
-            const serializedData = this.serializer.serializeForPostMessage(object, {
-                changeType: 'material',
-                includeGeometry: false,
-                includeHierarchy: false
-            });
-            if (!serializedData) return;
-
-            // Send to UI with material-specific update type
-            this.sendToUI('object-modified-material', [serializedData], {
-                throttle: true,
-                panels: ['right']
-            });
+            // For non-selected objects, we don't need to update UI
+            // (per user requirement: only selected objects need real-time updates)
+            return;
 
         } catch (error) {
             console.error('PropertyPanelSync.handleMaterialEvent error:', error);
@@ -335,6 +326,15 @@ class PropertyPanelSync {
             // Selection events need different handling
             const selectedObjects = this.getCurrentSelection();
             const serializedObjects = this.serializer.serializeBatchForPostMessage(selectedObjects);
+
+            // CRITICAL: Only send if selection actually changed
+            // Prevents flickering when clicking the same object repeatedly
+            if (this.selectionDataEqual(this.lastSerializedSelection, serializedObjects)) {
+                return; // No change, skip update
+            }
+
+            // Cache new selection
+            this.lastSerializedSelection = serializedObjects;
 
             // Send to all relevant panels
             this.sendToUI('selection-change', serializedObjects, {
@@ -580,6 +580,46 @@ class PropertyPanelSync {
             console.error('PropertyPanelSync.getCurrentSelection error:', error);
             return [];
         }
+    }
+
+    /**
+     * Compare two serialized selection arrays to detect changes
+     * Prevents unnecessary UI updates when clicking the same object
+     * @private
+     */
+    selectionDataEqual(prev, current) {
+        // Different count = changed
+        if (!Array.isArray(prev) || !Array.isArray(current)) return false;
+        if (prev.length !== current.length) return false;
+        if (prev.length === 0 && current.length === 0) return true;
+
+        // Compare IDs in order
+        for (let i = 0; i < prev.length; i++) {
+            if (prev[i]?.id !== current[i]?.id) return false;
+        }
+
+        // Compare critical properties that affect UI rendering
+        for (let i = 0; i < prev.length; i++) {
+            const p = prev[i];
+            const c = current[i];
+
+            // Position
+            if (JSON.stringify(p.position) !== JSON.stringify(c.position)) return false;
+
+            // Rotation
+            if (JSON.stringify(p.rotation) !== JSON.stringify(c.rotation)) return false;
+
+            // Dimensions
+            if (JSON.stringify(p.dimensions) !== JSON.stringify(c.dimensions)) return false;
+
+            // Material (color, opacity)
+            if (JSON.stringify(p.material) !== JSON.stringify(c.material)) return false;
+
+            // Container properties
+            if (JSON.stringify(p.autoLayout) !== JSON.stringify(c.autoLayout)) return false;
+        }
+
+        return true; // No changes detected
     }
 
     /**

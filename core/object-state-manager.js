@@ -221,6 +221,20 @@ class ObjectStateManager extends EventTarget {
     }
 
     /**
+     * Extract rotation data from Three.js Euler and convert to degrees for UI
+     * @private
+     */
+    extractRotation(rotation) {
+        if (!rotation) return { x: 0, y: 0, z: 0 };
+        // Convert from radians (Three.js) to degrees (UI display)
+        return {
+            x: (rotation.x * 180) / Math.PI,
+            y: (rotation.y * 180) / Math.PI,
+            z: (rotation.z * 180) / Math.PI
+        };
+    }
+
+    /**
      * Build standard object structure from objectData
      * @private
      */
@@ -233,7 +247,7 @@ class ObjectStateManager extends EventTarget {
 
             // 3D properties
             position: this.extractVector3(objectData.mesh?.position),
-            rotation: this.extractVector3(objectData.mesh?.rotation),
+            rotation: this.extractRotation(objectData.mesh?.rotation), // Convert radians to degrees
             dimensions: objectData.dimensions || { x: 1, y: 1, z: 1 },
 
             // Container properties
@@ -482,8 +496,8 @@ class ObjectStateManager extends EventTarget {
         // Extract objects for methods that don't need source
         const changedObjects = changedItems.map(item => item.object);
 
-        // Update 3D scene
-        this.updateSceneController(changedObjects);
+        // Update 3D scene (with source information to skip geometry updates for 'drag')
+        this.updateSceneController(changedItems);
 
         // Update UI systems
         this.updateUISystems(changedObjects);
@@ -491,19 +505,65 @@ class ObjectStateManager extends EventTarget {
         // Emit unified events with source information
         this.emitChangeEvents(changedItems);
 
+        // Refresh selection UI if any changed objects are currently selected
+        this.refreshSelectionUI(changedItems);
+
         // Clear pending changes
         this.pendingChanges.clear();
     }
 
     /**
+     * Refresh selection UI for currently selected objects
+     * This ensures PropertyPanel shows real-time updates during operations like push tool
+     */
+    refreshSelectionUI(changedItems) {
+        const selectionController = this.getSelectionController();
+        if (!selectionController) return;
+
+        // Check if any changed object is currently selected
+        const hasSelectedChange = changedItems.some(({ object }) =>
+            this.selection.has(object.id)
+        );
+
+        if (!hasSelectedChange) return;
+
+        // Get current selection with fresh data FROM SCENECONTROLLER (after updateSceneController has run)
+        const selectedMeshes = selectionController.getSelectedObjects?.() || [];
+        if (selectedMeshes.length === 0) return;
+
+        // Build object structure from SceneController (single source of truth for geometry)
+        const serializedSelection = selectedMeshes.map(mesh => {
+            const objectData = this.sceneController?.getObjectByMesh?.(mesh);
+            if (!objectData) return null;
+
+            // Use buildObjectStructure to get fresh dimensions from SceneController
+            return this.buildObjectStructure(objectData);
+        }).filter(Boolean);
+
+        if (serializedSelection.length === 0) return;
+
+        // Try callback first (for iframe/indirect mode)
+        if (selectionController.selectionChangeCallback) {
+            selectionController.selectionChangeCallback(serializedSelection);
+        }
+
+        // Direct store update (for direct mode)
+        // Access Svelte store function directly
+        const syncFunction = window.syncSelectionFromThreeJS;
+        if (syncFunction && typeof syncFunction === 'function') {
+            syncFunction(serializedSelection);
+        }
+    }
+
+    /**
      * Update SceneController with object changes
      */
-    updateSceneController(changedObjects) {
+    updateSceneController(changedItems) {
         if (!this.sceneController) {
             return;
         }
 
-        changedObjects.forEach(object => {
+        changedItems.forEach(({ object, source }) => {
             // PROXY PATTERN: Apply ALL geometry updates directly to SceneController
             // SceneController is the single source of truth for all 3D properties
 
@@ -545,9 +605,9 @@ class ObjectStateManager extends EventTarget {
 
                     // SPECIAL CASE: Skip layout update if source is 'push-tool'
                     // Push directly manipulates geometry, positions should not change
-                    const isPushOperation = this.pendingChanges.get(object.id) === 'push-tool';
+                    const skipLayoutUpdate = source === 'push-tool';
 
-                    if (!isPushOperation && (autoLayoutChanged || autoLayoutPropertyChanged)) {
+                    if (!skipLayoutUpdate && (autoLayoutChanged || autoLayoutPropertyChanged)) {
                         const layoutResult = this.sceneController.updateLayout(object.id);
 
                         // When first switching TO layout mode, resize container once

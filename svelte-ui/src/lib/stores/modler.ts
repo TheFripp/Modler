@@ -475,11 +475,50 @@ export function syncSelectionFromThreeJS(selectedObjectsData: any[]) {
 			})
 			.filter(obj => obj != null); // Remove any failed validations
 
-		selectedObjects.set(objectDataArray);
+		// CRITICAL: Only update if selection actually changed
+		// Prevents flickering when clicking the same object
+		const currentSelection = get(selectedObjects);
+		if (selectionChanged(currentSelection, objectDataArray)) {
+			selectedObjects.set(objectDataArray);
+		}
 	} catch (error) {
 		console.error('syncSelectionFromThreeJS: Critical error:', error);
 		selectedObjects.set([]); // Fallback to empty selection
 	}
+}
+
+/**
+ * Check if selection has actually changed
+ * Compares IDs and modification timestamps
+ */
+function selectionChanged(current: ObjectData[], incoming: ObjectData[]): boolean {
+	// Different count = changed
+	if (current.length !== incoming.length) return true;
+
+	// Empty selection - no change
+	if (current.length === 0) return false;
+
+	// Compare IDs in order (selection order matters)
+	for (let i = 0; i < current.length; i++) {
+		if (current[i].id !== incoming[i].id) return true;
+	}
+
+	// Same objects selected - check if properties changed
+	// Only update if property values actually changed to prevent input flicker
+	for (let i = 0; i < current.length; i++) {
+		const curr = current[i];
+		const inc = incoming[i];
+
+		// Check critical properties that affect UI inputs
+		if (JSON.stringify(curr.position) !== JSON.stringify(inc.position)) return true;
+		if (JSON.stringify(curr.rotation) !== JSON.stringify(inc.rotation)) return true;
+		if (JSON.stringify(curr.dimensions) !== JSON.stringify(inc.dimensions)) return true;
+		if (JSON.stringify(curr.material) !== JSON.stringify(inc.material)) return true;
+		if (JSON.stringify(curr.autoLayout) !== JSON.stringify(inc.autoLayout)) return true;
+	}
+
+	// No changes detected
+	return false;
 }
 
 // Sync object hierarchy from Three.js
@@ -490,6 +529,11 @@ export function syncHierarchyFromThreeJS(allObjects: ObjectData[]) {
 // Sync container context from Three.js
 export function syncContainerContextFromThreeJS(context: ContainerContext | null) {
 	containerContext.set(context);
+}
+
+// Make syncSelectionFromThreeJS globally available for ObjectStateManager
+if (typeof window !== 'undefined') {
+	(window as any).syncSelectionFromThreeJS = syncSelectionFromThreeJS;
 }
 
 /**
