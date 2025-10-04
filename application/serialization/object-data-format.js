@@ -46,14 +46,17 @@ const STANDARD_OBJECT_DATA_SCHEMA = {
 
     // Container properties
     isContainer: 'boolean',
+    isHug: 'boolean', // Hug mode: container auto-resizes to fit children (mutually exclusive with layout mode)
     layoutMode: 'string|null',
     autoLayout: {
         enabled: 'boolean',
         direction: 'string|null',
         gap: 'number',
-        padding: 'object'
+        padding: 'object',
+        tileMode: 'object|undefined' // Tile mode: { enabled: boolean, repeat: number, sourceObjectId: string }
     },
     calculatedGap: 'number|undefined', // Dynamic gap value in space-between mode
+    layoutProperties: 'object|undefined', // Layout properties for children (sizeX, sizeY, sizeZ: 'fixed'|'fill')
 
     // State flags
     selected: 'boolean',
@@ -522,6 +525,7 @@ function createEmptyObjectData(id = null) {
         name: 'Empty Object',
         type: 'object',
         isContainer: false,
+        isHug: false,
 
         position: { x: 0, y: 0, z: 0 },
         rotation: { x: 0, y: 0, z: 0 },

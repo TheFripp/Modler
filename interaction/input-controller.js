@@ -217,28 +217,52 @@ class InputController {
             return;
         }
 
-        // Skip if modifier keys are pressed (let ToolController handle these)
-        if (event.metaKey || event.ctrlKey) {
-            return;
-        }
+        // Track Meta/Command key for tools (move duplication, etc.)
+        const isMetaKey = event.code === 'MetaLeft' || event.code === 'MetaRight';
 
         if (!this.keys.has(event.code)) {
             this.keys.add(event.code);
 
-            // Let current tool handle keys first
+            // Let current tool handle keys first (including Meta key)
             const tool = this.toolBehaviors[this.currentTool];
             if (tool && tool.onKeyDown && tool.onKeyDown(event)) {
                 return;
             }
 
-            // Tool switching shortcuts
-            const toolController = window.modlerComponents?.toolController;
-            switch (event.code) {
-                case 'KeyQ': if (toolController) toolController.switchToTool('select'); break;
-                case 'KeyW': if (toolController) toolController.switchToTool('move'); break;
-                case 'KeyE': if (toolController) toolController.switchToTool('push'); break;
-                case 'KeyR': if (toolController) toolController.switchToTool('box-creation'); break;
-                case 'Escape': this.selectionController.clearSelection(); break;
+            // Skip other processing if modifier keys are pressed (except Meta which tools need)
+            if (event.ctrlKey && !isMetaKey) {
+                return;
+            }
+
+            // Tab key: Focus dimension input when measurement is showing
+            if (event.code === 'Tab') {
+                const measurementTool = window.modlerComponents?.measurementTool;
+                if (measurementTool && measurementTool.currentEdgeAxis && measurementTool.currentObject) {
+                    event.preventDefault(); // Prevent default tab behavior
+
+                    // Focus the dimension input in the property panel
+                    // ID format matches PropertyPanel XyzInput: idPrefix="dim"
+                    const inputId = `dim-${measurementTool.currentEdgeAxis}`;
+                    const inputElement = document.getElementById(inputId);
+                    if (inputElement) {
+                        inputElement.focus();
+                        inputElement.select();
+                    }
+                    return;
+                }
+            }
+
+            // Tool switching shortcuts (don't trigger if Meta is pressed)
+            if (!event.metaKey) {
+                const toolController = window.modlerComponents?.toolController;
+                switch (event.code) {
+                    case 'KeyQ': if (toolController) toolController.switchToTool('select'); break;
+                    case 'KeyW': if (toolController) toolController.switchToTool('move'); break;
+                    case 'KeyE': if (toolController) toolController.switchToTool('push'); break;
+                    case 'KeyR': if (toolController) toolController.switchToTool('box-creation'); break;
+                    case 'KeyT': if (toolController) toolController.switchToTool('tile'); break;
+                    case 'Escape': this.selectionController.clearSelection(); break;
+                }
             }
         }
     }

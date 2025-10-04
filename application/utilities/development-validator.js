@@ -8,6 +8,10 @@ class DevelopmentValidator {
         this.enabled = this.isDevelopmentMode();
         this.violations = [];
         this.originalMethods = new Map();
+        this.warningThrottle = new Map(); // Track last warning time per violation type
+        this.throttleInterval = 60000; // Only warn once per 60 seconds per type
+        this.maxWarningsPerType = 3; // Maximum warnings per type before silencing
+        this.warningCounts = new Map(); // Track warning count per type
 
         if (this.enabled) {
             // DevelopmentValidator: Monitoring THREE.js (logging removed to reduce console noise)
@@ -55,6 +59,347 @@ class DevelopmentValidator {
         this.interceptConstructor(THREE, 'Mesh', 'VisualizationResourcePool.getMeshHighlight()');
         this.interceptConstructor(THREE, 'LineSegments', 'VisualizationResourcePool.getLineMesh()');
         this.interceptConstructor(THREE, 'Line', 'VisualizationResourcePool.getLineMesh()');
+
+        // Initialize schema and messaging validation
+        this.initializeSchemaValidation();
+        this.initializeMessagingValidation();
+    }
+
+    /**
+     * Initialize schema validation for object properties
+     */
+    initializeSchemaValidation() {
+        // Monitor ObjectStateManager updates
+        if (window.modlerComponents?.objectStateManager) {
+            const osm = window.modlerComponents.objectStateManager;
+            const originalUpdate = osm.updateObject;
+
+            osm.updateObject = (objectId, updates) => {
+                this.validateObjectSchema(objectId, updates);
+                return originalUpdate.call(osm, objectId, updates);
+            };
+        }
+
+        // Monitor SceneController addObject
+        setTimeout(() => {
+            const sceneController = window.modlerComponents?.sceneController;
+            if (sceneController) {
+                const originalAddObject = sceneController.addObject;
+
+                sceneController.addObject = function(geometry, material, options) {
+                    developmentValidator.validateObjectCreationOptions(options);
+                    return originalAddObject.call(this, geometry, material, options);
+                };
+            }
+        }, 100);
+
+        // Monitor direct mesh.position manipulation (should use ObjectStateManager)
+        this.monitorDirectMeshManipulation();
+
+        // Monitor direct geometry vertex manipulation (should use GeometryUtils)
+        this.monitorDirectGeometryManipulation();
+    }
+
+    /**
+     * Monitor direct mesh property manipulation
+     */
+    monitorDirectMeshManipulation() {
+        // Override THREE.Object3D.position setter to detect direct manipulation
+        setTimeout(() => {
+            const originalPositionSet = Object.getOwnPropertyDescriptor(THREE.Object3D.prototype, 'position')?.set;
+            if (!originalPositionSet) return;
+
+            Object.defineProperty(THREE.Object3D.prototype, 'position', {
+                get() {
+                    return this._position;
+                },
+                set(value) {
+                    // Check if this is during a drag operation or centralized update
+                    const stack = new Error().stack;
+                    const isDuringDrag = stack.includes('updateDragMovement') || stack.includes('performPositionUpdate');
+                    const isCentralized = stack.includes('ObjectStateManager') || stack.includes('updateObjectDimensions');
+                    const isInitialization = stack.includes('addObject') || stack.includes('configureMesh');
+
+                    if (!isDuringDrag && !isCentralized && !isInitialization && this.userData?.id) {
+                        developmentValidator.recordViolation({
+                            type: 'state-management-violation',
+                            message: 'Direct mesh.position manipulation detected',
+                            objectId: this.userData.id,
+                            stack
+                        });
+                        console.warn(
+                            `🚨 State Management Violation: Direct mesh.position manipulation\n` +
+                            `   Object: ${this.userData.id}\n` +
+                            `   Use: ObjectStateManager.updateObject(id, { position: {...} })\n` +
+                            `   Direct manipulation bypasses state sync and UI updates`
+                        );
+                    }
+
+                    if (originalPositionSet) {
+                        originalPositionSet.call(this, value);
+                    } else {
+                        this._position = value;
+                    }
+                }
+            });
+        }, 200);
+    }
+
+    /**
+     * Monitor direct geometry manipulation
+     */
+    monitorDirectGeometryManipulation() {
+        setTimeout(() => {
+            if (!THREE.BufferGeometry) return;
+
+            const originalSetAttribute = THREE.BufferGeometry.prototype.setAttribute;
+
+            THREE.BufferGeometry.prototype.setAttribute = function(name, attribute) {
+                const stack = new Error().stack;
+                const isFromGeometryUtils = stack.includes('GeometryUtils') || stack.includes('resizeGeometry');
+                const isFromFactory = stack.includes('GeometryFactory');
+                const isFromDuplicationMode = stack.includes('enterDuplicationMode') || stack.includes('endFaceDrag');
+                const isFromMeasurementTool = stack.includes('MeasurementTool') || stack.includes('createEdgeMeasurementVisual') || stack.includes('createFaceNormalMeasurementVisual');
+                const isFromBoxCreation = stack.includes('BoxCreationTool') || stack.includes('updateInvisibleBoxDimensions');
+
+                if (name === 'position' && !isFromGeometryUtils && !isFromFactory && !isFromDuplicationMode && !isFromMeasurementTool && !isFromBoxCreation) {
+                    developmentValidator.recordViolation({
+                        type: 'geometry-violation',
+                        message: 'Direct geometry vertex manipulation detected',
+                        stack
+                    });
+                    console.warn(
+                        `🚨 Geometry Violation: Direct vertex manipulation\n` +
+                        `   Use: GeometryUtils.resizeGeometry() or GeometryFactory methods\n` +
+                        `   Direct manipulation can break support mesh synchronization`
+                    );
+                }
+
+                return originalSetAttribute.call(this, name, attribute);
+            };
+        }, 200);
+    }
+
+    /**
+     * Initialize messaging validation
+     */
+    initializeMessagingValidation() {
+        // Monitor PropertyPanelSync for direct postMessage usage
+        setTimeout(() => {
+            const propertyPanelSync = window.modlerComponents?.propertyPanelSync;
+            if (propertyPanelSync?.iframe?.contentWindow) {
+                const originalPostMessage = propertyPanelSync.iframe.contentWindow.postMessage;
+
+                propertyPanelSync.iframe.contentWindow.postMessage = function(...args) {
+                    developmentValidator.validatePostMessage(args[0]);
+                    return originalPostMessage.apply(this, args);
+                };
+            }
+        }, 500);
+
+        // Monitor ObjectEventBus usage
+        this.monitorEventBusUsage();
+
+        // Monitor layout updates
+        this.monitorLayoutUpdates();
+    }
+
+    /**
+     * Monitor ObjectEventBus for proper usage
+     */
+    monitorEventBusUsage() {
+        setTimeout(() => {
+            const eventBus = window.objectEventBus;
+            if (!eventBus) return;
+
+            const originalEmit = eventBus.emit;
+
+            eventBus.emit = function(eventType, objectId, payload, metadata) {
+                const stack = new Error().stack;
+
+                // Check if manual event emission (not from ObjectStateManager or legitimate sources)
+                const isFromStateManager = stack.includes('ObjectStateManager');
+                const isFromPropertySchema = stack.includes('PropertySchemaRegistry');
+                const isFromSelectionController = stack.includes('SelectionController') && eventType.includes('selection');
+                const isFromSceneController = stack.includes('SceneController') && eventType.includes('lifecycle');
+                const isFromBoxCreation = stack.includes('BoxCreationTool') && eventType.includes('geometry');
+                const isLegitimate = isFromStateManager || isFromPropertySchema || isFromSelectionController || isFromSceneController || isFromBoxCreation;
+
+                if (!isLegitimate) {
+                    developmentValidator.recordViolation({
+                        type: 'event-bus-violation',
+                        message: 'Direct ObjectEventBus.emit() detected',
+                        eventType,
+                        stack
+                    });
+                    console.warn(
+                        `🚨 Event Bus Violation: Direct emit() call\n` +
+                        `   Event: ${eventType}\n` +
+                        `   Use: ObjectStateManager.updateObject() which emits events automatically\n` +
+                        `   Manual events can cause synchronization issues`
+                    );
+                }
+
+                return originalEmit.call(this, eventType, objectId, payload, metadata);
+            };
+        }, 300);
+    }
+
+    /**
+     * Monitor layout updates
+     */
+    monitorLayoutUpdates() {
+        setTimeout(() => {
+            const sceneController = window.modlerComponents?.sceneController;
+            if (!sceneController) return;
+
+            const originalUpdateLayout = sceneController.updateLayout;
+
+            sceneController.updateLayout = function(containerId, pushContext) {
+                const containerData = this.getObject(containerId);
+
+                // Check for layout update on non-layout container
+                if (containerData && !containerData.autoLayout?.enabled) {
+                    developmentValidator.recordViolation({
+                        type: 'layout-violation',
+                        message: 'updateLayout called on container without layout enabled',
+                        containerId,
+                        containerData
+                    });
+                    console.warn(
+                        `🚨 Layout Violation: updateLayout on non-layout container\n` +
+                        `   Container: ${containerId}\n` +
+                        `   autoLayout.enabled: ${containerData.autoLayout?.enabled}\n` +
+                        `   Only call updateLayout on containers with layout mode enabled`
+                    );
+                }
+
+                return originalUpdateLayout.call(this, containerId, pushContext);
+            };
+        }, 300);
+    }
+
+    /**
+     * Validate object schema against standard format
+     */
+    validateObjectSchema(objectId, updates) {
+        if (!window.ObjectDataFormat) return;
+
+        // Check for schema violations
+        const violations = [];
+
+        // Check for mutually exclusive properties
+        if (updates.isHug && updates.autoLayout?.enabled) {
+            violations.push({
+                type: 'schema-violation',
+                message: 'isHug and autoLayout.enabled are mutually exclusive',
+                objectId,
+                updates
+            });
+            console.warn(
+                `🚨 Schema Violation: Object ${objectId}\n` +
+                `   isHug and autoLayout.enabled cannot both be true\n` +
+                `   See: /documentation/container-properties.md`
+            );
+        }
+
+        // Check for missing required nested objects
+        if (updates.position && typeof updates.position !== 'object') {
+            violations.push({
+                type: 'schema-violation',
+                message: 'position must be an object with x, y, z properties',
+                objectId,
+                updates
+            });
+            console.warn(
+                `🚨 Schema Violation: Object ${objectId}\n` +
+                `   position must be {x, y, z}, got: ${typeof updates.position}`
+            );
+        }
+
+        if (violations.length > 0) {
+            violations.forEach(v => this.recordViolation(v));
+        }
+    }
+
+    /**
+     * Validate object creation options
+     */
+    validateObjectCreationOptions(options) {
+        if (!options) return;
+
+        const violations = [];
+
+        // Check for rotation without proper structure
+        if (options.rotation && (!options.rotation.x && options.rotation.x !== 0)) {
+            violations.push({
+                type: 'schema-violation',
+                message: 'rotation must have x, y, z properties',
+                options
+            });
+            console.warn(
+                `🚨 Schema Violation: Object creation\n` +
+                `   rotation must be {x, y, z}, got: ${JSON.stringify(options.rotation)}`
+            );
+        }
+
+        // Check for isHug with autoLayout
+        if (options.isHug && options.autoLayout?.enabled) {
+            violations.push({
+                type: 'schema-violation',
+                message: 'Cannot create object with both isHug and autoLayout enabled',
+                options
+            });
+            console.warn(
+                `🚨 Schema Violation: Object creation\n` +
+                `   isHug and autoLayout.enabled are mutually exclusive`
+            );
+        }
+
+        if (violations.length > 0) {
+            violations.forEach(v => this.recordViolation(v));
+        }
+    }
+
+    /**
+     * Validate PostMessage usage
+     */
+    validatePostMessage(message) {
+        const stack = new Error().stack;
+
+        // Check if PostMessage is being called directly (not through PropertyPanelSync)
+        if (!stack.includes('PropertyPanelSync') && !stack.includes('updateUISystems')) {
+            const violation = {
+                type: 'messaging-violation',
+                message: 'Direct postMessage detected - use PropertyPanelSync or ObjectStateManager',
+                stack
+            };
+            this.recordViolation(violation);
+
+            console.warn(
+                `🚨 Messaging Violation: Direct postMessage usage\n` +
+                `   Use PropertyPanelSync.sendToUI() or ObjectStateManager.updateObject()\n` +
+                `   Direct postMessage bypasses validation and schema serialization`
+            );
+        }
+
+        // Validate message structure
+        if (message && typeof message === 'object') {
+            if (!message.type) {
+                const violation = {
+                    type: 'messaging-violation',
+                    message: 'PostMessage missing "type" property',
+                    messageData: message
+                };
+                this.recordViolation(violation);
+
+                console.warn(
+                    `🚨 Messaging Violation: Message missing type\n` +
+                    `   All messages should have a "type" property\n` +
+                    `   See: MessageProtocolSchema for valid types`
+                );
+            }
+        }
     }
 
     /**
@@ -69,10 +414,13 @@ class DevelopmentValidator {
         const OriginalClass = namespace[className];
         this.originalMethods.set(className, OriginalClass);
 
+        // Capture validator instance for closure
+        const validator = this;
+
         // Create wrapper constructor
         function ValidatedConstructor(...args) {
             // Check stack trace to see if this is called from centralized systems
-            const isFromCentralizedSystem = this.isCallFromCentralizedSystems();
+            const isFromCentralizedSystem = validator.isCallFromCentralizedSystems();
 
             if (!isFromCentralizedSystem) {
                 const violation = {
@@ -82,14 +430,32 @@ class DevelopmentValidator {
                     timestamp: Date.now()
                 };
 
-                this.recordViolation(violation);
+                // Throttle console warnings to prevent browser crashes
+                const now = Date.now();
+                const lastWarning = validator.warningThrottle.get(className) || 0;
+                const warningCount = validator.warningCounts.get(className) || 0;
 
-                // Log warning to console
-                console.warn(
-                    `🚨 DevelopmentValidator: Manual ${className} creation detected!\n` +
-                    `   Consider using: ${suggestedMethod}\n` +
-                    `   This helps with performance optimization and resource pooling.`
-                );
+                // Only warn up to maxWarningsPerType times total
+                if (warningCount < validator.maxWarningsPerType) {
+                    // Check if enough time has passed since last warning
+                    if (now - lastWarning > 1000) { // 1 second between warnings
+                        validator.warningThrottle.set(className, now);
+                        validator.warningCounts.set(className, warningCount + 1);
+                        validator.recordViolation(violation);
+
+                        const remaining = validator.maxWarningsPerType - warningCount - 1;
+                        const silenceMsg = remaining === 0
+                            ? '\n   (This will be the last warning for this type - further warnings silenced)'
+                            : `\n   (${remaining} more warnings will be shown before silencing)`;
+
+                        console.warn(
+                            `🚨 DevelopmentValidator: Manual ${className} creation detected!\n` +
+                            `   Consider using: ${suggestedMethod}\n` +
+                            `   This helps with performance optimization and resource pooling.` +
+                            silenceMsg
+                        );
+                    }
+                }
             }
 
             // Call original constructor
@@ -133,8 +499,12 @@ class DevelopmentValidator {
             'restoreObjectFromSnapshot', // Allow object restoration
             'restoreContainer',         // Allow container restoration
             'createContainerGeometry',  // Allow container geometry creation
+            'MeasurementTool',          // Allow measurement tool temporary geometry
+            'createEdgeMeasurementVisual', // Allow measurement visuals
+            'createFaceNormalMeasurementVisual', // Allow measurement visuals
             'createInteractiveFaces',   // Allow interactive face creation
             'updateSupportMeshGeometries', // Allow support mesh updates
+            'enterDuplicationMode',     // Allow temporary ghost visualization in move tool
         ];
 
         return centralizedSystemPatterns.some(pattern =>

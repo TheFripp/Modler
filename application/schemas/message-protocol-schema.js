@@ -163,6 +163,17 @@ const MESSAGE_PROTOCOL_SCHEMA = {
         response: 'fill-button-states-response'
     },
 
+    'fill-button-hover': {
+        direction: MESSAGE_DIRECTION.UI_TO_MAIN,
+        description: 'Hover over fill button to highlight corresponding face',
+        payload: {
+            objectId: { type: DATA_TYPES.NUMBER_OR_STRING, required: true },
+            axis: { type: DATA_TYPES.STRING, required: true }, // 'x', 'y', or 'z'
+            isHovering: { type: DATA_TYPES.BOOLEAN, required: true }
+        },
+        response: null
+    },
+
     // ===========================
     // OBJECT SELECTION
     // ===========================
@@ -173,7 +184,8 @@ const MESSAGE_PROTOCOL_SCHEMA = {
         payload: {
             objectId: { type: DATA_TYPES.NUMBER, required: true },
             parentContainer: { type: DATA_TYPES.NUMBER_OR_STRING, required: false },
-            useNavigationController: { type: DATA_TYPES.BOOLEAN, required: false }
+            useNavigationController: { type: DATA_TYPES.BOOLEAN, required: false },
+            isShiftClick: { type: DATA_TYPES.BOOLEAN, required: false }
         },
         response: null // Selection state comes via data-update
     },
@@ -186,6 +198,51 @@ const MESSAGE_PROTOCOL_SCHEMA = {
             targetContainerId: { type: DATA_TYPES.NUMBER_OR_STRING, required: false }
         },
         response: null // Hierarchy change comes via hierarchy-changed
+    },
+
+    'object-container-move-to-container': {
+        direction: MESSAGE_DIRECTION.UI_TO_MAIN,
+        description: 'Move a container to a different container',
+        payload: {
+            objectId: { type: DATA_TYPES.NUMBER_OR_STRING, required: true },
+            targetContainerId: { type: DATA_TYPES.NUMBER_OR_STRING, required: true }
+        },
+        response: null // Hierarchy change comes via hierarchy-changed
+    },
+
+    'object-move-to-root': {
+        direction: MESSAGE_DIRECTION.UI_TO_MAIN,
+        description: 'Move an object to scene root (remove from container)',
+        payload: {
+            objectId: { type: DATA_TYPES.NUMBER_OR_STRING, required: true }
+        },
+        response: null // Hierarchy change comes via hierarchy-changed
+    },
+
+    'object-reorder': {
+        direction: MESSAGE_DIRECTION.UI_TO_MAIN,
+        description: 'Reorder an object within its parent container or root',
+        payload: {
+            objectId: { type: DATA_TYPES.NUMBER_OR_STRING, required: true },
+            targetId: { type: DATA_TYPES.NUMBER_OR_STRING, required: true },
+            position: { type: DATA_TYPES.STRING, required: true }, // 'before' or 'after'
+            parentId: { type: DATA_TYPES.NUMBER_OR_STRING, required: false } // null for root
+        },
+        response: null // Hierarchy change comes via hierarchy-changed
+    },
+
+    'request-hierarchy-refresh': {
+        direction: MESSAGE_DIRECTION.UI_TO_MAIN,
+        description: 'Request an immediate hierarchy refresh from main window',
+        payload: {},
+        response: null
+    },
+
+    'left-panel-ready': {
+        direction: MESSAGE_DIRECTION.UI_TO_MAIN,
+        description: 'Left panel has loaded and is ready to receive data',
+        payload: {},
+        response: null // Triggers immediate hierarchy refresh
     },
 
     // ===========================
@@ -209,6 +266,18 @@ const MESSAGE_PROTOCOL_SCHEMA = {
             inLayoutMode: { type: DATA_TYPES.BOOLEAN, required: true }
         },
         response: null
+    },
+
+    'create-tiled-container': {
+        direction: MESSAGE_DIRECTION.UI_TO_MAIN,
+        description: 'Create a tiled array container from an object',
+        payload: {
+            objectId: { type: DATA_TYPES.NUMBER_OR_STRING, required: true },
+            axis: { type: DATA_TYPES.STRING, required: true }, // 'x', 'y', or 'z'
+            repeat: { type: DATA_TYPES.NUMBER, required: true }, // Number of instances (minimum 2)
+            gap: { type: DATA_TYPES.NUMBER, required: true } // Gap between instances
+        },
+        response: null // Container creation result comes via hierarchy updates
     },
 
     // ===========================

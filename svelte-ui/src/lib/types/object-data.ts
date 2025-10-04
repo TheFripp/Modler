@@ -49,11 +49,18 @@ export interface LayoutPadding {
     back: number;
 }
 
+export interface TileMode {
+    enabled: boolean;
+    repeat: number;
+    sourceObjectId: string;
+}
+
 export interface AutoLayout {
     enabled: boolean;
     direction: 'x' | 'y' | 'z' | null;
     gap: number;
     padding: LayoutPadding;
+    tileMode?: TileMode;
 }
 
 // Parametric design interfaces

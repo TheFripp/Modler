@@ -28,9 +28,11 @@ async function initializeModlerV2(canvas) {
         initializeInteraction();
         initializeApplication();
 
-        initializeContent();
+        // Note: initializeContent() moved after connectComponents() to ensure
+        // configuration is loaded before creating demo objects
         connectComponents();
         setupObjectSystemIntegration();
+        initializeContent();
 
         // Validate component creation
         validateInitialization();
@@ -207,7 +209,8 @@ function initializeApplication() {
         ['select', SelectTool],
         ['move', MoveTool],
         ['push', PushTool],
-        ['box-creation', BoxCreationTool]
+        ['box-creation', BoxCreationTool],
+        ['tile', TileTool]
         // REMOVED: LayoutTool - Layout functionality moved to property-panel driven approach
     ];
     tools.forEach(([name, tool]) => modlerV2Components.toolController.registerTool(name, tool));
@@ -303,6 +306,12 @@ function connectComponents() {
         if (containerViz) {
             navigationController.initialize(selectionController, visualizationManager, containerViz);
         }
+    }
+
+    // Initialize tile instance manager
+    if (window.tileInstanceManager) {
+        window.tileInstanceManager.initialize();
+        modlerV2Components.tileInstanceManager = window.tileInstanceManager;
     }
 
     // Connect snap system to animation loop

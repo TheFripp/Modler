@@ -57,7 +57,12 @@ class PropertyFormatConverter {
             'name': 'string',
             'type': 'string',
             'autoLayout.direction': 'string',
-            'layoutMode': 'string'
+            'layoutMode': 'string',
+
+            // Tile mode properties
+            'autoLayout.tileMode.repeat': 'number',
+            'autoLayout.tileMode.enabled': 'boolean',
+            'autoLayout.tileMode.sourceObjectId': 'string'
         };
 
         // Color format patterns

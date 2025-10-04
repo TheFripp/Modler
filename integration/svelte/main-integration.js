@@ -143,9 +143,22 @@
                 await initializeSplitPanels();
             }
 
+            // Initialize centralized panel communication
+            let panelCommunication = null;
+            if (typeof window.PanelCommunication !== 'undefined') {
+                const panelManager = directComponentManager || splitPanelController;
+                panelCommunication = new window.PanelCommunication(panelManager);
+                window.modlerComponents.panelCommunication = panelCommunication;
+            } else {
+                console.warn('⚠️ PanelCommunication not loaded - panel messaging will be limited');
+            }
+
             // Initialize settings handler
             if (typeof window.SettingsHandler !== 'undefined') {
                 settingsHandler = new window.SettingsHandler();
+                if (panelCommunication) {
+                    settingsHandler.initialize(panelCommunication);
+                }
             } else {
                 console.warn('⚠️ SettingsHandler not loaded - settings management will be limited');
             }
@@ -260,10 +273,10 @@
             // Create and initialize Split panel controller
             splitPanelController = new window.SplitPanelController();
 
-            // Wait longer to ensure DOM and UI components are fully loaded
+            // Reduced delay for faster startup
             setTimeout(() => {
                 splitPanelController.initialize();
-            }, 1000);
+            }, 100);
 
             return true;
 
@@ -298,9 +311,7 @@
 
                 // Expose global hierarchy notification function for backward compatibility
                 window.notifyObjectHierarchyChanged = function() {
-                    console.log('🔔 notifyObjectHierarchyChanged called [direct mode]');
                     if (propertyPanelSync && propertyPanelSync.refreshCompleteHierarchy) {
-                        console.log('   ✅ Calling refreshCompleteHierarchy()');
                         propertyPanelSync.refreshCompleteHierarchy();
                     } else {
                         console.warn('   ⚠️ PropertyPanelSync.refreshCompleteHierarchy not available');
@@ -351,9 +362,7 @@
 
                 // Expose global hierarchy notification function for backward compatibility
                 window.notifyObjectHierarchyChanged = function() {
-                    console.log('🔔 notifyObjectHierarchyChanged called [iframe mode]');
                     if (propertyPanelSync && propertyPanelSync.refreshCompleteHierarchy) {
-                        console.log('   ✅ Calling refreshCompleteHierarchy()');
                         propertyPanelSync.refreshCompleteHierarchy();
                     } else {
                         console.warn('   ⚠️ PropertyPanelSync.refreshCompleteHierarchy not available');
@@ -691,6 +700,51 @@
             }
 
             switch (type) {
+                case 'left-panel-ready':
+                    // Left panel is ready - send initial hierarchy immediately
+                    if (propertyPanelSync && propertyPanelSync.refreshCompleteHierarchy) {
+                        propertyPanelSync.refreshCompleteHierarchy();
+                    }
+                    break;
+                case 'object-select':
+                    // Handle object selection from UI list
+                    const sceneController = window.modlerComponents?.sceneController;
+                    const selectionController = window.modlerComponents?.selectionController;
+                    const navigationController = window.modlerComponents?.navigationController;
+
+                    if (data.useNavigationController && navigationController) {
+                        // Use NavigationController for container-aware selection
+                        const objectData = sceneController.getObject(data.objectId);
+
+                        if (objectData) {
+                            if (objectData.isContainer) {
+                                // Container selected: select without stepping in
+                                if (selectionController && objectData.mesh) {
+                                    if (!data.isShiftClick) {
+                                        selectionController.clearSelection();
+                                    }
+                                    selectionController.select(objectData.mesh);
+                                }
+                            } else if (data.parentContainer) {
+                                // Child object: step into parent container and select child
+                                navigationController.navigateToObject(data.objectId);
+                            } else {
+                                // Root-level object: navigate to object
+                                navigationController.navigateToObject(data.objectId);
+                            }
+                        }
+                    } else if (sceneController && selectionController) {
+                        // Fallback to direct selection
+                        const objectData = sceneController.getObject(data.objectId);
+                        if (objectData && objectData.mesh) {
+                            // Clear current selection and select the object (unless shift-click)
+                            if (!data.isShiftClick) {
+                                selectionController.clearSelection();
+                            }
+                            selectionController.select(objectData.mesh);
+                        }
+                    }
+                    break;
                 case 'property-update':
                     handlePropertyUpdate(data.objectId, data.property, data.value, data.source);
                     break;
@@ -722,7 +776,6 @@
                     handleVisualSettingsUpdate(data.settings);
                     break;
                 case 'get-visual-settings':
-                    console.log('📨 Received get-visual-settings request');
                     handleGetVisualSettings(event.source);
                     break;
                 case 'scene-settings-changed':
@@ -736,6 +789,28 @@
                     break;
                 case 'get-interface-settings':
                     handleGetInterfaceSettings(event.source);
+                    break;
+                case 'object-move-to-container':
+                case 'object-container-move-to-container':
+                    handleMoveToContainer(data.objectId, data.targetContainerId);
+                    break;
+                case 'object-move-to-root':
+                    handleMoveToRoot(data.objectId);
+                    break;
+                case 'request-hierarchy-refresh':
+                    // Force immediate hierarchy refresh after drag-drop
+                    if (propertyPanelSync) {
+                        propertyPanelSync.refreshCompleteHierarchy();
+                    }
+                    break;
+                case 'object-reorder':
+                    handleObjectReorder(data.objectId, data.targetId, data.position, data.parentId);
+                    break;
+                case 'fill-button-hover':
+                    handleFillButtonHover(data.objectId, data.axis, data.isHovering);
+                    break;
+                case 'create-tiled-container':
+                    handleCreateTiledContainer(data.objectId, data.axis, data.repeat, data.gap);
                     break;
             }
         });
@@ -995,6 +1070,187 @@
     }
 
     /**
+     * Handle tile container creation from PropertyPanel
+     */
+    function handleCreateTiledContainer(objectId, axis, repeat, gap) {
+        const toolController = window.modlerComponents?.toolController;
+        if (!toolController) {
+            console.error('❌ ToolController not available for tile creation');
+            return;
+        }
+
+        const tileTool = toolController.tools.get('tile');
+        if (!tileTool) {
+            console.error('❌ TileTool not registered');
+            return;
+        }
+
+        // Create tiled container using tile tool
+        tileTool.createTiledContainer({ axis, repeat, gap });
+    }
+
+    /**
+     * Handle moving object to container (drag and drop)
+     */
+    function handleMoveToContainer(objectId, targetContainerId) {
+        const sceneController = window.modlerComponents?.sceneController;
+        if (!sceneController) {
+            console.warn('❌ SceneController not available for move operation');
+            return;
+        }
+
+        // Get the object and target container
+        const objectData = sceneController.getObject(objectId);
+        const targetContainer = sceneController.getObject(targetContainerId);
+
+        if (!objectData || !targetContainer) {
+            console.warn('❌ Object or target container not found:', { objectId, targetContainerId });
+            return;
+        }
+
+        if (!targetContainer.isContainer) {
+            console.warn('❌ Target is not a container:', targetContainerId);
+            return;
+        }
+
+        // Store old parent for layout update
+        const oldParentId = objectData.parentContainer;
+
+        // Use sceneController to move the object
+        sceneController.setParentContainer(objectId, targetContainerId, true);
+
+        // Update old parent's layout if it had one
+        if (oldParentId) {
+            const oldParent = sceneController.getObject(oldParentId);
+            if (oldParent && oldParent.autoLayout && oldParent.autoLayout.enabled) {
+                sceneController.updateLayout(oldParentId);
+            }
+        }
+
+        // Refresh UI
+        if (propertyPanelSync) {
+            propertyPanelSync.refreshCompleteHierarchy();
+        }
+    }
+
+    /**
+     * Handle moving object to root level (drag and drop)
+     */
+    function handleMoveToRoot(objectId) {
+        const sceneController = window.modlerComponents?.sceneController;
+        if (!sceneController) {
+            console.warn('❌ SceneController not available for move operation');
+            return;
+        }
+
+        // Get the object
+        const objectData = sceneController.getObject(objectId);
+        if (!objectData) {
+            console.warn('❌ Object not found:', objectId);
+            return;
+        }
+
+        // Store old parent for layout update
+        const oldParentId = objectData.parentContainer;
+
+        // Use sceneController to move the object to root (null parent)
+        sceneController.setParentContainer(objectId, null, true);
+
+        // Update old parent's layout if it had one
+        if (oldParentId) {
+            const oldParent = sceneController.getObject(oldParentId);
+            if (oldParent && oldParent.autoLayout && oldParent.autoLayout.enabled) {
+                sceneController.updateLayout(oldParentId);
+            }
+        }
+
+        // Refresh UI
+        if (propertyPanelSync) {
+            propertyPanelSync.refreshCompleteHierarchy();
+        }
+    }
+
+    /**
+     * Handle reordering objects within a container or at root
+     */
+    function handleObjectReorder(objectId, targetId, position, parentId) {
+        const sceneController = window.modlerComponents?.sceneController;
+        if (!sceneController) {
+            console.warn('❌ SceneController not available for reorder operation');
+            return;
+        }
+
+        // Get the parent's children array
+        let childrenArray;
+        if (parentId) {
+            const parent = sceneController.getObject(parentId);
+            if (!parent || !parent.isContainer) {
+                console.warn('❌ Parent container not found or invalid:', parentId);
+                return;
+            }
+            // Get children from SceneController
+            childrenArray = sceneController.getChildObjects(parentId);
+        } else {
+            // Root level - get all objects without parents
+            childrenArray = Array.from(sceneController.objects.values())
+                .filter(obj => !obj.parentContainer)
+                .map(obj => obj.id);
+        }
+
+        // Find current indices
+        const draggedIndex = childrenArray.indexOf(objectId);
+        const targetIndex = childrenArray.indexOf(targetId);
+
+        if (draggedIndex === -1 || targetIndex === -1) {
+            console.warn('❌ Object or target not found in children array');
+            return;
+        }
+
+        // Remove dragged object
+        childrenArray.splice(draggedIndex, 1);
+
+        // Calculate new index
+        let newIndex = targetIndex;
+        if (draggedIndex < targetIndex) {
+            // Dragged from before target, adjust for removal
+            newIndex--;
+        }
+
+        if (position === 'after') {
+            newIndex++;
+        }
+
+        // Insert at new position
+        childrenArray.splice(newIndex, 0, objectId);
+
+        // Update Three.js scene graph order to match
+        if (parentId) {
+            const parent = sceneController.getObject(parentId);
+            if (parent && parent.mesh) {
+                // Reorder children in Three.js parent
+                const childMesh = sceneController.getObject(objectId)?.mesh;
+                if (childMesh) {
+                    // Remove and re-add at correct position
+                    parent.mesh.remove(childMesh);
+                    parent.mesh.children.splice(newIndex, 0, childMesh);
+                    parent.mesh.add(childMesh);
+                }
+            }
+
+            // Trigger layout update if parent has layout enabled
+            const parentObj = sceneController.getObject(parentId);
+            if (parentObj && parentObj.autoLayout && parentObj.autoLayout.enabled) {
+                sceneController.updateLayout(parentId);
+            }
+        }
+
+        // Refresh UI
+        if (propertyPanelSync) {
+            propertyPanelSync.refreshCompleteHierarchy();
+        }
+    }
+
+    /**
      * Check if object is in a layout-enabled container
      */
     function handleCheckLayoutMode(source, objectId) {
@@ -1019,6 +1275,41 @@
             type: 'layout-mode-response',
             data: { objectId, inLayoutMode }
         }, '*');
+    }
+
+    /**
+     * Handle fill button hover - show/hide face highlight
+     */
+    function handleFillButtonHover(objectId, axis, isHovering) {
+        const sceneController = window.modlerComponents?.sceneController;
+        const visualizationManager = window.modlerComponents?.visualizationManager;
+
+        if (!sceneController || !visualizationManager) {
+            return;
+        }
+
+        const objectData = sceneController.getObject(objectId);
+        if (!objectData || !objectData.mesh) {
+            return;
+        }
+
+        if (isHovering) {
+            // Create a synthetic face for the axis
+            // Face normal points along the axis (positive direction)
+            const normal = new THREE.Vector3();
+            if (axis === 'x') normal.set(1, 0, 0);
+            else if (axis === 'y') normal.set(0, 1, 0);
+            else if (axis === 'z') normal.set(0, 0, 1);
+
+            const face = { normal };
+
+            // Show face highlight using visualization manager
+            visualizationManager.getVisualizerFor(objectData.mesh)?.showFaceHighlight(objectData.mesh, face);
+        } else {
+            // Hide face highlight
+            const face = { normal: new THREE.Vector3() }; // Dummy face for hide
+            visualizationManager.getVisualizerFor(objectData.mesh)?.hideFaceHighlight(objectData.mesh, face);
+        }
     }
 
     /**
@@ -1076,7 +1367,7 @@
             const objectStateManager = window.modlerComponents?.objectStateManager;
             if (objectStateManager) {
                 objectStateManager.objects.delete(objectData.id);
-                objectStateManager.rebuildHierarchy();
+                // Note: Hierarchy is rebuilt on-demand via getHierarchy(), no need to rebuild here
             }
         });
     }
@@ -1129,7 +1420,7 @@
             }).catch(error => {
                 console.error('❌ Integration startup failed:', error);
             });
-        }, 200); // Small delay to let v2-main.js start first
+        }, 50); // Reduced delay for faster startup
     }
 
     // Initialize when DOM is ready with improved timing

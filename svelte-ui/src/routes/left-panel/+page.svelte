@@ -8,13 +8,22 @@
 	import { unifiedCommunication } from '$lib/services/unified-communication';
 	import { toggleSnapInScene } from '$lib/bridge/threejs-bridge';
 	import { cn } from '$lib/utils';
+	import { Box, BoxSelect, SquareStack } from 'lucide-svelte';
 
 	// Tab state
 	let activeTab: 'objects' | 'settings' = 'objects';
 
+	// Loading state - hide empty state until first data load
+	let hasLoadedOnce = false;
+
 	// Watch for tab changes to settings and reload settings
 	$: if (activeTab === 'settings') {
 		loadSettingsFromConfig();
+	}
+
+	// Mark as loaded when we receive hierarchy data
+	$: if ($objectHierarchy.length > 0 && !hasLoadedOnce) {
+		hasLoadedOnce = true;
 	}
 
 	// Visual settings state
@@ -176,6 +185,9 @@
 		event.dataTransfer.effectAllowed = 'move';
 		event.dataTransfer.setData('text/plain', object.id);
 
+		// Add visual feedback to the dragged element
+		event.currentTarget.style.opacity = '0.4';
+
 		// Show the current object's position indicator so user can drop it back in same place
 		dragOverTarget = object;
 		dropIndicatorPosition = 'before'; // Show line above current position
@@ -209,6 +221,9 @@
 	}
 
 	function handleDragEnd(event) {
+		// Reset visual feedback
+		event.currentTarget.style.opacity = '1';
+
 		draggedObject = null;
 		dragOverTarget = null;
 		dropIndicatorPosition = null;
@@ -251,12 +266,14 @@
 	function handleDragLeave(event) {
 		// More conservative drag leave - only clear if leaving the entire list area
 		const relatedTarget = event.relatedTarget;
-		if (relatedTarget && (!event.currentTarget.contains(relatedTarget) &&
-			!event.currentTarget.closest('.space-y-1')?.contains(relatedTarget))) {
+		const currentTarget = event.currentTarget; // Store reference before setTimeout
+
+		if (relatedTarget && currentTarget && (!currentTarget.contains(relatedTarget) &&
+			!currentTarget.closest('.space-y-1')?.contains(relatedTarget))) {
 			// Only clear if actually leaving the list context
 			setTimeout(() => {
 				// Use timeout to prevent flicker when moving between closely spaced elements
-				if (!dragOverTarget || (relatedTarget && event.currentTarget.contains(relatedTarget))) return;
+				if (!dragOverTarget || (relatedTarget && currentTarget && currentTarget.contains(relatedTarget))) return;
 				dragOverTarget = null;
 				dropIndicatorPosition = null;
 			}, 50);
@@ -281,6 +298,11 @@
 		draggedObject = null;
 		dragOverTarget = null;
 		dropIndicatorPosition = null;
+
+		// Request immediate hierarchy refresh from main window
+		setTimeout(() => {
+			window.parent.postMessage({ type: 'request-hierarchy-refresh', data: {} }, '*');
+		}, 50);
 	}
 
 	function handleRootDrop(event) {
@@ -359,13 +381,27 @@
 	}
 
 	function reorderObjectAtRoot(draggedObj, targetObj, position) {
-		// Update local ordering state (UI-only, no backend sync)
-		updateLocalObjectOrder('root', draggedObj.id, targetObj.id, position);
+		// Send reorder command to backend
+		unifiedCommunication.sendObjectMovement('reorder', {
+			objectId: draggedObj.id,
+			targetId: targetObj.id,
+			position: position,
+			parentId: null
+		}).catch(error => {
+			console.error('Failed to send reorder command:', error);
+		});
 	}
 
 	function reorderObjectInContainer(draggedObj, targetObj, position) {
-		// Update local ordering state (UI-only, no backend sync)
-		updateLocalObjectOrder(targetObj.parentContainer, draggedObj.id, targetObj.id, position);
+		// Send reorder command to backend
+		unifiedCommunication.sendObjectMovement('reorder', {
+			objectId: draggedObj.id,
+			targetId: targetObj.id,
+			position: position,
+			parentId: targetObj.parentContainer
+		}).catch(error => {
+			console.error('Failed to send reorder command:', error);
+		});
 	}
 
 	/**
@@ -479,9 +515,12 @@
 	}
 
 	// Function to select object in the scene when clicked in hierarchy
-	function selectObjectInScene(objectId: string) {
+	function selectObjectInScene(objectId: string, event?: MouseEvent) {
 		// Find the object in the hierarchy to check if it has a parent container
 		const selectedObject = filteredHierarchy.find(obj => obj.id === objectId);
+
+		// Check for shift-click to add to selection
+		const isShiftClick = event?.shiftKey;
 
 		// Check if we're in iframe context
 		const isInIframe = window !== window.parent;
@@ -494,14 +533,23 @@
 				// CONTAINER-FIRST BEHAVIOR:
 				if (selectedObject?.isContainer) {
 					// Case 1: Container selected → Select container in scene (stay at root level)
-					navigationController.navigateToRoot(); // Ensure we're at root level
-					navigationController.selectObject(objectId); // Select the container
+					const sceneController = (window as any).modlerComponents?.sceneController;
+					const selectionController = (window as any).modlerComponents?.selectionController;
+					if (sceneController && selectionController) {
+						const containerData = sceneController.getObject(objectId);
+						if (containerData && containerData.mesh) {
+							if (!isShiftClick) {
+								selectionController.clearSelection();
+							}
+							selectionController.select(containerData.mesh);
+						}
+					}
 				} else if (selectedObject?.parentContainer) {
 					// Case 2: Child object selected → Step into container and select child
 					navigationController.navigateToObject(objectId); // This handles stepping in
 				} else {
 					// Case 3: Root-level object → Direct selection
-					navigationController.selectObject(objectId);
+					navigationController.navigateToObject(objectId);
 				}
 				return;
 			}
@@ -528,11 +576,16 @@
 		}
 
 		// Iframe context or fallback: use unified communication system
-		const data = {
-			objectId,
-			parentContainer: selectedObject?.parentContainer || null,
-			useNavigationController: true
+		const data: any = {
+			objectId: Number(objectId),
+			useNavigationController: true,
+			isShiftClick: isShiftClick
 		};
+
+		// Only include parentContainer if it exists (omit if null/undefined)
+		if (selectedObject?.parentContainer) {
+			data.parentContainer = Number(selectedObject.parentContainer);
+		}
 
 		unifiedCommunication.sendNavigationCommand('object-select', data).catch(error => {
 			console.error('Failed to send object selection command:', error);
@@ -638,7 +691,6 @@
 	// Settings response handler (defined once, reused)
 	function handleSettingsResponse(event: MessageEvent) {
 		if (event.data.type === 'visual-settings-response') {
-			console.log('📥 Received visual-settings-response:', event.data.settings);
 			const settings = event.data.settings;
 			visualSettings = {
 				selection: {
@@ -653,38 +705,30 @@
 					opacity: settings.containers.opacity * 100
 				}
 			};
-			console.log('✅ Updated visualSettings:', visualSettings);
 		} else if (event.data.type === 'cad-wireframe-settings-response') {
-			console.log('📥 Received cad-wireframe-settings-response:', event.data.settings);
 			const settings = event.data.settings;
 			cadWireframeSettings = {
 				color: settings.color,
 				lineWidth: settings.lineWidth,
 				opacity: settings.opacity * 100
 			};
-			console.log('✅ Updated cadWireframeSettings:', cadWireframeSettings);
 		} else if (event.data.type === 'scene-settings-response') {
-			console.log('📥 Received scene-settings-response:', event.data.settings);
 			const settings = event.data.settings;
 			sceneSettings = {
 				backgroundColor: settings.backgroundColor,
 				gridMainColor: settings.gridMainColor,
 				gridSubColor: settings.gridSubColor
 			};
-			console.log('✅ Updated sceneSettings:', sceneSettings);
 		} else if (event.data.type === 'interface-settings-response') {
-			console.log('📥 Received interface-settings-response:', event.data.settings);
 			const settings = event.data.settings;
 			interfaceSettings = {
 				accentColor: settings.accentColor,
 				toolbarOpacity: settings.toolbarOpacity * 100
 			};
-			console.log('✅ Updated interfaceSettings:', interfaceSettings);
 		}
 	}
 
 	function loadSettingsFromConfig() {
-		console.log('📤 Requesting settings from main app...');
 		// Send requests for all setting types (handler is registered in onMount)
 		window.parent.postMessage({ type: 'get-visual-settings' }, '*');
 		window.parent.postMessage({ type: 'get-cad-wireframe-settings' }, '*');
@@ -695,13 +739,6 @@
 	onMount(() => {
 		// Enable dark mode
 		document.documentElement.classList.add('dark');
-
-		// Debug: Log object hierarchy changes (only when meaningful)
-		objectHierarchy.subscribe(hierarchy => {
-			if (hierarchy.length > 0) {
-				// Debug: Left Panel updated (removed to reduce log spam)
-			}
-		});
 
 		// Initialize the bridge with Three.js for real-time synchronization
 		// MUST be called before anything else to set up PostMessage listener
@@ -716,6 +753,9 @@
 		} catch (error) {
 			console.warn('Failed to load settings from ConfigurationManager:', error);
 		}
+
+		// Notify main app that left panel is ready to receive data
+		window.parent.postMessage({ type: 'left-panel-ready' }, '*');
 
 		// Get unit converter instance
 		unitConverter = (window as any).UnitConverter ? new (window as any).UnitConverter() : null;
@@ -770,56 +810,66 @@
 
 <!-- Recursive Tree Item Snippet -->
 {#snippet TreeItem(object, depth)}
-	<div class="object-tree-item" style="margin-left: {depth * 16}px">
+	<div class="object-tree-item flex items-center relative" style="padding-left: {depth * 8}px;">
+		<!-- Drop indicator line (absolutely positioned so it doesn't affect layout) -->
+		{#if draggedObject && dragOverTarget?.id === object.id && dropIndicatorPosition === 'before'}
+			<div class="absolute top-0 left-0 right-0 h-0.5 bg-blue-500 z-10"></div>
+		{/if}
+		{#if draggedObject && dragOverTarget?.id === object.id && dropIndicatorPosition === 'after'}
+			<div class="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-500 z-10"></div>
+		{/if}
+
+		<!-- Expand/collapse button for containers (outside highlight) -->
+		<!-- Don't show expand/collapse for tiled containers -->
+		{#if object.isContainer && !object.autoLayout?.tileMode?.enabled}
+			<button
+				class="flex-shrink-0 w-4 h-4 flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
+				on:click|stopPropagation={() => toggleContainer(object.id)}
+				tabindex="-1">
+				{#if expandedContainers.has(object.id)}
+					<!-- Expanded chevron -->
+					<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+						<path stroke-linecap="round" stroke-linejoin="round" d="M6 9l6 6 6-6"/>
+					</svg>
+				{:else}
+					<!-- Collapsed chevron -->
+					<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+						<path stroke-linecap="round" stroke-linejoin="round" d="M9 6l6 6-6 6"/>
+					</svg>
+				{/if}
+			</button>
+		{:else}
+			<!-- Spacer for non-expandable items or tiled containers -->
+			<div class="w-4 h-4"></div>
+		{/if}
+
+		<!-- Highlightable content -->
 		<div
-			class="group flex items-center gap-2 px-2 py-1.5 text-sm rounded-md hover:bg-gray-700/50 cursor-pointer transition-colors relative"
+			class="group flex items-center gap-2 px-2 py-2 text-sm rounded-md hover:bg-gray-700/50 cursor-pointer transition-all relative text-muted-foreground flex-1 focus:outline-none"
+			class:opacity-40={draggedObject && draggedObject.id === object.id}
+			class:cursor-move={draggedObject}
 			class:bg-accent={isObjectHighlighted(object)}
-			class:text-accent-foreground={isObjectHighlighted(object)}
 			draggable="true"
 			on:dragstart={(e) => handleDragStart(e, object)}
 			on:dragend={handleDragEnd}
 			on:dragover={(e) => handleDragOver(e, object)}
 			on:dragleave={handleDragLeave}
 			on:drop={(e) => handleDrop(e, object)}
-			on:click={() => selectObjectInScene(object.id)}
+			on:click={(e) => selectObjectInScene(object.id, e)}
 			role="button"
 			tabindex="0">
 
-			<!-- Expand/collapse button for containers (show even for empty containers) -->
-			{#if object.isContainer}
-				<button
-					class="flex-shrink-0 w-4 h-4 flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
-					on:click|stopPropagation={() => toggleContainer(object.id)}
-					tabindex="-1">
-					{#if expandedContainers.has(object.id)}
-						<!-- Expanded chevron -->
-						<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-							<path stroke-linecap="round" stroke-linejoin="round" d="M6 9l6 6 6-6"/>
-						</svg>
-					{:else}
-						<!-- Collapsed chevron -->
-						<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-							<path stroke-linecap="round" stroke-linejoin="round" d="M9 6l6 6-6 6"/>
-						</svg>
-					{/if}
-				</button>
-			{:else}
-				<!-- Spacer for non-expandable items -->
-				<div class="w-4 h-4"></div>
-			{/if}
-
 			<!-- Icon based on type -->
-			<div class="flex-shrink-0 w-4 h-4 flex items-center justify-center">
-				{#if object.isContainer}
-					<!-- Container/Folder icon -->
-					<svg class="w-3 h-3 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-						<path stroke-linecap="round" stroke-linejoin="round" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/>
-					</svg>
+			<div class="flex-shrink-0 w-5 h-5 flex items-center justify-center">
+				{#if object.isContainer && object.autoLayout?.tileMode?.enabled}
+					<!-- Tiled container icon -->
+					<SquareStack class="w-5 h-5 text-[#10B981]" strokeWidth={1.5} />
+				{:else if object.isContainer}
+					<!-- Regular container icon -->
+					<BoxSelect class="w-5 h-5 text-muted-foreground" strokeWidth={1.5} />
 				{:else}
 					<!-- Object/Box icon -->
-					<svg class="w-3 h-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-						<path stroke-linecap="round" stroke-linejoin="round" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10"/>
-					</svg>
+					<Box class="w-5 h-5 text-muted-foreground" strokeWidth={1.5} />
 				{/if}
 			</div>
 
@@ -827,23 +877,24 @@
 			<div class="flex-1 truncate font-medium select-none">
 				{object.name || object.id}
 			</div>
+
+			<!-- Tile badge for tiled containers -->
+			{#if object.isContainer && object.autoLayout?.tileMode?.enabled}
+				<div class="flex-shrink-0 px-1.5 py-0.5 text-[10px] font-medium bg-[#10B981]/20 text-[#10B981] rounded">
+					×{object.autoLayout.tileMode.repeat}
+				</div>
+			{/if}
 		</div>
 
-		<!-- Drop indicator - always reserved space (shows for both before/after) -->
-		<div class="h-0.5 mt-1 mx-2 rounded-full transition-colors"
-			class:bg-primary={draggedObject && dragOverTarget?.id === object.id && (dropIndicatorPosition === 'before' || dropIndicatorPosition === 'after')}
-			class:opacity-100={draggedObject && dragOverTarget?.id === object.id && (dropIndicatorPosition === 'before' || dropIndicatorPosition === 'after')}
-			class:opacity-0={!(draggedObject && dragOverTarget?.id === object.id && (dropIndicatorPosition === 'before' || dropIndicatorPosition === 'after'))}></div>
-
-		<!-- Children (recursively rendered if expanded) -->
-		{#if object.isContainer && object.children && object.children.length > 0 && expandedContainers.has(object.id)}
-			<div class="space-y-1 mt-1">
-				{#each object.children as childObject}
-					{@render TreeItem(childObject, depth + 1)}
-				{/each}
-			</div>
-		{/if}
 	</div>
+
+	<!-- Children (recursively rendered if expanded) - as siblings, not nested -->
+	<!-- Hide children for tiled containers (they're instances, not individual objects) -->
+	{#if object.isContainer && object.children && object.children.length > 0 && expandedContainers.has(object.id) && !object.autoLayout?.tileMode?.enabled}
+		{#each object.children as childObject}
+			{@render TreeItem(childObject, depth + 1)}
+		{/each}
+	{/if}
 {/snippet}
 
 <svelte:head>
@@ -875,7 +926,7 @@
 	</div>
 
 	<!-- Tab Content -->
-	<div class="flex-1 p-2 sm:p-4 pt-4 overflow-y-auto min-w-0">
+	<div class="flex-1 px-2 py-4 overflow-y-auto min-w-0">
 		{#if activeTab === 'objects'}
 			<!-- Objects Tab Content -->
 			<div class="space-y-4">
@@ -883,14 +934,16 @@
 				<!-- Object Hierarchy -->
 				<div>
 					{#if treeStructure.length === 0}
-						<div class="text-xs text-muted-foreground p-6 text-center">
-							<div class="text-gray-500 mb-2">🎯</div>
-							<div>Create objects to see them here</div>
-							<div class="text-gray-600 text-xs mt-1">Press T to create a box</div>
-						</div>
+						{#if hasLoadedOnce}
+							<div class="text-xs text-muted-foreground p-6 text-center">
+								<div class="text-gray-500 mb-2">🎯</div>
+								<div>Create objects to see them here</div>
+								<div class="text-gray-600 text-xs mt-1">Press T to create a box</div>
+							</div>
+						{/if}
 					{:else}
 						<!-- Tree-like sidebar structure -->
-						<div class="space-y-1"
+						<div class="space-y-0.5"
 							 on:dragover={(e) => {
 								 // Container-level dragover to maintain indicator when dragging over gaps
 								 if (draggedObject) {

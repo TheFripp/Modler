@@ -15,7 +15,8 @@ export type PropertyPath =
 	| `autoLayout.gap`
 	| `autoLayout.padding.width`
 	| `autoLayout.padding.height`
-	| `autoLayout.padding.depth`;
+	| `autoLayout.padding.depth`
+	| `autoLayout.tileMode.repeat`;
 
 export interface PropertyConstraints {
 	min?: number;
@@ -123,6 +124,9 @@ class PropertyController {
 		this.constraints.set('autoLayout.padding.width', { step: 0.1, min: 0 });
 		this.constraints.set('autoLayout.padding.height', { step: 0.1, min: 0 });
 		this.constraints.set('autoLayout.padding.depth', { step: 0.1, min: 0 });
+
+		// Tile mode constraints
+		this.constraints.set('autoLayout.tileMode.repeat', { step: 1, min: 2, max: 20 });
 	}
 
 	/**

@@ -3,14 +3,15 @@
 	import { initializeBridge } from '$lib/bridge/threejs-bridge';
 	import { toolState } from '$lib/stores/modler';
 	import { activateToolInScene, toggleSnapInScene } from '$lib/bridge/threejs-bridge';
-	import { MousePointer, Move, ArrowUp, Box, Magnet } from 'lucide-svelte';
+	import { MousePointer, Move, ArrowUp, Box, Magnet, SquareStack } from 'lucide-svelte';
 
 	// Main tool configuration with Lucide icons
 	const tools = [
 		{ id: 'select', label: 'Select', shortcut: 'Q', icon: MousePointer },
 		{ id: 'move', label: 'Move', shortcut: 'W', icon: Move },
 		{ id: 'push', label: 'Push', shortcut: 'E', icon: ArrowUp },
-		{ id: 'box-creation', label: 'Create Box', shortcut: 'R', icon: Box }
+		{ id: 'box-creation', label: 'Create Box', shortcut: 'R', icon: Box },
+		{ id: 'tile', label: 'Tile', shortcut: 'T', icon: SquareStack }
 	];
 
 	function handleToolClick(toolName: string) {
@@ -36,46 +37,9 @@
 		// Initialize the bridge with Three.js for real-time synchronization
 		initializeBridge();
 
-		// Handle keyboard shortcuts globally when toolbar has focus
-		const handleKeyDown = (event: KeyboardEvent) => {
-			// Skip if typing in an input field
-			const target = event.target as HTMLElement;
-			if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.contentEditable === 'true') {
-				return;
-			}
-
-			// Skip if modifier keys are pressed (let main app handle Cmd+Z, etc.)
-			if (event.metaKey || event.ctrlKey) {
-				return;
-			}
-
-			// Tool switching shortcuts
-			switch (event.key.toLowerCase()) {
-				case 'q':
-					event.preventDefault();
-					handleToolClick('select');
-					break;
-				case 'w':
-					event.preventDefault();
-					handleToolClick('move');
-					break;
-				case 'e':
-					event.preventDefault();
-					handleToolClick('push');
-					break;
-				case 'r':
-					event.preventDefault();
-					handleToolClick('box-creation');
-					break;
-			}
-		};
-
-		document.addEventListener('keydown', handleKeyDown);
-
-		// Cleanup
-		return () => {
-			document.removeEventListener('keydown', handleKeyDown);
-		};
+		// NOTE: Keyboard shortcuts are now handled by InputController in the main app
+		// This eliminates duplicate event handlers and consolidates keyboard handling
+		// Tool shortcuts: Q (select), W (move), E (push), R (box), T (tile)
 	});
 </script>
 
@@ -146,7 +110,7 @@
 		display: flex;
 		align-items: center;
 		gap: 8px; /* Reduced gap for tighter square button layout */
-		box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+		box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
 		width: fit-content;
 		height: fit-content;
 	}

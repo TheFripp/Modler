@@ -67,7 +67,7 @@
 			// Use property controller - handles mixed values automatically
 			const currentValue = getNumericValue();
 			const stepValue = typeof step === 'number' ? step : (isOpacity ? 1 : 0.1);
-			let newValue = isOpacity
+			let newValue = (isOpacity || stepValue === 1)
 				? Math.round(currentValue + stepValue)
 				: parseFloat((Math.round((currentValue + stepValue) * 10) / 10).toFixed(1));
 			// Apply constraints
@@ -78,7 +78,7 @@
 			// Fallback for non-property-controller usage
 			const currentValue = getNumericValue();
 			const stepValue = typeof step === 'number' ? step : (isOpacity ? 1 : 0.1);
-			let newValue = isOpacity
+			let newValue = (isOpacity || stepValue === 1)
 				? Math.round(currentValue + stepValue)
 				: parseFloat((Math.round((currentValue + stepValue) * 10) / 10).toFixed(1));
 			// Apply constraints
@@ -96,7 +96,7 @@
 			// Use property controller - handles mixed values automatically
 			const currentValue = getNumericValue();
 			const stepValue = typeof step === 'number' ? step : (isOpacity ? 1 : 0.1);
-			let newValue = isOpacity
+			let newValue = (isOpacity || stepValue === 1)
 				? Math.round(currentValue - stepValue)
 				: parseFloat((Math.round((currentValue - stepValue) * 10) / 10).toFixed(1));
 			// Apply constraints
@@ -107,7 +107,7 @@
 			// Fallback for non-property-controller usage
 			const currentValue = getNumericValue();
 			const stepValue = typeof step === 'number' ? step : (isOpacity ? 1 : 0.1);
-			let newValue = isOpacity
+			let newValue = (isOpacity || stepValue === 1)
 				? Math.round(currentValue - stepValue)
 				: parseFloat((Math.round((currentValue - stepValue) * 10) / 10).toFixed(1));
 			// Apply constraints
@@ -271,6 +271,15 @@
 			// Apply final validated update when drag stops - use captured objectId/property
 			if (dragObjectId && dragProperty) {
 				propertyController?.updateProperty(dragObjectId, dragProperty, currentDragValue, 'input');
+			} else if (onchange) {
+				// For non-property-controller inputs (like settings), call onchange callback
+				// Create a synthetic event with the final drag value
+				const syntheticEvent = new Event('change', { bubbles: true });
+				Object.defineProperty(syntheticEvent, 'target', {
+					writable: false,
+					value: { value: String(currentDragValue) }
+				});
+				onchange(syntheticEvent);
 			}
 		}
 
@@ -314,10 +323,11 @@
 		}
 
 		// Keep full precision for the actual value, but round display appropriately
-		const actualValue = constrainedValue;
-		const displayValue = isOpacity
+		// Use integer rounding if step is 1 (for repeat counts), otherwise one decimal place
+		const actualValue = stepValue === 1
 			? Math.round(constrainedValue)
-			: parseFloat((Math.round(constrainedValue * 10) / 10).toFixed(1));
+			: Math.round(constrainedValue * 10) / 10;
+		const displayValue = actualValue;
 
 		// Track the current dragged value for final update
 		currentDragValue = actualValue;
