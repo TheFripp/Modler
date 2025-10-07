@@ -118,7 +118,7 @@ class LayoutEngine {
         });
 
         // Align layout based on push context (anchor mode) or center normally
-        const alignedPositions = this.alignLayoutPositions(positions, objectSizes, axis, layoutAnchor, pushContext, fullContainerSize, padding);
+        const alignedPositions = this.alignLayoutPositions(positions, objectSizes, axis, layoutAnchor, pushContext, fullContainerSize, padding, layoutConfig);
 
         if (!pushContext && alignedPositions.length > 0) {
             console.log('📐 Layout calculated (no push):', {
@@ -287,7 +287,6 @@ class LayoutEngine {
         const { sizeX, sizeY, sizeZ } = obj.layoutProperties;
         const adjustedSize = baseSize.clone();
 
-
         // Calculate fill size per object for layout axis
         const fillSizePerObject = (availableSpace && fillCount > 0) ? availableSpace / fillCount : baseSize[layoutAxis];
 
@@ -437,9 +436,10 @@ class LayoutEngine {
      * @param {Object} pushContext - Optional push context with {axis, anchorMode}
      * @param {THREE.Vector3} containerSize - Container size for anchor-based alignment
      * @param {Object} padding - Padding configuration
+     * @param {Object} layoutConfig - Layout configuration (includes alignment)
      * @returns {Array} Aligned positions
      */
-    static alignLayoutPositions(positions, sizes, axis, layoutAnchor = null, pushContext = null, containerSize = null, padding = null) {
+    static alignLayoutPositions(positions, sizes, axis, layoutAnchor = null, pushContext = null, containerSize = null, padding = null, layoutConfig = null) {
         if (positions.length === 0 || sizes.length === 0) return positions;
 
         // Calculate actual layout bounds
@@ -471,8 +471,8 @@ class LayoutEngine {
         // When no container size: center the layout (container will resize to hug)
         const isPushing = pushContext && pushContext.axis === axis;
 
-        if (containerSize) {
-            // CONTAINER SIZE EXISTS: Align objects to edges
+        if (containerSize && isPushing) {
+            // PUSHING: Align objects to container edges based on anchor mode
             const containerAxisSize = axis === 'x' ? containerSize.x : axis === 'y' ? containerSize.y : containerSize.z;
             const containerMin = -containerAxisSize / 2;
             const containerMax = containerAxisSize / 2;
@@ -480,7 +480,7 @@ class LayoutEngine {
             // Get padding offset for this axis
             const paddingOffset = padding ? this.getPaddingOffset(axis, padding) : 0;
 
-            if (isPushing && pushContext.anchorMode === 'max') {
+            if (pushContext.anchorMode === 'max') {
                 // PUSHING from min face: align last object to max edge
                 targetPosition = (containerMax - paddingOffset) - max;
             } else {
@@ -489,7 +489,8 @@ class LayoutEngine {
             }
 
         } else {
-            // NO CONTAINER SIZE: Center the layout (container will resize to fit)
+            // NOT PUSHING or NO CONTAINER SIZE: Center the layout
+            // This prevents container from "jumping" when layout direction changes
             const boundsCenter = (min + max) / 2;
             let targetCenter = 0;
             if (layoutAnchor) {
@@ -500,12 +501,80 @@ class LayoutEngine {
             targetPosition = targetCenter - boundsCenter;
         }
 
-        // Apply offset to all positions
-        return positions.map(pos => {
+        // Apply offset to all positions (layout axis)
+        const axisAlignedPositions = positions.map(pos => {
             const alignedPos = pos.clone();
             if (axis === 'x') alignedPos.x += targetPosition;
             else if (axis === 'y') alignedPos.y += targetPosition;
             else if (axis === 'z') alignedPos.z += targetPosition;
+            return alignedPos;
+        });
+
+        // Apply perpendicular alignment (if containerSize and alignment config exist)
+        if (containerSize && layoutConfig?.alignment) {
+            return this.applyPerpendicularAlignment(axisAlignedPositions, sizes, axis, containerSize, layoutConfig.alignment, padding);
+        }
+
+        return axisAlignedPositions;
+    }
+
+    /**
+     * Apply alignment on axes perpendicular to the layout direction
+     * @param {Array} positions - Array of position vectors (already aligned on layout axis)
+     * @param {Array} sizes - Array of size vectors
+     * @param {string} layoutAxis - The layout axis ('x', 'y', 'z')
+     * @param {THREE.Vector3} containerSize - Container size
+     * @param {Object} alignment - Alignment config {x: 'left'|'center'|'right', y: 'bottom'|'center'|'top', z: 'back'|'center'|'front'}
+     * @param {Object} padding - Padding configuration
+     * @returns {Array} Aligned positions
+     */
+    static applyPerpendicularAlignment(positions, sizes, layoutAxis, containerSize, alignment, padding) {
+        // Determine which axes are perpendicular to the layout axis
+        const perpendicularAxes = [];
+        if (layoutAxis !== 'x') perpendicularAxes.push('x');
+        if (layoutAxis !== 'y') perpendicularAxes.push('y');
+        if (layoutAxis !== 'z') perpendicularAxes.push('z');
+
+        return positions.map((pos, index) => {
+            const alignedPos = pos.clone();
+            const size = sizes[index];
+
+            // Apply alignment for each perpendicular axis
+            perpendicularAxes.forEach(axis => {
+                const alignmentValue = alignment[axis] || 'center';
+                const containerAxisSize = containerSize[axis];
+                const objectAxisSize = size[axis];
+                const paddingOffset = padding ? this.getPaddingOffset(axis, padding) : 0;
+
+                // Container bounds (accounting for padding)
+                const containerMin = -containerAxisSize / 2 + paddingOffset;
+                const containerMax = containerAxisSize / 2 - paddingOffset;
+                const containerCenter = 0;
+
+                let targetPosition;
+                switch (alignmentValue) {
+                    case 'left':
+                    case 'bottom':
+                    case 'back':
+                        // Align to min edge
+                        targetPosition = containerMin + objectAxisSize / 2;
+                        break;
+                    case 'right':
+                    case 'top':
+                    case 'front':
+                        // Align to max edge
+                        targetPosition = containerMax - objectAxisSize / 2;
+                        break;
+                    case 'center':
+                    default:
+                        // Center alignment
+                        targetPosition = containerCenter;
+                        break;
+                }
+
+                alignedPos[axis] = targetPosition;
+            });
+
             return alignedPos;
         });
     }
@@ -738,9 +807,16 @@ class LayoutEngine {
             return this._getEmptyBounds();
         }
 
-        if (type === 'selection') {
+        // Detect if items are mesh objects (have .geometry property)
+        const isMeshArray = items.length > 0 && items[0] && items[0].geometry !== undefined;
+
+        if (isMeshArray) {
+            // Items are mesh objects, use selection bounds calculation
+            return this._calculateSelectionBounds(items, useWorldSpace);
+        } else if (type === 'selection') {
             return this._calculateSelectionBounds(items, useWorldSpace);
         } else {
+            // Items are position/size objects, use position bounds calculation
             return this._calculatePositionBounds(items);
         }
     }

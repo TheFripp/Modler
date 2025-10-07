@@ -61,7 +61,7 @@ class InputController {
         this.canvas.addEventListener('contextmenu', this.handleContextMenu, false);
 
         // Keyboard events (document level for global capture)
-        document.addEventListener('keydown', this.handleKeyDown, false);
+        document.addEventListener('keydown', this.handleKeyDown, true);
         document.addEventListener('keyup', this.handleKeyUp, false);
 
         // Focus management
@@ -117,6 +117,12 @@ class InputController {
     }
 
     onMouseDown(event) {
+        // Auto-focus the window when clicking in the 3D scene
+        // This ensures keyboard/mouse events work without requiring explicit focus
+        if (window.focus) {
+            window.focus();
+        }
+
         this.mouseButtons.add(event.button);
         this.updateMousePosition(event);
 
@@ -250,6 +256,37 @@ class InputController {
                     }
                     return;
                 }
+            }
+
+            // Cmd+F: Wrap selected objects in container (prevent browser find)
+            if (event.metaKey && event.code === 'KeyF') {
+                event.preventDefault();
+                const toolController = window.modlerComponents?.toolController;
+                if (toolController) {
+                    toolController.createLayoutContainer();
+                }
+                return;
+            }
+
+            // Cmd+D: Duplicate selected object
+            if (event.metaKey && event.code === 'KeyD') {
+                event.preventDefault();
+                const historyManager = window.modlerComponents?.historyManager;
+                const sceneController = window.modlerComponents?.sceneController;
+
+                if (historyManager && sceneController && this.selectionController) {
+                    const selectedObjects = this.selectionController.getSelectedObjects();
+                    if (selectedObjects.length > 0) {
+                        const mesh = selectedObjects[0];
+                        const objectData = sceneController.getObjectByMesh(mesh);
+
+                        if (objectData) {
+                            const command = new DuplicateObjectCommand(objectData.id);
+                            historyManager.executeCommand(command);
+                        }
+                    }
+                }
+                return;
             }
 
             // Tool switching shortcuts (don't trigger if Meta is pressed)

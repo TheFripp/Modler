@@ -14,24 +14,42 @@
 		? displayObject.calculatedGap
 		: (displayObject.autoLayout?.gap ?? 0);
 
-	// Handle layout axis selection with toggle behavior
+	// Handle layout axis selection (NO toggle for tiled containers - always change direction)
 	function selectLayoutAxis(axis: string) {
 		if (!axis || !['x', 'y', 'z'].includes(axis)) {
 			console.error('❌ Invalid layout axis:', axis);
 			return;
 		}
 
-		const currentDirection = displayObject.autoLayout?.direction;
-		const isCurrentlyEnabled = displayObject.autoLayout?.enabled;
-
+		// For tiled containers, just change the direction (no toggle)
 		// Build complete autoLayout object
 		const autoLayout = {
-			enabled: !(currentDirection === axis && isCurrentlyEnabled),
-			direction: (currentDirection === axis && isCurrentlyEnabled) ? '' : axis,
+			enabled: true, // Always keep enabled for tiled containers
+			direction: axis, // Set new direction
 			gap: displayObject.autoLayout?.gap ?? 0,
 			padding: displayObject.autoLayout?.padding ?? {
 				width: 0, height: 0, depth: 0
 			},
+			alignment: displayObject.autoLayout?.alignment ?? { x: 'center', y: 'center', z: 'center' },
+			tileMode: displayObject.autoLayout?.tileMode
+		};
+
+		updateThreeJSProperty(objectId, 'autoLayout', autoLayout, 'property-panel');
+	}
+
+	// Handle alignment changes
+	function handleAlignmentChange(axis: string, value: string) {
+		const currentAlignment = displayObject.autoLayout?.alignment ?? { x: 'center', y: 'center', z: 'center' };
+		const newAlignment = { ...currentAlignment, [axis]: value };
+
+		const autoLayout = {
+			enabled: true,
+			direction: displayObject.autoLayout?.direction,
+			gap: displayObject.autoLayout?.gap ?? 0,
+			padding: displayObject.autoLayout?.padding ?? {
+				width: 0, height: 0, depth: 0
+			},
+			alignment: newAlignment,
 			tileMode: displayObject.autoLayout?.tileMode
 		};
 
@@ -44,8 +62,10 @@
 		axis={layoutDirection}
 		repeat={displayObject.autoLayout?.tileMode?.repeat ?? 3}
 		gap={gapValue}
+		alignment={displayObject.autoLayout?.alignment}
 		{currentUnit}
 		{objectId}
 		onAxisChange={selectLayoutAxis}
+		onAlignmentChange={handleAlignmentChange}
 	/>
 </PropertyGroup>

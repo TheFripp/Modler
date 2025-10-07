@@ -22,8 +22,6 @@ class LayoutGeometry {
      * @returns {Object} Object with visual mesh, collision mesh, and materials
      */
     static createContainerGeometry(size, geometryFactory, materialManager) {
-        console.log('LayoutGeometry.createContainerGeometry - NEW ARCHITECTURE: Creating solid-first container');
-
         // Use injected factories (factories are now required - no fallback access)
         const gFactory = geometryFactory;
         const mManager = materialManager;
@@ -224,8 +222,8 @@ class LayoutGeometry {
         // Make visual container invisible by default - only show when selected
         edgeContainer.visible = false;
 
-        // Interactive mesh is now independent and always visible for selection
-        interactiveMesh.visible = true;
+        // Interactive mesh is invisible - used only for raycasting (support mesh handles visibility)
+        interactiveMesh.visible = false;
         
         // CRITICAL FIX: DISABLE wireframe raycasting - only interactive mesh should be raycastable
         // The wireframe is purely visual - collision detection should go through interactive mesh only
@@ -276,6 +274,16 @@ class LayoutGeometry {
 
         // Use injected factories
         const gFactory = geometryFactory;
+
+        // Validate inputs before creating geometry
+        if (isNaN(newSize.x) || isNaN(newSize.y) || isNaN(newSize.z)) {
+            console.error('Invalid container size (NaN):', newSize);
+            return false;
+        }
+        if (isNaN(newCenter.x) || isNaN(newCenter.y) || isNaN(newCenter.z)) {
+            console.error('Invalid container center (NaN):', newCenter);
+            return false;
+        }
 
         // Create new solid BoxGeometry
         let newGeometry;
@@ -362,7 +370,25 @@ class LayoutGeometry {
 
         // Optimize raycast for updated geometry
         newGeometry.computeBoundingBox();
-        newGeometry.computeBoundingSphere();
+
+        // Validate position attributes before computing bounding sphere
+        const positionAttr = newGeometry.getAttribute('position');
+        if (positionAttr && positionAttr.array) {
+            let hasNaN = false;
+            for (let i = 0; i < positionAttr.array.length; i++) {
+                if (isNaN(positionAttr.array[i])) {
+                    hasNaN = true;
+                    console.error('NaN detected in geometry position attribute at index', i,
+                        'Container size:', newSize, 'Center:', newCenter);
+                    break;
+                }
+            }
+            if (!hasNaN) {
+                newGeometry.computeBoundingSphere();
+            }
+        } else {
+            newGeometry.computeBoundingSphere();
+        }
 
         // ARCHITECTURE SIMPLIFICATION: Wireframe update removed from here
         // Caller must explicitly call GeometryUtils.updateSupportMeshGeometries() after this method

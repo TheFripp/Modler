@@ -60,7 +60,8 @@ class MoveTool {
             if (objectData && objectData.parentContainer) {
                 const container = sceneController.getObject(objectData.parentContainer);
                 if (container && container.autoLayout && container.autoLayout.enabled) {
-                    // Don't show highlights for children in layout mode
+                    // Don't show highlights for children in layout mode (including tiled containers)
+                    // User must double-click to enter container context to edit individual objects
                     return false;
                 }
             }
@@ -684,11 +685,9 @@ class MoveTool {
 
                     if (hasMoved) {
                         const command = new MoveObjectCommand(objectId, this.dragStartPosition, finalPosition);
-                        historyManager.undoStack.push(command);
-                        historyManager.clearRedoStack();
-                        historyManager.trimHistory();
-                        historyManager.notifyHistoryChanged();
-
+                        // Use executeCommand() to properly handle command execution and history tracking
+                        // ARCHITECTURAL FIX: Commands must go through executeCommand() for proper undo/redo
+                        historyManager.executeCommand(command);
                         logger.debug(`📝 Registered move in history: ${objectId}`);
                     }
                 }

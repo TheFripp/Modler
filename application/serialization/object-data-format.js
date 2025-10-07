@@ -53,6 +53,7 @@ const STANDARD_OBJECT_DATA_SCHEMA = {
         direction: 'string|null',
         gap: 'number',
         padding: 'object',
+        alignment: 'object|undefined', // Alignment: { x: 'left'|'center'|'right', y: 'bottom'|'center'|'top', z: 'back'|'center'|'front' }
         tileMode: 'object|undefined' // Tile mode: { enabled: boolean, repeat: number, sourceObjectId: string }
     },
     calculatedGap: 'number|undefined', // Dynamic gap value in space-between mode
@@ -214,6 +215,7 @@ function serializeForPostMessage(objectData) {
             locked: objectData.locked,
             selectable: objectData.selectable,
             children: objectData.children ? [...objectData.children] : [],
+            childrenOrder: objectData.childrenOrder ? [...objectData.childrenOrder] : undefined,
             parent: objectData.parent,
             parentContainer: objectData.parentContainer,
             layoutMode: objectData.layoutMode,

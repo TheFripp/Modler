@@ -95,7 +95,7 @@ class SelectionController {
         if (objectData.parentContainer) {
             const parentContainer = this.getParentContainer(objectData);
             if (parentContainer?.mesh) {
-                // Select parent container instead of child
+                // Regular containers: Select parent container instead of child
                 return { targetObject: parentContainer.mesh, shouldNavigate: false };
             }
         }
@@ -407,8 +407,17 @@ class SelectionController {
         if (isMultiSelect) {
             this.toggle(targetObject);
         } else {
-            this.clearSelection();
-            this.select(targetObject);
+            // CRITICAL: Check if clicking the same object that's already the only selection
+            // Prevents UI flickering when clicking already-selected object
+            const isSameObjectAlreadySelected =
+                this.selectedObjects.size === 1 &&
+                this.selectedObjects.has(targetObject);
+
+            if (!isSameObjectAlreadySelected) {
+                this.clearSelection();
+                this.select(targetObject);
+            }
+            // If same object already selected, do nothing (no clear, no select, no events)
         }
 
         return true;

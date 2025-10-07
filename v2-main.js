@@ -455,6 +455,9 @@ function createFadeOutGrid(majorColor, minorColor) {
     // Create the grid mesh
     const grid = new THREE.LineSegments(geometry, material);
 
+    // Lower grid more to prevent z-fighting with objects at y=0
+    grid.position.y = -0.1;
+
     group.add(grid);
     return group;
 }

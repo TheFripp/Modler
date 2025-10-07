@@ -107,6 +107,13 @@ class DirectComponentManager {
                 initialData: toolbarData
             });
 
+            // Show resize gutters after panels are loaded
+            setTimeout(() => {
+                document.querySelectorAll('.gutter').forEach(gutter => {
+                    gutter.classList.add('loaded');
+                });
+            }, 100);
+
         } catch (error) {
             console.error('❌ Failed to mount components:', error);
             throw error;
@@ -139,8 +146,8 @@ class DirectComponentManager {
             throw new Error(`Unknown component: ${componentName}`);
         }
 
-        // Use Svelte dev server URL (port 5174 - Vite auto-switched from 5173)
-        iframe.src = `http://localhost:5174${route}`;
+        // Use Svelte dev server URL
+        iframe.src = `http://localhost:5173${route}`;
         iframe.style.cssText = `
             width: 100%;
             height: 100%;

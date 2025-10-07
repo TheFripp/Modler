@@ -630,7 +630,7 @@ class ContainerCrudManager {
     /**
      * Resize container to match layout-calculated bounds
      */
-    resizeContainerToLayoutBounds(containerData, layoutBounds) {
+    resizeContainerToLayoutBounds(containerData, layoutBounds, pushContext = null) {
         const validation = this.validateContainer(containerData, 'resizeContainerToLayoutBounds');
         if (!validation.success) return false;
 
@@ -639,12 +639,35 @@ class ContainerCrudManager {
             return false;
         }
 
-        // SIMPLIFIED ARCHITECTURE: Container never moves during auto-layout, only resizes
-        // This eliminates coordinate system mismatches and prevents object positioning breakage
+        // Calculate new position if pushing (container grows from pushed edge)
+        let newPosition = containerData.mesh.position.clone();
+
+        if (pushContext && pushContext.isPush) {
+            const oldSize = containerData.dimensions;
+            const newSize = layoutBounds.size;
+            const axis = pushContext.axis;
+            const anchorMode = pushContext.anchorMode;
+
+            // Calculate size delta
+            const sizeDelta = newSize[axis] - oldSize[axis];
+
+            // Adjust position based on anchor mode:
+            // - 'min' anchor: growing from max edge (right/top/back) -> shift position in positive direction
+            // - 'max' anchor: growing from min edge (left/bottom/front) -> shift position in negative direction
+            if (anchorMode === 'min') {
+                // Anchor at min edge, grow toward max -> shift by +delta/2
+                newPosition[axis] += sizeDelta / 2;
+            } else if (anchorMode === 'max') {
+                // Anchor at max edge, grow toward min -> shift by -delta/2
+                newPosition[axis] -= sizeDelta / 2;
+            }
+
+        }
+
         const success = this.updateContainerGeometryWithFactories(
             containerData,
             layoutBounds.size,
-            containerData.mesh.position, // Keep current position
+            newPosition,
             false // shouldReposition = false
         );
 

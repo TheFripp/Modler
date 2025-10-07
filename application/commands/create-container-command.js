@@ -41,7 +41,12 @@ class CreateContainerCommand extends BaseCommand {
                     const objectData = sceneController.getObjectByMesh(obj);
                     if (objectData) {
                         this.originalParents[obj.userData.id] = objectData.parentContainer;
-                        this.originalPositions[obj.userData.id] = obj.position.clone();
+
+                        // CRITICAL: Store WORLD position for proper restoration
+                        // Local positions change when parent changes, world positions stay consistent
+                        const worldPos = new THREE.Vector3();
+                        obj.getWorldPosition(worldPos);
+                        this.originalPositions[obj.userData.id] = worldPos;
                     }
                 }
             });
@@ -59,7 +64,6 @@ class CreateContainerCommand extends BaseCommand {
                     selectionController.select(containerObject.mesh);
                 }
 
-                console.log(`✅ CreateContainerCommand executed: ${this.description}`);
                 return true;
             } else {
                 console.error('CreateContainerCommand: Failed to create container');
@@ -81,19 +85,19 @@ class CreateContainerCommand extends BaseCommand {
             const selectionController = window.modlerComponents?.selectionController;
 
             if (!sceneController || !selectionController) {
-                console.error('CreateContainerCommand: Required components not available for undo');
+                console.error('CreateContainerCommand undo: Required components not available');
                 return false;
             }
 
             if (!this.containerId || !this.containerData) {
-                console.error('CreateContainerCommand: No container data to undo');
+                console.error('CreateContainerCommand undo: No container data to undo');
                 return false;
             }
 
             // Get the container data
             const containerData = sceneController.getObject(this.containerId);
             if (!containerData) {
-                console.error('CreateContainerCommand: Container not found for undo');
+                console.error(`CreateContainerCommand undo: Container not found: ${this.containerId}`);
                 return false;
             }
 
@@ -101,46 +105,72 @@ class CreateContainerCommand extends BaseCommand {
             const children = sceneController.getChildObjects(this.containerId);
 
             // Restore original parent relationships and positions
-            children.forEach(childData => {
-                if (childData.mesh && this.originalParents[childData.id] !== undefined) {
-                    // CRITICAL: Restore parent relationship FIRST to get back to correct coordinate system
-                    const originalParent = this.originalParents[childData.id];
-                    if (originalParent) {
-                        // Move object back to original parent
-                        sceneController.setParentContainer(childData.id, originalParent, false); // Skip layout update
-                    } else {
-                        // Move object back to root (no parent)
-                        sceneController.setParentContainer(childData.id, null, false); // Skip layout update
-                    }
+            children.forEach((childData, index) => {
+                try {
+                    if (childData.mesh && this.originalParents[childData.id] !== undefined) {
+                        const originalParent = this.originalParents[childData.id];
+                        const worldPosition = this.originalPositions[childData.id];
 
-                    // THEN restore original world position (now that coordinate system is correct)
-                    if (this.originalPositions[childData.id]) {
-                        childData.mesh.position.copy(this.originalPositions[childData.id]);
-                    }
+                        // Step 1: Restore parent relationship FIRST
+                        if (originalParent) {
+                            sceneController.setParentContainer(childData.id, originalParent, false);
+                        } else {
+                            sceneController.setParentContainer(childData.id, null, false);
+                        }
 
-                    // Update object data using ObjectStateManager
-                    const objectStateManager = window.modlerComponents?.objectStateManager;
-                    if (objectStateManager) {
-                        objectStateManager.updateObject(childData.id, {
-                            position: {
-                                x: childData.mesh.position.x,
-                                y: childData.mesh.position.y,
-                                z: childData.mesh.position.z
-                            },
-                            parentContainer: originalParent
-                        });
-                    } else {
-                        // Fallback to direct update
-                        sceneController.updateObject(childData.id, {
-                            position: childData.mesh.position,
-                            parentContainer: originalParent
-                        });
+                        // Step 2: Convert world position to local position in new coordinate space
+                        if (worldPosition) {
+                            if (originalParent) {
+                                // Has parent - convert world to local
+                                const parentData = sceneController.getObject(originalParent);
+                                if (parentData && parentData.mesh) {
+                                    const parentWorldMatrix = parentData.mesh.matrixWorld;
+                                    const parentWorldMatrixInverse = new THREE.Matrix4().copy(parentWorldMatrix).invert();
+                                    const localPosition = worldPosition.clone().applyMatrix4(parentWorldMatrixInverse);
+                                    childData.mesh.position.copy(localPosition);
+                                } else {
+                                    // Fallback if parent mesh not available
+                                    childData.mesh.position.copy(worldPosition);
+                                }
+                            } else {
+                                // No parent - world position IS local position
+                                childData.mesh.position.copy(worldPosition);
+                            }
+
+                            childData.mesh.updateMatrixWorld(true);
+                        }
+
+                        // Step 3: Update object data using ObjectStateManager
+                        const objectStateManager = window.modlerComponents?.objectStateManager;
+                        if (objectStateManager) {
+                            objectStateManager.updateObject(childData.id, {
+                                position: {
+                                    x: childData.mesh.position.x,
+                                    y: childData.mesh.position.y,
+                                    z: childData.mesh.position.z
+                                },
+                                parentContainer: originalParent
+                            });
+                        } else {
+                            // Fallback to direct update
+                            sceneController.updateObject(childData.id, {
+                                position: childData.mesh.position,
+                                parentContainer: originalParent
+                            });
+                        }
                     }
+                } catch (childError) {
+                    console.error(`CreateContainerCommand undo: Error restoring child ${childData.id}:`, childError);
+                    // Continue with other children
                 }
             });
 
             // Remove the container itself
-            sceneController.removeObject(this.containerId);
+            const removeSuccess = sceneController.removeObject(this.containerId);
+            if (!removeSuccess) {
+                console.error(`CreateContainerCommand undo: Failed to remove container: ${this.containerId}`);
+                return false;
+            }
 
             // Restore original selection
             selectionController.clearSelection();
@@ -154,7 +184,6 @@ class CreateContainerCommand extends BaseCommand {
                 }
             });
 
-            console.log(`↩️ CreateContainerCommand undone: ${this.description}`);
             return true;
 
         } catch (error) {

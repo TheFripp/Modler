@@ -76,9 +76,9 @@
 		}
 	}
 
-	function handleFillHover(axis: 'x' | 'y' | 'z' | null) {
+	function handleFillHover(axis: 'x' | 'y' | 'z', isHovering: boolean = true) {
 		if (onFillHover) {
-			onFillHover(axis);
+			onFillHover(axis, isHovering);
 		}
 	}
 
@@ -166,8 +166,8 @@
 							)}
 							title={`Toggle fill for ${axis.toUpperCase()}-axis`}
 							onclick={() => handleFillToggle(axis)}
-							onmouseenter={() => handleFillHover(axis)}
-							onmouseleave={() => handleFillHover(null)}
+							onmouseenter={() => handleFillHover(axis, true)}
+							onmouseleave={() => handleFillHover(axis, false)}
 						>
 							F
 						</button>

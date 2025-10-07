@@ -13,6 +13,23 @@ class MoveObjectCommand extends BaseCommand {
         this.objectId = objectId;
         this.oldPosition = { ...oldPosition };
         this.newPosition = { ...newPosition };
+
+        // Capture coordinate space context
+        const sceneController = window.modlerComponents?.sceneController;
+        if (sceneController) {
+            const objectData = sceneController.getObject(objectId);
+            if (objectData) {
+                this.parentContainer = objectData.parentContainer || null;
+
+                // Check if object is in a container with active layout
+                if (this.parentContainer) {
+                    const parent = sceneController.getObject(this.parentContainer);
+                    this.wasInLayoutMode = parent?.autoLayout?.enabled || false;
+                } else {
+                    this.wasInLayoutMode = false;
+                }
+            }
+        }
     }
 
     execute() {
@@ -31,6 +48,35 @@ class MoveObjectCommand extends BaseCommand {
         }
 
         try {
+            const objectData = sceneController.getObject(this.objectId);
+            if (!objectData) {
+                logger.error('MoveObjectCommand: Object not found for undo:', this.objectId);
+                return false;
+            }
+
+            // Validate coordinate space hasn't changed
+            const currentParent = objectData.parentContainer || null;
+            const parentChanged = currentParent !== this.parentContainer;
+
+            // Check if layout mode changed
+            let currentlyInLayoutMode = false;
+            if (currentParent) {
+                const parent = sceneController.getObject(currentParent);
+                currentlyInLayoutMode = parent?.autoLayout?.enabled || false;
+            }
+
+            // If object is now in layout mode but wasn't before, skip position restore
+            // Let layout system handle positioning
+            if (currentlyInLayoutMode && !this.wasInLayoutMode) {
+                logger.info(`↩️ Skipped position undo (object now in layout mode): ${this.objectId}`);
+                return true;
+            }
+
+            // If parent changed, warn but attempt to restore
+            if (parentChanged) {
+                logger.warn('MoveObjectCommand: Parent container changed during undo, position may be incorrect');
+            }
+
             // Update position back to old position
             objectStateManager.updateObject(this.objectId, {
                 position: this.oldPosition
@@ -55,6 +101,25 @@ class MoveObjectCommand extends BaseCommand {
         }
 
         try {
+            const objectData = sceneController.getObject(this.objectId);
+            if (!objectData) {
+                logger.error('MoveObjectCommand: Object not found for redo:', this.objectId);
+                return false;
+            }
+
+            // Check if layout mode is active
+            let currentlyInLayoutMode = false;
+            if (objectData.parentContainer) {
+                const parent = sceneController.getObject(objectData.parentContainer);
+                currentlyInLayoutMode = parent?.autoLayout?.enabled || false;
+            }
+
+            // If object is now in layout mode, skip position restore
+            if (currentlyInLayoutMode) {
+                logger.info(`↪️ Skipped position redo (object in layout mode): ${this.objectId}`);
+                return true;
+            }
+
             // Update position to new position
             objectStateManager.updateObject(this.objectId, {
                 position: this.newPosition

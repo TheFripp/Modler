@@ -239,6 +239,19 @@ class ObjectStateManager extends EventTarget {
      * @private
      */
     buildObjectStructure(objectData, includeExtendedProps = true) {
+        // Get fresh dimensions from geometry (single source of truth)
+        let dimensions = objectData.dimensions || { x: 1, y: 1, z: 1 };
+        if (objectData.mesh?.geometry && window.GeometryUtils?.getGeometryDimensions) {
+            const geometryDimensions = window.GeometryUtils.getGeometryDimensions(objectData.mesh.geometry);
+            if (geometryDimensions) {
+                dimensions = {
+                    x: geometryDimensions.x,
+                    y: geometryDimensions.y,
+                    z: geometryDimensions.z
+                };
+            }
+        }
+
         const structure = {
             // Core identity
             id: objectData.id,
@@ -248,7 +261,7 @@ class ObjectStateManager extends EventTarget {
             // 3D properties
             position: this.extractVector3(objectData.mesh?.position),
             rotation: this.extractRotation(objectData.mesh?.rotation), // Convert radians to degrees
-            dimensions: objectData.dimensions || { x: 1, y: 1, z: 1 },
+            dimensions: dimensions, // Fresh from geometry
 
             // Container properties
             isContainer: objectData.isContainer || false,
@@ -567,8 +580,15 @@ class ObjectStateManager extends EventTarget {
             // PROXY PATTERN: Apply ALL geometry updates directly to SceneController
             // SceneController is the single source of truth for all 3D properties
 
-            // Apply dimension updates (triggers parent layout on change)
-            this.applyGeometryUpdate(object, 'Dimension', 'updateObjectDimensions', true);
+            // Handle parent container changes (drag-and-drop in object tree)
+            if (object._changedProperties?.has('parentContainer')) {
+                this.sceneController.setParentContainer(object.id, object.parentContainer, true);
+            }
+
+            // Apply dimension updates (triggers parent layout on change, UNLESS source is push-tool)
+            // Push tool suppresses layout updates during drag for performance and to prevent container movement
+            const shouldTriggerLayout = source !== 'push-tool';
+            this.applyGeometryUpdate(object, 'Dimension', 'updateObjectDimensions', shouldTriggerLayout);
 
             // Apply position updates
             this.applyGeometryUpdate(object, 'Position', 'updateObjectPosition', false);

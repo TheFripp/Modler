@@ -76,7 +76,7 @@ html {
 /* Floating Toolbar */
 .floating-toolbar {
     position: absolute;
-    top: 24px;
+    top: 12px;
     left: 50%;
     transform: translateX(-50%);
     z-index: 1000;
@@ -99,6 +99,12 @@ html {
     position: relative;
     margin-left: -4px !important; /* Pull left to overlap left panel */
     margin-right: -4px !important; /* Pull right to overlap right panel */
+    opacity: 0; /* Hidden by default */
+    transition: opacity 0.3s ease;
+}
+
+.gutter.loaded {
+    opacity: 1; /* Show when panels are loaded */
 }
 
 .gutter.gutter-horizontal {
@@ -117,6 +123,7 @@ html {
     background-color: #404040; /* Subtle grey line */
     transform: translateX(-0.5px);
     pointer-events: none;
+    opacity: inherit; /* Inherit opacity from parent gutter */
 }
 
 /* Container queries for responsive content */

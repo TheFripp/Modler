@@ -80,6 +80,50 @@ const MESSAGE_PROTOCOL_SCHEMA = {
         response: 'tool-state-update'
     },
 
+    'create-layout-container': {
+        direction: MESSAGE_DIRECTION.UI_TO_MAIN,
+        description: 'Wrap selected objects in a container',
+        payload: {},
+        response: null
+    },
+
+    'undo': {
+        direction: MESSAGE_DIRECTION.UI_TO_MAIN,
+        description: 'Undo last command',
+        payload: {},
+        response: null
+    },
+
+    'redo': {
+        direction: MESSAGE_DIRECTION.UI_TO_MAIN,
+        description: 'Redo last undone command',
+        payload: {},
+        response: null
+    },
+
+    'tool-switch': {
+        direction: MESSAGE_DIRECTION.UI_TO_MAIN,
+        description: 'Switch to a different tool',
+        payload: {
+            toolName: { type: DATA_TYPES.STRING, required: true }
+        },
+        response: null
+    },
+
+    'clear-selection': {
+        direction: MESSAGE_DIRECTION.UI_TO_MAIN,
+        description: 'Clear all selected objects',
+        payload: {},
+        response: null
+    },
+
+    'duplicate-object': {
+        direction: MESSAGE_DIRECTION.UI_TO_MAIN,
+        description: 'Duplicate selected object(s)',
+        payload: {},
+        response: null
+    },
+
     'tool-state-update': {
         direction: MESSAGE_DIRECTION.MAIN_TO_UI,
         description: 'Notify UI of current tool state',
@@ -554,6 +598,9 @@ class MessageProtocolValidator {
 
         // Handle union types (number|string)
         if (expectedType === DATA_TYPES.NUMBER_OR_STRING) {
+            // Allow null for optional fields
+            if (value === null && !fieldDef.required) return errors;
+
             const actualType = typeof value;
             if (actualType !== 'number' && actualType !== 'string') {
                 errors.push(`Field "${fieldName}" in "${messageType}" has wrong type: expected number or string, got ${actualType}`);

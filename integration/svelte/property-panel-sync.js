@@ -905,7 +905,7 @@ class PropertyPanelSync {
     sendObjectMovement(operation, data) {
         try {
             // Validate operation type
-            const validOperations = ['move-to-container', 'move-to-root', 'reorder-container', 'reorder-root'];
+            const validOperations = ['move-to-container', 'move-to-root', 'reorder-container', 'reorder-root', 'reorder', 'container-move-to-container'];
             if (!validOperations.includes(operation)) {
                 console.error('PropertyPanelSync.sendObjectMovement: Invalid operation:', operation);
                 return false;

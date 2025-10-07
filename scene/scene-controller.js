@@ -12,8 +12,14 @@ class SceneController {
         this.nextBoxNumber = 1;
         this.nextContainerNumber = 1;
 
+        // Root-level object ordering (similar to container childrenOrder)
+        this.rootChildrenOrder = [];
+
         // Unified state management system
         this.objectStateManager = null;
+
+        // Hug container update control
+        this.hugUpdatesEnabled = true;
         
         // Setup CAD lighting - balanced illumination to show face differences clearly
         // Key light from front-top-right for primary illumination
@@ -29,7 +35,10 @@ class SceneController {
         // Low ambient to maintain face contrast while avoiding pure black shadows
         const ambientLight = new THREE.AmbientLight(0xffffff, 0.2);
         this.scene.add(ambientLight);
-        
+
+        // Subscribe to geometry changes to update hug containers
+        this.subscribeToGeometryEvents();
+
         // SceneController initialized
     }
 
@@ -85,7 +94,138 @@ class SceneController {
             this.eventCallbacks[event].forEach(callback => callback(data));
         }
     }
-    
+
+    /**
+     * Subscribe to geometry change events to update hug containers
+     */
+    subscribeToGeometryEvents() {
+        const eventBus = window.objectEventBus;
+        if (!eventBus) {
+            console.warn('SceneController: ObjectEventBus not available, hug containers will not auto-update');
+            return;
+        }
+
+        eventBus.subscribe(eventBus.EVENT_TYPES.GEOMETRY, (event) => {
+            try {
+                // Skip if hug updates are temporarily disabled (e.g., during layout calculation)
+                if (!this.hugUpdatesEnabled) {
+                    return;
+                }
+
+                const { objectId } = event;
+                const objectData = this.getObject(objectId);
+
+                if (!objectData || !objectData.parentContainer) {
+                    return;
+                }
+
+                // Check if parent container has isHug enabled
+                const parentData = this.getObject(objectData.parentContainer);
+                if (!parentData || !parentData.isContainer || !parentData.isHug) {
+                    return;
+                }
+
+                // Recalculate container size based on children
+                this.updateHugContainerSize(parentData.id);
+
+            } catch (error) {
+                console.error('SceneController: Error handling geometry event for hug container:', error);
+            }
+        }, { subscriberId: 'SceneController_HugContainerUpdate' });
+    }
+
+    /**
+     * Temporarily disable hug container updates (e.g., during push operations)
+     */
+    disableHugUpdates() {
+        this.hugUpdatesEnabled = false;
+    }
+
+    /**
+     * Re-enable hug container updates
+     */
+    enableHugUpdates() {
+        this.hugUpdatesEnabled = true;
+    }
+
+    /**
+     * Update container size to hug its children
+     * @param {string} containerId - ID of the container to update
+     */
+    updateHugContainerSize(containerId) {
+        const containerData = this.getObject(containerId);
+        if (!containerData || !containerData.isContainer || !containerData.mesh) {
+            return;
+        }
+
+        // Get all children
+        const children = this.getChildObjects(containerId);
+        if (children.length === 0) {
+            return;
+        }
+
+        // Calculate bounding box that contains all children in LOCAL space (relative to container)
+        const bbox = new THREE.Box3();
+        children.forEach(child => {
+            if (child.mesh && child.mesh.geometry) {
+                // Get child's bounding box in its local space
+                child.mesh.geometry.computeBoundingBox();
+                const childBox = child.mesh.geometry.boundingBox.clone();
+
+                // Transform to child's world space
+                childBox.applyMatrix4(child.mesh.matrixWorld);
+
+                // Then transform to container's local space
+                const containerWorldMatrixInverse = containerData.mesh.matrixWorld.clone().invert();
+                childBox.applyMatrix4(containerWorldMatrixInverse);
+
+                bbox.union(childBox);
+            }
+        });
+
+        // Get the center of the bounding box in container's local space
+        const bboxCenter = bbox.getCenter(new THREE.Vector3());
+
+        // Calculate new dimensions
+        const newSize = bbox.getSize(new THREE.Vector3());
+
+        // CRITICAL: The container needs to move so that its center aligns with the bbox center
+        // This keeps the children in the same position relative to world space
+        containerData.mesh.position.add(bboxCenter);
+        containerData.mesh.updateMatrixWorld(true);
+
+        // Now update all children positions to compensate for the container movement
+        children.forEach(child => {
+            if (child.mesh) {
+                child.mesh.position.sub(bboxCenter);
+                child.mesh.updateMatrixWorld(true);
+            }
+        });
+
+        // Update container geometry (now centered at origin in its local space)
+        const geometryUtils = window.GeometryUtils;
+        if (geometryUtils && containerData.mesh.geometry) {
+            geometryUtils.resizeGeometry(containerData.mesh.geometry, 'x', newSize.x, 'center');
+            geometryUtils.resizeGeometry(containerData.mesh.geometry, 'y', newSize.y, 'center');
+            geometryUtils.resizeGeometry(containerData.mesh.geometry, 'z', newSize.z, 'center');
+
+            // Update stored dimensions
+            containerData.dimensions = {
+                x: newSize.x,
+                y: newSize.y,
+                z: newSize.z
+            };
+
+            // Update support meshes (selection box, wireframe)
+            const supportMeshFactory = this.getSupportMeshFactory();
+            if (supportMeshFactory) {
+                supportMeshFactory.updateSupportMeshGeometries(containerData.mesh, false);
+            }
+
+            // console.log(`📦 Updated hug container ${containerId} to size:`, newSize, 'center offset:', bboxCenter);
+        }
+    }
+
     // Add object to scene with metadata
     addObject(geometry, material, options = {}) {
         let mesh;
@@ -125,6 +265,11 @@ class SceneController {
         // Add to scene and registry
         this.scene.add(mesh);
         this.objects.set(id, objectData);
+
+        // Track root-level objects in order
+        if (!objectData.parentContainer) {
+            this.rootChildrenOrder.push(id);
+        }
 
         // Sync to ObjectStateManager for unified state management
         this.syncObjectToStateManager(objectData);
@@ -186,14 +331,22 @@ class SceneController {
                 objectData.mesh.material.dispose();
             }
         }
-        
+
+        // Remove from root order tracking if it was at root level
+        if (!objectData.parentContainer) {
+            const index = this.rootChildrenOrder.indexOf(id);
+            if (index !== -1) {
+                this.rootChildrenOrder.splice(index, 1);
+            }
+        }
+
         // Remove from registry
         this.objects.delete(id);
 
         // Remove from ObjectStateManager for unified state management
         if (this.objectStateManager) {
             this.objectStateManager.objects.delete(id);
-            this.objectStateManager.rebuildHierarchy();
+            // Note: Hierarchy is rebuilt on-demand via getHierarchy(), no need to rebuild here
         }
 
         // Emit event for UI updates
@@ -217,7 +370,45 @@ class SceneController {
     
     // Get all objects
     getAllObjects() {
-        return Array.from(this.objects.values());
+        const allObjects = Array.from(this.objects.values());
+
+        // Sort objects based on stored order (rootChildrenOrder and childrenOrder)
+        // This ensures UI displays objects in the order they were created or manually reordered
+        return allObjects.sort((a, b) => {
+            // If objects have different parents, compare by parent hierarchy
+            if (a.parentContainer !== b.parentContainer) {
+                // Root objects come before nested objects (for hierarchy display)
+                if (!a.parentContainer) return -1;
+                if (!b.parentContainer) return 1;
+                return 0;
+            }
+
+            // Same parent (or both at root) - use stored order
+            let orderArray;
+            if (!a.parentContainer) {
+                // Root level
+                orderArray = this.rootChildrenOrder;
+            } else {
+                // Inside container
+                const parent = this.objects.get(a.parentContainer);
+                orderArray = parent?.childrenOrder || [];
+            }
+
+            const aIndex = orderArray.indexOf(a.id);
+            const bIndex = orderArray.indexOf(b.id);
+
+            // If both found in order array, use that order
+            if (aIndex !== -1 && bIndex !== -1) {
+                return aIndex - bIndex;
+            }
+
+            // If only one found, it comes first
+            if (aIndex !== -1) return -1;
+            if (bIndex !== -1) return 1;
+
+            // Neither found (shouldn't happen), maintain current order
+            return 0;
+        });
     }
     
     // Get objects by type
@@ -435,10 +626,11 @@ class SceneController {
         const layoutResult = this.updateLayout(containerId);
 
         // Resize container to fit the laid out objects
-        if (layoutResult && layoutResult.success && layoutResult.layoutBounds) {
+        // SKIP for hug containers - they automatically resize based on children
+        if (layoutResult && layoutResult.success && layoutResult.layoutBounds && !container.isHug) {
             const containerCrudManager = this.getContainerCrudManager();
             if (containerCrudManager) {
-                containerCrudManager.resizeContainerToLayoutBounds(container, layoutResult.layoutBounds);
+                containerCrudManager.resizeContainerToLayoutBounds(container, layoutResult.layoutBounds, pushContext);
             }
         }
 
@@ -447,7 +639,7 @@ class SceneController {
     
     /**
      * Reset child positions to prepare for layout calculation
-     * Preserves the original center of child objects to prevent spatial offset during layout mode switch
+     * Centers children along all axes so layout starts from container center
      * @param {number} containerId - Container object ID
      */
     resetChildPositionsForLayout(containerId) {
@@ -455,20 +647,48 @@ class SceneController {
         if (childObjects.length === 0) return;
 
         const container = this.objects.get(containerId);
-        if (!container || !container.mesh) return;
+        if (!container || !container.mesh || !container.autoLayout) return;
+
+        const layoutDirection = container.autoLayout.direction;
 
         // Get container world position for coordinate conversion
         const containerWorldPosition = container.mesh.getWorldPosition(new THREE.Vector3());
 
-        // For newly created containers, objects are already properly centered
         // Use origin as layout anchor to center the layout properly
         container.layoutAnchor = new THREE.Vector3(0, 0, 0);
 
-        // Convert each child to container-relative coordinates, preserving their relative positions
+        // Calculate the center of all children in container's local space
+        const childCenters = { x: 0, y: 0, z: 0 };
+        let count = 0;
+
         childObjects.forEach((childData) => {
             if (childData.mesh) {
                 const worldPos = childData.mesh.getWorldPosition(new THREE.Vector3());
                 const relativePos = worldPos.clone().sub(containerWorldPosition);
+                childCenters.x += relativePos.x;
+                childCenters.y += relativePos.y;
+                childCenters.z += relativePos.z;
+                count++;
+            }
+        });
+
+        if (count > 0) {
+            childCenters.x /= count;
+            childCenters.y /= count;
+            childCenters.z /= count;
+        }
+
+        // Convert each child to container-relative coordinates and center ALL axes
+        // This ensures the layout group is centered in the container
+        childObjects.forEach((childData) => {
+            if (childData.mesh) {
+                const worldPos = childData.mesh.getWorldPosition(new THREE.Vector3());
+                const relativePos = worldPos.clone().sub(containerWorldPosition);
+
+                // Center children on ALL axes (layout will redistribute them along layout axis)
+                relativePos.x -= childCenters.x;
+                relativePos.y -= childCenters.y;
+                relativePos.z -= childCenters.z;
 
                 childData.mesh.position.copy(relativePos);
                 childData.mesh.updateMatrixWorld();
@@ -541,7 +761,6 @@ class SceneController {
      * @returns {boolean} True if layout was successfully updated
      */
     updateLayout(containerId, pushContext = null) {
-        console.log('📐 updateLayout called:', { containerId, hasPushContext: !!pushContext, pushContext });
         const container = this.objects.get(containerId);
 
         if (!container || !container.autoLayout || !container.autoLayout.enabled) {
@@ -556,14 +775,21 @@ class SceneController {
 
         // This will be implemented when we create the layout engine
         if (window.LayoutEngine) {
-            // Get container size for fill calculations
-            const containerSize = this.getContainerSize(container);
+            // Disable hug updates during layout to prevent intermediate updates
+            const wasHugEnabled = this.hugUpdatesEnabled;
+            this.hugUpdatesEnabled = false;
 
-            // Pass the layout anchor if it exists (preserves original center when switching to layout mode)
-            const layoutAnchor = container.layoutAnchor || null;
-            const layoutResult = window.LayoutEngine.calculateLayout(children, container.autoLayout, containerSize, layoutAnchor, pushContext);
+            try {
+                // Get container size for fill calculations
+                // CRITICAL: Always pass containerSize when layout is enabled, even for hug containers
+                // Fill objects need the container size to calculate their dimensions
+                const containerSize = this.getContainerSize(container);
 
-            this.applyLayoutPositionsAndSizes(children, layoutResult.positions, layoutResult.sizes, container, pushContext);
+                // Pass the layout anchor if it exists (preserves original center when switching to layout mode)
+                const layoutAnchor = container.layoutAnchor || null;
+                const layoutResult = window.LayoutEngine.calculateLayout(children, container.autoLayout, containerSize, layoutAnchor, pushContext);
+
+                this.applyLayoutPositionsAndSizes(children, layoutResult.positions, layoutResult.sizes, container, pushContext);
 
             // Store calculated gap directly on container for display (no recursion)
             if (layoutResult.calculatedGap !== undefined) {
@@ -593,10 +819,28 @@ class SceneController {
                 }
             }
 
-            // Use bounds directly from LayoutEngine (architectural improvement)
-            const layoutBounds = layoutResult.bounds;
+                // Use bounds directly from LayoutEngine (architectural improvement)
+                const layoutBounds = layoutResult.bounds;
 
-            return { success: true, layoutBounds };
+                // Resize container to match new layout bounds (for non-hug containers)
+                if (!container.isHug && layoutBounds && layoutBounds.size) {
+                    const containerCrudManager = this.getContainerCrudManager();
+                    if (containerCrudManager) {
+                        containerCrudManager.resizeContainerToLayoutBounds(container, layoutBounds, pushContext);
+                    }
+                }
+
+                return { success: true, layoutBounds };
+
+            } finally {
+                // Re-enable hug updates
+                this.hugUpdatesEnabled = wasHugEnabled;
+
+                // If this is a hug container, trigger a single update now that layout is complete
+                if (container.isHug) {
+                    this.updateHugContainerSize(containerId);
+                }
+            }
         }
 
         return { success: false, reason: 'LayoutEngine not available' };
@@ -636,6 +880,30 @@ class SceneController {
      * @returns {Array} Array of child object data
      */
     getChildObjects(containerId) {
+        const container = this.objects.get(containerId);
+
+        // If container has explicit child order, use it
+        if (container && container.childrenOrder && Array.isArray(container.childrenOrder)) {
+            // Map IDs to actual objects, filtering out any invalid IDs
+            const orderedChildren = [];
+            for (const childId of container.childrenOrder) {
+                const child = this.objects.get(childId);
+                if (child && child.parentContainer === containerId) {
+                    orderedChildren.push(child);
+                }
+            }
+
+            // Add any children not in the order array (shouldn't happen, but defensive)
+            for (const obj of this.objects.values()) {
+                if (obj.parentContainer === containerId && !container.childrenOrder.includes(obj.id)) {
+                    orderedChildren.push(obj);
+                }
+            }
+
+            return orderedChildren;
+        }
+
+        // Fallback: return children in iteration order
         const children = [];
         for (const obj of this.objects.values()) {
             if (obj.parentContainer === containerId) {
@@ -749,14 +1017,17 @@ class SceneController {
     setParentContainer(objectId, parentId, updateLayout = true) {
         const obj = this.objects.get(objectId);
         if (!obj) return false;
-        
+
         if (parentId && !this.objects.get(parentId)?.isContainer) {
             return false;
         }
-        
+
         const mesh = obj.mesh;
         if (!mesh) return false;
-        
+
+        // Track old parent for childrenOrder updates
+        const oldParentId = obj.parentContainer;
+
         // Handle Three.js hierarchy changes
         if (parentId) {
             // Moving to a container
@@ -767,15 +1038,15 @@ class SceneController {
                 if (mesh.parent !== parentContainer.mesh) {
                     // Store world position before changing parent
                     const worldPosition = mesh.getWorldPosition(new THREE.Vector3());
-                    
+
                     // Remove from current parent
                     if (mesh.parent) {
                         mesh.parent.remove(mesh);
                     }
-                    
+
                     // Add to container
                     parentContainer.mesh.add(mesh);
-                    
+
                     // Convert world position to local position relative to container
                     const containerWorldMatrix = parentContainer.mesh.matrixWorld;
                     const containerWorldMatrixInverse = new THREE.Matrix4().copy(containerWorldMatrix).invert();
@@ -783,22 +1054,56 @@ class SceneController {
                     mesh.position.copy(localPosition);
                 }
                 // If already a child, skip hierarchy changes (ContainerManager handled it)
+
+                // Initialize or update childrenOrder array
+                if (!parentContainer.childrenOrder || !Array.isArray(parentContainer.childrenOrder)) {
+                    // Initialize from current children
+                    const currentChildren = this.getChildObjects(parentId);
+                    parentContainer.childrenOrder = currentChildren.map(child => child.id);
+                }
+
+                // Add this object to childrenOrder if not already present
+                if (!parentContainer.childrenOrder.includes(objectId)) {
+                    parentContainer.childrenOrder.push(objectId);
+                }
             }
         } else {
             // Moving to root (removing from container)
             if (mesh.parent && mesh.parent !== this.scene) {
                 // Store world position before changing parent
                 const worldPosition = mesh.getWorldPosition(new THREE.Vector3());
-                
+
                 // Remove from container
                 mesh.parent.remove(mesh);
-                
+
                 // Add to scene at world position
                 this.scene.add(mesh);
                 mesh.position.copy(worldPosition);
             }
+
+            // Add to rootChildrenOrder if not already present
+            if (!this.rootChildrenOrder.includes(objectId)) {
+                this.rootChildrenOrder.push(objectId);
+            }
         }
-        
+
+        // Remove from old parent's childrenOrder if it exists
+        if (oldParentId && oldParentId !== parentId) {
+            const oldParent = this.objects.get(oldParentId);
+            if (oldParent && oldParent.childrenOrder && Array.isArray(oldParent.childrenOrder)) {
+                const index = oldParent.childrenOrder.indexOf(objectId);
+                if (index !== -1) {
+                    oldParent.childrenOrder.splice(index, 1);
+                }
+            }
+        } else if (!oldParentId && parentId) {
+            // Moving from root to a container - remove from rootChildrenOrder
+            const index = this.rootChildrenOrder.indexOf(objectId);
+            if (index !== -1) {
+                this.rootChildrenOrder.splice(index, 1);
+            }
+        }
+
         // Update metadata
         obj.parentContainer = parentId;
 
@@ -823,12 +1128,52 @@ class SceneController {
             );
         }
 
+        // Update matrix world to ensure visual updates
+        mesh.updateMatrixWorld(true);
+
         // Update layout of the new parent container only if requested
         if (parentId && updateLayout) {
             const container = this.objects.get(parentId);
-            // Only update layout if container has auto layout enabled
-            if (container && container.autoLayout && container.autoLayout.enabled) {
-                this.updateLayout(parentId);
+            if (container) {
+                // Handle hug containers
+                if (container.isHug) {
+                    this.updateHugContainerSize(parentId);
+                }
+                // Handle layout mode containers
+                else if (container.autoLayout && container.autoLayout.enabled) {
+                    const layoutResult = this.updateLayout(parentId);
+
+                    // Resize container to fit new children
+                    if (layoutResult && layoutResult.success && layoutResult.layoutBounds) {
+                        const containerCrudManager = this.getContainerCrudManager();
+                        if (containerCrudManager) {
+                            containerCrudManager.resizeContainerToLayoutBounds(container, layoutResult.layoutBounds);
+                        }
+                    }
+                }
+            }
+        }
+
+        // Update layout of old parent container if it had one
+        if (oldParentId && oldParentId !== parentId && updateLayout) {
+            const oldContainer = this.objects.get(oldParentId);
+            if (oldContainer) {
+                // Handle hug containers
+                if (oldContainer.isHug) {
+                    this.updateHugContainerSize(oldParentId);
+                }
+                // Handle layout mode containers
+                else if (oldContainer.autoLayout && oldContainer.autoLayout.enabled) {
+                    const layoutResult = this.updateLayout(oldParentId);
+
+                    // Resize container to fit remaining children
+                    if (layoutResult && layoutResult.success && layoutResult.layoutBounds) {
+                        const containerCrudManager = this.getContainerCrudManager();
+                        if (containerCrudManager) {
+                            containerCrudManager.resizeContainerToLayoutBounds(oldContainer, layoutResult.layoutBounds);
+                        }
+                    }
+                }
             }
         }
 
@@ -1116,10 +1461,18 @@ class SceneController {
             selectable: options.selectable !== false, // default true
             userData: options.userData || {},
 
+            // Preview/temporary flag for hiding from object tree
+            isTemporary: options.isTemporary || false,
+            isPreview: options.isPreview || false,
+
             // Auto layout properties
             isContainer: options.isContainer || false,
             autoLayout: null, // Will contain layout config when enabled
             parentContainer: options.parentContainer || null,
+
+            // Container sizing mode (hug = auto-size to fit children)
+            isHug: options.sizingMode === 'hug' || options.isHug || false,
+
             layoutProperties: {
                 sizeX: options.sizeX || 'fixed', // 'fixed', 'fill', 'hug'
                 sizeY: options.sizeY || 'fixed',

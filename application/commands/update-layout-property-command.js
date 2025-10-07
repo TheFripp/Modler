@@ -13,6 +13,10 @@ class UpdateLayoutPropertyCommand extends BaseCommand {
         // Store original layout state for complex undo scenarios
         this.originalLayoutState = null;
         this.newLayoutState = null;
+
+        // Store child positions before layout changes (for undo)
+        this.childPositionSnapshots = new Map();
+        this.wasLayoutEnabled = false;
     }
 
     /**
@@ -37,6 +41,20 @@ class UpdateLayoutPropertyCommand extends BaseCommand {
 
             // Store original layout state before change
             this.originalLayoutState = JSON.parse(JSON.stringify(containerData.autoLayout || {}));
+            this.wasLayoutEnabled = containerData.autoLayout?.enabled || false;
+
+            // CRITICAL: Capture child positions BEFORE layout activation
+            // This allows proper restoration when undoing layout mode
+            const childIds = sceneController.getChildObjects(this.containerId);
+            childIds.forEach(childData => {
+                if (childData.mesh && childData.position) {
+                    this.childPositionSnapshots.set(childData.id, {
+                        x: childData.position.x,
+                        y: childData.position.y,
+                        z: childData.position.z
+                    });
+                }
+            });
 
             // Execute the property change using existing handler
             const success = propertyUpdateHandler.handleContainerLayoutPropertyChange(
@@ -53,7 +71,8 @@ class UpdateLayoutPropertyCommand extends BaseCommand {
                 console.log(`✅ UpdateLayoutPropertyCommand executed: ${this.description}`, {
                     property: this.property,
                     oldValue: this.oldValue,
-                    newValue: this.newValue
+                    newValue: this.newValue,
+                    childrenCaptured: this.childPositionSnapshots.size
                 });
                 return true;
             } else {
@@ -73,6 +92,7 @@ class UpdateLayoutPropertyCommand extends BaseCommand {
     undo() {
         try {
             const sceneController = window.modlerComponents?.sceneController;
+            const objectStateManager = window.modlerComponents?.objectStateManager;
 
             if (!sceneController) {
                 console.error('UpdateLayoutPropertyCommand: SceneController not available for undo');
@@ -86,34 +106,54 @@ class UpdateLayoutPropertyCommand extends BaseCommand {
                 return false;
             }
 
-            // Restore original layout state
+            // Step 1: Restore original layout state
             if (this.originalLayoutState) {
                 containerData.autoLayout = JSON.parse(JSON.stringify(this.originalLayoutState));
             }
 
-            // Apply the restored layout (if layout was enabled)
-            if (containerData.autoLayout && containerData.autoLayout.enabled) {
+            // Step 2: Restore child positions if layout is being disabled
+            const layoutNowEnabled = containerData.autoLayout?.enabled || false;
+
+            if (!layoutNowEnabled && this.childPositionSnapshots.size > 0) {
+                // Layout is being disabled - restore manual positions
+                console.log(`Restoring ${this.childPositionSnapshots.size} child positions (layout disabled)`);
+
+                this.childPositionSnapshots.forEach((position, childId) => {
+                    if (objectStateManager) {
+                        objectStateManager.updateObject(childId, {
+                            position: position
+                        });
+                    } else {
+                        const childData = sceneController.getObject(childId);
+                        if (childData && childData.mesh) {
+                            childData.mesh.position.set(position.x, position.y, position.z);
+                            childData.position = { ...position };
+                        }
+                    }
+                });
+            }
+
+            // Step 3: Apply layout if it was enabled
+            if (layoutNowEnabled) {
                 const layoutResult = sceneController.updateContainerLayout(this.containerId);
                 if (!layoutResult || !layoutResult.success) {
                     console.warn('UpdateLayoutPropertyCommand: Layout update failed during undo');
                 }
             }
 
-            // Trigger unified state updates through ObjectStateManager
-            const objectStateManager = window.modlerComponents?.objectStateManager;
+            // Step 4: Trigger unified state updates
             if (objectStateManager) {
-                // Use ObjectStateManager to sync all layout state changes
                 objectStateManager.updateObject(this.containerId, {
                     layout: containerData.autoLayout
                 });
             } else if (window.modlerComponents?.propertyManager) {
-                // Fallback to direct notification
                 window.modlerComponents.propertyManager.notifyObjectModified(containerData);
             }
 
             console.log(`↩️ UpdateLayoutPropertyCommand undone: ${this.description}`, {
                 property: this.property,
-                restoredValue: this.oldValue
+                restoredValue: this.oldValue,
+                childrenRestored: !layoutNowEnabled ? this.childPositionSnapshots.size : 0
             });
             return true;
 
@@ -143,6 +183,7 @@ class UpdateLayoutPropertyCommand extends BaseCommand {
     cleanup() {
         this.originalLayoutState = null;
         this.newLayoutState = null;
+        this.childPositionSnapshots.clear();
     }
 }
 

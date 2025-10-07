@@ -166,13 +166,24 @@ class BoxCreationTool {
             supportMeshFactory.updateSupportMeshGeometries(this.creationObject);
         }
 
-        // Make material opaque
+        // Make material opaque and enable depth writing
         this.creationObject.material.opacity = 1.0;
         this.creationObject.material.transparent = false;
+        this.creationObject.material.depthWrite = true; // Re-enable depth writing so floor doesn't show through
         this.creationObject.material.needsUpdate = true;
 
         // Update position to center
         this.creationObject.position.set(centerX, centerY, centerZ);
+
+        // Make appropriate support meshes visible
+        if (this.creationObject.userData.supportMeshes) {
+            const supportMeshes = this.creationObject.userData.supportMeshes;
+            // CAD wireframe should be visible for regular objects
+            if (supportMeshes.cadWireframe) supportMeshes.cadWireframe.visible = true;
+            // Interactive mesh stays invisible (used only for raycasting)
+            // Face highlight stays invisible (shown only on hover/selection)
+            // Selection wireframe stays invisible (shown only on selection)
+        }
 
         // Make visible for selection
         delete this.creationObject.userData.hideFromSelection;
@@ -184,6 +195,8 @@ class BoxCreationTool {
             if (objectData) {
                 objectData.position = this.creationObject.position.clone();
                 objectData.dimensions = { x: width, y: height, z: depth };
+                // Remove temporary flag so object appears in tree
+                delete objectData.isTemporary;
 
                 // Emit final update event
                 if (window.objectEventBus) {
@@ -214,19 +227,17 @@ class BoxCreationTool {
             command.createdObjectId = createdObjectId;
             command.objectSnapshot = command.createObjectSnapshot(sceneController.getObject(createdObjectId));
 
-            // Add to history (but don't execute, since object is already created)
-            historyManager.undoStack.push(command);
-            historyManager.clearRedoStack();
-            historyManager.trimHistory();
-            historyManager.notifyHistoryChanged();
+            // ARCHITECTURAL FIX: Commands must go through executeCommand() for proper undo/redo
+            // The command's execute() is a no-op since the object is already created
+            historyManager.executeCommand(command);
 
             logger.debug(`📝 Registered box creation in history: ${createdObjectId}`);
         }
 
-        // Keep selection on the finalized box
-        // (already selected, no need to re-select)
+        // Keep reference to the finalized box for selection
+        const finalizedMesh = this.creationObject;
 
-        // Clear only the visual preview elements
+        // Clear only the visual preview elements and reset state
         this.cleanupVisuals();
         this.creationObject = null;
         this.startPosition = null;
@@ -238,6 +249,13 @@ class BoxCreationTool {
         const toolController = window.modlerComponents?.toolController;
         if (toolController && toolController.switchToTool) {
             toolController.switchToTool('select');
+        }
+
+        // Select the finalized box AFTER switching tools and clearing state
+        const selectionController = window.modlerComponents?.selectionController;
+        if (selectionController && finalizedMesh) {
+            selectionController.clearSelection();
+            selectionController.select(finalizedMesh);
         }
     }
 
@@ -489,12 +507,16 @@ class BoxCreationTool {
         const sceneController = window.modlerComponents?.sceneController;
         if (!sceneController) return;
 
-        // Create minimal geometry and material (will become visible on finalize)
+        // Create minimal geometry
         const geometry = this.geometryFactory.createBoxGeometry(0.01, 0.01, 0.01);
-        const material = this.materialManager.createMeshLambertMaterial({
+
+        // CRITICAL: Create a new material instance (not pooled) to avoid affecting other boxes
+        // During creation, we need opacity 0, but other boxes need opacity 1
+        const material = new THREE.MeshLambertMaterial({
             color: 0x888888,
             transparent: true,
-            opacity: 0.0
+            opacity: 0.0,
+            depthWrite: false  // Prevent z-fighting with wireframe
         });
 
         // Add to scene controller with proper name from the start
@@ -502,11 +524,19 @@ class BoxCreationTool {
             name: sceneController.generateObjectName('box'),
             type: 'cube',
             position: this.startPosition.clone(),
-            selectable: true
+            selectable: true,
+            isTemporary: true  // Hide from object tree during creation
         });
 
         if (boxData && boxData.mesh) {
             this.creationObject = boxData.mesh;
+
+            // Hide support meshes (wireframes, edges, etc.) during creation
+            if (this.creationObject.userData.supportMeshes) {
+                Object.values(this.creationObject.userData.supportMeshes).forEach(supportMesh => {
+                    if (supportMesh) supportMesh.visible = false;
+                });
+            }
 
             // Make object invisible to selection highlighting but keep it selectable for properties
             this.creationObject.userData.hideFromSelection = true;

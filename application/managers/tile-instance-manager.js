@@ -18,24 +18,39 @@ class TileInstanceManager {
         this.objectStateManager = window.modlerComponents?.objectStateManager;
         this.objectEventBus = window.objectEventBus;
 
-        // Listen for property changes
+        // Listen for hierarchy changes (autoLayout property changes emit HIERARCHY events)
         if (this.objectEventBus) {
-            this.objectEventBus.subscribe('object:property-change', (event) => {
-                this.handlePropertyChange(event.data);
+            this.objectEventBus.subscribe(this.objectEventBus.EVENT_TYPES.HIERARCHY, (event) => {
+                this.handleHierarchyChange(event);
             });
         }
     }
 
     /**
-     * Handle property changes - watch for tileMode.repeat changes
+     * Handle hierarchy changes - watch for tileMode.repeat changes
      */
-    handlePropertyChange(data) {
-        const { objectId, property, value, oldValue } = data;
+    handleHierarchyChange(event) {
+        const { objectId, changeData } = event;
 
-        // Check if this is a repeat count change for a tiled container
-        if (property === 'autoLayout.tileMode.repeat') {
-            this.updateTileInstances(objectId, value, oldValue);
+        // Get the container object to check for tileMode changes
+        const container = this.sceneController?.getObject(objectId);
+        if (!container || !container.autoLayout?.tileMode?.enabled) {
+            return;
         }
+
+        // Check if repeat count changed by comparing with tracked state
+        const currentRepeat = container.autoLayout.tileMode.repeat;
+        const trackedRepeat = this.trackedRepeats?.get(objectId);
+
+        if (trackedRepeat !== undefined && currentRepeat !== trackedRepeat) {
+            this.updateTileInstances(objectId, currentRepeat, trackedRepeat);
+        }
+
+        // Track current repeat count for future comparisons
+        if (!this.trackedRepeats) {
+            this.trackedRepeats = new Map();
+        }
+        this.trackedRepeats.set(objectId, currentRepeat);
     }
 
     /**
@@ -68,8 +83,8 @@ class TileInstanceManager {
         }
 
         // Trigger layout recalculation
-        if (this.objectStateManager) {
-            this.objectStateManager.notifyLayoutChange(containerId);
+        if (this.sceneController) {
+            this.sceneController.updateLayout(containerId);
         }
     }
 

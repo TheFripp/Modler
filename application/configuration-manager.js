@@ -656,6 +656,7 @@ class ConfigurationManager {
     notifySubscribers(keyPath, newValue, oldValue) {
         if (this.subscribers.has(keyPath)) {
             const callbacks = this.subscribers.get(keyPath);
+
             callbacks.forEach((callback) => {
                 try {
                     callback(newValue, oldValue);

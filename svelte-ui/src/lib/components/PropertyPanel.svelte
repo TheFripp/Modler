@@ -167,8 +167,8 @@
 			<PropertyGroup title="Tile Configuration">
 				<TileControls
 					axis={tileAxis}
-					repeat={tileRepeat}
-					gap={tileGap}
+					bind:repeat={tileRepeat}
+					bind:gap={tileGap}
 					{currentUnit}
 					objectId={null}
 					onAxisChange={selectTileAxis}

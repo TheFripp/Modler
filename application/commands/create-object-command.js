@@ -25,6 +25,14 @@ class CreateObjectCommand extends BaseCommand {
         }
 
         try {
+            // If object was already created (e.g., by box-creation-tool), don't create again
+            if (this.createdObjectId) {
+                const existingObject = sceneController.getObject(this.createdObjectId);
+                if (existingObject) {
+                    return true;
+                }
+            }
+
             // Create the object
             const objectData = sceneController.addObject(this.geometry, this.material, this.options);
 
@@ -38,7 +46,6 @@ class CreateObjectCommand extends BaseCommand {
             // Store snapshot for undo (in case we need to restore exact state)
             this.objectSnapshot = this.createObjectSnapshot(objectData);
 
-            logger.info(`✅ Created object: ${objectData.name} (${this.createdObjectId})`);
             return true;
 
         } catch (error) {

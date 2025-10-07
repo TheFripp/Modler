@@ -161,8 +161,9 @@ class DevelopmentValidator {
                 const isFromDuplicationMode = stack.includes('enterDuplicationMode') || stack.includes('endFaceDrag');
                 const isFromMeasurementTool = stack.includes('MeasurementTool') || stack.includes('createEdgeMeasurementVisual') || stack.includes('createFaceNormalMeasurementVisual');
                 const isFromBoxCreation = stack.includes('BoxCreationTool') || stack.includes('updateInvisibleBoxDimensions');
+                const isFromSupportMeshFactory = stack.includes('SupportMeshFactory') || stack.includes('updateSupportMeshGeometries');
 
-                if (name === 'position' && !isFromGeometryUtils && !isFromFactory && !isFromDuplicationMode && !isFromMeasurementTool && !isFromBoxCreation) {
+                if (name === 'position' && !isFromGeometryUtils && !isFromFactory && !isFromDuplicationMode && !isFromMeasurementTool && !isFromBoxCreation && !isFromSupportMeshFactory) {
                     developmentValidator.recordViolation({
                         type: 'geometry-violation',
                         message: 'Direct geometry vertex manipulation detected',
@@ -196,6 +197,9 @@ class DevelopmentValidator {
                 };
             }
         }, 500);
+
+        // Monitor ALL window.postMessage calls to catch bypasses
+        this.monitorGlobalPostMessage();
 
         // Monitor ObjectEventBus usage
         this.monitorEventBusUsage();
@@ -277,6 +281,44 @@ class DevelopmentValidator {
                 return originalUpdateLayout.call(this, containerId, pushContext);
             };
         }, 300);
+    }
+
+    /**
+     * Monitor global window.postMessage to catch bypasses
+     */
+    monitorGlobalPostMessage() {
+        if (typeof window === 'undefined') return;
+
+        const originalPostMessage = window.postMessage;
+
+        window.postMessage = function(message, targetOrigin, transfer) {
+            const stack = new Error().stack;
+
+            // Whitelist: PropertyPanelSync, main-integration message handling, DirectComponentManager
+            const isFromPropertyPanelSync = stack.includes('PropertyPanelSync');
+            const isFromMainIntegration = stack.includes('main-integration.js') || stack.includes('setupUnifiedMessageHandling');
+            const isFromDirectComponentManager = stack.includes('DirectComponentManager');
+            const isFromPanelCommunication = stack.includes('PanelCommunication');
+            const isWhitelisted = isFromPropertyPanelSync || isFromMainIntegration || isFromDirectComponentManager || isFromPanelCommunication;
+
+            if (!isWhitelisted) {
+                developmentValidator.recordViolation({
+                    type: 'postmessage-bypass-violation',
+                    message: 'Direct window.postMessage bypass detected',
+                    messageType: message?.type,
+                    stack
+                });
+                console.error(
+                    `🚨 PostMessage Bypass Violation: Direct window.postMessage call\n` +
+                    `   Message type: ${message?.type || 'unknown'}\n` +
+                    `   CRITICAL: Never bypass PropertyPanelSync\n` +
+                    `   Use: PropertyPanelSync.sendToUI() for all UI updates\n` +
+                    `   Stack trace:\n${stack}`
+                );
+            }
+
+            return originalPostMessage.call(this, message, targetOrigin, transfer);
+        };
     }
 
     /**
@@ -368,17 +410,24 @@ class DevelopmentValidator {
         const stack = new Error().stack;
 
         // Check if PostMessage is being called directly (not through PropertyPanelSync)
-        if (!stack.includes('PropertyPanelSync') && !stack.includes('updateUISystems')) {
+        const isFromPropertyPanelSync = stack.includes('PropertyPanelSync');
+        const isFromMainIntegration = stack.includes('main-integration') || stack.includes('updateUISystems');
+        const isFromPanelCommunication = stack.includes('PanelCommunication');
+        const isWhitelisted = isFromPropertyPanelSync || isFromMainIntegration || isFromPanelCommunication;
+
+        if (!isWhitelisted) {
             const violation = {
                 type: 'messaging-violation',
-                message: 'Direct postMessage detected - use PropertyPanelSync or ObjectStateManager',
+                message: 'Direct postMessage detected - use PropertyPanelSync',
+                messageType: message?.type,
                 stack
             };
             this.recordViolation(violation);
 
-            console.warn(
-                `🚨 Messaging Violation: Direct postMessage usage\n` +
-                `   Use PropertyPanelSync.sendToUI() or ObjectStateManager.updateObject()\n` +
+            console.error(
+                `🚨 Messaging Violation: Direct postMessage bypass\n` +
+                `   Message type: ${message?.type || 'unknown'}\n` +
+                `   Use: PropertyPanelSync.sendToUI() for all UI updates\n` +
                 `   Direct postMessage bypasses validation and schema serialization`
             );
         }

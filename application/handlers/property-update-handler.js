@@ -60,13 +60,16 @@ class PropertyUpdateHandler {
                 objectData.autoLayout.enabled = false;
                 objectData.autoLayout.direction = null;
 
-                // Switch container to hug mode without moving objects
+                // Switch container back to hug mode when layout is disabled
+                objectData.isHug = true;
+
                 // No layout update needed - just preserve current positions
                 return true;
             }
 
-            // Enable layout mode
+            // Enable layout mode and disable hug mode (they are mutually exclusive)
             objectData.autoLayout.enabled = true;
+            objectData.isHug = false;
 
             // Step 4: PropertyUpdateHandler → objectData.autoLayout[property] = newValue
             if (property.startsWith('autoLayout.')) {
@@ -176,11 +179,9 @@ class PropertyUpdateHandler {
             const historyManager = window.modlerComponents?.historyManager;
             if (historyManager) {
                 const command = new UpdatePropertyCommand(objectId, property, oldValue, value);
-                historyManager.undoStack.push(command);
-                historyManager.clearRedoStack();
-                historyManager.trimHistory();
-                historyManager.notifyHistoryChanged();
-
+                // ARCHITECTURAL FIX: Commands must go through executeCommand() for proper undo/redo
+                // The command's execute() is a no-op since the update already happened
+                historyManager.executeCommand(command);
                 logger.debug(`📝 Registered property change in history: ${property}`);
             }
         }
@@ -206,6 +207,152 @@ class PropertyUpdateHandler {
         }
 
         return value;
+    }
+
+    /**
+     * Check if object has fill enabled for specific axis
+     */
+    isAxisFilled(objectId, axis) {
+        const sceneController = window.modlerComponents?.sceneController;
+        if (!sceneController) return false;
+
+        const objectData = sceneController.getObject(objectId);
+        if (!objectData || !objectData.layoutProperties) return false;
+
+        const sizeProperty = `size${axis.toUpperCase()}`;
+        return objectData.layoutProperties[sizeProperty] === 'fill';
+    }
+
+    /**
+     * Check if object is in a layout-enabled container
+     */
+    isInLayoutContainer(objectId) {
+        const sceneController = window.modlerComponents?.sceneController;
+        if (!sceneController) return false;
+
+        const objectData = sceneController.getObject(objectId);
+        if (!objectData || !objectData.parentContainer) return false;
+
+        const container = sceneController.getObject(objectData.parentContainer);
+        return container && container.autoLayout && container.autoLayout.enabled;
+    }
+
+    /**
+     * Toggle fill property for an axis
+     */
+    toggleFillProperty(axis) {
+        const sceneController = window.modlerComponents?.sceneController;
+        const selectionController = window.modlerComponents?.selectionController;
+
+        if (!sceneController || !selectionController) return;
+
+        const selectedObjects = selectionController.getSelectedObjects();
+        if (!selectedObjects || selectedObjects.length === 0) return;
+
+        const mesh = selectedObjects[0];
+        if (!mesh.userData?.id) return;
+
+        const objectData = sceneController.getObject(mesh.userData.id);
+        if (!objectData) return;
+
+        // Check if object is in a layout container
+        if (!objectData.parentContainer) {
+            console.warn('PropertyUpdateHandler: Object is not in a container, cannot toggle fill');
+            return;
+        }
+
+        const container = sceneController.getObject(objectData.parentContainer);
+        if (!container || !container.autoLayout || !container.autoLayout.enabled) {
+            console.warn('PropertyUpdateHandler: Parent container does not have layout enabled');
+            return;
+        }
+
+        // Initialize layoutProperties if needed
+        if (!objectData.layoutProperties) {
+            objectData.layoutProperties = {
+                sizeX: 'fixed',
+                sizeY: 'fixed',
+                sizeZ: 'fixed'
+            };
+        }
+
+        // Initialize savedDimensions storage if needed
+        if (!objectData.savedDimensions) {
+            objectData.savedDimensions = { x: null, y: null, z: null };
+        }
+
+        // Toggle fill state for the axis
+        const sizeProperty = `size${axis.toUpperCase()}`;
+        const currentState = objectData.layoutProperties[sizeProperty];
+        const newState = currentState === 'fill' ? 'fixed' : 'fill';
+
+        if (newState === 'fill') {
+            // Save current dimension before applying fill
+            const currentDimension = objectData.dimensions?.[axis] || 1;
+            objectData.savedDimensions[axis] = currentDimension;
+        } else {
+            // Restore saved dimension when toggling fill off
+            if (objectData.savedDimensions[axis] !== null) {
+                sceneController.updateObjectDimensions(objectData.id, axis, objectData.savedDimensions[axis]);
+                objectData.savedDimensions[axis] = null;
+            }
+        }
+
+        objectData.layoutProperties[sizeProperty] = newState;
+
+        // Apply layout update
+        sceneController.updateLayout(container.id);
+
+        // Notify about the layout change via ObjectEventBus
+        if (window.objectEventBus) {
+            window.objectEventBus.emit(
+                'object:layout-updated',
+                objectData.id,
+                {
+                    containerId: container.id,
+                    affectedObjectIds: [objectData.id]
+                },
+                { source: 'fill-property-toggle' }
+            );
+        }
+
+        // Refresh property panel for selected objects
+        this.refreshLayoutPropertyPanels(container, selectionController);
+    }
+
+    /**
+     * Refresh property panels for all objects in a container when layout changes
+     */
+    refreshLayoutPropertyPanels(container, selectionController) {
+        const sceneController = window.modlerComponents?.sceneController;
+        if (!container || !sceneController) return;
+
+        const children = sceneController.getChildObjects(container.id);
+        if (!children || children.length === 0) return;
+
+        // Refresh property panel if any child is currently selected
+        const selectedObjects = selectionController?.getSelectedObjects();
+        if (!selectedObjects || selectedObjects.length === 0) return;
+
+        const selectedIds = selectedObjects.map(mesh => mesh.userData?.id).filter(Boolean);
+        const shouldRefresh = children.some(child => selectedIds.includes(child.id));
+
+        if (shouldRefresh) {
+            // Trigger UI refresh via ObjectEventBus
+            setTimeout(() => {
+                if (window.objectEventBus && selectedIds.length > 0) {
+                    window.objectEventBus.emit(
+                        'object:properties-changed',
+                        selectedIds[0],
+                        {
+                            objectIds: selectedIds,
+                            source: 'fill-property'
+                        },
+                        { source: 'fill-property-refresh' }
+                    );
+                }
+            }, 100);
+        }
     }
 
     /**

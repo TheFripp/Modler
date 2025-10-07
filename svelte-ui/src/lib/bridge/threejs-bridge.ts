@@ -1,9 +1,13 @@
+import { get } from 'svelte/store';
 import {
 	initializeModlerBridge,
 	syncSelectionFromThreeJS,
 	syncHierarchyFromThreeJS,
 	syncContainerContextFromThreeJS,
-	toolState
+	toolState,
+	selectedObjects,
+	objectHierarchy,
+	containerContext
 } from '$lib/stores/modler';
 import { unifiedCommunication } from '$lib/services/unified-communication';
 
@@ -55,22 +59,22 @@ export function initializeBridge() {
 		return;
 	}
 
-	// Direct context: poll for component availability
+	// Direct context: poll for component availability at 60fps
 	const pollInterval = setInterval(() => {
 		try {
 			const directComponents = (window as any)?.modlerComponents;
 			if (directComponents) {
-						bridge.initialize(directComponents);
+				bridge.initialize(directComponents);
 				setupDirectDataSync(directComponents);
 				clearInterval(pollInterval);
 			}
 		} catch (error) {
 			// Continue polling
 		}
-	}, 100);
+	}, 16); // 60fps polling (16ms)
 
-	// Stop polling after 2 seconds if components not found
-	setTimeout(() => clearInterval(pollInterval), 2000);
+	// Stop polling after 500ms if components not found (reduced from 2s)
+	setTimeout(() => clearInterval(pollInterval), 500);
 }
 
 /**
@@ -363,48 +367,50 @@ function isHierarchyUpdate(updateType: string): boolean {
  * Sync selection data that's already serialized from iframe integration
  */
 function syncSelectionFromIframe(serializedObjects: any[]) {
-	// Updating selection store
-	// Import and update the store
-	import('$lib/stores/modler').then(({ selectedObjects }) => {
+	// CRITICAL: Only update if selection actually changed
+	// Prevents flickering when clicking the same object
+	const currentSelection = get(selectedObjects);
+
+	// Quick check: different count = changed
+	if (currentSelection.length !== serializedObjects.length) {
 		selectedObjects.set(serializedObjects);
-		// Selection store updated successfully
-	}).catch(error => {
-		console.error('❌ Failed to update selection store:', error);
-	});
+		return;
+	}
+
+	// Same count - check if IDs changed
+	let changed = false;
+	for (let i = 0; i < currentSelection.length; i++) {
+		if (currentSelection[i]?.id !== serializedObjects[i]?.id) {
+			changed = true;
+			break;
+		}
+	}
+
+	if (changed) {
+		selectedObjects.set(serializedObjects);
+	}
 }
 
 /**
  * Sync object hierarchy data for the left panel
  */
 function syncHierarchyFromIframe(hierarchyObjects: any[]) {
-	// Import and update the object hierarchy store
-	import('$lib/stores/modler').then(({ objectHierarchy }) => {
-		objectHierarchy.set(hierarchyObjects);
-	}).catch(error => {
-		console.error('❌ Failed to update hierarchy store:', error);
-	});
+	// Use synchronous update for immediate rendering
+	objectHierarchy.set(hierarchyObjects);
 }
 
 /**
  * Sync tool state from main application to Svelte store
  */
 function syncToolStateFromIframe(toolStateData: any) {
-	// Import and update the tool state store
-	import('$lib/stores/modler').then(({ toolState }) => {
-		toolState.set(toolStateData);
-	}).catch(error => {
-		console.error('❌ Failed to update tool state store:', error);
-	});
+	// Use synchronous update for immediate rendering
+	toolState.set(toolStateData);
 }
 
 /**
  * Sync container context from main application to Svelte store
  */
 function syncContainerContextFromIframe(containerContextData: any) {
-	// Import and update the container context store
-	import('$lib/stores/modler').then(({ containerContext }) => {
-		containerContext.set(containerContextData);
-	}).catch(error => {
-		console.error('❌ Failed to update container context store:', error);
-	});
+	// Use synchronous update for immediate rendering
+	containerContext.set(containerContextData);
 }

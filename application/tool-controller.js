@@ -49,6 +49,7 @@ class ToolController {
             onMouseUp: (hit, event) => tool.onMouseUp ? tool.onMouseUp(hit, event) : undefined,
             onMouseMove: (hit, event) => tool.onMouseMove ? tool.onMouseMove(hit, event) : undefined,
             onKeyDown: (event) => tool.onKeyDown ? tool.onKeyDown(event) : undefined,
+            onKeyUp: (event) => tool.onKeyUp ? tool.onKeyUp(event) : undefined,
             hasActiveHighlight: () => tool.hasActiveHighlight ? tool.hasActiveHighlight() : false
         };
         

@@ -72,7 +72,10 @@ class NavigationController {
 
         // FIXED TIMING: Clear selection AFTER container context is established
         // This ensures UI update happens with correct container context
-        this.selectionController.clearSelection('navigate-to-container');
+        // Only clear if not adding to selection (shift-click)
+        if (!options.addToSelection) {
+            this.selectionController.clearSelection('navigate-to-container');
+        }
 
         // EXPLICIT UI NOTIFICATION: Ensure UI gets updated with new container context
         if (window.notifyObjectHierarchyChanged) {
@@ -125,7 +128,10 @@ class NavigationController {
                     this.navigateToContainer(objectData.parentContainer, { ...options, skipDimming: true });
 
                     // Then select the specific child object
-                    this.selectionController.clearSelection('navigate-to-object');
+                    // Only clear selection if not adding to selection (shift-click)
+                    if (!options.addToSelection) {
+                        this.selectionController.clearSelection('navigate-to-object');
+                    }
                     this.selectionController.select(objectData.mesh);
 
                     // NOW trigger dimming after both container entry and object selection are complete
@@ -140,8 +146,8 @@ class NavigationController {
             }
 
             // Object is at root level - just select it
-            this.navigateToRoot();
-            this.selectionController.clearSelection('navigate-to-root-object');
+            // Pass options to navigateToRoot so it knows whether to clear selection
+            this.navigateToRoot(options);
             this.selectionController.select(objectData.mesh);
             return true;
 
@@ -189,7 +195,7 @@ class NavigationController {
     /**
      * Navigate to root level (exit all container contexts)
      */
-    navigateToRoot() {
+    navigateToRoot(options = {}) {
         if (!this.initialized) return false;
 
         // CRITICAL FIX: Check if we were in container context before clearing state
@@ -218,8 +224,10 @@ class NavigationController {
             }
         }
 
-        // Clear selection
-        this.selectionController.clearSelection('navigate-to-root');
+        // Clear selection only if not adding to selection (shift-click)
+        if (!options.addToSelection) {
+            this.selectionController.clearSelection('navigate-to-root');
+        }
 
         // EXPLICIT UI NOTIFICATION: Ensure UI gets updated when exiting all containers
         if (window.notifyObjectHierarchyChanged) {
@@ -399,33 +407,9 @@ class NavigationController {
             return true;
         }
 
-        // Double-click on child object inside a container
+        // Double-click on child object inside a container - always navigate directly to it
         if (objectData.parentContainer) {
-            const parentContainer = sceneController.getObject(objectData.parentContainer);
-
-            // Check if parent is a layout-enabled container
-            const isLayoutContainer = parentContainer?.autoLayout?.enabled;
-
-            if (isLayoutContainer) {
-                // LAYOUT CONTAINERS: Two-step process (select parent first, then navigate)
-                const currentSelection = this.selectionController.getSelectedObjects();
-                const isParentSelected = currentSelection.length === 1 &&
-                                        currentSelection[0].id === objectData.parentContainer;
-
-                if (isParentSelected) {
-                    // Parent container is selected - navigate into it and select the object
-                    this.navigateToObject(objectData.id);
-                } else {
-                    // Parent container not selected - select it first (container-first selection)
-                    this.selectionController.clearSelection();
-                    if (parentContainer?.mesh) {
-                        this.selectionController.select(parentContainer.mesh);
-                    }
-                }
-            } else {
-                // HUG CONTAINERS: Direct navigation into container
-                this.navigateToObject(objectData.id);
-            }
+            this.navigateToObject(objectData.id);
             return true;
         }
 

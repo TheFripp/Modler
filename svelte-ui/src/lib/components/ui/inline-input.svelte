@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { cn } from '$lib/utils';
 	import { propertyController, type PropertyPath } from '$lib/services/property-controller';
+	import { ChevronUp, ChevronDown } from 'lucide-svelte';
 
 	interface Props {
 		label: string;
@@ -381,19 +382,19 @@
 					type="button"
 					tabindex="-1"
 					onmousedown={(e) => startArrowInteraction(e, 'up')}
-					class="flex items-center justify-center w-5 h-4 text-xs text-gray-400 hover:text-gray-200 hover:bg-[#171717] transition-colors cursor-ns-resize"
+					class="flex items-center justify-center w-8 h-4 text-gray-400 hover:text-white transition-colors cursor-ns-resize group"
 					disabled={disabled}
 				>
-					▲
+					<ChevronUp class="w-3.5 h-3.5 transition-colors" strokeWidth={1.5} />
 				</button>
 				<button
 					type="button"
 					tabindex="-1"
 					onmousedown={(e) => startArrowInteraction(e, 'down')}
-					class="flex items-center justify-center w-5 h-4 text-xs text-gray-400 hover:text-gray-200 hover:bg-[#171717] transition-colors cursor-ns-resize"
+					class="flex items-center justify-center w-8 h-4 text-gray-400 hover:text-white transition-colors cursor-ns-resize group"
 					disabled={disabled}
 				>
-					▼
+					<ChevronDown class="w-3.5 h-3.5 transition-colors" strokeWidth={1.5} />
 				</button>
 			</div>
 		{/if}

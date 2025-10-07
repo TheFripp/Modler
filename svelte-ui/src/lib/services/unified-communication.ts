@@ -11,6 +11,7 @@ interface UnifiedCommunicationService {
     sendSnapToggle(): Promise<boolean>;
     sendVisualSettings(settingsType: string, settings: any): Promise<boolean>;
     sendNavigationCommand(commandType: string, data: any): Promise<boolean>;
+    sendSelectionChange(objectId: string, isShiftClick?: boolean): Promise<boolean>;
     sendSettingsRequest(requestType: string): Promise<boolean>;
 }
 
@@ -73,10 +74,12 @@ class UnifiedCommunication implements UnifiedCommunicationService {
             }
         }, 100);
 
-        // Stop polling after 2 seconds (faster detection for iframe context)
+        // Stop polling after 500ms in dev mode (cross-origin), 2s in production
+        const isDev = window.location.port === '5173'; // Vite dev server port
+        const pollTimeout = isDev ? 500 : 2000;
         setTimeout(() => {
             clearInterval(pollInterval);
-        }, 2000);
+        }, pollTimeout);
     }
 
     /**
@@ -137,6 +140,17 @@ class UnifiedCommunication implements UnifiedCommunicationService {
 
         // Fallback to direct PostMessage
         return this.fallbackPostMessage(commandType, data);
+    }
+
+    /**
+     * Send selection change (convenience wrapper for object-select command)
+     */
+    async sendSelectionChange(objectId: string, isShiftClick: boolean = false): Promise<boolean> {
+        return this.sendNavigationCommand('object-select', {
+            objectId,
+            useNavigationController: true,
+            isShiftClick
+        });
     }
 
     /**
@@ -235,6 +249,7 @@ export const unifiedCommunication = {
     sendSnapToggle: async () => unifiedCommunication.instance.sendSnapToggle(),
     sendVisualSettings: async (settingsType: string, settings: any) => unifiedCommunication.instance.sendVisualSettings(settingsType, settings),
     sendNavigationCommand: async (commandType: string, data: any) => unifiedCommunication.instance.sendNavigationCommand(commandType, data),
+    sendSelectionChange: async (objectId: string, isShiftClick?: boolean) => unifiedCommunication.instance.sendSelectionChange(objectId, isShiftClick),
     sendSettingsRequest: async (requestType: string) => unifiedCommunication.instance.sendSettingsRequest(requestType),
     isInitialized: () => unifiedCommunication.instance.isInitialized(),
     getStatus: () => unifiedCommunication.instance.getStatus()

@@ -58,7 +58,7 @@ class ObjectVisualizer {
         const configManager = this.getConfigManager();
         if (configManager) {
             // When lineWidth changes, recreate all thick line groups with new width
-            configManager.subscribe('visual.selection.lineWidth', () => {
+            configManager.subscribe('visual.selection.lineWidth', (newValue) => {
                 this.refreshAllHighlights();
             });
         }

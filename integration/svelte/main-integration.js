@@ -725,12 +725,16 @@
                                     }
                                     selectionController.select(objectData.mesh);
                                 }
-                            } else if (data.parentContainer) {
+                            } else if (objectData.parentContainer) {
                                 // Child object: step into parent container and select child
-                                navigationController.navigateToObject(data.objectId);
+                                navigationController.navigateToObject(data.objectId, {
+                                    addToSelection: data.isShiftClick
+                                });
                             } else {
                                 // Root-level object: navigate to object
-                                navigationController.navigateToObject(data.objectId);
+                                navigationController.navigateToObject(data.objectId, {
+                                    addToSelection: data.isShiftClick
+                                });
                             }
                         }
                     } else if (sceneController && selectionController) {
@@ -751,6 +755,33 @@
                 case 'tool-activation':
                     activateTool(data.toolName);
                     break;
+                case 'tool-switch':
+                    activateTool(data.toolName);
+                    break;
+                case 'clear-selection':
+                    window.modlerComponents?.selectionController?.clearSelection();
+                    break;
+                case 'create-layout-container':
+                    const toolController = window.modlerComponents?.toolController;
+                    if (toolController) {
+                        toolController.createLayoutContainer();
+                    }
+                    break;
+                case 'undo':
+                    const undoToolController = window.modlerComponents?.toolController;
+                    if (undoToolController) {
+                        undoToolController.undo();
+                    }
+                    break;
+                case 'redo':
+                    const redoToolController = window.modlerComponents?.toolController;
+                    if (redoToolController) {
+                        redoToolController.redo();
+                    }
+                    break;
+                case 'duplicate-object':
+                    handleDuplicateObject();
+                    break;
                 case 'snap-toggle':
                     handleSnapToggle();
                     break;
@@ -767,28 +798,28 @@
                     handleCheckLayoutMode(event.source, data.objectId);
                     break;
                 case 'cad-wireframe-settings-changed':
-                    handleCadWireframeSettingsUpdate(data.settings);
+                    settingsHandler?.handleCadWireframeSettingsUpdate(data.settings);
                     break;
                 case 'get-cad-wireframe-settings':
-                    handleGetCadWireframeSettings(event.source);
+                    settingsHandler?.handleGetCadWireframeSettings(event.source);
                     break;
                 case 'visual-settings-changed':
-                    handleVisualSettingsUpdate(data.settings);
+                    settingsHandler?.handleVisualSettingsUpdate(data.settings);
                     break;
                 case 'get-visual-settings':
-                    handleGetVisualSettings(event.source);
+                    settingsHandler?.handleGetVisualSettings(event.source);
                     break;
                 case 'scene-settings-changed':
-                    handleSceneSettingsUpdate(data.settings);
+                    settingsHandler?.handleSceneSettingsUpdate(data.settings);
                     break;
                 case 'get-scene-settings':
-                    handleGetSceneSettings(event.source);
+                    settingsHandler?.handleGetSceneSettings(event.source);
                     break;
                 case 'interface-settings-changed':
-                    handleInterfaceSettingsUpdate(data.settings);
+                    settingsHandler?.handleInterfaceSettingsUpdate(data.settings);
                     break;
                 case 'get-interface-settings':
-                    handleGetInterfaceSettings(event.source);
+                    settingsHandler?.handleGetInterfaceSettings(event.source);
                     break;
                 case 'object-move-to-container':
                 case 'object-container-move-to-container':
@@ -943,9 +974,16 @@
             if (success) {
                 // Send updated tool state to all panels
                 sendToolStateUpdate(toolName);
+
+                // Auto-focus the main window so the tool can receive events
+                if (window.focus) {
+                    window.focus();
+                }
             } else {
                 console.warn('❌ Failed to switch to tool:', toolName);
             }
+        } else {
+            console.warn('❌ ToolController not available');
         }
     }
 
@@ -956,53 +994,6 @@
     // SETTINGS HANDLERS (Delegated to SettingsHandler class)
     // ==================================================================================
 
-    function handleCadWireframeSettingsUpdate(settings) {
-        if (settingsHandler) {
-            settingsHandler.handleCadWireframeSettingsUpdate(settings);
-        }
-    }
-
-    function handleGetCadWireframeSettings(source) {
-        if (settingsHandler) {
-            settingsHandler.handleGetCadWireframeSettings(source);
-        }
-    }
-
-    function handleVisualSettingsUpdate(settings) {
-        if (settingsHandler) {
-            settingsHandler.handleVisualSettingsUpdate(settings);
-        }
-    }
-
-    function handleSceneSettingsUpdate(settings) {
-        if (settingsHandler) {
-            settingsHandler.handleSceneSettingsUpdate(settings);
-        }
-    }
-
-    function handleGetSceneSettings(source) {
-        if (settingsHandler) {
-            settingsHandler.handleGetSceneSettings(source);
-        }
-    }
-
-    function handleInterfaceSettingsUpdate(settings) {
-        if (settingsHandler) {
-            settingsHandler.handleInterfaceSettingsUpdate(settings);
-        }
-    }
-
-    function handleGetInterfaceSettings(source) {
-        if (settingsHandler) {
-            settingsHandler.handleGetInterfaceSettings(source);
-        }
-    }
-
-    function handleGetVisualSettings(source) {
-        if (settingsHandler) {
-            settingsHandler.handleGetVisualSettings(source);
-        }
-    }
 
     // ==================================================================================
     // SNAP TOGGLE HANDLER
@@ -1026,6 +1017,39 @@
 
     // Expose snap toggle for UI components
     window.toggleSnapping = handleSnapToggle;
+
+    /**
+     * Handle duplicate object command from UI
+     */
+    function handleDuplicateObject() {
+        const selectionController = window.modlerComponents?.selectionController;
+        const historyManager = window.modlerComponents?.historyManager;
+        const sceneController = window.modlerComponents?.sceneController;
+
+        if (!selectionController || !historyManager || !sceneController) {
+            logger.warn('DuplicateObject: Missing required components');
+            return;
+        }
+
+        const selectedObjects = selectionController.getSelectedObjects();
+        if (selectedObjects.length === 0) {
+            logger.info('DuplicateObject: No object selected');
+            return;
+        }
+
+        // Get first selected object's ID
+        const mesh = selectedObjects[0];
+        const objectData = sceneController.getObjectByMesh(mesh);
+
+        if (!objectData) {
+            logger.warn('DuplicateObject: Could not find object data');
+            return;
+        }
+
+        // Create and execute duplicate command
+        const command = new DuplicateObjectCommand(objectData.id);
+        historyManager.executeCommand(command);
+    }
 
     /**
      * Handle fill button visibility check from PropertyPanel
@@ -1113,23 +1137,32 @@
             return;
         }
 
-        // Store old parent for layout update
-        const oldParentId = objectData.parentContainer;
-
-        // Use sceneController to move the object
-        sceneController.setParentContainer(objectId, targetContainerId, true);
-
-        // Update old parent's layout if it had one
-        if (oldParentId) {
-            const oldParent = sceneController.getObject(oldParentId);
-            if (oldParent && oldParent.autoLayout && oldParent.autoLayout.enabled) {
-                sceneController.updateLayout(oldParentId);
-            }
+        // Use ObjectStateManager to move the object (proper event flow)
+        // SceneController.setParentContainer handles layout updates automatically
+        const objectStateManager = window.modlerComponents?.objectStateManager;
+        if (objectStateManager) {
+            objectStateManager.updateObject(objectId, {
+                parentContainer: targetContainerId
+            });
+        } else {
+            // Fallback to direct scene controller (shouldn't happen)
+            sceneController.setParentContainer(objectId, targetContainerId, true);
         }
 
-        // Refresh UI
-        if (propertyPanelSync) {
-            propertyPanelSync.refreshCompleteHierarchy();
+        // After moving to container, select the object and navigate into the container
+        const navigationController = window.modlerComponents?.navigationController;
+        const selectionController = window.modlerComponents?.selectionController;
+
+        if (navigationController && selectionController) {
+            // Navigate into the container
+            navigationController.navigateToContainer(targetContainerId);
+
+            // Select the moved object
+            const movedObjectMesh = sceneController.getObject(objectId)?.mesh;
+            if (movedObjectMesh) {
+                selectionController.clearSelection();
+                selectionController.select(movedObjectMesh);
+            }
         }
     }
 
@@ -1150,23 +1183,16 @@
             return;
         }
 
-        // Store old parent for layout update
-        const oldParentId = objectData.parentContainer;
-
-        // Use sceneController to move the object to root (null parent)
-        sceneController.setParentContainer(objectId, null, true);
-
-        // Update old parent's layout if it had one
-        if (oldParentId) {
-            const oldParent = sceneController.getObject(oldParentId);
-            if (oldParent && oldParent.autoLayout && oldParent.autoLayout.enabled) {
-                sceneController.updateLayout(oldParentId);
-            }
-        }
-
-        // Refresh UI
-        if (propertyPanelSync) {
-            propertyPanelSync.refreshCompleteHierarchy();
+        // Use ObjectStateManager to move the object to root (proper event flow)
+        // SceneController.setParentContainer handles layout updates automatically
+        const objectStateManager = window.modlerComponents?.objectStateManager;
+        if (objectStateManager) {
+            objectStateManager.updateObject(objectId, {
+                parentContainer: null
+            });
+        } else {
+            // Fallback to direct scene controller (shouldn't happen)
+            sceneController.setParentContainer(objectId, null, true);
         }
     }
 
@@ -1180,6 +1206,8 @@
             return;
         }
 
+        const draggedObj = sceneController.getObject(objectId);
+
         // Get the parent's children array
         let childrenArray;
         if (parentId) {
@@ -1188,30 +1216,60 @@
                 console.warn('❌ Parent container not found or invalid:', parentId);
                 return;
             }
-            // Get children from SceneController
-            childrenArray = sceneController.getChildObjects(parentId);
+            // Get or initialize childrenOrder array
+            if (!parent.childrenOrder || !Array.isArray(parent.childrenOrder)) {
+                // Initialize from current children
+                const currentChildren = sceneController.getChildObjects(parentId);
+                parent.childrenOrder = currentChildren.map(child => child.id);
+            }
+            childrenArray = [...parent.childrenOrder];
         } else {
-            // Root level - get all objects without parents
-            childrenArray = Array.from(sceneController.objects.values())
-                .filter(obj => !obj.parentContainer)
-                .map(obj => obj.id);
+            // Root level - use rootChildrenOrder
+            if (!sceneController.rootChildrenOrder || !Array.isArray(sceneController.rootChildrenOrder)) {
+                // Initialize from current root objects
+                sceneController.rootChildrenOrder = Array.from(sceneController.objects.values())
+                    .filter(obj => !obj.parentContainer)
+                    .map(obj => obj.id);
+            }
+            childrenArray = [...sceneController.rootChildrenOrder];
         }
 
         // Find current indices
         const draggedIndex = childrenArray.indexOf(objectId);
         const targetIndex = childrenArray.indexOf(targetId);
 
-        if (draggedIndex === -1 || targetIndex === -1) {
-            console.warn('❌ Object or target not found in children array');
+        if (targetIndex === -1) {
+            console.warn('❌ Target object not found in children array');
             return;
         }
 
-        // Remove dragged object
-        childrenArray.splice(draggedIndex, 1);
+        // If dragged object is not in the array, it's being moved from another parent
+        // In this case, we need to update its parentContainer first
+        if (draggedIndex === -1 && draggedObj) {
+            // Object is being moved from a different parent
+            // First, update its parent
+            const objectStateManager = window.modlerComponents?.objectStateManager;
+            if (objectStateManager) {
+                objectStateManager.updateObject(objectId, {
+                    parentContainer: parentId
+                });
+            } else {
+                sceneController.setParentContainer(objectId, parentId, true);
+            }
+
+            // Add to the new parent's order array
+            childrenArray.push(objectId);
+        } else if (draggedIndex !== -1) {
+            // Object is already in this parent, just remove it for reordering
+            childrenArray.splice(draggedIndex, 1);
+        } else {
+            console.warn('❌ Dragged object not found');
+            return;
+        }
 
         // Calculate new index
         let newIndex = targetIndex;
-        if (draggedIndex < targetIndex) {
+        if (draggedIndex !== -1 && draggedIndex < targetIndex) {
             // Dragged from before target, adjust for removal
             newIndex--;
         }
@@ -1223,9 +1281,13 @@
         // Insert at new position
         childrenArray.splice(newIndex, 0, objectId);
 
-        // Update Three.js scene graph order to match
+        // Update stored order
         if (parentId) {
             const parent = sceneController.getObject(parentId);
+
+            // CRITICAL: Store the new order in the parent container
+            parent.childrenOrder = childrenArray;
+
             if (parent && parent.mesh) {
                 // Reorder children in Three.js parent
                 const childMesh = sceneController.getObject(objectId)?.mesh;
@@ -1241,6 +1303,18 @@
             const parentObj = sceneController.getObject(parentId);
             if (parentObj && parentObj.autoLayout && parentObj.autoLayout.enabled) {
                 sceneController.updateLayout(parentId);
+            }
+        } else {
+            // Root level - store the new order
+            sceneController.rootChildrenOrder = childrenArray;
+
+            // Reorder in Three.js scene
+            const objectMesh = sceneController.getObject(objectId)?.mesh;
+            if (objectMesh) {
+                // Remove and re-add at correct position in scene
+                sceneController.scene.remove(objectMesh);
+                sceneController.scene.children.splice(newIndex, 0, objectMesh);
+                sceneController.scene.add(objectMesh);
             }
         }
 
@@ -1279,6 +1353,7 @@
 
     /**
      * Handle fill button hover - show/hide face highlight
+     * Uses see-through rendering so highlights are visible even when occluded
      */
     function handleFillButtonHover(objectId, axis, isHovering) {
         const sceneController = window.modlerComponents?.sceneController;
@@ -1293,6 +1368,11 @@
             return;
         }
 
+        const supportMeshes = objectData.mesh.userData?.supportMeshes;
+        if (!supportMeshes?.faceHighlight) {
+            return;
+        }
+
         if (isHovering) {
             // Create a synthetic face for the axis
             // Face normal points along the axis (positive direction)
@@ -1303,9 +1383,22 @@
 
             const face = { normal };
 
+            // Enable see-through rendering for fill button highlights
+            // This allows highlights to be visible even when occluded by other objects
+            if (supportMeshes.faceHighlight.material) {
+                supportMeshes.faceHighlight.material.depthTest = false;
+                supportMeshes.faceHighlight.material.renderOrder = 1001; // Render after other highlights
+            }
+
             // Show face highlight using visualization manager
             visualizationManager.getVisualizerFor(objectData.mesh)?.showFaceHighlight(objectData.mesh, face);
         } else {
+            // Restore normal depth testing when hiding
+            if (supportMeshes.faceHighlight.material) {
+                supportMeshes.faceHighlight.material.depthTest = true;
+                supportMeshes.faceHighlight.material.renderOrder = 1000;
+            }
+
             // Hide face highlight
             const face = { normal: new THREE.Vector3() }; // Dummy face for hide
             visualizationManager.getVisualizerFor(objectData.mesh)?.hideFaceHighlight(objectData.mesh, face);

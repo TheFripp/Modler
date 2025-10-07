@@ -66,14 +66,6 @@ class PushTool {
                 if (!isLayoutEnabled) {
                     return false; // Block containers in hug mode
                 }
-            } else if (objectData && !objectData.isContainer) {
-                // Block child objects inside layout-enabled containers
-                if (objectData.parentContainer) {
-                    const parent = sceneController.getObject(objectData.parentContainer);
-                    if (parent?.autoLayout?.enabled) {
-                        return false;
-                    }
-                }
             }
         }
 
@@ -105,9 +97,15 @@ class PushTool {
     }
 
     onDoubleClick(hit, event) {
+        // If actively pushing, stop the operation
         if (this.isPushing) {
             this.stopPush();
+            return;
         }
+
+        // Otherwise, handle container navigation (double-click to step into container)
+        const operationCallbacks = { isOperationActive: () => this.isPushing };
+        this.eventHandler.handleDoubleClick(hit, event, operationCallbacks);
     }
 
     /**
@@ -122,6 +120,12 @@ class PushTool {
         this.pushedFace = hit.face;
         this.cumulativeAmount = 0;
 
+        // Disable hug updates during push to prevent interference
+        const sceneController = window.modlerComponents?.sceneController;
+        if (sceneController && typeof sceneController.disableHugUpdates === 'function') {
+            sceneController.disableHugUpdates();
+        }
+
         // Face highlight stays visible during push
         // Note: It may visually lag slightly during fast drags as it's positioned at face center
         // which changes as vertices move. Wireframe provides accurate feedback.
@@ -135,7 +139,6 @@ class PushTool {
         this.determinePushAxis(worldNormal);
 
         // Store initial state for undo
-        const sceneController = window.modlerComponents?.sceneController;
         const objectData = sceneController?.getObjectByMesh(targetObject);
         if (objectData) {
             this.initialDimensions = objectData.dimensions ? { ...objectData.dimensions } : null;
@@ -201,11 +204,6 @@ class PushTool {
 
         // Update container layout if needed
         this.updateContainerLayout();
-
-        // Note: Don't call updateDimensionDisplay() during drag - it triggers
-        // objectStateManager.updateObject() which calls updateObjectDimensions()
-        // which resets the geometry to centered bounds via scaleGeometryAlongAxis().
-        // We update dimensions directly in modifyGeometry() and finalize in stopPush().
     }
 
     /**
@@ -279,14 +277,28 @@ class PushTool {
             }
         }
 
-        // Determine anchor mode from push direction
-        // pushDirection > 0 means pushing +face, so MIN face stays fixed
-        // pushDirection < 0 means pushing -face, so MAX face stays fixed
-        const anchorMode = this.pushDirection > 0 ? 'min' : 'max';
-
-        // Check if this is a container (reuse sceneController from above)
+        // Check if this is a container or child in layout container
         const objectData2 = sceneController?.getObjectByMesh(this.pushedObject);
         const isContainer = objectData2?.isContainer;
+
+        // Determine anchor mode from push direction and alignment
+        // Default: pushDirection > 0 means pushing +face, so MIN face stays fixed
+        //          pushDirection < 0 means pushing -face, so MAX face stays fixed
+        let anchorMode = this.pushDirection > 0 ? 'min' : 'max';
+
+        // Check if this object is inside a layout-enabled container with alignment
+        if (!isContainer && objectData2?.parentContainer && sceneController) {
+            const parent = sceneController.getObject(objectData2.parentContainer);
+            if (parent?.autoLayout?.enabled && parent.autoLayout.alignment) {
+                const alignment = parent.autoLayout.alignment[this.pushAxis];
+
+                // If center-aligned on this axis: use 'center' mode for symmetric expansion
+                // If edge-aligned: use normal behavior (pushed face moves, opposite stays)
+                if (alignment === 'center') {
+                    anchorMode = 'center';
+                }
+            }
+        }
 
         let success;
         if (isContainer) {
@@ -298,9 +310,16 @@ class PushTool {
                 return;
             }
 
-            // Calculate position shift to keep anchor face fixed
-            const shiftAmount = (newDimension - currentDims[this.pushAxis]) / 2;
-            const positionShift = this.pushDirection > 0 ? shiftAmount : -shiftAmount;
+            // Calculate position shift based on anchor mode
+            let positionShift = 0;
+            if (anchorMode === 'center') {
+                // Center mode: no position shift (symmetric expansion)
+                positionShift = 0;
+            } else {
+                // Edge-anchored: shift to keep anchor face fixed
+                const shiftAmount = (newDimension - currentDims[this.pushAxis]) / 2;
+                positionShift = this.pushDirection > 0 ? shiftAmount : -shiftAmount;
+            }
 
             // Create new centered geometry
             const oldGeometry = this.pushedObject.geometry;
@@ -314,24 +333,34 @@ class PushTool {
             this.pushedObject.geometry = newGeometry;
             geometryFactory.returnGeometry(oldGeometry, 'box');
 
-            // Shift position to keep anchor face fixed
-            this.pushedObject.position[this.pushAxis] += positionShift;
+            // Shift object position if needed (but NOT if inside a layout container)
+            const parentContainer = objectData2?.parentContainer ? sceneController.getObject(objectData2.parentContainer) : null;
+            const isInLayoutContainer = parentContainer?.autoLayout?.enabled;
 
-            // CRITICAL: When container moves, children (in local coords) move with it in world space
-            // To keep children visually in place, shift their local positions by opposite amount
-            if (sceneController && this.pushedObject.userData?.id) {
-                const children = sceneController.getChildObjects(this.pushedObject.userData.id);
-                if (children.length > 0) {
-                    console.log(`  📦 Container shifted by ${positionShift.toFixed(3)} on ${this.pushAxis}, counter-shifting ${children.length} children`);
-                }
-                children.forEach(child => {
-                    if (child.mesh) {
-                        const oldPos = child.mesh.position[this.pushAxis];
-                        child.mesh.position[this.pushAxis] -= positionShift;
-                        console.log(`    ↔️  ${child.name}: ${oldPos.toFixed(3)} → ${child.mesh.position[this.pushAxis].toFixed(3)}`);
-                    }
-                });
+            if (positionShift !== 0 && !isInLayoutContainer) {
+                // Only shift position if NOT inside a layout container
+                // Layout containers will handle positioning via their layout engine
+                this.pushedObject.position[this.pushAxis] += positionShift;
             }
+
+            // Check if this container has layout enabled
+            const hasLayoutEnabled = objectData2?.autoLayout?.enabled;
+
+            if (!hasLayoutEnabled) {
+                // NON-LAYOUT CONTAINERS (hug mode): Counter-shift children to keep them visually in place
+                // CRITICAL: When container moves, children (in local coords) move with it in world space
+                // To keep children visually in place, shift their local positions by opposite amount
+                if (sceneController && this.pushedObject.userData?.id) {
+                    const children = sceneController.getChildObjects(this.pushedObject.userData.id);
+                    children.forEach(child => {
+                        if (child.mesh) {
+                            child.mesh.position[this.pushAxis] -= positionShift;
+                        }
+                    });
+                }
+            }
+            // LAYOUT CONTAINERS: Don't counter-shift children
+            // The layout engine will recalculate child positions based on new container size
 
             success = true;
         } else {
@@ -349,16 +378,37 @@ class PushTool {
             // Update all support meshes (wireframes, etc.) - unified for containers and objects
             geometryUtils.updateSupportMeshGeometries(this.pushedObject, false);
 
-            // Update scene data dimensions and position
+            // Update scene data dimensions and position through ObjectStateManager
             if (sceneController && this.pushedObject.userData?.id) {
                 const finalObjectData = objectData2 || objectData;
                 if (finalObjectData) {
                     const dims = geometryUtils.getGeometryDimensions(this.pushedObject.geometry);
-                    finalObjectData.dimensions = { x: dims.x, y: dims.y, z: dims.z };
 
-                    // Update position for containers
-                    if (isContainer) {
-                        finalObjectData.position = this.pushedObject.position.clone();
+                    // Update through ObjectStateManager to preserve all properties (like autoLayout)
+                    const objectStateManager = window.modlerComponents?.objectStateManager;
+                    if (objectStateManager) {
+                        const updates = {
+                            dimensions: { x: dims.x, y: dims.y, z: dims.z }
+                        };
+
+                        // Update position for containers
+                        if (isContainer) {
+                            updates.position = {
+                                x: this.pushedObject.position.x,
+                                y: this.pushedObject.position.y,
+                                z: this.pushedObject.position.z
+                            };
+                        }
+
+                        // Pass 'push-tool' as source to suppress parent layout updates during drag
+                        // Layout will be updated once when push is complete
+                        objectStateManager.updateObject(finalObjectData.id, updates, 'push-tool');
+                    } else {
+                        // Fallback to direct update
+                        finalObjectData.dimensions = { x: dims.x, y: dims.y, z: dims.z };
+                        if (isContainer) {
+                            finalObjectData.position = this.pushedObject.position.clone();
+                        }
                     }
                 }
             }
@@ -478,7 +528,6 @@ class PushTool {
 
                 // FILL OBJECTS: Replace geometry instead of vertex manipulation
                 // This keeps geometry centered and avoids position shifts
-                const oldPos = child.mesh.position.clone();
                 const oldGeometry = child.mesh.geometry;
                 const newGeometry = geometryFactory.createBoxGeometry(
                     axis === 'x' ? newDimension : currentDims.x,
@@ -543,6 +592,12 @@ class PushTool {
 
         const pushedObject = this.pushedObject;
 
+        // Re-enable hug updates
+        const sceneController = window.modlerComponents?.sceneController;
+        if (sceneController && typeof sceneController.enableHugUpdates === 'function') {
+            sceneController.enableHugUpdates();
+        }
+
         // Finalize geometry and recalculate face highlight position
         if (pushedObject) {
             const geometryUtils = window.GeometryUtils;
@@ -551,15 +606,74 @@ class PushTool {
                 geometryUtils.updateSupportMeshGeometries(pushedObject, true);
             }
 
-            // Final dimension update
-            // Source 'push-tool' tells ObjectStateManager to skip layout update
-            // Positions stay fixed, fill objects already resized during drag
-            if (this.objectStateManager && pushedObject.userData?.id) {
-                const dimensions = geometryUtils?.getGeometryDimensions(pushedObject.geometry);
-                if (dimensions) {
-                    this.objectStateManager.updateObject(pushedObject.userData.id, {
-                        dimensions: { x: dimensions.x, y: dimensions.y, z: dimensions.z }
-                    }, 'push-tool');
+            // Recenter geometry to keep rotation pivot at geometric center
+            if (geometryUtils && pushedObject.geometry) {
+                // Calculate current bounding box center
+                pushedObject.geometry.computeBoundingBox();
+                const boundingBox = pushedObject.geometry.boundingBox;
+                const geometryCenter = new THREE.Vector3();
+                boundingBox.getCenter(geometryCenter);
+
+                // Offset geometry so its center is at origin
+                pushedObject.geometry.translate(-geometryCenter.x, -geometryCenter.y, -geometryCenter.z);
+
+                // Recompute bounding box and attributes after translation
+                pushedObject.geometry.computeBoundingBox();
+                pushedObject.geometry.computeBoundingSphere();
+                if (pushedObject.geometry.attributes.position) {
+                    pushedObject.geometry.attributes.position.needsUpdate = true;
+                }
+
+                // Adjust mesh position to compensate (in world space)
+                const worldOffset = geometryCenter.clone().applyMatrix4(
+                    new THREE.Matrix4().extractRotation(pushedObject.matrixWorld)
+                );
+                pushedObject.position.add(worldOffset);
+
+                // Update matrices
+                pushedObject.updateMatrix();
+                pushedObject.updateMatrixWorld(true);
+
+                // Final dimension update AFTER recentering
+                // Source 'push-tool' tells ObjectStateManager to skip layout update
+                // Positions stay fixed, fill objects already resized during drag
+                if (this.objectStateManager && pushedObject.userData?.id) {
+                    const dimensions = geometryUtils.getGeometryDimensions(pushedObject.geometry);
+                    if (dimensions) {
+                        this.objectStateManager.updateObject(pushedObject.userData.id, {
+                            dimensions: { x: dimensions.x, y: dimensions.y, z: dimensions.z },
+                            position: { x: pushedObject.position.x, y: pushedObject.position.y, z: pushedObject.position.z }
+                        }, 'push-tool');
+                    }
+                }
+            }
+
+            // Trigger final container update now that push is complete
+            if (sceneController && pushedObject.userData?.id) {
+                const objectData = sceneController.getObjectByMesh(pushedObject);
+
+                // If this is a hug container, update its size
+                if (objectData?.isHug && objectData?.isContainer) {
+                    sceneController.updateHugContainerSize(objectData.id);
+                }
+
+                // If object is inside a layout container, trigger layout update with push context
+                // This preserves the anchor point so container grows from pushed edge, not recenter
+                if (objectData?.parentContainer) {
+                    const parentContainer = sceneController.getObject(objectData.parentContainer);
+                    if (parentContainer?.autoLayout?.enabled) {
+                        // Pass push context to preserve anchor during layout
+                        // anchorMode determines which edge stays fixed:
+                        // - direction 1 (pushing +X/+Y/+Z face): use 'min' anchor (left/bottom/front edge fixed)
+                        // - direction -1 (pushing -X/-Y/-Z face): use 'max' anchor (right/top/back edge fixed)
+                        const pushContext = {
+                            axis: this.pushAxis,
+                            direction: this.pushDirection,
+                            anchorMode: this.pushDirection === 1 ? 'min' : 'max',
+                            isPush: true
+                        };
+                        sceneController.updateLayout(objectData.parentContainer, pushContext);
+                    }
                 }
             }
 
@@ -584,26 +698,41 @@ class PushTool {
      * Register undo action for history
      */
     registerUndoAction(pushedObject) {
-        const historyController = window.modlerComponents?.historyController;
-        if (!historyController) return;
+        const historyManager = window.modlerComponents?.historyManager;
+        if (!historyManager) return;
 
         const geometryUtils = window.GeometryUtils;
         const finalDimensions = geometryUtils?.getGeometryDimensions(pushedObject.geometry);
+        const finalPosition = {
+            x: pushedObject.position.x,
+            y: pushedObject.position.y,
+            z: pushedObject.position.z
+        };
 
-        if (this.initialDimensions && finalDimensions) {
-            historyController.push({
-                execute: () => {
-                    this.objectStateManager?.updateObject(pushedObject.userData.id, {
-                        dimensions: finalDimensions
-                    });
-                },
-                undo: () => {
-                    this.objectStateManager?.updateObject(pushedObject.userData.id, {
-                        dimensions: this.initialDimensions
-                    });
-                },
-                description: `Push ${pushedObject.userData.id}`
-            });
+        if (this.initialDimensions && finalDimensions && this.initialPosition) {
+            // Check if dimensions or position actually changed
+            const dimensionsChanged =
+                Math.abs(finalDimensions.x - this.initialDimensions.x) > 0.001 ||
+                Math.abs(finalDimensions.y - this.initialDimensions.y) > 0.001 ||
+                Math.abs(finalDimensions.z - this.initialDimensions.z) > 0.001;
+
+            const positionChanged =
+                Math.abs(finalPosition.x - this.initialPosition.x) > 0.001 ||
+                Math.abs(finalPosition.y - this.initialPosition.y) > 0.001 ||
+                Math.abs(finalPosition.z - this.initialPosition.z) > 0.001;
+
+            if (dimensionsChanged || positionChanged) {
+                // ARCHITECTURAL FIX: Use PushFaceCommand for proper undo/redo
+                const command = new PushFaceCommand(
+                    pushedObject.userData.id,
+                    this.initialDimensions,
+                    finalDimensions,
+                    this.initialPosition,
+                    finalPosition
+                );
+                historyManager.executeCommand(command);
+                logger.debug(`📝 Registered push in history: ${pushedObject.userData.id}`);
+            }
         }
     }
 

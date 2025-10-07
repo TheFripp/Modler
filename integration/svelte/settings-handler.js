@@ -9,6 +9,14 @@
 class SettingsHandler {
     constructor() {
         // Settings handler initialized
+        this.panelCommunication = null;
+    }
+
+    /**
+     * Initialize with panel communication
+     */
+    initialize(panelCommunication) {
+        this.panelCommunication = panelCommunication;
     }
 
     /**
@@ -57,24 +65,9 @@ class SettingsHandler {
             lineWidth: configurationManager.get('visual.cad.wireframe.lineWidth') || 1
         };
 
-        // Send settings response directly to left panel
-        const propertyPanelSync = this.getPropertyPanelSync();
-        if (!propertyPanelSync || !propertyPanelSync.panelManager) return;
-
-        const panelManager = propertyPanelSync.panelManager;
-        let leftPanelIframe = null;
-
-        if (panelManager.componentInstances) {
-            leftPanelIframe = panelManager.componentInstances.leftPanel?.iframe;
-        } else if (typeof panelManager.getIframes === 'function') {
-            leftPanelIframe = panelManager.getIframes().left;
-        }
-
-        if (leftPanelIframe && leftPanelIframe.contentWindow) {
-            leftPanelIframe.contentWindow.postMessage({
-                type: 'cad-wireframe-settings-response',
-                settings: currentSettings
-            }, '*');
+        // Send settings response via centralized panel communication
+        if (this.panelCommunication) {
+            this.panelCommunication.sendSettingsResponse('cad-wireframe-settings', currentSettings);
         }
     }
 
@@ -117,36 +110,9 @@ class SettingsHandler {
             }
         };
 
-        console.log('📤 Sending visual-settings-response:', currentSettings);
-
-        // Send settings response directly to left panel
-        // Access panelManager through PropertyPanelSync
-        const propertyPanelSync = this.getPropertyPanelSync();
-        if (!propertyPanelSync || !propertyPanelSync.panelManager) {
-            console.warn('❌ PropertyPanelSync or panelManager not available');
-            return;
-        }
-
-        const panelManager = propertyPanelSync.panelManager;
-        let leftPanelIframe = null;
-
-        if (panelManager.componentInstances) {
-            // DirectComponentManager
-            leftPanelIframe = panelManager.componentInstances.leftPanel?.iframe;
-        } else if (typeof panelManager.getIframes === 'function') {
-            // Legacy PanelManager
-            const iframes = panelManager.getIframes();
-            leftPanelIframe = iframes.left;
-        }
-
-        if (leftPanelIframe && leftPanelIframe.contentWindow) {
-            leftPanelIframe.contentWindow.postMessage({
-                type: 'visual-settings-response',
-                settings: currentSettings
-            }, '*');
-            console.log('✅ Sent visual-settings-response to left panel');
-        } else {
-            console.warn('❌ Left panel iframe not available');
+        // Send settings response via centralized panel communication
+        if (this.panelCommunication) {
+            this.panelCommunication.sendSettingsResponse('visual-settings', currentSettings);
         }
     }
 
@@ -181,24 +147,9 @@ class SettingsHandler {
             gridSubColor: configurationManager.get('scene.grid.subColor') || '#222222'
         };
 
-        // Send settings response directly to left panel
-        const propertyPanelSync = this.getPropertyPanelSync();
-        if (!propertyPanelSync || !propertyPanelSync.panelManager) return;
-
-        const panelManager = propertyPanelSync.panelManager;
-        let leftPanelIframe = null;
-
-        if (panelManager.componentInstances) {
-            leftPanelIframe = panelManager.componentInstances.leftPanel?.iframe;
-        } else if (typeof panelManager.getIframes === 'function') {
-            leftPanelIframe = panelManager.getIframes().left;
-        }
-
-        if (leftPanelIframe && leftPanelIframe.contentWindow) {
-            leftPanelIframe.contentWindow.postMessage({
-                type: 'scene-settings-response',
-                settings: currentSettings
-            }, '*');
+        // Send settings response via centralized panel communication
+        if (this.panelCommunication) {
+            this.panelCommunication.sendSettingsResponse('scene-settings', currentSettings);
         }
     }
 
@@ -232,24 +183,9 @@ class SettingsHandler {
             toolbarOpacity: configurationManager.get('interface.toolbarOpacity') || 0.95
         };
 
-        // Send settings response directly to left panel
-        const propertyPanelSync = this.getPropertyPanelSync();
-        if (!propertyPanelSync || !propertyPanelSync.panelManager) return;
-
-        const panelManager = propertyPanelSync.panelManager;
-        let leftPanelIframe = null;
-
-        if (panelManager.componentInstances) {
-            leftPanelIframe = panelManager.componentInstances.leftPanel?.iframe;
-        } else if (typeof panelManager.getIframes === 'function') {
-            leftPanelIframe = panelManager.getIframes().left;
-        }
-
-        if (leftPanelIframe && leftPanelIframe.contentWindow) {
-            leftPanelIframe.contentWindow.postMessage({
-                type: 'interface-settings-response',
-                settings: currentSettings
-            }, '*');
+        // Send settings response via centralized panel communication
+        if (this.panelCommunication) {
+            this.panelCommunication.sendSettingsResponse('interface-settings', currentSettings);
         }
     }
 }

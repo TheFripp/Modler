@@ -61,7 +61,7 @@
 		setTimeout(() => requestFillButtonState(displayObject.id), 100);
 	}
 
-	function handleFillHover(axis: 'x' | 'y' | 'z' | null) {
+	function handleFillHover(axis: 'x' | 'y' | 'z', isHovering: boolean = true) {
 		if (!displayObject) return;
 
 		window.parent.postMessage({
@@ -69,7 +69,7 @@
 			data: {
 				objectId: displayObject.id,
 				axis: axis,
-				isHovering: axis !== null
+				isHovering: isHovering
 			}
 		}, '*');
 	}

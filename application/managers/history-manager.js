@@ -13,6 +13,8 @@ class HistoryManager {
 
         // State tracking
         this.isExecuting = false; // Prevent recursive command execution
+        this.isUndoing = false;   // Flag to indicate undo in progress
+        this.isRedoing = false;   // Flag to indicate redo in progress
         this.initialized = false;
 
         // Component references
@@ -92,11 +94,6 @@ class HistoryManager {
                 });
                 // Log but continue execution (graceful degradation)
                 // In strict mode, you might want to return false here
-            } else {
-                // Log command metadata for debugging
-                if (validation.metadata) {
-                    console.log(`✅ Command validated: ${command.type} (serializable: ${validation.metadata.serializable}, undoable: ${validation.metadata.undoable})`);
-                }
             }
         }
 
@@ -144,6 +141,7 @@ class HistoryManager {
         const command = this.undoStack.pop();
 
         this.isExecuting = true;
+        this.isUndoing = true;
 
         try {
             const success = command.undo();
@@ -169,6 +167,7 @@ class HistoryManager {
             return false;
         } finally {
             this.isExecuting = false;
+            this.isUndoing = false;
         }
     }
 
@@ -184,6 +183,7 @@ class HistoryManager {
         const command = this.redoStack.pop();
 
         this.isExecuting = true;
+        this.isRedoing = true;
 
         try {
             const success = command.execute();
@@ -209,6 +209,7 @@ class HistoryManager {
             return false;
         } finally {
             this.isExecuting = false;
+            this.isRedoing = false;
         }
     }
 
@@ -268,7 +269,9 @@ class HistoryManager {
             redoCount: this.redoStack.length,
             maxSteps: this.maxSteps,
             enabled: this.enabled,
-            isExecuting: this.isExecuting
+            isExecuting: this.isExecuting,
+            isUndoing: this.isUndoing,
+            isRedoing: this.isRedoing
         };
     }
 
