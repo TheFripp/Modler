@@ -298,61 +298,12 @@ class PropertyUpdateHandler {
             }
         }
 
+        // Direct mutation - layout properties are SceneController-managed, not ObjectStateManager-managed
+        // This is the correct pattern for layout engine configuration
         objectData.layoutProperties[sizeProperty] = newState;
 
-        // Apply layout update
+        // Apply layout update (emits hierarchy event automatically via SceneController - whitelisted in DevelopmentValidator)
         sceneController.updateLayout(container.id);
-
-        // Notify about the layout change via ObjectEventBus
-        if (window.objectEventBus) {
-            window.objectEventBus.emit(
-                'object:layout-updated',
-                objectData.id,
-                {
-                    containerId: container.id,
-                    affectedObjectIds: [objectData.id]
-                },
-                { source: 'fill-property-toggle' }
-            );
-        }
-
-        // Refresh property panel for selected objects
-        this.refreshLayoutPropertyPanels(container, selectionController);
-    }
-
-    /**
-     * Refresh property panels for all objects in a container when layout changes
-     */
-    refreshLayoutPropertyPanels(container, selectionController) {
-        const sceneController = window.modlerComponents?.sceneController;
-        if (!container || !sceneController) return;
-
-        const children = sceneController.getChildObjects(container.id);
-        if (!children || children.length === 0) return;
-
-        // Refresh property panel if any child is currently selected
-        const selectedObjects = selectionController?.getSelectedObjects();
-        if (!selectedObjects || selectedObjects.length === 0) return;
-
-        const selectedIds = selectedObjects.map(mesh => mesh.userData?.id).filter(Boolean);
-        const shouldRefresh = children.some(child => selectedIds.includes(child.id));
-
-        if (shouldRefresh) {
-            // Trigger UI refresh via ObjectEventBus
-            setTimeout(() => {
-                if (window.objectEventBus && selectedIds.length > 0) {
-                    window.objectEventBus.emit(
-                        'object:properties-changed',
-                        selectedIds[0],
-                        {
-                            objectIds: selectedIds,
-                            source: 'fill-property'
-                        },
-                        { source: 'fill-property-refresh' }
-                    );
-                }
-            }, 100);
-        }
     }
 
     /**

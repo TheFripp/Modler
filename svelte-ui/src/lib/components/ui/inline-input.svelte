@@ -382,7 +382,7 @@
 					type="button"
 					tabindex="-1"
 					onmousedown={(e) => startArrowInteraction(e, 'up')}
-					class="flex items-center justify-center w-8 h-4 text-gray-400 hover:text-white transition-colors cursor-ns-resize group"
+					class="flex items-center justify-center w-4 h-4 text-gray-400 hover:text-white transition-colors cursor-ns-resize group"
 					disabled={disabled}
 				>
 					<ChevronUp class="w-3.5 h-3.5 transition-colors" strokeWidth={1.5} />
@@ -391,7 +391,7 @@
 					type="button"
 					tabindex="-1"
 					onmousedown={(e) => startArrowInteraction(e, 'down')}
-					class="flex items-center justify-center w-8 h-4 text-gray-400 hover:text-white transition-colors cursor-ns-resize group"
+					class="flex items-center justify-center w-4 h-4 text-gray-400 hover:text-white transition-colors cursor-ns-resize group"
 					disabled={disabled}
 				>
 					<ChevronDown class="w-3.5 h-3.5 transition-colors" strokeWidth={1.5} />

@@ -3,6 +3,7 @@
 	import { unifiedCommunication } from '$lib/services/unified-communication';
 	import { Box, BoxSelect, SquareStack } from 'lucide-svelte';
 	import { cn } from '$lib/utils';
+	import { onMount } from 'svelte';
 
 	// Tree expansion state
 	let expandedContainers = new Set();
@@ -14,6 +15,16 @@
 
 	// Local ordering state (UI-only, not persisted)
 	let customObjectOrder = new Map();
+
+	// Animation state
+	let isLoaded = false;
+
+	onMount(() => {
+		// Trigger fade-in animation after component mounts
+		setTimeout(() => {
+			isLoaded = true;
+		}, 100);
+	});
 
 	// Filter out utility objects and temporary preview objects from hierarchy
 	$: filteredHierarchy = $objectHierarchy.filter(obj =>
@@ -305,9 +316,12 @@
 	}
 </script>
 
-{#snippet TreeItem(object, depth = 0)}
+{#snippet TreeItem(object, depth = 0, index = 0)}
 	<div
 		class="relative"
+		class:opacity-0={!isLoaded}
+		class:translate-y-[-10px]={!isLoaded}
+		style="transition: opacity 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) {index * 30}ms, transform 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) {index * 30}ms;"
 		draggable="true"
 		ondragstart={(e) => handleDragStart(e, object)}
 		ondragend={handleDragEnd}
@@ -347,14 +361,14 @@
 					'flex items-center gap-2 px-2 py-2 rounded-md flex-1 min-w-0 transition-colors',
 					'text-foreground/70 hover:text-foreground hover:bg-white/5',
 					'focus:outline-none',
-					isObjectHighlighted(object) && 'bg-white/10'
+					isObjectHighlighted(object) && 'bg-[#212121]/50'
 				)}
 			>
 				{#if object.isContainer && object.autoLayout?.tileMode?.enabled}
 					<SquareStack
 						class={cn(
 							"w-4 h-4 shrink-0",
-							isObjectHighlighted(object) ? "text-[#10B981]" : "text-foreground/50"
+							isObjectHighlighted(object) ? "text-blue-400" : "text-foreground/50"
 						)}
 						strokeWidth={1.5}
 					/>
@@ -391,8 +405,8 @@
 
 	{#if object.isContainer && expandedContainers.has(object.id) && object.children && object.children.length > 0 && !object.autoLayout?.tileMode?.enabled}
 		<div class="ml-4 space-y-0.5">
-			{#each object.children as child}
-				{@render TreeItem(child, depth + 1)}
+			{#each object.children as child, childIndex}
+				{@render TreeItem(child, depth + 1, childIndex)}
 			{/each}
 		</div>
 	{/if}
@@ -448,8 +462,8 @@
 			{/if}
 		</div>
 
-		{#each treeStructure as object}
-			{@render TreeItem(object, 0)}
+		{#each treeStructure as object, index}
+			{@render TreeItem(object, 0, index)}
 		{/each}
 	</div>
 </div>

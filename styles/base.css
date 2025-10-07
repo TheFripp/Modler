@@ -24,8 +24,8 @@ html {
 
 /* Left Panel - Split.js managed */
 .left-panel {
-    background: transparent; /* Let iframe content provide background */
-    overflow: hidden;
+    background: #171717; /* Dark background during load */
+    overflow: visible; /* Allow spring overshoot to show */
     position: relative;
     height: 100vh;
     z-index: 10; /* Above 3D canvas */
@@ -33,6 +33,12 @@ html {
     flex: none; /* Prevent flex shrinking/growing */
     width: 20%; /* Default width before Split.js takes over */
     min-width: 200px;
+    transform: translateX(-100%); /* Start off-screen left */
+    transition: transform 0.42s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.left-panel.loaded {
+    transform: translateX(0); /* Slide in from left with spring */
 }
 
 /* Main Viewport Area - Split.js managed */
@@ -49,8 +55,8 @@ html {
 
 /* Property Panel - Split.js managed */
 .property-panel {
-    background: transparent; /* Let iframe content provide background */
-    overflow: hidden;
+    background: #171717; /* Dark background during load */
+    overflow: visible; /* Allow spring overshoot to show */
     position: relative;
     height: 100vh;
     z-index: 10; /* Above 3D canvas */
@@ -59,6 +65,12 @@ html {
     width: 20%; /* Default width before Split.js takes over */
     min-width: 250px;
     box-sizing: border-box; /* Ensure proper width calculation */
+    transform: translateX(100%); /* Start off-screen right */
+    transition: transform 0.42s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.property-panel.loaded {
+    transform: translateX(0); /* Slide in from right with spring */
 }
 
 #canvas {
@@ -78,13 +90,20 @@ html {
     position: absolute;
     top: 12px;
     left: 50%;
-    transform: translateX(-50%);
+    transform: translateX(-50%) translateY(-100px); /* Start off-screen top */
     z-index: 1000;
     pointer-events: auto; /* Toolbar receives events */
     height: 80px; /* Increased height to accommodate drop shadow */
     width: 80%; /* Make toolbar container wider to prevent cut-off */
     min-width: 600px; /* Ensure minimum width for toolbar content */
     max-width: 1200px; /* Cap maximum width for very wide screens */
+    opacity: 0;
+    transition: transform 0.42s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.28s ease-out;
+}
+
+.floating-toolbar.loaded {
+    transform: translateX(-50%) translateY(0); /* Slide down with spring */
+    opacity: 1;
 }
 
 /* Split.js Gutter Styles - Invisible with overlay divider line */

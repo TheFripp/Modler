@@ -48,15 +48,11 @@ class InputFocusManager {
 
     /**
      * Setup keyboard listener for Tab key
+     * NOTE: Disabled - KeyboardRouter now handles Tab key routing
      */
     setupKeyboardListener() {
-        window.addEventListener('keydown', (e) => {
-            // Tab key pressed (not in an input field)
-            if (e.key === 'Tab' && !this.isInputFocused()) {
-                e.preventDefault();
-                this.focusLastManipulatedInput();
-            }
-        });
+        // KeyboardRouter handles Tab key routing centrally
+        // This prevents duplicate listeners and ensures proper priority handling
     }
 
     /**

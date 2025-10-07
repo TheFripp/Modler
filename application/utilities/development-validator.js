@@ -225,9 +225,17 @@ class DevelopmentValidator {
                 const isFromStateManager = stack.includes('ObjectStateManager');
                 const isFromPropertySchema = stack.includes('PropertySchemaRegistry');
                 const isFromSelectionController = stack.includes('SelectionController') && eventType.includes('selection');
-                const isFromSceneController = stack.includes('SceneController') && eventType.includes('lifecycle');
+                const isFromSceneController = stack.includes('SceneController') &&
+                    (eventType.includes('lifecycle') || eventType.includes('hierarchy') || eventType.includes('layout'));
                 const isFromBoxCreation = stack.includes('BoxCreationTool') && eventType.includes('geometry');
-                const isLegitimate = isFromStateManager || isFromPropertySchema || isFromSelectionController || isFromSceneController || isFromBoxCreation;
+                const isFromTransformationManager = stack.includes('TransformationManager') &&
+                    (eventType.includes('transform') || eventType.includes('hierarchy'));
+                const isFromMovementUtils = stack.includes('MovementUtils') &&
+                    (eventType.includes('geometry') || eventType.includes('transform'));
+                const isFromUnitConverter = stack.includes('UnitConverter') && eventType.includes('unit-preference');
+                const isLegitimate = isFromStateManager || isFromPropertySchema || isFromSelectionController ||
+                    isFromSceneController || isFromBoxCreation || isFromTransformationManager ||
+                    isFromMovementUtils || isFromUnitConverter;
 
                 if (!isLegitimate) {
                     developmentValidator.recordViolation({

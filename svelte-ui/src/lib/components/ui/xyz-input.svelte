@@ -26,6 +26,8 @@
 		onFillHover?: (axis: 'x' | 'y' | 'z' | null) => void;
 		// Disable all inputs (for layout mode)
 		disableAll?: boolean;
+		// Hide values (for empty state)
+		hideValues?: boolean;
 	}
 
 	let {
@@ -43,6 +45,7 @@
 		onFillToggle,
 		onFillHover,
 		disableAll = false,
+		hideValues = false,
 		...restProps
 	}: Props = $props();
 
@@ -107,7 +110,8 @@
 
 		// Listen for PostMessage (for iframe communication)
 		const handlePostMessage = (event: MessageEvent) => {
-			if (event.data?.type === 'focus-input') {
+			// PropertyPanelSync sends: { type: 'data-update', data: { updateType: 'focus-input', objectId, property } }
+			if (event.data?.type === 'data-update' && event.data?.data?.updateType === 'focus-input') {
 				const { objectId: requestedObjectId, property } = event.data.data;
 				focusInput(requestedObjectId, property);
 			}
@@ -128,7 +132,7 @@
 		{#each ['x', 'y', 'z'] as axis}
 			{@const property = objectId && propertyBase ? `${propertyBase}.${axis}` : undefined}
 			{@const mixedState = property ? getPropertyMixedState(property, $selectedObjects) : { isMixed: false, value: values[axis] }}
-			{@const displayValue = mixedState.isMixed ? '' : (typeof mixedState.value === 'number' ? Math.round(mixedState.value * 10) / 10 : mixedState.value)}
+			{@const displayValue = hideValues ? '' : (mixedState.isMixed ? '' : (typeof mixedState.value === 'number' ? Math.round(mixedState.value * 10) / 10 : mixedState.value))}
 			{@const fieldState = property ? $fieldStates[property] : undefined}
 			{@const isDisabled = disableAll || fieldState?.disabled || false}
 			{@const isFilled = fillStates[axis] || false}
@@ -140,7 +144,7 @@
 							label={labels[axis]}
 							type="number"
 							value={displayValue}
-							placeholder={mixedState.isMixed ? 'Mixed' : (disableAll ? 'Layout Mode' : (isDisabled ? fieldState?.tooltip || 'Disabled' : ''))}
+							placeholder={hideValues ? '' : (mixedState.isMixed ? 'Mixed' : (disableAll ? 'Layout Mode' : (isDisabled ? fieldState?.tooltip || 'Disabled' : '')))}
 							class={cn(
 								mixedState.isMixed ? 'text-muted-foreground/60' : '',
 								isDisabled ? 'opacity-50' : '',
@@ -158,7 +162,7 @@
 						<button
 							type="button"
 							class={cn(
-								'w-6 h-6 rounded border text-xs font-medium transition-colors flex-shrink-0',
+								'w-6 h-8 rounded border text-xs font-medium transition-colors flex-shrink-0 p-0 flex items-center justify-center',
 								'hover:bg-[#212121] border-[#2E2E2E]',
 								isFilled
 									? 'bg-[#212121] text-white border-[#2E2E2E]'

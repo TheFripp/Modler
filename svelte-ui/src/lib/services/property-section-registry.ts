@@ -65,7 +65,6 @@ export const propertySectionRegistry = new PropertySectionRegistry();
 propertySectionRegistry.register('box', [
 	{
 		type: 'transform',
-		props: { showFillButtons: true },
 		features: {
 			position: true,
 			rotation: true,
@@ -78,7 +77,6 @@ propertySectionRegistry.register('box', [
 propertySectionRegistry.register('container', [
 	{
 		type: 'transform',
-		props: { showFillButtons: false },
 		features: {
 			position: true,
 			rotation: true,
@@ -91,7 +89,6 @@ propertySectionRegistry.register('container', [
 propertySectionRegistry.register('tiled-container', [
 	{
 		type: 'transform',
-		props: { showFillButtons: false },
 		features: {
 			position: true,
 			rotation: true,
@@ -104,7 +101,6 @@ propertySectionRegistry.register('tiled-container', [
 propertySectionRegistry.register('multi', [
 	{
 		type: 'transform',
-		props: { showFillButtons: true },
 		features: {
 			position: true,
 			rotation: true,

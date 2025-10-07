@@ -26,7 +26,7 @@ class InputController {
         // Move gizmo removed - face-based movement system replaces 3-axis gizmos
 
         // Unified input state
-        this.keys = new Set();
+        // Keys are now tracked by KeyboardRouter - provide getter for backward compatibility
         this.mouseButtons = new Set();
         this.lastMousePosition = { x: 0, y: 0 };
 
@@ -45,9 +45,8 @@ class InputController {
         this.handleMouseMove = this.onMouseMove.bind(this);
         this.handleMouseDown = this.onMouseDown.bind(this);
         this.handleMouseUp = this.onMouseUp.bind(this);
-        this.handleKeyDown = this.onKeyDown.bind(this);
-        this.handleKeyUp = this.onKeyUp.bind(this);
         this.handleContextMenu = (e) => e.preventDefault();
+        // Keyboard handlers removed - now in KeyboardRouter
 
         this.setupEventListeners();
     }
@@ -60,9 +59,8 @@ class InputController {
         this.canvas.addEventListener('mouseup', this.handleMouseUp, false);
         this.canvas.addEventListener('contextmenu', this.handleContextMenu, false);
 
-        // Keyboard events (document level for global capture)
-        document.addEventListener('keydown', this.handleKeyDown, true);
-        document.addEventListener('keyup', this.handleKeyUp, false);
+        // Keyboard events - REMOVED, now handled by KeyboardRouter
+        // The router provides centralized keyboard handling with priority-based delegation
 
         // Focus management
         this.canvas.setAttribute('tabindex', '0');
@@ -93,14 +91,19 @@ class InputController {
 
         // Check if Option/Alt key is held for measurement mode
         const measurementTool = window.modlerComponents?.measurementTool;
-        if (measurementTool && (event.altKey || this.keys.has('Alt'))) {
-            // Measurement mode active
-            const selectedObjects = this.selectionController?.getSelectedObjects() || [];
-            measurementTool.onHover(hit, selectedObjects);
-            return; // Skip normal tool behavior
-        } else if (measurementTool && !event.altKey && !this.keys.has('Alt')) {
-            // Option key released - clear measurement
-            measurementTool.clearMeasurement();
+        if (measurementTool) {
+            const keyboardRouter = window.modlerComponents?.keyboardRouter;
+            const isAltPressed = keyboardRouter?.keys.has('AltLeft') || keyboardRouter?.keys.has('AltRight') || false;
+
+            if (isAltPressed) {
+                // Measurement mode active
+                const selectedObjects = this.selectionController?.getSelectedObjects() || [];
+                measurementTool.onHover(hit, selectedObjects);
+                return; // Skip normal tool behavior
+            } else {
+                // Option key released - clear measurement
+                measurementTool.clearMeasurement();
+            }
         }
 
         // Delegate to current tool
@@ -215,107 +218,9 @@ class InputController {
         }
     }
 
-    onKeyDown(event) {
-        // Skip if input field is focused
-        const activeElement = document.activeElement;
-        if (activeElement && (activeElement.tagName === 'INPUT' ||
-            activeElement.tagName === 'TEXTAREA' || activeElement.contentEditable === 'true')) {
-            return;
-        }
-
-        // Track Meta/Command key for tools (move duplication, etc.)
-        const isMetaKey = event.code === 'MetaLeft' || event.code === 'MetaRight';
-
-        if (!this.keys.has(event.code)) {
-            this.keys.add(event.code);
-
-            // Let current tool handle keys first (including Meta key)
-            const tool = this.toolBehaviors[this.currentTool];
-            if (tool && tool.onKeyDown && tool.onKeyDown(event)) {
-                return;
-            }
-
-            // Skip other processing if modifier keys are pressed (except Meta which tools need)
-            if (event.ctrlKey && !isMetaKey) {
-                return;
-            }
-
-            // Tab key: Focus dimension input when measurement is showing
-            if (event.code === 'Tab') {
-                const measurementTool = window.modlerComponents?.measurementTool;
-                if (measurementTool && measurementTool.currentEdgeAxis && measurementTool.currentObject) {
-                    event.preventDefault(); // Prevent default tab behavior
-
-                    // Focus the dimension input in the property panel
-                    // ID format matches PropertyPanel XyzInput: idPrefix="dim"
-                    const inputId = `dim-${measurementTool.currentEdgeAxis}`;
-                    const inputElement = document.getElementById(inputId);
-                    if (inputElement) {
-                        inputElement.focus();
-                        inputElement.select();
-                    }
-                    return;
-                }
-            }
-
-            // Cmd+F: Wrap selected objects in container (prevent browser find)
-            if (event.metaKey && event.code === 'KeyF') {
-                event.preventDefault();
-                const toolController = window.modlerComponents?.toolController;
-                if (toolController) {
-                    toolController.createLayoutContainer();
-                }
-                return;
-            }
-
-            // Cmd+D: Duplicate selected object
-            if (event.metaKey && event.code === 'KeyD') {
-                event.preventDefault();
-                const historyManager = window.modlerComponents?.historyManager;
-                const sceneController = window.modlerComponents?.sceneController;
-
-                if (historyManager && sceneController && this.selectionController) {
-                    const selectedObjects = this.selectionController.getSelectedObjects();
-                    if (selectedObjects.length > 0) {
-                        const mesh = selectedObjects[0];
-                        const objectData = sceneController.getObjectByMesh(mesh);
-
-                        if (objectData) {
-                            const command = new DuplicateObjectCommand(objectData.id);
-                            historyManager.executeCommand(command);
-                        }
-                    }
-                }
-                return;
-            }
-
-            // Tool switching shortcuts (don't trigger if Meta is pressed)
-            if (!event.metaKey) {
-                const toolController = window.modlerComponents?.toolController;
-                switch (event.code) {
-                    case 'KeyQ': if (toolController) toolController.switchToTool('select'); break;
-                    case 'KeyW': if (toolController) toolController.switchToTool('move'); break;
-                    case 'KeyE': if (toolController) toolController.switchToTool('push'); break;
-                    case 'KeyR': if (toolController) toolController.switchToTool('box-creation'); break;
-                    case 'KeyT': if (toolController) toolController.switchToTool('tile'); break;
-                    case 'Escape': this.selectionController.clearSelection(); break;
-                }
-            }
-        }
-    }
-
-    onKeyUp(event) {
-        this.keys.delete(event.code);
-
-        // Forward to active tool if it has onKeyUp handler
-        const currentToolName = this.getCurrentTool();
-        if (currentToolName && this.toolBehaviors[currentToolName]) {
-            const tool = this.toolBehaviors[currentToolName];
-            if (tool && tool.onKeyUp && tool.onKeyUp(event)) {
-                return; // Tool handled the event
-            }
-        }
-    }
+    // onKeyDown and onKeyUp methods REMOVED
+    // Keyboard handling now centralized in KeyboardRouter (/interaction/keyboard-router.js)
+    // This eliminates competing listeners and provides priority-based delegation
 
     // Unified raycasting with smart object prioritization
     raycast() {
@@ -394,11 +299,6 @@ class InputController {
         return this.currentTool;
     }
 
-    // Utility methods
-    isKeyDown(keyCode) {
-        return this.keys.has(keyCode);
-    }
-
     isMouseButtonDown(button) {
         return this.mouseButtons.has(button);
     }
@@ -413,11 +313,9 @@ class InputController {
         this.canvas.removeEventListener('mousedown', this.handleMouseDown);
         this.canvas.removeEventListener('mouseup', this.handleMouseUp);
         this.canvas.removeEventListener('contextmenu', this.handleContextMenu);
-        document.removeEventListener('keydown', this.handleKeyDown);
-        document.removeEventListener('keyup', this.handleKeyUp);
+        // Keyboard listeners removed - now in KeyboardRouter
 
         // Clear state
-        this.keys.clear();
         this.mouseButtons.clear();
         this.selectionController.clearSelection();
         this.visualEffects.clearHighlight();

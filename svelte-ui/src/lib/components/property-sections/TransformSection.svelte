@@ -8,25 +8,40 @@
 	export let displayObject: any;
 	export let objectId: string;
 	export let currentUnit: string = 'm';
-	export let showFillButtons: boolean = false;
 	export let features: SectionFeatures = {
 		position: true,
 		rotation: true,
 		dimensions: true
 	};
 
-	// Fill button state
+	// Fill button state (dynamic based on container layout)
+	let showFillButtons: boolean = false;
 	let fillButtonStates = { x: false, y: false, z: false };
 
 	// Layout mode state - determines if position inputs should be disabled
 	let inLayoutMode = false;
 
-	// Request fill button state and layout mode when displayObject changes
-	$: if (displayObject && !displayObject.isContainer && showFillButtons) {
+	// Default empty values for when no object is selected
+	const emptyVector = { x: 0, y: 0, z: 0 };
+
+	// Request fill button visibility and state when displayObject changes
+	$: if (displayObject && !displayObject.isContainer) {
+		requestFillButtonCheck(displayObject.id);
 		requestFillButtonState(displayObject.id);
 		requestLayoutMode(displayObject.id);
 	} else {
+		showFillButtons = false;
 		inLayoutMode = false;
+	}
+
+	// Disabled state when no object is selected
+	$: isDisabled = !displayObject;
+
+	function requestFillButtonCheck(id: string) {
+		window.parent.postMessage({
+			type: 'fill-button-check',
+			data: { objectId: id }
+		}, '*');
 	}
 
 	function requestFillButtonState(id: string) {
@@ -56,9 +71,8 @@
 			data: { objectId: displayObject.id, axis }
 		}, '*');
 
-		fillButtonStates[axis] = !fillButtonStates[axis];
-
-		setTimeout(() => requestFillButtonState(displayObject.id), 100);
+		// Don't optimistically toggle - wait for backend confirmation
+		// The backend will emit events that trigger UI updates with correct state
 	}
 
 	function handleFillHover(axis: 'x' | 'y' | 'z', isHovering: boolean = true) {
@@ -78,7 +92,7 @@
 	onMount(() => {
 		const handleMessageResponse = (event: MessageEvent) => {
 			if (event.data.type === 'fill-button-check-response') {
-				// showFillButtons controlled by parent
+				showFillButtons = event.data.data.shouldShow || false;
 			} else if (event.data.type === 'fill-button-states-response') {
 				fillButtonStates = event.data.data.states || { x: false, y: false, z: false };
 			} else if (event.data.type === 'layout-mode-response') {
@@ -96,13 +110,14 @@
 		<!-- Position Sub-group (optional via features.position) -->
 		{#if features.position !== false}
 			<div class="space-y-2">
-				<h4 class="text-xs font-medium text-foreground/80 uppercase tracking-wide text-right">Position ({currentUnit})</h4>
+				<h4 class="text-xs font-medium uppercase tracking-wide text-right {isDisabled ? 'text-foreground/30' : 'text-foreground/80'}">Position ({currentUnit})</h4>
 				<XyzInput
-					values={displayObject.position}
+					values={displayObject?.position || emptyVector}
 					{objectId}
 					propertyBase="position"
 					idPrefix="pos"
-					disableAll={inLayoutMode}
+					disableAll={isDisabled || inLayoutMode}
+					hideValues={isDisabled}
 				/>
 			</div>
 		{/if}
@@ -110,11 +125,13 @@
 		<!-- Rotation Sub-group (optional via features.rotation) -->
 		{#if features.rotation !== false}
 			<div class="space-y-2">
-				<h4 class="text-xs font-medium text-foreground/80 uppercase tracking-wide text-right">Rotation</h4>
+				<h4 class="text-xs font-medium uppercase tracking-wide text-right {isDisabled ? 'text-foreground/30' : 'text-foreground/80'}">Rotation</h4>
 				<XyzInput
-					values={displayObject.rotation}
+					values={displayObject?.rotation || emptyVector}
 					{objectId}
 					propertyBase="rotation"
+					disableAll={isDisabled}
+					hideValues={isDisabled}
 				/>
 			</div>
 		{/if}
@@ -122,9 +139,9 @@
 		<!-- Dimensions Sub-group (optional via features.dimensions) -->
 		{#if features.dimensions !== false}
 			<div class="space-y-2">
-				<h4 class="text-xs font-medium text-foreground/80 uppercase tracking-wide text-right">Dimensions ({currentUnit})</h4>
+				<h4 class="text-xs font-medium uppercase tracking-wide text-right {isDisabled ? 'text-foreground/30' : 'text-foreground/80'}">Dimensions ({currentUnit})</h4>
 				<XyzInput
-					values={displayObject.dimensions}
+					values={displayObject?.dimensions || emptyVector}
 					{objectId}
 					propertyBase="dimensions"
 					labels={{ x: 'W', y: 'H', z: 'D' }}
@@ -133,6 +150,8 @@
 					fillStates={fillButtonStates}
 					onFillToggle={handleFillToggle}
 					onFillHover={handleFillHover}
+					disableAll={isDisabled}
+					hideValues={isDisabled}
 				/>
 			</div>
 		{/if}

@@ -75,18 +75,10 @@ class DeleteObjectCommand extends BaseCommand {
                 return false;
             }
 
-            // Notify UI of changes through ObjectStateManager
-            const objectStateManager = window.modlerComponents?.objectStateManager;
-            if (objectStateManager) {
-                // Use ObjectStateManager to trigger deletion notifications
-                this.objectIds.forEach(id => {
-                    objectStateManager.notifyObjectDeleted(id);
-                });
-            } else {
-                // BYPASS ELIMINATED: ObjectStateManager must be available - no fallback bypasses
-                console.error('❌ DeleteObjectCommand: ObjectStateManager not available - this is an architectural error');
-                console.error('❌ window.notifyObjectModified fallback eliminated to prevent race conditions');
-                return false;
+            // Notify UI of hierarchy changes via PropertyPanelSync
+            const propertyPanelSync = window.modlerComponents?.propertyPanelSync;
+            if (propertyPanelSync) {
+                propertyPanelSync.sendHierarchyUpdate();
             }
 
             return true;
@@ -125,18 +117,10 @@ class DeleteObjectCommand extends BaseCommand {
                 return false;
             }
 
-            // Notify UI of changes through ObjectStateManager
-            const objectStateManager = window.modlerComponents?.objectStateManager;
-            if (objectStateManager) {
-                // Use ObjectStateManager to sync restored objects
-                this.deletedObjects.forEach(snapshot => {
-                    objectStateManager.syncRestoredObject(snapshot.id);
-                });
-            } else {
-                // BYPASS ELIMINATED: ObjectStateManager must be available for undo - no fallback bypasses
-                console.error('❌ DeleteObjectCommand: ObjectStateManager not available for undo - this is an architectural error');
-                console.error('❌ window.notifyObjectModified fallback eliminated to prevent race conditions');
-                return false;
+            // Notify UI of hierarchy changes via PropertyPanelSync
+            const propertyPanelSync = window.modlerComponents?.propertyPanelSync;
+            if (propertyPanelSync) {
+                propertyPanelSync.sendHierarchyUpdate();
             }
 
             return true;

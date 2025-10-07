@@ -109,7 +109,7 @@
 			<h3 class="text-lg font-semibold text-foreground">{$displayObject.name}</h3>
 			<div class="flex items-center gap-2">
 				{#if $displayObject.isContainer && $displayObject.autoLayout?.tileMode?.enabled}
-					<Badge variant="outline" class="bg-[#10B981]/20 text-[#10B981] border-[#10B981]/30">
+					<Badge variant="outline" class="bg-blue-500/20 text-blue-400 border-blue-500/30">
 						Tile
 					</Badge>
 				{:else if $displayObject.isContainer}
@@ -139,7 +139,6 @@
 					displayObject={$displayObject}
 					objectId={getObjectIdForUpdate()}
 					{currentUnit}
-					showFillButtons={section.props?.showFillButtons ?? false}
 					features={section.features ?? {}}
 				/>
 			{:else if section.type === 'material'}
@@ -177,10 +176,17 @@
 		{/if}
 		{/key}
 	{:else}
-		<div class="text-center text-muted-foreground py-8">
-			<div class="text-lg mb-2">No object selected</div>
-			<div class="text-sm">Select an object to view its properties</div>
+		<!-- Empty state: Show header and disabled transform section -->
+		<div class="flex items-center justify-between mb-6">
+			<h3 class="text-lg font-semibold text-foreground/40">No Selection</h3>
 		</div>
+
+		<TransformSection
+			displayObject={null}
+			objectId=""
+			{currentUnit}
+			features={{}}
+		/>
 	{/if}
 
 	</div>

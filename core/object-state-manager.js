@@ -240,7 +240,9 @@ class ObjectStateManager extends EventTarget {
      */
     buildObjectStructure(objectData, includeExtendedProps = true) {
         // Get fresh dimensions from geometry (single source of truth)
-        let dimensions = objectData.dimensions || { x: 1, y: 1, z: 1 };
+        let dimensions = { x: 1, y: 1, z: 1 }; // Default fallback
+
+        // ALWAYS get fresh dimensions from geometry if available
         if (objectData.mesh?.geometry && window.GeometryUtils?.getGeometryDimensions) {
             const geometryDimensions = window.GeometryUtils.getGeometryDimensions(objectData.mesh.geometry);
             if (geometryDimensions) {
@@ -250,6 +252,9 @@ class ObjectStateManager extends EventTarget {
                     z: geometryDimensions.z
                 };
             }
+        } else if (objectData.dimensions) {
+            // Fallback to objectData.dimensions only if geometry not available
+            dimensions = objectData.dimensions;
         }
 
         const structure = {
@@ -820,13 +825,22 @@ class ObjectStateManager extends EventTarget {
     }
 
     /**
-     * Get object in PostMessage-ready format
+     * Get object in PostMessage-ready format with fresh geometry data
      * @param {string} objectId - Object ID
-     * @returns {Object|null} PostMessage-safe object data
+     * @returns {Object|null} PostMessage-safe object data with fresh dimensions from geometry
      */
     getObjectForPostMessage(objectId) {
-        const object = this.objects.get(objectId);
-        return this.safeSerializeForPostMessage(object, `object ${objectId}`);
+        // Get fresh object data from SceneController (single source of truth for geometry)
+        const sceneObject = this.sceneController?.getObject(objectId);
+        if (!sceneObject) {
+            console.warn(`ObjectStateManager.getObjectForPostMessage: Object ${objectId} not found in SceneController`);
+            return null;
+        }
+
+        // Build fresh structure with current geometry dimensions
+        const freshObject = this.buildObjectStructure(sceneObject, true);
+
+        return this.safeSerializeForPostMessage(freshObject, `object ${objectId}`);
     }
 
     /**

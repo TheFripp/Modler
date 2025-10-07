@@ -158,78 +158,12 @@ class ToolController {
     }
     
     /**
-     * Setup keyboard shortcuts for tool switching
-     * Note: Basic tool switching (Q,W,E,R) is handled by InputController
-     * This handles advanced shortcuts like Cmd+F
+     * Setup keyboard shortcuts - REMOVED
+     * Keyboard handling now centralized in KeyboardRouter (/interaction/keyboard-router.js)
+     * This eliminates competing listeners and provides priority-based delegation
      */
     setupKeyboardShortcuts() {
-        document.addEventListener('keydown', (event) => {
-            // Skip if any input field is focused (handled by InputController)
-            const activeElement = document.activeElement;
-            const isInputFocused = activeElement && (
-                activeElement.tagName === 'INPUT' ||
-                activeElement.tagName === 'TEXTAREA' ||
-                activeElement.contentEditable === 'true'
-            );
-
-            if (isInputFocused) {
-                return;
-            }
-
-            switch (event.key) {
-                case 'f':
-                case 'F':
-                    // Cmd+F or Ctrl+F: Create auto layout container from selection
-                    if (event.metaKey || event.ctrlKey) {
-                        event.preventDefault();
-                        event.stopPropagation();
-                        event.stopImmediatePropagation();
-                        this.createLayoutContainer();
-                        return false;
-                    }
-                    break;
-
-                case 'z':
-                case 'Z':
-                    // Cmd+Z or Ctrl+Z: Undo
-                    // Cmd+Shift+Z or Ctrl+Shift+Z: Redo
-                    if (event.metaKey || event.ctrlKey) {
-                        event.preventDefault();
-                        event.stopPropagation();
-                        event.stopImmediatePropagation();
-
-                        if (event.shiftKey) {
-                            this.redo();
-                        } else {
-                            this.undo();
-                        }
-                        return false;
-                    }
-                    break;
-
-                case 'y':
-                case 'Y':
-                    // Cmd+Y or Ctrl+Y: Redo (alternative)
-                    if (event.metaKey || event.ctrlKey) {
-                        event.preventDefault();
-                        event.stopPropagation();
-                        event.stopImmediatePropagation();
-                        this.redo();
-                        return false;
-                    }
-                    break;
-
-                case 'Delete':
-                case 'Backspace':
-                    // Delete or Backspace: Delete selected objects
-                    // Prevent browser back navigation on Backspace
-                    event.preventDefault();
-                    event.stopPropagation();
-                    event.stopImmediatePropagation();
-                    this.deleteSelectedObjects();
-                    return false;
-            }
-        }, true); // Use capture phase to handle before other listeners
+        // No longer needed - KeyboardRouter handles all shortcuts
     }
     
     /**

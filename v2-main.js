@@ -222,6 +222,11 @@ function initializeApplication() {
     modlerV2Components.objectStateManager.initialize({
         sceneController: modlerV2Components.sceneController
     });
+
+    // Initialize KeyboardRouter for centralized keyboard input handling
+    // Must be initialized AFTER all other components to ensure they're available
+    modlerV2Components.keyboardRouter = window.keyboardRouter;
+    modlerV2Components.keyboardRouter.initialize(modlerV2Components);
 }
 
 /**

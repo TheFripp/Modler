@@ -151,6 +151,16 @@ const MESSAGE_PROTOCOL_SCHEMA = {
     // FILL BUTTONS (Layout System)
     // ===========================
 
+    'focus-input': {
+        direction: MESSAGE_DIRECTION.MAIN_TO_UI,
+        description: 'Request property panel to focus a specific input field',
+        payload: {
+            objectId: { type: DATA_TYPES.NUMBER_OR_STRING, required: true },
+            property: { type: DATA_TYPES.STRING, required: true }
+        },
+        response: null
+    },
+
     'fill-button-check': {
         direction: MESSAGE_DIRECTION.UI_TO_MAIN,
         description: 'Check if fill buttons should be shown for an object',

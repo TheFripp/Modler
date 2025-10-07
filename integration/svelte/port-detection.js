@@ -20,13 +20,15 @@ class SveltePortDetector {
      * Detect Svelte dev server port with improved reliability and faster detection
      */
     async detectPort() {
+        const detectStart = performance.now();
+
         // Try cached port first for instant loading
         const cachedPort = localStorage.getItem(this.CACHE_KEY);
         console.log('🔍 Cached port check:', cachedPort);
         if (cachedPort && this.COMMON_PORTS.includes(parseInt(cachedPort))) {
             try {
                 const controller = new AbortController();
-                const timeoutId = setTimeout(() => controller.abort(), 1000);
+                const timeoutId = setTimeout(() => controller.abort(), 300); // Reduced from 1000ms to 300ms
 
                 const response = await fetch(`http://localhost:${cachedPort}/`, {
                     method: 'GET',
@@ -37,7 +39,8 @@ class SveltePortDetector {
 
                 if (response.ok) {
                     this._setUrls(cachedPort);
-                    console.log('🚀 Svelte server found (cached):', this.baseUrl);
+                    const elapsed = (performance.now() - detectStart).toFixed(0);
+                    console.log(`🚀 Svelte server found (cached) in ${elapsed}ms:`, this.baseUrl);
                     return true;
                 }
             } catch (error) {
@@ -57,7 +60,8 @@ class SveltePortDetector {
                     const port = this.COMMON_PORTS[i];
                     this._setUrls(port);
                     localStorage.setItem(this.CACHE_KEY, port.toString());
-                    console.log('🚀 Svelte server detected:', this.baseUrl);
+                    const elapsed = (performance.now() - detectStart).toFixed(0);
+                    console.log(`🚀 Svelte server detected in ${elapsed}ms:`, this.baseUrl);
                     return true;
                 }
             }
@@ -93,7 +97,7 @@ class SveltePortDetector {
     async _testPort(port) {
         try {
             const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 500);
+            const timeoutId = setTimeout(() => controller.abort(), 200); // Reduced from 500ms to 200ms
 
             // Test the root path instead of specific route
             const response = await fetch(`http://localhost:${port}/`, {

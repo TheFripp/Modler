@@ -403,7 +403,8 @@
 
             const checkClasses = () => {
                 if (window.SveltePortDetector && window.SveltePanelManager) {
-                    // Svelte classes are available (logging removed to reduce console noise)
+                    const elapsed = Date.now() - startTime;
+                    console.log(`✅ Svelte classes loaded in ${elapsed}ms`);
                     resolve(true);
                 } else {
                     const elapsed = Date.now() - startTime;
@@ -415,6 +416,9 @@
                         });
                         resolve(false);
                     } else {
+                        if (elapsed > 0 && elapsed % 500 === 0) {
+                            console.log(`⏳ Waiting for Svelte classes... ${elapsed}ms`);
+                        }
                         setTimeout(checkClasses, 100);
                     }
                 }
@@ -789,7 +793,7 @@
                     handleFillButtonCheck(event.source, data.objectId);
                     break;
                 case 'fill-button-toggle':
-                    handleFillButtonToggle(data.objectId, data.axis);
+                    handleFillButtonToggle(event.source, data.objectId, data.axis);
                     break;
                 case 'fill-button-get-states':
                     handleFillButtonGetStates(event.source, data.objectId);
@@ -1086,11 +1090,22 @@
     /**
      * Handle fill button toggle from PropertyPanel
      */
-    function handleFillButtonToggle(objectId, axis) {
+    function handleFillButtonToggle(source, objectId, axis) {
         const propertyManager = window.modlerComponents?.propertyManager;
-        if (propertyManager) {
-            propertyManager.toggleFillProperty(axis);
-        }
+        if (!propertyManager) return;
+
+        // Toggle the fill property
+        propertyManager.toggleFillProperty(axis);
+
+        // Send updated states back to UI after a brief delay to allow layout update to complete
+        setTimeout(() => {
+            const states = {
+                x: propertyManager.isAxisFilled(objectId, 'x'),
+                y: propertyManager.isAxisFilled(objectId, 'y'),
+                z: propertyManager.isAxisFilled(objectId, 'z')
+            };
+            source.postMessage({ type: 'fill-button-states-response', data: { objectId, states } }, '*');
+        }, 50);
     }
 
     /**

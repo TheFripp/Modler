@@ -67,6 +67,8 @@ class DirectComponentManager {
      * Mount all Svelte components directly in DOM containers
      */
     async mountAllComponents() {
+        const loadStart = performance.now();
+
         try {
             // Get initial data with error handling
             let leftPanelData, propertyPanelData, toolbarData;
@@ -92,20 +94,21 @@ class DirectComponentManager {
                 toolbarData = { currentTool: 'select', availableTools: ['select', 'box', 'move', 'push'] };
             }
 
-            // Mount left panel
-            await this.mountComponent('leftPanel', 'left-panel-container', {
-                initialData: leftPanelData
-            });
+            // Mount all panels in parallel instead of sequential
+            await Promise.all([
+                this.mountComponent('leftPanel', 'left-panel-container', {
+                    initialData: leftPanelData
+                }),
+                this.mountComponent('propertyPanel', 'property-panel-container', {
+                    initialData: propertyPanelData
+                }),
+                this.mountComponent('mainToolbar', 'main-toolbar-container', {
+                    initialData: toolbarData
+                })
+            ]);
 
-            // Mount property panel
-            await this.mountComponent('propertyPanel', 'property-panel-container', {
-                initialData: propertyPanelData
-            });
-
-            // Mount main toolbar
-            await this.mountComponent('mainToolbar', 'main-toolbar-container', {
-                initialData: toolbarData
-            });
+            const loadTime = (performance.now() - loadStart).toFixed(0);
+            console.log(`✅ All panels loaded in ${loadTime}ms`);
 
             // Show resize gutters after panels are loaded
             setTimeout(() => {
@@ -125,6 +128,8 @@ class DirectComponentManager {
      * TODO: Replace with proper Svelte component compilation/mounting
      */
     async mountComponent(componentName, containerId, props = {}) {
+        const componentStart = performance.now();
+
         const container = document.getElementById(containerId);
         if (!container) {
             throw new Error(`Container ${containerId} not found`);
@@ -157,28 +162,50 @@ class DirectComponentManager {
 
         container.appendChild(iframe);
 
-        // Expose modlerComponents to iframe window after it loads
-        iframe.addEventListener('load', () => {
-            try {
-                // Only works for same-origin iframes
-                if (iframe.contentWindow && window.modlerComponents) {
-                    iframe.contentWindow.modlerComponents = window.modlerComponents;
-                    console.log(`✅ Exposed modlerComponents to ${componentName} iframe`);
-                }
-            } catch (error) {
-                // Cross-origin - can't access iframe contentWindow
-                console.warn(`⚠️ Cannot expose modlerComponents to ${componentName} iframe (cross-origin)`);
-            }
-        });
-
-        // Store reference for communication
-        this.componentInstances[componentName] = {
-            iframe,
-            container,
-            props,
-            mounted: true
+        // Map component names to their parent container classes
+        const parentContainerMap = {
+            leftPanel: '.left-panel',
+            propertyPanel: '.property-panel',
+            mainToolbar: '.floating-toolbar'
         };
 
+        // Return promise that resolves when iframe is loaded
+        return new Promise((resolve) => {
+            // Expose modlerComponents to iframe window after it loads
+            iframe.addEventListener('load', () => {
+                const componentTime = (performance.now() - componentStart).toFixed(0);
+                console.log(`✅ ${componentName} loaded in ${componentTime}ms`);
+
+                try {
+                    // Only works for same-origin iframes
+                    if (iframe.contentWindow && window.modlerComponents) {
+                        iframe.contentWindow.modlerComponents = window.modlerComponents;
+                    }
+                } catch (error) {
+                    // Cross-origin - can't access iframe contentWindow
+                    console.warn(`⚠️ Cannot expose modlerComponents to ${componentName} iframe (cross-origin)`);
+                }
+
+                // Trigger slide-in animation by adding 'loaded' class to parent container
+                const parentSelector = parentContainerMap[componentName];
+                if (parentSelector) {
+                    const parentContainer = document.querySelector(parentSelector);
+                    if (parentContainer) {
+                        parentContainer.classList.add('loaded');
+                    }
+                }
+
+                resolve();
+            });
+
+            // Store reference for communication
+            this.componentInstances[componentName] = {
+                iframe,
+                container,
+                props,
+                mounted: true
+            };
+        });
     }
 
     /**

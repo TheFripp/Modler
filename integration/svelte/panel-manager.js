@@ -352,6 +352,28 @@ class SveltePanelManager {
 
         if (!url) return;
 
+        const container = document.getElementById(containerId);
+        if (!container) return;
+
+        // Add loading indicator
+        const loadingIndicator = document.createElement('div');
+        loadingIndicator.style.cssText = `
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 100%;
+            height: 100%;
+            background: #171717;
+            color: #888;
+            font-size: 12px;
+            font-family: Arial, sans-serif;
+        `;
+        loadingIndicator.textContent = `Loading ${panelType}...`;
+        container.innerHTML = '';
+        container.appendChild(loadingIndicator);
+
+        const loadStart = performance.now();
+
         const iframe = document.createElement('iframe');
         iframe.src = url;
         iframe.style.cssText = `
@@ -359,29 +381,33 @@ class SveltePanelManager {
             height: 100%;
             border: none;
             background: transparent;
+            display: none;
         `;
-        // Enable cross-origin requests for iframe content
 
-        const container = document.getElementById(containerId);
-        if (container) {
-            container.innerHTML = '';
-            container.appendChild(iframe);
-            this.iframes[iframeKey] = iframe;
+        container.appendChild(iframe);
+        this.iframes[iframeKey] = iframe;
 
-            // Expose modlerComponents to iframe window after it loads
-            iframe.addEventListener('load', () => {
-                try {
-                    // Only works for same-origin iframes (localhost:5173 -> localhost:5173)
-                    if (iframe.contentWindow && window.modlerComponents) {
-                        iframe.contentWindow.modlerComponents = window.modlerComponents;
-                        console.log(`✅ Exposed modlerComponents to ${panelType} iframe`);
-                    }
-                } catch (error) {
-                    // Cross-origin - can't access iframe contentWindow
-                    console.warn(`⚠️ Cannot expose modlerComponents to ${panelType} iframe (cross-origin)`);
+        // Show iframe and remove loading indicator when loaded
+        iframe.addEventListener('load', () => {
+            const loadTime = (performance.now() - loadStart).toFixed(0);
+            console.log(`✅ ${panelType} panel loaded in ${loadTime}ms`);
+
+            // Remove loading indicator and show iframe
+            if (loadingIndicator.parentNode) {
+                loadingIndicator.remove();
+            }
+            iframe.style.display = 'block';
+
+            try {
+                // Only works for same-origin iframes (localhost:5173 -> localhost:5173)
+                if (iframe.contentWindow && window.modlerComponents) {
+                    iframe.contentWindow.modlerComponents = window.modlerComponents;
                 }
-            });
-        }
+            } catch (error) {
+                // Cross-origin - can't access iframe contentWindow
+                console.warn(`⚠️ Cannot expose modlerComponents to ${panelType} iframe (cross-origin)`);
+            }
+        });
     }
 
     /**

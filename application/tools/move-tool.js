@@ -33,6 +33,9 @@ class MoveTool {
         // Direction change detection for immediate response
         this.lastMovementDelta = undefined;
 
+        // Track cumulative movement for Tab key focus
+        this.cumulativeMovement = { x: 0, y: 0, z: 0 };
+
         // Position update debouncing to prevent UI spam
         this.lastPositionUpdateTime = 0;
         this.positionUpdateThrottle = 16; // ~60fps max rate
@@ -156,35 +159,12 @@ class MoveTool {
     }
 
     /**
-     * Handle key down events - monitor Command/Meta key for duplication mode
+     * Check if Command/Meta key is currently pressed
+     * Direct query to KeyboardRouter - no event handlers needed
      */
-    onKeyDown(event) {
-        // Check for Command/Meta key (Mac: ⌘, Windows: Win key) - track it even before dragging starts
-        if (event.key === 'Meta' || event.code === 'MetaLeft' || event.code === 'MetaRight') {
-            // If already dragging, enter duplication mode immediately
-            if (this.isDragging && !this.isDuplicationMode) {
-                this.enterDuplicationMode();
-            }
-            // If not dragging, the key state is tracked by InputController
-            // and will be checked when drag starts
-            return true;
-        }
-        return false;
-    }
-
-    /**
-     * Handle key up events - monitor Command/Meta key release
-     */
-    onKeyUp(event) {
-        // Check for Command/Meta key release
-        if (event.key === 'Meta' || event.code === 'MetaLeft' || event.code === 'MetaRight') {
-            // Exit duplication mode if currently in it
-            if (this.isDuplicationMode && this.isDragging) {
-                this.exitDuplicationMode();
-            }
-            return true;
-        }
-        return false;
+    isCommandKeyPressed() {
+        const keyboardRouter = window.modlerComponents?.keyboardRouter;
+        return keyboardRouter?.keys.has('MetaLeft') || keyboardRouter?.keys.has('MetaRight') || false;
     }
 
     /**
@@ -322,6 +302,9 @@ class MoveTool {
         // Reset direction tracking for new drag operation
         this.lastMovementDelta = undefined;
 
+        // Reset cumulative movement tracking for Tab key focus
+        this.cumulativeMovement = { x: 0, y: 0, z: 0 };
+
         // Store the hit point on the face for proper snap offset calculation
         this.dragHitPoint = hit.point.clone();
 
@@ -347,16 +330,15 @@ class MoveTool {
             }
         }
         
-        // Store initial mouse position and check for Option key
+        // Store initial mouse position and check for Command/Meta key at drag start
         const inputController = window.modlerComponents?.inputController;
         if (inputController) {
             this.lastMousePos = inputController.mouse.clone();
+        }
 
-            // Check if Command/Meta key is already pressed when starting drag
-            const isCommandPressed = inputController.keys?.has('MetaLeft') || inputController.keys?.has('MetaRight') || false;
-            if (isCommandPressed) {
-                this.enterDuplicationMode();
-            }
+        // Check if Command/Meta key is already pressed when starting drag
+        if (this.isCommandKeyPressed()) {
+            this.enterDuplicationMode();
         }
 
         // Clear the highlight since we're now dragging
@@ -377,6 +359,19 @@ class MoveTool {
         const camera = window.modlerComponents?.sceneFoundation?.camera;
 
         if (!inputController || !camera || !this.lastMousePos || !window.CameraMathUtils) return;
+
+        // Check Command/Meta key state each frame - toggle duplication mode dynamically
+        const isCommandPressed = this.isCommandKeyPressed();
+        if (isCommandPressed && !this.isDuplicationMode) {
+            this.enterDuplicationMode();
+        } else if (!isCommandPressed && this.isDuplicationMode) {
+            this.exitDuplicationMode();
+        }
+
+        // Update duplication measurement during drag
+        if (this.isDuplicationMode) {
+            this.updateDuplicationMeasurement();
+        }
 
         // Get current mouse position in NDC
         const currentMouseNDC = inputController.mouse;
@@ -412,6 +407,11 @@ class MoveTool {
             }
         }
         this.lastMovementDelta = worldMovement.clone();
+
+        // Track cumulative movement for determining dominant axis
+        this.cumulativeMovement.x += Math.abs(worldMovement.x);
+        this.cumulativeMovement.y += Math.abs(worldMovement.y);
+        this.cumulativeMovement.z += Math.abs(worldMovement.z);
 
         // Calculate potential new position
         const potentialPosition = this.dragObject.position.clone().add(worldMovement);
@@ -529,6 +529,44 @@ class MoveTool {
 
         // Keep dragged object at its current position (it represents the duplicate being created)
         this.dragObject.position.copy(currentDragPosition);
+
+        // Show measurement line between original and duplicate
+        this.showDuplicationMeasurement();
+    }
+
+    /**
+     * Show measurement line between original and duplicate during duplication mode
+     */
+    showDuplicationMeasurement() {
+        const measurementTool = window.modlerComponents?.measurementTool;
+        if (!measurementTool || !this.ghostObject || !this.dragObject) return;
+
+        // Get positions
+        const originalPos = this.ghostObject.position;
+        const duplicatePos = this.dragObject.position;
+
+        // Calculate distance and direction
+        const distance = originalPos.distanceTo(duplicatePos);
+        const direction = duplicatePos.clone().sub(originalPos).normalize();
+
+        // Create measurement visualization
+        measurementTool.createFaceNormalMeasurementVisual(
+            originalPos,
+            duplicatePos,
+            distance,
+            false, // No start connector needed
+            false, // No end connector needed
+            this.ghostObject,
+            this.dragObject
+        );
+    }
+
+    /**
+     * Update duplication measurement during drag
+     */
+    updateDuplicationMeasurement() {
+        if (!this.isDuplicationMode) return;
+        this.showDuplicationMeasurement();
     }
 
     /**
@@ -538,6 +576,12 @@ class MoveTool {
         if (!this.isDuplicationMode) return;
 
         this.isDuplicationMode = false;
+
+        // Clear measurement visualization
+        const measurementTool = window.modlerComponents?.measurementTool;
+        if (measurementTool) {
+            measurementTool.clearMeasurement();
+        }
 
         // Remove and dispose ghost object
         if (this.ghostObject) {
@@ -567,9 +611,9 @@ class MoveTool {
         const draggedObject = this.dragObject; // Store reference before clearing
         const wasDuplicationMode = this.isDuplicationMode;
 
-        // Record which axis was manipulated for Tab key focus
-        if (this.dragFaceNormal && draggedObject && window.inputFocusManager) {
-            const dominantAxis = this.getDominantAxisFromNormal(this.dragFaceNormal);
+        // Record which axis was manipulated for Tab key focus (based on actual movement, not face normal)
+        if (draggedObject && window.inputFocusManager) {
+            const dominantAxis = this.getDominantAxisFromMovement(this.cumulativeMovement);
             // Try multiple ways to get the object ID
             const objectId = draggedObject.userData?.objectId || draggedObject.userData?.id || draggedObject.id;
             window.inputFocusManager.recordManipulation(objectId, `position.${dominantAxis}`);
@@ -903,6 +947,15 @@ class MoveTool {
 
         if (absX > absY && absX > absZ) return 'x';
         if (absY > absZ) return 'y';
+        return 'z';
+    }
+
+    /**
+     * Get dominant axis from cumulative movement (for Tab key focus)
+     */
+    getDominantAxisFromMovement(movement) {
+        if (movement.x > movement.y && movement.x > movement.z) return 'x';
+        if (movement.y > movement.z) return 'y';
         return 'z';
     }
 

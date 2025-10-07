@@ -2,53 +2,14 @@
 	import { onMount } from 'svelte';
 	import PropertyPanel from '$lib/components/PropertyPanel.svelte';
 	import { initializeBridge } from '$lib/bridge/threejs-bridge';
-	import { selectedObjects, selectedObject } from '$lib/stores/modler';
-	import { unifiedCommunication } from '$lib/services/unified-communication';
 
 	onMount(() => {
 		// Initialize the bridge with Three.js
 		initializeBridge();
 
-		// Handle keyboard shortcuts globally when property panel has focus
-		const handleKeyDown = (event: KeyboardEvent) => {
-			// Skip if typing in an input field
-			const target = event.target as HTMLElement;
-			if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.contentEditable === 'true') {
-				return;
-			}
-
-			// Skip if modifier keys are pressed (let main app handle Cmd+Z, etc.)
-			if (event.metaKey || event.ctrlKey) {
-				return;
-			}
-
-			// Tool switching shortcuts
-			switch (event.key.toLowerCase()) {
-				case 'q':
-					event.preventDefault();
-					unifiedCommunication.sendToolActivation('select');
-					break;
-				case 'w':
-					event.preventDefault();
-					unifiedCommunication.sendToolActivation('move');
-					break;
-				case 'e':
-					event.preventDefault();
-					unifiedCommunication.sendToolActivation('push');
-					break;
-				case 'r':
-					event.preventDefault();
-					unifiedCommunication.sendToolActivation('box-creation');
-					break;
-			}
-		};
-
-		document.addEventListener('keydown', handleKeyDown);
-
-		// Cleanup
-		return () => {
-			document.removeEventListener('keydown', handleKeyDown);
-		};
+		// Keyboard handlers REMOVED - now centralized in KeyboardRouter
+		// Main application's KeyboardRouter handles all shortcuts with priority-based delegation
+		// UI panels are passive receivers via PostMessage, not active keyboard listeners
 	});
 </script>
 

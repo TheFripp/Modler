@@ -281,10 +281,10 @@ class PushTool {
         const objectData2 = sceneController?.getObjectByMesh(this.pushedObject);
         const isContainer = objectData2?.isContainer;
 
-        // Determine anchor mode from push direction and alignment
-        // Default: pushDirection > 0 means pushing +face, so MIN face stays fixed
-        //          pushDirection < 0 means pushing -face, so MAX face stays fixed
-        let anchorMode = this.pushDirection > 0 ? 'min' : 'max';
+        // Determine anchor mode from ACTUAL movement direction, not face normal
+        // If delta > 0: expanding in positive direction → min face stays fixed
+        // If delta < 0: shrinking or expanding in negative direction → max face stays fixed
+        let anchorMode = delta > 0 ? 'min' : 'max';
 
         // Check if this object is inside a layout-enabled container with alignment
         if (!isContainer && objectData2?.parentContainer && sceneController) {
@@ -442,36 +442,30 @@ class PushTool {
 
         // Get layout direction
         const layoutDirection = objectData.autoLayout.direction || 'x';
-
-        // Only update layout if pushing on the layout axis
-        // Pushing on other axes should not affect object positions along the layout axis
-        if (this.pushAxis !== layoutDirection) {
-            // Pushing perpendicular to layout direction - don't recalculate layout
-            // Objects should stay in their current positions along the layout axis
-            return;
-        }
-
-        // Check if there are fill objects in the layout
         const children = sceneController.getChildObjects(objectData.id);
+
+        // Check if there are fill objects on the PUSH AXIS (not layout axis)
+        // Fill objects should resize when container size changes on their fill axis,
+        // regardless of whether that's the layout direction or perpendicular to it
+        const sizeProperty = `size${this.pushAxis.toUpperCase()}`;
         const hasFillObjects = children.some(child => {
-            const sizeProperty = `size${this.pushAxis.toUpperCase()}`;
             return child.layoutProperties?.[sizeProperty] === 'fill';
         });
 
         if (hasFillObjects) {
-            // WITH FILL OBJECTS: Don't recalculate layout (positions would shift)
-            // Instead, directly resize fill objects based on new container size
-            console.log('🔵 Push with fill objects - resizing fill objects only, NOT updating layout');
+            // WITH FILL OBJECTS on push axis: Resize them to match new container size
             this.updateFillObjectsDuringPush(objectData, children);
-        } else {
-            // NO FILL OBJECTS: Use space-between distribution
-            console.log('🔵 Push without fill objects - updating layout with space-between');
+        } else if (this.pushAxis === layoutDirection) {
+            // NO FILL OBJECTS, pushing on layout axis: Use space-between distribution
             const pushContext = {
                 axis: this.pushAxis,
-                anchorMode: this.pushDirection > 0 ? 'min' : 'max'
+                // Use cumulative movement to determine anchor
+                anchorMode: this.cumulativeAmount > 0 ? 'min' : 'max'
             };
             sceneController.updateLayout(objectData.id, pushContext);
         }
+        // If pushing perpendicular to layout direction with no fill objects, do nothing
+        // (children positions along layout axis don't change)
     }
 
     /**
@@ -491,7 +485,12 @@ class PushTool {
         // Calculate available space for fill objects
         const axis = this.pushAxis;
         const containerAxisSize = containerSize[axis];
-        const paddingTotal = (padding.width || 0) * 2; // Simplified - should use axis-specific padding
+
+        // Get correct padding for this axis
+        let paddingTotal = 0;
+        if (axis === 'x') paddingTotal = (padding.width || 0) * 2;
+        else if (axis === 'y') paddingTotal = (padding.height || 0) * 2;
+        else if (axis === 'z') paddingTotal = (padding.depth || 0) * 2;
 
         let totalFixedSize = 0;
         let fillCount = 0;
@@ -516,15 +515,14 @@ class PushTool {
         const geometryFactory = window.modlerComponents?.geometryFactory;
         if (!geometryFactory) return;
 
-        console.log(`  🔄 Updating ${fillCount} fill objects, ${children.length - fillCount} fixed objects`);
-
         children.forEach(child => {
             const sizeProperty = `size${axis.toUpperCase()}`;
-            const oldPos = child.mesh?.position.clone();
 
             if (child.layoutProperties?.[sizeProperty] === 'fill' && child.mesh) {
                 const currentDims = geometryUtils.getGeometryDimensions(child.mesh.geometry);
-                const newDimension = Math.max(fillSizePerObject, 0.1);
+                // Use calculated fill size directly - no minimum constraint
+                // If calculation results in negative/zero, that means container is too small
+                const newDimension = Math.max(fillSizePerObject, 0.01);
 
                 // FILL OBJECTS: Replace geometry instead of vertex manipulation
                 // This keeps geometry centered and avoids position shifts
@@ -544,25 +542,6 @@ class PushTool {
 
                 // Update object data
                 child.dimensions[axis] = newDimension;
-
-                console.log(`  📏 Resized fill object ${child.name}:`, {
-                    axis,
-                    oldSize: currentDims[axis],
-                    newSize: newDimension,
-                    oldPos: oldPos[axis],
-                    newPos: child.mesh.position[axis],
-                    positionChanged: Math.abs(oldPos[axis] - child.mesh.position[axis]) > 0.001
-                });
-            } else if (child.mesh && oldPos) {
-                // FIXED OBJECT - should NOT move
-                if (Math.abs(oldPos[axis] - child.mesh.position[axis]) > 0.001) {
-                    console.warn(`  ⚠️ Fixed object ${child.name} MOVED:`, {
-                        axis,
-                        oldPos: oldPos[axis],
-                        newPos: child.mesh.position[axis],
-                        delta: child.mesh.position[axis] - oldPos[axis]
-                    });
-                }
             }
         });
     }
@@ -679,6 +658,14 @@ class PushTool {
 
             // Register undo action
             this.registerUndoAction(pushedObject);
+
+            // Record manipulation for Tab key focus (dimensions along push axis)
+            if (window.inputFocusManager && pushedObject.userData?.id && this.pushAxis) {
+                window.inputFocusManager.recordManipulation(
+                    pushedObject.userData.id,
+                    `dimensions.${this.pushAxis}`
+                );
+            }
         }
 
         // Clear hover state

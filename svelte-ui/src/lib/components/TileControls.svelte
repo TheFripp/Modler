@@ -55,7 +55,7 @@
 				type="button"
 				onclick={() => onAxisChange('x')}
 				class="flex items-center justify-center px-3 py-2 text-xs font-medium border-2 rounded-md transition-all {isXActive
-					? 'border-[#10B981] text-foreground shadow-sm'
+					? 'border-blue-500 text-foreground shadow-sm'
 					: 'border-[#2E2E2E] text-muted-foreground hover:border-[#404040] hover:text-foreground'}"
 				title="Width"
 			>
@@ -65,7 +65,7 @@
 				type="button"
 				onclick={() => onAxisChange('y')}
 				class="flex items-center justify-center px-3 py-2 text-xs font-medium border-2 rounded-md transition-all {isYActive
-					? 'border-[#10B981] text-foreground shadow-sm'
+					? 'border-blue-500 text-foreground shadow-sm'
 					: 'border-[#2E2E2E] text-muted-foreground hover:border-[#404040] hover:text-foreground'}"
 				title="Height"
 			>
@@ -75,7 +75,7 @@
 				type="button"
 				onclick={() => onAxisChange('z')}
 				class="flex items-center justify-center px-3 py-2 text-xs font-medium border-2 rounded-md transition-all {isZActive
-					? 'border-[#10B981] text-foreground shadow-sm'
+					? 'border-blue-500 text-foreground shadow-sm'
 					: 'border-[#2E2E2E] text-muted-foreground hover:border-[#404040] hover:text-foreground'}"
 				title="Depth"
 			>
