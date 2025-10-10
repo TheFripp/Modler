@@ -318,7 +318,8 @@ class MaterialManager {
             opacity: config.opacity,
             side: config.side,
             depthTest: config.depthTest,
-            depthWrite: config.depthWrite
+            depthWrite: config.depthWrite,
+            clippingPlanes: [] // Disable clipping - always render face highlights
         });
 
         material.renderOrder = config.renderOrder;
@@ -368,7 +369,8 @@ class MaterialManager {
             opacity: config.opacity,
             side: config.side,
             depthTest: config.depthTest,
-            depthWrite: config.depthWrite
+            depthWrite: config.depthWrite,
+            clippingPlanes: [] // Disable clipping - always render face highlights
         });
 
         material.renderOrder = config.renderOrder;
@@ -411,7 +413,8 @@ class MaterialManager {
             opacity: config.opacity,
             side: config.side,
             depthTest: config.depthTest,
-            depthWrite: config.depthWrite
+            depthWrite: config.depthWrite,
+            clippingPlanes: [] // Disable clipping - always render face highlights
         });
 
         material.renderOrder = config.renderOrder;
@@ -695,7 +698,7 @@ class MaterialManager {
         const keyProps = [
             type,
             config.color || 'default',
-            config.opacity || '1',
+            config.opacity !== undefined ? config.opacity : 'default', // Don't default to '1' - use actual value or 'default'
             config.lineWidth || '1',
             config.wireframe || 'false',
             config.transparent || 'false',
