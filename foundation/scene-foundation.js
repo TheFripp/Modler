@@ -97,19 +97,25 @@ class SceneFoundation {
 
     /**
      * Update grid opacity based on camera position
-     * When camera is below floor (y < -1), set grid to 20% opacity
+     * When camera is below floor (y < -1), set grid to 20% opacity and hide floor plane
      */
     updateGridOpacity() {
         if (!this.camera) return;
 
-        const targetOpacity = this.camera.position.y < -1 ? 0.2 : 1.0;
+        const isBelowFloor = this.camera.position.y < -1;
+        const targetOpacity = isBelowFloor ? 0.2 : 1.0;
 
         // Find floor grid object
         this.scene.traverse((object) => {
             if (object.userData && object.userData.type === 'grid') {
-                // Update all children (grid lines)
+                // Update all children
                 object.traverse((child) => {
-                    if (child.material && child.material.opacity !== undefined) {
+                    // Hide floor plane when below, show when above
+                    if (child.name === 'Floor Plane') {
+                        child.visible = !isBelowFloor;
+                    }
+                    // Update grid line opacity
+                    else if (child.material && child.material.opacity !== undefined) {
                         // Smoothly transition opacity
                         if (Math.abs(child.material.opacity - targetOpacity) > 0.01) {
                             const lerp = (a, b, t) => a + (b - a) * t;
