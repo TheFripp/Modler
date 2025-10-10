@@ -123,11 +123,8 @@ class MaterialManager {
             // Don't invalidate cache - we want to keep using the same material instance
         });
 
-        // Face highlight materials
-        this.registerConfigCallback('visual.effects.materials.face.opacity', (newValue) => {
-            this.updateMaterialsOfType(this.materialTypes.FACE_HIGHLIGHT, 'opacity', newValue);
-            this.updateMaterialsOfType(this.materialTypes.AXIS_HIGHLIGHT, 'opacity', newValue);
-        });
+        // NOTE: visual.effects.materials.face.opacity callback removed - it was conflicting with
+        // visual.selection.faceHighlightOpacity which is the correct setting for face highlights
 
         // Preview materials
         this.registerConfigCallback('visual.boxCreation.color', (newValue) => {
@@ -772,7 +769,10 @@ class MaterialManager {
         let updatedCount = 0;
         let needsGeometryUpdate = false;
 
+        console.log('🔍 updateMaterialsOfType called:', { type, property, value, activeMaterialsSize: this.activeMaterials.size });
+
         for (const material of this.activeMaterials) {
+            console.log('  - Checking material type:', material.userData?.materialManagerType, 'vs', type);
             if (material.userData?.materialManagerType === type) {
                 try {
                     if (property === 'color' && typeof value === 'string') {
@@ -787,11 +787,14 @@ class MaterialManager {
 
                     material.needsUpdate = true;
                     updatedCount++;
+                    console.log('    ✓ Updated material', property, 'to', value);
                 } catch (error) {
                     console.warn('MaterialManager: Error updating material property:', error);
                 }
             }
         }
+
+        console.log('  → Total updated:', updatedCount);
 
 
         // Note: ConfigurationManager handles visualization refresh via its subscribe callbacks

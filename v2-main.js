@@ -183,21 +183,31 @@ function initializeApplication() {
         modlerV2Components.visualizationManager.initializeWithConfigurationManager();
     }
 
-    // Recreate pooled materials now that ConfigurationManager is available
-    // This ensures materials get correct config values instead of fallback defaults
+    // Update existing material instances with correct config values
+    // Don't recreate materials - that would break references from existing objects
     if (modlerV2Components.supportMeshFactory && modlerV2Components.materialManager) {
-        // Clear material cache to force recreation with correct config values
-        modlerV2Components.materialManager.invalidateCacheForType(
-            modlerV2Components.materialManager.materialTypes.FACE_HIGHLIGHT
-        );
-        modlerV2Components.materialManager.invalidateCacheForType(
-            modlerV2Components.materialManager.materialTypes.FACE_HIGHLIGHT_CONTAINER
-        );
-        modlerV2Components.materialManager.invalidateCacheForType(
-            modlerV2Components.materialManager.materialTypes.FACE_HIGHLIGHT_DISABLED
-        );
+        const configManager = modlerV2Components.configurationManager;
+        const materialManager = modlerV2Components.materialManager;
 
-        modlerV2Components.supportMeshFactory.createBaseMaterials();
+        // Update existing material values to match loaded config
+        const faceColor = configManager.get('visual.selection.color');
+        const faceOpacity = configManager.get('visual.selection.faceHighlightOpacity');
+        const containerColor = configManager.get('visual.containers.wireframeColor');
+        const containerOpacity = configManager.get('visual.containers.faceHighlightOpacity');
+
+        console.log('🔧 Updating materials after config load:', {
+            faceColor, faceOpacity,
+            containerColor, containerOpacity
+        });
+
+        // Update the existing material instances (don't recreate - that breaks references!)
+        materialManager.updateMaterialsOfType(materialManager.materialTypes.FACE_HIGHLIGHT, 'color', faceColor);
+        materialManager.updateMaterialsOfType(materialManager.materialTypes.FACE_HIGHLIGHT, 'opacity', faceOpacity);
+
+        materialManager.updateMaterialsOfType(materialManager.materialTypes.FACE_HIGHLIGHT_CONTAINER, 'color', containerColor);
+        materialManager.updateMaterialsOfType(materialManager.materialTypes.FACE_HIGHLIGHT_CONTAINER, 'opacity', containerOpacity);
+
+        materialManager.updateMaterialsOfType(materialManager.materialTypes.FACE_HIGHLIGHT_DISABLED, 'opacity', faceOpacity);
     }
 
     modlerV2Components.snapController = new SnapController(
