@@ -566,7 +566,7 @@ function createDemoObjects() {
     let material, geometry;
 
     if (materialManager) {
-        material = materialManager.createMeshLambertMaterial({ color: 0x888888 });
+        material = materialManager.createMeshLambertMaterial({ color: materialManager.colors.DEFAULT_OBJECT });
     } else {
         material = new THREE.MeshLambertMaterial({ color: 0x888888 });
     }

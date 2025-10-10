@@ -13,12 +13,19 @@ class MaterialManager {
         // Active materials tracking for cleanup
         this.activeMaterials = new Set();
 
+        // Color constants for special material states
+        this.colors = {
+            DISABLED_STATE: 0x888888,  // Grey for disabled/blocked tool operations
+            DEFAULT_OBJECT: 0x888888   // Grey for default object material
+        };
+
         // Material type registry
         this.materialTypes = {
             SELECTION_EDGE: 'selection-edge',
             CONTAINER_WIREFRAME: 'container-wireframe',
             FACE_HIGHLIGHT: 'face-highlight',
             FACE_HIGHLIGHT_CONTAINER: 'face-highlight-container',
+            FACE_HIGHLIGHT_DISABLED: 'face-highlight-disabled',
             AXIS_HIGHLIGHT: 'axis-highlight',
             PADDING_VISUALIZATION: 'padding-viz',
             PREVIEW_WIREFRAME: 'preview-wireframe',
@@ -90,12 +97,8 @@ class MaterialManager {
         });
 
         this.registerConfigCallback('visual.selection.faceHighlightOpacity', (newValue) => {
-            console.log('🔔 Callback fired for visual.selection.faceHighlightOpacity:', {
-                newValue,
-                type: typeof newValue,
-                isNaN: isNaN(newValue)
-            });
             this.updateMaterialsOfType(this.materialTypes.FACE_HIGHLIGHT, 'opacity', newValue);
+            this.updateMaterialsOfType(this.materialTypes.FACE_HIGHLIGHT_DISABLED, 'opacity', newValue);
             // Don't invalidate cache - we want to keep using the same material instance
         });
 
@@ -372,6 +375,51 @@ class MaterialManager {
         material.renderOrder = config.renderOrder;
 
         return this.cacheMaterial(key, material, this.materialTypes.FACE_HIGHLIGHT_CONTAINER);
+    }
+
+    /**
+     * Create disabled face highlight material (grey color for blocked tool operations)
+     * This material is NOT updated when selection colors change - only opacity updates
+     * @param {Object} options - Material options
+     * @returns {THREE.MeshBasicMaterial} Disabled face highlight material
+     */
+    createDisabledFaceHighlightMaterial(options = {}) {
+        const configManager = this.getConfigManager();
+
+        // Build configuration - uses fixed grey color, only opacity tracks config
+        const config = {
+            color: options.color || this.colors.DISABLED_STATE, // Dark grey - fixed, not affected by selection color changes
+            opacity: options.opacity || configManager?.get('visual.selection.faceHighlightOpacity') || 0.3,
+            renderOrder: options.renderOrder || configManager?.get('visual.effects.materials.face.renderOrder') || 1000,
+            side: THREE.DoubleSide,
+            transparent: true,
+            depthTest: true,
+            depthWrite: false,
+            ...options
+        };
+
+        // Generate cache key
+        const key = this.generateMaterialKey(this.materialTypes.FACE_HIGHLIGHT_DISABLED, config);
+
+        // Check cache
+        const cached = this.getMaterialFromCache(key);
+        if (cached) return cached;
+
+        // Create new material
+        const material = new THREE.MeshBasicMaterial({
+            color: config.color,
+            transparent: config.transparent,
+            opacity: config.opacity,
+            side: config.side,
+            depthTest: config.depthTest,
+            depthWrite: config.depthWrite
+        });
+
+        material.renderOrder = config.renderOrder;
+
+        // Cache with FACE_HIGHLIGHT_DISABLED type
+        // This type is only updated for opacity changes, NOT color changes
+        return this.cacheMaterial(key, material, this.materialTypes.FACE_HIGHLIGHT_DISABLED);
     }
 
     /**
@@ -724,14 +772,6 @@ class MaterialManager {
         let updatedCount = 0;
         let needsGeometryUpdate = false;
 
-        // DEBUG: Log update attempt
-        console.log('📝 updateMaterialsOfType called:', {
-            type,
-            property,
-            value,
-            activeMaterialsCount: this.activeMaterials.size
-        });
-
         for (const material of this.activeMaterials) {
             if (material.userData?.materialManagerType === type) {
                 try {
@@ -747,19 +787,11 @@ class MaterialManager {
 
                     material.needsUpdate = true;
                     updatedCount++;
-
-                    // DEBUG: Log successful update
-                    if (property === 'opacity') {
-                        console.log(`  ✓ Updated ${type} material opacity:`, material.opacity);
-                    }
                 } catch (error) {
                     console.warn('MaterialManager: Error updating material property:', error);
                 }
             }
         }
-
-        // DEBUG: Log results
-        console.log(`  → Updated ${updatedCount} materials of type ${type}`);
 
 
         // Note: ConfigurationManager handles visualization refresh via its subscribe callbacks

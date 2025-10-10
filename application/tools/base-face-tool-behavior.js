@@ -133,17 +133,21 @@ class BaseFaceToolBehavior {
                 if (isDisabledAction) {
                     const supportMeshFactory = window.modlerComponents?.supportMeshFactory;
                     if (supportMeshFactory && supportMeshFactory.materials.faceHighlightDisabled) {
-                        // Store original material for restoration
-                        if (!supportMeshes.faceHighlight.userData.originalMaterial) {
+                        // Only swap if not already using disabled material (prevent nested swaps)
+                        if (supportMeshes.faceHighlight.material !== supportMeshFactory.materials.faceHighlightDisabled) {
+                            // Store original material for restoration
                             supportMeshes.faceHighlight.userData.originalMaterial = supportMeshes.faceHighlight.material;
+                            // Swap to grey disabled material
+                            supportMeshes.faceHighlight.material = supportMeshFactory.materials.faceHighlightDisabled;
                         }
-                        // Swap to grey disabled material
-                        supportMeshes.faceHighlight.material = supportMeshFactory.materials.faceHighlightDisabled;
                     }
                 } else {
-                    // Restore original material if previously disabled
+                    // Restore original material if previously swapped
                     if (supportMeshes.faceHighlight.userData.originalMaterial) {
-                        supportMeshes.faceHighlight.material = supportMeshes.faceHighlight.userData.originalMaterial;
+                        // Validate that original material still exists before restoring
+                        if (supportMeshes.faceHighlight.userData.originalMaterial) {
+                            supportMeshes.faceHighlight.material = supportMeshes.faceHighlight.userData.originalMaterial;
+                        }
                         delete supportMeshes.faceHighlight.userData.originalMaterial;
                     }
                 }
@@ -151,7 +155,9 @@ class BaseFaceToolBehavior {
                 supportMeshes.faceHighlight.visible = true;
             } else {
                 // Fallback to Visual Effects for objects without support meshes
-                this.visualEffects.showFaceHighlight(hit, isDisabledAction ? 0x888888 : null);
+                const materialManager = window.modlerComponents?.materialManager;
+                const disabledColor = materialManager?.colors?.DISABLED_STATE || 0x888888;
+                this.visualEffects.showFaceHighlight(hit, isDisabledAction ? disabledColor : null);
             }
             return !isDisabledAction; // Return false if disabled so hasValidFaceHover works correctly
         } else {
@@ -274,7 +280,10 @@ class BaseFaceToolBehavior {
             if (supportMeshes?.faceHighlight) {
                 // Restore original material if it was swapped to disabled state
                 if (supportMeshes.faceHighlight.userData.originalMaterial) {
-                    supportMeshes.faceHighlight.material = supportMeshes.faceHighlight.userData.originalMaterial;
+                    // Validate that original material still exists before restoring
+                    if (supportMeshes.faceHighlight.userData.originalMaterial) {
+                        supportMeshes.faceHighlight.material = supportMeshes.faceHighlight.userData.originalMaterial;
+                    }
                     delete supportMeshes.faceHighlight.userData.originalMaterial;
                 }
                 supportMeshes.faceHighlight.visible = false;

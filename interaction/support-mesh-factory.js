@@ -33,28 +33,10 @@ class SupportMeshFactory {
         this.materials.faceHighlight = this.materialManager.createFaceHighlightMaterial();
         this.materials.faceHighlightContainer = this.materialManager.createContainerFaceHighlightMaterial();
 
-        // Create disabled state material (grey with same opacity as face highlights)
-        // Create directly without MaterialManager to avoid it being updated when face highlight colors change
-        const configManager = this.materialManager.getConfigManager();
-        const faceOpacity = configManager?.get('visual.selection.faceHighlightOpacity') || 0.3;
-        this.materials.faceHighlightDisabled = new THREE.MeshBasicMaterial({
-            color: 0x888888, // Dark grey
-            transparent: true,
-            opacity: faceOpacity,
-            side: THREE.DoubleSide,
-            depthTest: true,
-            depthWrite: false
-        });
-        this.materials.faceHighlightDisabled.renderOrder = 1000;
-
-        // Subscribe to opacity changes to keep disabled material in sync
-        if (configManager) {
-            configManager.subscribe('visual.selection.faceHighlightOpacity', (newOpacity) => {
-                if (this.materials.faceHighlightDisabled) {
-                    this.materials.faceHighlightDisabled.opacity = newOpacity;
-                }
-            });
-        }
+        // Create disabled state material via MaterialManager
+        // This material type is only updated for opacity changes, NOT color changes
+        // Maintains grey color (0x888888) while syncing opacity with other face highlights
+        this.materials.faceHighlightDisabled = this.materialManager.createDisabledFaceHighlightMaterial();
 
         this.materials.containerWireframe = this.materialManager.createContainerWireframeMaterial();
         this.materials.cadWireframe = this.materialManager.createCadEdgeMaterial();
@@ -100,10 +82,6 @@ class SupportMeshFactory {
                 faceHighlight.material = newMaterial;
                 updatedCount++;
             }
-        }
-
-        if (updatedCount > 0) {
-            console.log(`✓ Updated ${updatedCount} face highlight materials to use new pooled materials`);
         }
     }
 
