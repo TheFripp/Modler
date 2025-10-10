@@ -195,11 +195,6 @@ function initializeApplication() {
         const containerColor = configManager.get('visual.containers.wireframeColor');
         const containerOpacity = configManager.get('visual.containers.faceHighlightOpacity');
 
-        console.log('🔧 Updating materials after config load:', {
-            faceColor, faceOpacity,
-            containerColor, containerOpacity
-        });
-
         // Update the existing material instances (don't recreate - that breaks references!)
         materialManager.updateMaterialsOfType(materialManager.materialTypes.FACE_HIGHLIGHT, 'color', faceColor);
         materialManager.updateMaterialsOfType(materialManager.materialTypes.FACE_HIGHLIGHT, 'opacity', faceOpacity);

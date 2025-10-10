@@ -282,7 +282,57 @@ if (supportMeshes.faceHighlight.userData.originalMaterial) {
 }
 ```
 
-### 4. Prevent Face Highlight Flicker
+### 4. Material Initialization & Configuration
+
+```javascript
+// CRITICAL: Material initialization timing and config conflicts
+// Materials created BEFORE ConfigurationManager loads get fallback defaults
+// Solution: Update existing material instances after config loads
+
+// In v2-main.js initializeApplication():
+if (modlerV2Components.supportMeshFactory && modlerV2Components.materialManager) {
+    const configManager = modlerV2Components.configurationManager;
+    const materialManager = modlerV2Components.materialManager;
+
+    // Get loaded config values
+    const faceColor = configManager.get('visual.selection.color');
+    const faceOpacity = configManager.get('visual.selection.faceHighlightOpacity');
+    const containerColor = configManager.get('visual.containers.wireframeColor');
+    const containerOpacity = configManager.get('visual.containers.faceHighlightOpacity');
+
+    // Update existing material instances (DON'T recreate - that breaks references!)
+    materialManager.updateMaterialsOfType(materialManager.materialTypes.FACE_HIGHLIGHT, 'color', faceColor);
+    materialManager.updateMaterialsOfType(materialManager.materialTypes.FACE_HIGHLIGHT, 'opacity', faceOpacity);
+
+    materialManager.updateMaterialsOfType(materialManager.materialTypes.FACE_HIGHLIGHT_CONTAINER, 'color', containerColor);
+    materialManager.updateMaterialsOfType(materialManager.materialTypes.FACE_HIGHLIGHT_CONTAINER, 'opacity', containerOpacity);
+}
+```
+
+**Key Rules**:
+- ❌ **NEVER** recreate materials to update config values (breaks object references)
+- ✅ **ALWAYS** use `updateMaterialsOfType()` to modify existing instances
+- ⚠️ **WATCH** for conflicting config callbacks updating same material type
+- 📝 **UPDATE** both color AND opacity when config loads
+
+**Config Callback Conflicts**:
+```javascript
+// BAD: Multiple callbacks updating same material
+this.registerConfigCallback('visual.effects.materials.face.opacity', (newValue) => {
+    this.updateMaterialsOfType(this.materialTypes.FACE_HIGHLIGHT, 'opacity', newValue); // Default: 0.6
+});
+this.registerConfigCallback('visual.selection.faceHighlightOpacity', (newValue) => {
+    this.updateMaterialsOfType(this.materialTypes.FACE_HIGHLIGHT, 'opacity', newValue); // User: 0.18
+});
+// Result: Race condition! One overwrites the other.
+
+// GOOD: Single callback per material property
+this.registerConfigCallback('visual.selection.faceHighlightOpacity', (newValue) => {
+    this.updateMaterialsOfType(this.materialTypes.FACE_HIGHLIGHT, 'opacity', newValue);
+});
+```
+
+### 5. Prevent Face Highlight Flicker
 
 ```javascript
 // Track which face is hovered to prevent repositioning on every mouse move
@@ -307,7 +357,7 @@ clearHover() {
 }
 ```
 
-### 5. Update Support Mesh
+### 6. Update Support Mesh
 
 ```javascript
 // Support meshes update automatically when geometry changes

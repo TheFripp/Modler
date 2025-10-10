@@ -50,12 +50,6 @@ class SupportMeshFactory {
 
         // Update existing objects to use new materials
         // This is needed when materials are recreated after ConfigurationManager initialization
-        console.log('🔍 createBaseMaterials - About to update existing face highlights');
-        console.log('🔍 New material opacities:', {
-            faceHighlight: this.materials.faceHighlight?.opacity,
-            faceHighlightContainer: this.materials.faceHighlightContainer?.opacity,
-            faceHighlightDisabled: this.materials.faceHighlightDisabled?.opacity
-        });
         this.updateExistingFaceHighlightMaterials();
     }
 
@@ -65,13 +59,9 @@ class SupportMeshFactory {
      */
     updateExistingFaceHighlightMaterials() {
         const sceneController = window.modlerComponents?.sceneController;
-        if (!sceneController) {
-            console.log('🔍 updateExistingFaceHighlightMaterials - No sceneController');
-            return;
-        }
+        if (!sceneController) return;
 
         let updatedCount = 0;
-        console.log('🔍 updateExistingFaceHighlightMaterials - Checking', sceneController.objects.size, 'objects');
 
         // Iterate through all objects and update their face highlight materials
         for (const [id, objectData] of sceneController.objects) {
@@ -87,16 +77,12 @@ class SupportMeshFactory {
                 ? this.materials.faceHighlightContainer
                 : this.materials.faceHighlight;
 
-            console.log('🔍 Object', id, '- current opacity:', faceHighlight.material?.opacity, '→ new opacity:', newMaterial?.opacity);
-
             // Update the material reference
             if (faceHighlight.material !== newMaterial) {
                 faceHighlight.material = newMaterial;
                 updatedCount++;
             }
         }
-
-        console.log('✓ Updated', updatedCount, 'face highlight materials');
     }
 
     /**
