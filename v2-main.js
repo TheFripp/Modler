@@ -47,8 +47,11 @@ async function initializeModlerV2(canvas) {
             }
         }));
 
+        // Auto-load last scene (replaces demo objects if scene exists)
+        await autoLoadLastScene();
+
         // CRITICAL: Trigger explicit hierarchy sync after all initialization complete
-        // This ensures Svelte UI receives initial object data including demo cube
+        // This ensures Svelte UI receives initial object data (from loaded scene or demo objects)
         setTimeout(() => {
             if (window.notifyObjectHierarchyChanged) {
                 window.notifyObjectHierarchyChanged();
@@ -177,6 +180,12 @@ function initializeApplication() {
 
     // Initialize PropertyManager for object property updates and fill functionality
     modlerV2Components.propertyManager = new PropertyManager();
+
+    // Initialize File System for scene save/load
+    modlerV2Components.fileManager = new FileManager();
+    modlerV2Components.fileManager.startAutoSave(); // Start 30-second auto-save
+
+    // FileManagerHandler initialized in main-integration.js (follows SettingsHandler pattern)
 
     // Initialize components that depend on ConfigurationManager
     if (modlerV2Components.visualizationManager) {
@@ -627,6 +636,55 @@ function getModlerV2Status() {
         components: Object.keys(modlerV2Components),
         sceneStats: modlerV2Components.sceneController?.getStats()
     };
+}
+
+/**
+ * Auto-load the last opened scene if it exists
+ * Called after FileManager initialization to restore user's last working state
+ */
+async function autoLoadLastScene() {
+    const fileManager = modlerV2Components?.fileManager;
+    if (!fileManager) {
+        console.warn('autoLoadLastScene: FileManager not available');
+        return;
+    }
+
+    try {
+        // Get the last opened file ID
+        const lastFileId = fileManager.getLastOpenedFileId();
+
+        if (!lastFileId) {
+            // No last file - check if any files exist
+            const files = await fileManager.listFiles();
+            if (files && files.length > 0) {
+                // Load the most recently modified file
+                const sortedFiles = [...files].sort((a, b) => b.modified - a.modified);
+                await fileManager.loadScene(sortedFiles[0].id);
+                console.log('autoLoadLastScene: Loaded most recent file');
+            }
+            return;
+        }
+
+        // Verify the file still exists
+        const files = await fileManager.listFiles();
+        const fileExists = files && files.some(f => f.id === lastFileId);
+
+        if (fileExists) {
+            // Load the last opened file
+            await fileManager.loadScene(lastFileId);
+            console.log('autoLoadLastScene: Loaded last opened file');
+        } else {
+            // Last file was deleted, load most recent
+            if (files && files.length > 0) {
+                const sortedFiles = [...files].sort((a, b) => b.modified - a.modified);
+                await fileManager.loadScene(sortedFiles[0].id);
+                console.log('autoLoadLastScene: Last file not found, loaded most recent file');
+            }
+        }
+    } catch (error) {
+        console.warn('autoLoadLastScene: Failed to auto-load scene:', error);
+        // Continue with default scene if auto-load fails
+    }
 }
 
 // Auto-initialize when DOM is ready

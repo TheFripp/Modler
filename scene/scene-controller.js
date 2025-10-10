@@ -1500,11 +1500,29 @@ class SceneController {
 
         // Apply transforms if specified
         if (options.position) {
-            mesh.position.copy(options.position);
+            if (options.position.isVector3) {
+                mesh.position.copy(options.position);
+            } else {
+                mesh.position.set(
+                    options.position.x ?? 0,
+                    options.position.y ?? 0,
+                    options.position.z ?? 0
+                );
+            }
         }
 
         if (options.rotation) {
-            mesh.rotation.copy(options.rotation);
+            if (options.rotation.isEuler) {
+                mesh.rotation.copy(options.rotation);
+            } else {
+                // Convert from degrees to radians and set
+                mesh.rotation.set(
+                    (options.rotation.x ?? 0) * Math.PI / 180,
+                    (options.rotation.y ?? 0) * Math.PI / 180,
+                    (options.rotation.z ?? 0) * Math.PI / 180,
+                    options.rotation.order || 'XYZ'
+                );
+            }
         }
 
         // CAD PRINCIPLE: Scale must always be (1, 1, 1) for exact measurements

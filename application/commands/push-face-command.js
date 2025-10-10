@@ -21,7 +21,6 @@ class PushFaceCommand extends BaseCommand {
 
     execute() {
         // Push operation already happened, just store the state
-        logger.debug(`Push command executed: ${this.objectId}`);
         return true;
     }
 

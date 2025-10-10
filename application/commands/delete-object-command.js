@@ -78,7 +78,7 @@ class DeleteObjectCommand extends BaseCommand {
             // Notify UI of hierarchy changes via PropertyPanelSync
             const propertyPanelSync = window.modlerComponents?.propertyPanelSync;
             if (propertyPanelSync) {
-                propertyPanelSync.sendHierarchyUpdate();
+                propertyPanelSync.refreshCompleteHierarchy();
             }
 
             return true;
@@ -120,7 +120,7 @@ class DeleteObjectCommand extends BaseCommand {
             // Notify UI of hierarchy changes via PropertyPanelSync
             const propertyPanelSync = window.modlerComponents?.propertyPanelSync;
             if (propertyPanelSync) {
-                propertyPanelSync.sendHierarchyUpdate();
+                propertyPanelSync.refreshCompleteHierarchy();
             }
 
             return true;

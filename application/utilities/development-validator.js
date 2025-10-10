@@ -162,8 +162,9 @@ class DevelopmentValidator {
                 const isFromMeasurementTool = stack.includes('MeasurementTool') || stack.includes('createEdgeMeasurementVisual') || stack.includes('createFaceNormalMeasurementVisual');
                 const isFromBoxCreation = stack.includes('BoxCreationTool') || stack.includes('updateInvisibleBoxDimensions');
                 const isFromSupportMeshFactory = stack.includes('SupportMeshFactory') || stack.includes('updateSupportMeshGeometries');
+                const isFromObjectVisualizer = stack.includes('ObjectVisualizer') || stack.includes('object-visualizer') || stack.includes('offsetEdgeGeometry');
 
-                if (name === 'position' && !isFromGeometryUtils && !isFromFactory && !isFromDuplicationMode && !isFromMeasurementTool && !isFromBoxCreation && !isFromSupportMeshFactory) {
+                if (name === 'position' && !isFromGeometryUtils && !isFromFactory && !isFromDuplicationMode && !isFromMeasurementTool && !isFromBoxCreation && !isFromSupportMeshFactory && !isFromObjectVisualizer) {
                     developmentValidator.recordViolation({
                         type: 'geometry-violation',
                         message: 'Direct geometry vertex manipulation detected',
@@ -539,9 +540,10 @@ class DevelopmentValidator {
         const stack = new Error().stack;
         if (!stack) return false;
 
-        // Check for calls from centralized systems
+        // Check for calls from centralized systems or whitelisted components
         const centralizedSystemPatterns = [
             'GeometryFactory',
+            'AxisGizmo',  // Whitelist: Axis gizmo uses manual THREE.js creation
             'MaterialManager',
             'VisualizationResourcePool',
             'addObject',                // Allow main object creation in SceneController

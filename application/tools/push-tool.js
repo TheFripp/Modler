@@ -123,6 +123,12 @@ class PushTool {
         this.pushedFace = hit.face;
         this.cumulativeAmount = 0;
 
+        // Register operation with FileManager to prevent auto-save during drag
+        const fileManager = window.modlerComponents?.fileManager;
+        if (fileManager && typeof fileManager.registerOperation === 'function') {
+            fileManager.registerOperation('push-tool-drag');
+        }
+
         // Disable hug updates during push to prevent interference
         if (sceneController && typeof sceneController.disableHugUpdates === 'function') {
             sceneController.disableHugUpdates();
@@ -260,6 +266,12 @@ class PushTool {
         // Calculate new dimension after delta
         const newDimension = currentDims[this.pushAxis] + delta;
 
+        // Enforce minimum dimension (0.1 units)
+        const MIN_DIMENSION = 0.1;
+        if (newDimension < MIN_DIMENSION) {
+            return; // Don't allow dimensions smaller than minimum
+        }
+
         // Check minimum size for containers in layout mode
         const sceneController = window.modlerComponents?.sceneController;
         if (sceneController && this.pushedObject.userData?.id) {
@@ -283,10 +295,11 @@ class PushTool {
         const objectData2 = sceneController?.getObjectByMesh(this.pushedObject);
         const isContainer = objectData2?.isContainer;
 
-        // Determine anchor mode from ACTUAL movement direction, not face normal
-        // If delta > 0: expanding in positive direction → min face stays fixed
-        // If delta < 0: shrinking or expanding in negative direction → max face stays fixed
-        let anchorMode = delta > 0 ? 'min' : 'max';
+        // Determine anchor mode from the CLICKED FACE, not the drag direction
+        // The face you clicked should be the one that moves, regardless of drag direction
+        // pushDirection > 0: clicked max face (positive normal) → keep min face fixed
+        // pushDirection < 0: clicked min face (negative normal) → keep max face fixed
+        let anchorMode = this.pushDirection > 0 ? 'min' : 'max';
 
         // Check if this object is inside a layout-enabled container with alignment
         if (!isContainer && objectData2?.parentContainer && sceneController) {
@@ -676,6 +689,12 @@ class PushTool {
         // Reset state
         this.resetState();
 
+        // Unregister operation with FileManager (allow auto-save again)
+        const fileManager = window.modlerComponents?.fileManager;
+        if (fileManager && typeof fileManager.unregisterOperation === 'function') {
+            fileManager.unregisterOperation('push-tool-drag');
+        }
+
         // Reset cursor
         const canvas = window.modlerComponents?.sceneFoundation?.canvas;
         if (canvas) {
@@ -720,7 +739,6 @@ class PushTool {
                     finalPosition
                 );
                 historyManager.executeCommand(command);
-                logger.debug(`📝 Registered push in history: ${pushedObject.userData.id}`);
             }
         }
     }

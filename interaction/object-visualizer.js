@@ -168,7 +168,7 @@ class ObjectVisualizer {
             }
 
             // FALLBACK: Create legacy wireframe if no support meshes exist (backward compatibility)
-            console.warn('Object missing support meshes, creating legacy wireframe:', object.name);
+            // Silently create legacy wireframe - this is expected for old scenes
 
             // Force geometry bounds recalculation
             if (object.geometry) {
@@ -237,7 +237,7 @@ class ObjectVisualizer {
             }
 
             // FALLBACK: Clean up legacy wireframe (backward compatibility)
-            console.warn('Cleaning up legacy wireframe for object:', object.name);
+            // Silently clean up legacy wireframe - this is expected for old scenes
 
             // Support meshes are now children - no unregistration needed
 

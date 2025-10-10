@@ -3,9 +3,10 @@
 	import { initializeBridge } from '$lib/bridge/threejs-bridge';
 	import ObjectTree from '$lib/components/ObjectTree.svelte';
 	import SettingsPanel from '$lib/components/SettingsPanel.svelte';
+	import FileBrowser from '$lib/components/FileBrowser.svelte';
 
 	// Tab state
-	let activeTab: 'objects' | 'settings' = 'objects';
+	let activeTab: 'objects' | 'files' | 'settings' = 'objects';
 	let settingsPanel: SettingsPanel;
 
 	// Reload settings when switching to settings tab
@@ -32,7 +33,7 @@
 		<button
 			type="button"
 			onclick={() => (activeTab = 'objects')}
-			class="flex-1 px-8 py-6 modler-section-title transition-colors {activeTab === 'objects'
+			class="flex-1 px-6 py-6 modler-section-title transition-colors {activeTab === 'objects'
 				? 'text-foreground border-b-2 border-blue-500'
 				: 'text-foreground/60 hover:text-foreground/80'}"
 		>
@@ -40,8 +41,17 @@
 		</button>
 		<button
 			type="button"
+			onclick={() => (activeTab = 'files')}
+			class="flex-1 px-6 py-6 modler-section-title transition-colors {activeTab === 'files'
+				? 'text-foreground border-b-2 border-blue-500'
+				: 'text-foreground/60 hover:text-foreground/80'}"
+		>
+			Files
+		</button>
+		<button
+			type="button"
 			onclick={() => (activeTab = 'settings')}
-			class="flex-1 px-8 py-6 modler-section-title transition-colors {activeTab === 'settings'
+			class="flex-1 px-6 py-6 modler-section-title transition-colors {activeTab === 'settings'
 				? 'text-foreground border-b-2 border-blue-500'
 				: 'text-foreground/60 hover:text-foreground/80'}"
 		>
@@ -53,6 +63,8 @@
 	<div class="flex-1 overflow-hidden">
 		{#if activeTab === 'objects'}
 			<ObjectTree />
+		{:else if activeTab === 'files'}
+			<FileBrowser />
 		{:else}
 			<SettingsPanel bind:this={settingsPanel} />
 		{/if}

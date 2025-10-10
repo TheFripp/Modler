@@ -495,6 +495,10 @@ class SelectionController {
 
         // Direct match - use object's selectable property
         if (objectData) {
+            // System objects (like floor grid) are never selectable
+            if (objectData.category === 'system') {
+                return false;
+            }
             return objectData.selectable === true;
         }
 

@@ -299,6 +299,12 @@ class MoveTool {
         this.dragObject = targetObject; // Use the actual container, not the collision mesh
         this.dragStartPosition = targetObject.position.clone();
 
+        // Register operation with FileManager to prevent auto-save during drag
+        const fileManager = window.modlerComponents?.fileManager;
+        if (fileManager && typeof fileManager.registerOperation === 'function') {
+            fileManager.registerOperation('move-tool-drag');
+        }
+
         // Reset direction tracking for new drag operation
         this.lastMovementDelta = undefined;
 
@@ -732,7 +738,6 @@ class MoveTool {
                         // Use executeCommand() to properly handle command execution and history tracking
                         // ARCHITECTURAL FIX: Commands must go through executeCommand() for proper undo/redo
                         historyManager.executeCommand(command);
-                        logger.debug(`📝 Registered move in history: ${objectId}`);
                     }
                 }
             }
@@ -751,6 +756,12 @@ class MoveTool {
         this.lastMousePos = null;
         this.snapAttachmentPoint = null;
         this.dragHitPoint = null;
+
+        // Unregister operation with FileManager (allow auto-save again)
+        const fileManager = window.modlerComponents?.fileManager;
+        if (fileManager && typeof fileManager.unregisterOperation === 'function') {
+            fileManager.unregisterOperation('move-tool-drag');
+        }
 
         // Clear face highlights
         this.faceToolBehavior.clearHover();

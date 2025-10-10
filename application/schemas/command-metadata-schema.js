@@ -124,13 +124,13 @@ const COMMAND_METADATA_SCHEMA = {
 
     'delete-object': {
         category: COMMAND_CATEGORIES.DELETION,
-        description: 'Delete an object from the scene',
+        description: 'Delete one or more objects from the scene',
         className: 'DeleteObjectCommand',
         parameters: {
-            objectId: {
-                type: 'string',
+            objectIds: {
+                type: 'array',
                 required: true,
-                description: 'ID of object to delete'
+                description: 'ID(s) of object(s) to delete (accepts string or array)'
             },
             cascadeChildren: {
                 type: 'boolean',

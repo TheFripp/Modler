@@ -76,9 +76,27 @@ class ObjectStateManager extends EventTarget {
         delete object[pendingKey];
 
         // Sync back from SceneController (single source of truth)
+        // CRITICAL: Read directly from THREE.js mesh for position/rotation (tools mutate mesh directly)
         const sceneObject = this.sceneController.getObject(object.id);
-        if (sceneObject?.[propertyKey]) {
-            object[propertyKey] = { ...sceneObject[propertyKey] };
+        if (sceneObject?.mesh) {
+            if (propertyKey === 'position' && sceneObject.mesh.position) {
+                // Read fresh position from mesh (push tool and move tool modify directly)
+                object.position = {
+                    x: sceneObject.mesh.position.x,
+                    y: sceneObject.mesh.position.y,
+                    z: sceneObject.mesh.position.z
+                };
+            } else if (propertyKey === 'rotation' && sceneObject.mesh.rotation) {
+                // Read fresh rotation from mesh and convert to degrees
+                object.rotation = {
+                    x: (sceneObject.mesh.rotation.x * 180) / Math.PI,
+                    y: (sceneObject.mesh.rotation.y * 180) / Math.PI,
+                    z: (sceneObject.mesh.rotation.z * 180) / Math.PI
+                };
+            } else if (propertyKey === 'dimension' && sceneObject.dimensions) {
+                // Dimensions are stored in sceneObject, not on mesh
+                object.dimensions = { ...sceneObject.dimensions };
+            }
         }
 
         // Trigger parent layout update if needed (BOTTOM-UP PROPAGATION)

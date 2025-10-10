@@ -34,7 +34,6 @@ class MoveObjectCommand extends BaseCommand {
 
     execute() {
         // Move operation already happened, just store the state
-        logger.debug(`Move command executed: ${this.objectId}`);
         return true;
     }
 

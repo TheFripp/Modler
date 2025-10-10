@@ -57,6 +57,7 @@
     let propertyPanelSync = null;
     let splitPanelController = null;
     let settingsHandler = null;
+    let fileManagerHandler = null;
 
     /**
      * Show visual error message to user with enhanced debugging info
@@ -161,6 +162,19 @@
                 }
             } else {
                 console.warn('⚠️ SettingsHandler not loaded - settings management will be limited');
+            }
+
+            // Initialize file manager handler
+            if (typeof window.FileManagerHandler !== 'undefined') {
+                fileManagerHandler = new window.FileManagerHandler();
+                const fileManager = window.modlerComponents?.fileManager;
+                if (fileManager && panelCommunication) {
+                    fileManagerHandler.initialize(fileManager, panelCommunication);
+                    // Expose fileManagerHandler globally for switch statement access
+                    window.modlerComponents.fileManagerHandler = fileManagerHandler;
+                }
+            } else {
+                console.warn('⚠️ FileManagerHandler not loaded - file operations will be limited');
             }
 
             setupUnifiedEventHandlers();
@@ -852,6 +866,20 @@
                     break;
                 case 'create-tiled-container':
                     handleCreateTiledContainer(data.objectId, data.axis, data.repeat, data.gap);
+                    break;
+                case 'request-file-manager-ready':
+                    // UI requesting FileManager ready state
+                    const fileManagerHandler = window.modlerComponents?.fileManagerHandler;
+                    if (fileManagerHandler) {
+                        fileManagerHandler.handleRequestFileManagerReady(event.source);
+                    }
+                    break;
+                case 'file-manager-request':
+                    // File operation request from UI
+                    const fmHandler = window.modlerComponents?.fileManagerHandler;
+                    if (fmHandler) {
+                        fmHandler.handleFileRequest(data, event.source);
+                    }
                     break;
             }
         });

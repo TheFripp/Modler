@@ -528,6 +528,97 @@ const MESSAGE_PROTOCOL_SCHEMA = {
             selectedObjects: { type: DATA_TYPES.OBJECT_ARRAY, required: true }
         },
         response: null
+    },
+
+    // ===========================
+    // FILE MANAGER
+    // ===========================
+
+    'request-file-manager-ready': {
+        direction: MESSAGE_DIRECTION.UI_TO_MAIN,
+        description: 'Request FileManager ready signal',
+        payload: {},
+        response: 'file-manager-ready'
+    },
+
+    'file-manager-ready': {
+        direction: MESSAGE_DIRECTION.MAIN_TO_UI,
+        description: 'FileManager initialized and ready',
+        payload: {
+            isReady: { type: DATA_TYPES.BOOLEAN, required: true }
+        },
+        response: null
+    },
+
+    'file-manager-request': {
+        direction: MESSAGE_DIRECTION.UI_TO_MAIN,
+        description: 'Request file operation (newScene, saveScene, loadScene, deleteScene, listFiles)',
+        payload: {
+            requestId: { type: DATA_TYPES.NUMBER, required: true },
+            operation: { type: DATA_TYPES.STRING, required: true },
+            params: { type: DATA_TYPES.OBJECT, required: false }
+        },
+        response: 'file-manager-response'
+    },
+
+    'file-manager-response': {
+        direction: MESSAGE_DIRECTION.MAIN_TO_UI,
+        description: 'Response to file operation request',
+        payload: {
+            requestId: { type: DATA_TYPES.NUMBER, required: true },
+            result: { type: DATA_TYPES.OBJECT, required: true }
+        },
+        response: null
+    },
+
+    'file-manager-event:file-saved': {
+        direction: MESSAGE_DIRECTION.MAIN_TO_UI,
+        description: 'Scene file saved successfully',
+        payload: {
+            fileId: { type: DATA_TYPES.STRING, required: true },
+            fileName: { type: DATA_TYPES.STRING, required: true },
+            timestamp: { type: DATA_TYPES.NUMBER, required: true }
+        },
+        response: null
+    },
+
+    'file-manager-event:file-loaded': {
+        direction: MESSAGE_DIRECTION.MAIN_TO_UI,
+        description: 'Scene file loaded successfully',
+        payload: {
+            fileId: { type: DATA_TYPES.STRING, required: true },
+            fileName: { type: DATA_TYPES.STRING, required: true }
+        },
+        response: null
+    },
+
+    'file-manager-event:file-deleted': {
+        direction: MESSAGE_DIRECTION.MAIN_TO_UI,
+        description: 'Scene file deleted successfully',
+        payload: {
+            fileId: { type: DATA_TYPES.STRING, required: true }
+        },
+        response: null
+    },
+
+    'file-manager-event:dirty-state-changed': {
+        direction: MESSAGE_DIRECTION.MAIN_TO_UI,
+        description: 'Scene dirty state changed (unsaved changes)',
+        payload: {
+            isDirty: { type: DATA_TYPES.BOOLEAN, required: true },
+            fileName: { type: DATA_TYPES.STRING_OR_NULL, required: false }
+        },
+        response: null
+    },
+
+    'file-manager-event:unsaved-changes-prompt': {
+        direction: MESSAGE_DIRECTION.MAIN_TO_UI,
+        description: 'Prompt user about unsaved changes',
+        payload: {
+            action: { type: DATA_TYPES.STRING, required: true },
+            fileName: { type: DATA_TYPES.STRING_OR_NULL, required: false }
+        },
+        response: null
     }
 };
 

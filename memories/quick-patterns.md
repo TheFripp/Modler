@@ -56,6 +56,12 @@ if (ObjectStateManager.getObject(objectId)) {
 
 ## UI Communication Patterns
 
+**⚠️ CRITICAL: NEVER access window.parent.modlerComponents from Svelte iframes!**
+- Svelte iframes run on different origin (localhost:5173 vs localhost:3000)
+- Browser blocks cross-origin direct access → SecurityError
+- **ALWAYS use PostMessage** for ALL iframe ↔ parent communication
+- Use PropertyPanelSync (3D→UI) or UnifiedCommunication (UI→3D)
+
 ### 1. Send Data to UI (3D → UI)
 
 ```javascript

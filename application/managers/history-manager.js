@@ -285,6 +285,7 @@ class HistoryManager {
 
         // Common properties across all commands
         if (command.objectId !== undefined) params.objectId = command.objectId;
+        if (command.objectIds !== undefined) params.objectIds = command.objectIds;
         if (command.objectType !== undefined) params.objectType = command.objectType;
         if (command.property !== undefined) params.property = command.property;
         if (command.oldValue !== undefined) params.oldValue = command.oldValue;
