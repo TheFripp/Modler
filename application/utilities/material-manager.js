@@ -214,7 +214,8 @@ class MaterialManager {
             color: colorHex,
             transparent: config.transparent,
             opacity: config.opacity,
-            linewidth: config.lineWidth
+            linewidth: config.lineWidth,
+            clippingPlanes: [] // Disable clipping - always render wireframes
         });
 
         material.lineWidth = config.lineWidth;
@@ -264,7 +265,8 @@ class MaterialManager {
             color: colorHex,
             transparent: config.transparent,
             opacity: config.opacity,
-            linewidth: config.lineWidth
+            linewidth: config.lineWidth,
+            clippingPlanes: [] // Disable clipping - always render wireframes
         });
 
         material.lineWidth = config.lineWidth;
@@ -575,7 +577,8 @@ class MaterialManager {
             color: colorHex,
             transparent: config.transparent,
             opacity: config.opacity,
-            linewidth: config.lineWidth
+            linewidth: config.lineWidth,
+            clippingPlanes: [] // Disable clipping - always render wireframes
         });
 
         return this.cacheMaterial(key, material, this.materialTypes.CAD_WIREFRAME);

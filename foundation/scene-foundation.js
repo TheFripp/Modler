@@ -82,17 +82,50 @@ class SceneFoundation {
     
     render() {
         if (!this.isRunning) return;
-        
-        
+
+        // Update grid opacity based on camera position
+        this.updateGridOpacity();
+
         // Call animation callbacks for managed objects
         if (this.animationCallbacks && this.animationCallbacks.length > 0) {
             this.animationCallbacks.forEach(callback => callback());
         }
-        
+
         this.renderer.render(this.scene, this.camera);
         requestAnimationFrame(this.renderLoop);
     }
-    
+
+    /**
+     * Update grid opacity based on camera position
+     * When camera is below floor (y < -1), set grid to 20% opacity
+     */
+    updateGridOpacity() {
+        if (!this.camera) return;
+
+        const targetOpacity = this.camera.position.y < -1 ? 0.2 : 1.0;
+
+        // Find floor grid object
+        this.scene.traverse((object) => {
+            if (object.userData && object.userData.type === 'grid') {
+                // Update all children (grid lines)
+                object.traverse((child) => {
+                    if (child.material && child.material.opacity !== undefined) {
+                        // Smoothly transition opacity
+                        if (Math.abs(child.material.opacity - targetOpacity) > 0.01) {
+                            const lerp = (a, b, t) => a + (b - a) * t;
+                            child.material.opacity = lerp(
+                                child.material.opacity,
+                                targetOpacity,
+                                0.1
+                            );
+                            child.material.needsUpdate = true;
+                        }
+                    }
+                });
+            }
+        });
+    }
+
     // Add animation callback
     addAnimationCallback(callback) {
         if (typeof callback === 'function') {
