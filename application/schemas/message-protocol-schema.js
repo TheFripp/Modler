@@ -228,6 +228,26 @@ const MESSAGE_PROTOCOL_SCHEMA = {
         response: null
     },
 
+    'layout-button-hover': {
+        direction: MESSAGE_DIRECTION.UI_TO_MAIN,
+        description: 'Hover over layout direction button to highlight corresponding faces',
+        payload: {
+            objectId: { type: DATA_TYPES.NUMBER_OR_STRING, required: true },
+            axis: { type: DATA_TYPES.STRING, required: true }, // 'x', 'y', or 'z'
+            isHovering: { type: DATA_TYPES.BOOLEAN, required: true }
+        },
+        response: null
+    },
+
+    'reverse-child-order': {
+        direction: MESSAGE_DIRECTION.UI_TO_MAIN,
+        description: 'Reverse the order of children in a container',
+        payload: {
+            objectId: { type: DATA_TYPES.NUMBER_OR_STRING, required: true }
+        },
+        response: null
+    },
+
     // ===========================
     // OBJECT SELECTION
     // ===========================

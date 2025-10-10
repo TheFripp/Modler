@@ -3,6 +3,9 @@ title: Modler Architecture V2 - Design Document
 version: 2.4.0
 last_updated: September 26, 2025
 maintained_by: Architecture Team
+frequency: occasional
+complexity: advanced
+tokens: ~8000
 ---
 
 # Modler Architecture V2 - Design Document

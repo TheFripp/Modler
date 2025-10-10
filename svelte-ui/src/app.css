@@ -69,6 +69,9 @@
     --modler-interactive: 220 9% 42%; /* #6b7280 */
     --modler-interactive-hover: 220 9% 29%; /* #4b5563 */
     --modler-active: 0 0% 18%; /* #2E2E2E */
+    --modler-selection: 217 91% 60%; /* #3b82f6 - Blue for selection */
+    --modler-container: 142 71% 45%; /* #22c55e - Green for containers */
+    --modler-object: 220 9% 46%; /* #9ca3af - Gray for objects */
 
     /* Chart colors for any data visualization */
     --chart-1: 220 70% 50%;
@@ -122,5 +125,53 @@
 
   .modler-text-secondary {
     color: hsl(var(--modler-text-secondary));
+  }
+
+  /* Typography System */
+  .modler-section-title {
+    @apply text-sm font-medium;
+    color: hsl(var(--modler-text-secondary));
+  }
+
+  .modler-property-label {
+    @apply text-xs font-medium;
+    color: hsl(var(--modler-text-secondary));
+  }
+
+  .modler-object-name {
+    @apply text-base font-semibold;
+    color: hsl(var(--modler-text-primary));
+  }
+
+  .modler-input-value {
+    color: hsl(var(--modler-text-primary));
+    text-align: right;
+  }
+
+  /* Remove default color input borders */
+  input[type="color"] {
+    border: none !important;
+    outline: none !important;
+    background-color: #1C1C1C !important;
+  }
+
+  input[type="color"]::-webkit-color-swatch-wrapper {
+    padding: 4px;
+    background-color: #1C1C1C;
+  }
+
+  input[type="color"]::-webkit-color-swatch {
+    border: none;
+    border-radius: 2px;
+  }
+
+  input[type="color"]::-moz-color-swatch {
+    border: none;
+    border-radius: 2px;
+  }
+
+  /* Firefox color input background */
+  input[type="color"]::-moz-focus-inner {
+    border: 0;
   }
 }

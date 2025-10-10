@@ -844,6 +844,12 @@
                 case 'fill-button-hover':
                     handleFillButtonHover(data.objectId, data.axis, data.isHovering);
                     break;
+                case 'layout-button-hover':
+                    handleLayoutButtonHover(data.objectId, data.axis, data.isHovering);
+                    break;
+                case 'reverse-child-order':
+                    handleReverseChildOrder(data.objectId);
+                    break;
                 case 'create-tiled-container':
                     handleCreateTiledContainer(data.objectId, data.axis, data.repeat, data.gap);
                     break;
@@ -1418,6 +1424,95 @@
             const face = { normal: new THREE.Vector3() }; // Dummy face for hide
             visualizationManager.getVisualizerFor(objectData.mesh)?.hideFaceHighlight(objectData.mesh, face);
         }
+    }
+
+    function handleLayoutButtonHover(objectId, axis, isHovering) {
+        const sceneController = window.modlerComponents?.sceneController;
+        const visualizationManager = window.modlerComponents?.visualizationManager;
+
+        if (!sceneController || !visualizationManager) {
+            return;
+        }
+
+        const objectData = sceneController.getObject(objectId);
+        if (!objectData || !objectData.mesh) {
+            return;
+        }
+
+        const supportMeshes = objectData.mesh.userData?.supportMeshes;
+        if (!supportMeshes?.faceHighlight) {
+            return;
+        }
+
+        if (isHovering) {
+            // Create synthetic faces for both positive and negative directions of the axis
+            const normal = new THREE.Vector3();
+            if (axis === 'x') normal.set(1, 0, 0);
+            else if (axis === 'y') normal.set(0, 1, 0);
+            else if (axis === 'z') normal.set(0, 0, 1);
+
+            const face = { normal };
+
+            // Enable see-through rendering for layout button highlights
+            if (supportMeshes.faceHighlight.material) {
+                supportMeshes.faceHighlight.material.depthTest = false;
+                supportMeshes.faceHighlight.material.renderOrder = 1001;
+            }
+
+            // Show face highlight using visualization manager
+            visualizationManager.getVisualizerFor(objectData.mesh)?.showFaceHighlight(objectData.mesh, face);
+        } else {
+            // Restore normal depth testing when hiding
+            if (supportMeshes.faceHighlight.material) {
+                supportMeshes.faceHighlight.material.depthTest = true;
+                supportMeshes.faceHighlight.material.renderOrder = 1000;
+            }
+
+            // Hide face highlight
+            const face = { normal: new THREE.Vector3() };
+            visualizationManager.getVisualizerFor(objectData.mesh)?.hideFaceHighlight(objectData.mesh, face);
+        }
+    }
+
+    function handleReverseChildOrder(objectId) {
+        const sceneController = window.modlerComponents?.sceneController;
+        const objectStateManager = window.modlerComponents?.objectStateManager;
+
+        if (!sceneController || !objectStateManager) {
+            console.warn('⚠️ SceneController or ObjectStateManager not available');
+            return;
+        }
+
+        const containerData = sceneController.getObject(objectId);
+        if (!containerData || !containerData.isContainer) {
+            console.warn('⚠️ Object is not a container:', objectId);
+            return;
+        }
+
+        // Get current childrenOrder array
+        const childrenOrder = containerData.childrenOrder;
+        if (!childrenOrder || childrenOrder.length === 0) {
+            console.warn('⚠️ Container has no children to reverse');
+            return;
+        }
+
+        // Reverse the order
+        const reversedOrder = [...childrenOrder].reverse();
+
+        // Update the container data directly in SceneController
+        containerData.childrenOrder = reversedOrder;
+
+        // Notify ObjectStateManager of the change
+        objectStateManager.updateObject(objectId, {
+            childrenOrder: reversedOrder
+        });
+
+        // Update layout if enabled (this will use the updated childrenOrder)
+        if (containerData.autoLayout?.enabled) {
+            sceneController.updateLayout(objectId);
+        }
+
+        console.log('✅ Reversed child order for container:', objectId, reversedOrder);
     }
 
     /**

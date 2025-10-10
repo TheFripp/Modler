@@ -106,7 +106,13 @@ class SettingsHandler {
             containers: {
                 wireframeColor: configurationManager.get('visual.containers.wireframeColor') || '#00ff00',
                 lineWidth: configurationManager.get('visual.containers.lineWidth') || 1,
-                opacity: configurationManager.get('visual.containers.opacity') || 0.8
+                opacity: configurationManager.get('visual.containers.opacity') || 0.8,
+                faceHighlightOpacity: configurationManager.get('visual.containers.faceHighlightOpacity') || 0.3
+            },
+            cad: {
+                wireframe: {
+                    color: configurationManager.get('visual.cad.wireframe.color') || '#888888'
+                }
             }
         };
 

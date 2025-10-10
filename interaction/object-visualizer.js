@@ -11,7 +11,8 @@ class ObjectVisualizer {
 
         // New unified systems
         this.geometryFactory = new GeometryFactory();
-        this.materialManager = new MaterialManager();
+        // Use global MaterialManager instance for proper config callback tracking
+        this.materialManager = window.modlerComponents?.materialManager || new MaterialManager();
         this.resourcePool = new VisualizationResourcePool();
 
         // Base materials - now managed by MaterialManager
@@ -289,10 +290,13 @@ class ObjectVisualizer {
             supportMeshFactory.positionFaceHighlightForHit(supportMeshes.faceHighlight, hit);
         }
 
-        // Update color if provided
-        if (color !== null && supportMeshes.faceHighlight.material) {
+        // Update color only if explicitly provided
+        // Material already has correct color and opacity from MaterialManager config
+        if (supportMeshes.faceHighlight.material && color !== null) {
             supportMeshes.faceHighlight.material.color.setHex(color);
         }
+        // Don't copy object's material color - it overwrites the configured color AND opacity
+        // The pooled material from SupportMeshFactory already has the correct configured color
 
         // Show the pre-created mesh
         supportMeshes.faceHighlight.visible = true;

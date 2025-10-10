@@ -65,32 +65,36 @@ class LayoutEngine {
         const positions = [];
         const paddingOffset = this.getPaddingOffset(axis, padding);
 
+        // Check if layout should be reversed
+        const isReversed = layoutConfig?.reversed ?? false;
+        const workingObjects = isReversed ? [...objects].reverse() : objects;
+
         // Two-pass calculation for fill objects
-        const { fixedObjects, fillObjects, totalFixedSize, fillCount } = this.categorizeObjects(objects, axis);
+        const { fixedObjects, fillObjects, totalFixedSize, fillCount } = this.categorizeObjects(workingObjects, axis);
 
         // CRITICAL: Determine gap strategy FIRST (before sizing fill objects)
         const isPushing = pushContext && pushContext.axis === axis;
         let dynamicGap = gap;
         let availableSpace = axisSize;
 
-        if (axisSize && objects.length > 1 && isPushing && fillCount === 0) {
+        if (axisSize && workingObjects.length > 1 && isPushing && fillCount === 0) {
             // PUSHING with NO FILL: Use space-between distribution
             // First object at start edge, last object at end edge, gaps adjust
 
             const paddingTotal = this.getTotalPadding(axis, padding);
             const availableForGaps = axisSize - totalFixedSize - paddingTotal;
-            dynamicGap = Math.max(0, availableForGaps / (objects.length - 1));
+            dynamicGap = Math.max(0, availableForGaps / (workingObjects.length - 1));
 
         } else if (axisSize && fillCount > 0) {
             // WITH FILL OBJECTS: Use fixed gap, fill objects take remaining space
-            const totalGaps = (objects.length - 1) * gap;
+            const totalGaps = (workingObjects.length - 1) * gap;
             const paddingTotal = this.getTotalPadding(axis, padding);
             availableSpace = Math.max(0, axisSize - totalFixedSize - totalGaps - paddingTotal);
         }
         // NOT PUSHING and NO FILL: Use fixed gap
 
         // Calculate sizes for all objects using determined gap and availableSpace
-        const objectSizes = objects.map(obj => {
+        const objectSizes = workingObjects.map(obj => {
             const baseSize = this.getObjectSize(obj);
             return this.applySizingBehavior(obj, baseSize, axis, availableSpace, fillCount, fullContainerSize, padding);
         });
@@ -98,7 +102,7 @@ class LayoutEngine {
         // Position objects (start from first object's half-size)
         let currentPosition = 0;
 
-        objects.forEach((obj, index) => {
+        workingObjects.forEach((obj, index) => {
             const position = new THREE.Vector3(0, 0, 0);
             const size = objectSizes[index];
 
@@ -120,28 +124,28 @@ class LayoutEngine {
         // Align layout based on push context (anchor mode) or center normally
         const alignedPositions = this.alignLayoutPositions(positions, objectSizes, axis, layoutAnchor, pushContext, fullContainerSize, padding, layoutConfig);
 
-        if (!pushContext && alignedPositions.length > 0) {
-            console.log('📐 Layout calculated (no push):', {
-                axis,
-                gap: dynamicGap,
-                positions: alignedPositions.map((p, i) => ({
-                    object: i,
-                    position: p[axis],
-                    size: objectSizes[i][axis]
-                }))
-            });
-        }
-
         // Note: Padding does NOT offset object positions - it only affects container size
         // Objects stay centered, container expands around them with padding space
-        const finalPositions = alignedPositions;
+        let finalPositions = alignedPositions;
+        let finalSizes = objectSizes;
+
+        // If reversed, map positions back to original object order
+        if (isReversed) {
+            finalPositions = [];
+            finalSizes = [];
+            for (let i = 0; i < objects.length; i++) {
+                const reversedIndex = objects.length - 1 - i;
+                finalPositions[i] = alignedPositions[reversedIndex];
+                finalSizes[i] = objectSizes[reversedIndex];
+            }
+        }
 
         // Calculate bounds for the final layout (pass layoutConfig to include padding in size)
         const layoutBounds = this.calculateLayoutBounds(objects, finalPositions, layoutConfig, fullContainerSize);
 
         return {
             positions: finalPositions,
-            sizes: objectSizes,
+            sizes: finalSizes,
             bounds: layoutBounds,
             calculatedGap: dynamicGap // Return dynamic gap for property panel updates
         };

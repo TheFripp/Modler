@@ -105,12 +105,15 @@
 	});
 </script>
 
-<PropertyGroup title="Transform">
+<PropertyGroup title="Transform ({currentUnit})" align="right">
 	<div class="space-y-4">
 		<!-- Position Sub-group (optional via features.position) -->
 		{#if features.position !== false}
 			<div class="space-y-2">
-				<h4 class="text-xs font-medium uppercase tracking-wide text-right {isDisabled ? 'text-foreground/30' : 'text-foreground/80'}">Position ({currentUnit})</h4>
+				<div class="flex items-center gap-2 mb-2">
+					<div class="flex-1 border-t border-[#2E2E2E]/50"></div>
+					<h4 class="modler-property-label text-right whitespace-nowrap {isDisabled ? 'opacity-30' : ''}">Position</h4>
+				</div>
 				<XyzInput
 					values={displayObject?.position || emptyVector}
 					{objectId}
@@ -125,7 +128,10 @@
 		<!-- Rotation Sub-group (optional via features.rotation) -->
 		{#if features.rotation !== false}
 			<div class="space-y-2">
-				<h4 class="text-xs font-medium uppercase tracking-wide text-right {isDisabled ? 'text-foreground/30' : 'text-foreground/80'}">Rotation</h4>
+				<div class="flex items-center gap-2 mb-2">
+					<div class="flex-1 border-t border-[#2E2E2E]/50"></div>
+					<h4 class="modler-property-label text-right whitespace-nowrap {isDisabled ? 'opacity-30' : ''}">Rotation</h4>
+				</div>
 				<XyzInput
 					values={displayObject?.rotation || emptyVector}
 					{objectId}
@@ -139,7 +145,10 @@
 		<!-- Dimensions Sub-group (optional via features.dimensions) -->
 		{#if features.dimensions !== false}
 			<div class="space-y-2">
-				<h4 class="text-xs font-medium uppercase tracking-wide text-right {isDisabled ? 'text-foreground/30' : 'text-foreground/80'}">Dimensions ({currentUnit})</h4>
+				<div class="flex items-center gap-2 mb-2">
+					<div class="flex-1 border-t border-[#2E2E2E]/50"></div>
+					<h4 class="modler-property-label text-right whitespace-nowrap {isDisabled ? 'opacity-30' : ''}">Dimensions</h4>
+				</div>
 				<XyzInput
 					values={displayObject?.dimensions || emptyVector}
 					{objectId}

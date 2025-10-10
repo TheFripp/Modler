@@ -59,6 +59,10 @@ class PropertyFormatConverter {
             'autoLayout.direction': 'string',
             'layoutMode': 'string',
 
+            // Object properties (pass through as-is)
+            'autoLayout.alignment': 'object',
+            'autoLayout.reversed': 'boolean',
+
             // Tile mode properties
             'autoLayout.tileMode.repeat': 'number',
             'autoLayout.tileMode.enabled': 'boolean',
@@ -125,6 +129,10 @@ class PropertyFormatConverter {
                 case 'string':
                     return this.convertStringToInternal(value);
 
+                case 'object':
+                    // Pass objects through as-is (e.g., alignment)
+                    return { value, isValid: true };
+
                 default:
                     console.warn(`PropertyFormatConverter: Unknown property type for '${property}', treating as string`);
                     return this.convertStringToInternal(value);
@@ -169,6 +177,10 @@ class PropertyFormatConverter {
 
                 case 'string':
                     return this.convertStringFromInternal(internalValue, formatted);
+
+                case 'object':
+                    // Pass objects through as-is (e.g., alignment)
+                    return internalValue;
 
                 default:
                     return formatted ? String(internalValue) : internalValue;

@@ -18,6 +18,7 @@ class MaterialManager {
             SELECTION_EDGE: 'selection-edge',
             CONTAINER_WIREFRAME: 'container-wireframe',
             FACE_HIGHLIGHT: 'face-highlight',
+            FACE_HIGHLIGHT_CONTAINER: 'face-highlight-container',
             AXIS_HIGHLIGHT: 'axis-highlight',
             PADDING_VISUALIZATION: 'padding-viz',
             PREVIEW_WIREFRAME: 'preview-wireframe',
@@ -89,8 +90,13 @@ class MaterialManager {
         });
 
         this.registerConfigCallback('visual.selection.faceHighlightOpacity', (newValue) => {
+            console.log('🔔 Callback fired for visual.selection.faceHighlightOpacity:', {
+                newValue,
+                type: typeof newValue,
+                isNaN: isNaN(newValue)
+            });
             this.updateMaterialsOfType(this.materialTypes.FACE_HIGHLIGHT, 'opacity', newValue);
-            this.invalidateCacheForType(this.materialTypes.FACE_HIGHLIGHT);
+            // Don't invalidate cache - we want to keep using the same material instance
         });
 
         // Container materials
@@ -107,6 +113,11 @@ class MaterialManager {
         this.registerConfigCallback('visual.containers.opacity', (newValue) => {
             this.updateMaterialsOfType(this.materialTypes.CONTAINER_WIREFRAME, 'opacity', newValue);
             this.invalidateCacheForType(this.materialTypes.CONTAINER_WIREFRAME);
+        });
+
+        this.registerConfigCallback('visual.containers.faceHighlightOpacity', (newValue) => {
+            this.updateMaterialsOfType(this.materialTypes.FACE_HIGHLIGHT_CONTAINER, 'opacity', newValue);
+            // Don't invalidate cache - we want to keep using the same material instance
         });
 
         // Face highlight materials
@@ -311,6 +322,56 @@ class MaterialManager {
         material.renderOrder = config.renderOrder;
 
         return this.cacheMaterial(key, material, this.materialTypes.FACE_HIGHLIGHT);
+    }
+
+    /**
+     * Create or get cached container face highlight material
+     * @param {Object} options - Material options
+     * @returns {THREE.MeshBasicMaterial} Container face highlight material
+     */
+    createContainerFaceHighlightMaterial(options = {}) {
+        const configManager = this.getConfigManager();
+
+        // Build configuration - uses container-specific settings
+        const config = {
+            color: options.color || configManager?.get('visual.containers.wireframeColor') || '#00ff00',
+            opacity: options.opacity || configManager?.get('visual.containers.faceHighlightOpacity') || 0.3,
+            renderOrder: options.renderOrder || configManager?.get('visual.effects.materials.face.renderOrder') || 1000,
+            side: THREE.DoubleSide,
+            transparent: true,
+            depthTest: true,
+            depthWrite: false,
+            ...options
+        };
+
+        // Generate cache key
+        const key = this.generateMaterialKey(this.materialTypes.FACE_HIGHLIGHT_CONTAINER, config);
+
+        // Check cache
+        const cached = this.getMaterialFromCache(key);
+        if (cached) return cached;
+
+        // Create new material
+        let colorHex;
+        if (typeof config.color === 'string') {
+            colorHex = parseInt(config.color.replace('#', ''), 16);
+        } else if (typeof config.color === 'number') {
+            colorHex = config.color;
+        } else {
+            colorHex = 0xffffff;
+        }
+        const material = new THREE.MeshBasicMaterial({
+            color: colorHex,
+            transparent: config.transparent,
+            opacity: config.opacity,
+            side: config.side,
+            depthTest: config.depthTest,
+            depthWrite: config.depthWrite
+        });
+
+        material.renderOrder = config.renderOrder;
+
+        return this.cacheMaterial(key, material, this.materialTypes.FACE_HIGHLIGHT_CONTAINER);
     }
 
     /**
@@ -663,6 +724,14 @@ class MaterialManager {
         let updatedCount = 0;
         let needsGeometryUpdate = false;
 
+        // DEBUG: Log update attempt
+        console.log('📝 updateMaterialsOfType called:', {
+            type,
+            property,
+            value,
+            activeMaterialsCount: this.activeMaterials.size
+        });
+
         for (const material of this.activeMaterials) {
             if (material.userData?.materialManagerType === type) {
                 try {
@@ -678,11 +747,20 @@ class MaterialManager {
 
                     material.needsUpdate = true;
                     updatedCount++;
+
+                    // DEBUG: Log successful update
+                    if (property === 'opacity') {
+                        console.log(`  ✓ Updated ${type} material opacity:`, material.opacity);
+                    }
                 } catch (error) {
                     console.warn('MaterialManager: Error updating material property:', error);
                 }
             }
         }
+
+        // DEBUG: Log results
+        console.log(`  → Updated ${updatedCount} materials of type ${type}`);
+
 
         // Note: ConfigurationManager handles visualization refresh via its subscribe callbacks
         // No need to trigger refresh here as it would create duplicate refreshes

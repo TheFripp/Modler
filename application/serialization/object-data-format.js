@@ -54,6 +54,7 @@ const STANDARD_OBJECT_DATA_SCHEMA = {
         gap: 'number',
         padding: 'object',
         alignment: 'object|undefined', // Alignment: { x: 'left'|'center'|'right', y: 'bottom'|'center'|'top', z: 'back'|'center'|'front' }
+        reversed: 'boolean|undefined', // Reverse layout direction
         tileMode: 'object|undefined' // Tile mode: { enabled: boolean, repeat: number, sourceObjectId: string }
     },
     calculatedGap: 'number|undefined', // Dynamic gap value in space-between mode
@@ -313,7 +314,8 @@ function convertFromFlatProperties(sourceData) {
             enabled: sourceData['autoLayout.enabled'] || false,
             direction: sourceData['autoLayout.direction'] || null,
             gap: sourceData['autoLayout.gap'] || 0,
-            padding: sourceData['autoLayout.padding'] || { width: 0, height: 0, depth: 0 }
+            padding: sourceData['autoLayout.padding'] || { width: 0, height: 0, depth: 0 },
+            reversed: sourceData['autoLayout.reversed'] || false
         },
 
         calculatedGap: sourceData.calculatedGap, // Include dynamic gap value
@@ -364,7 +366,7 @@ function convertFromThreeJS(threeObject) {
             transparent: threeObject.material?.transparent || false
         },
 
-        autoLayout: userData.autoLayout || { enabled: false, direction: null, gap: 0, padding: { width: 0, height: 0, depth: 0 } },
+        autoLayout: userData.autoLayout || { enabled: false, direction: null, gap: 0, padding: { width: 0, height: 0, depth: 0 }, reversed: false },
         calculatedGap: userData.calculatedGap, // Include dynamic gap value
         parentContainer: userData.parentContainer || null
     };
@@ -403,7 +405,7 @@ function convertFromObjectStateManager(stateData) {
             transparent: stateData.material?.transparent || false
         },
 
-        autoLayout: stateData.autoLayout || { enabled: false, direction: null, gap: 0, padding: { width: 0, height: 0, depth: 0 } },
+        autoLayout: stateData.autoLayout || { enabled: false, direction: null, gap: 0, padding: { width: 0, height: 0, depth: 0 }, reversed: false },
         calculatedGap: stateData.calculatedGap, // Include dynamic gap value
         parentContainer: stateData.parentContainer || null
     };
@@ -428,7 +430,7 @@ function convertBestEffort(sourceData) {
         dimensions: sourceData.dimensions || { x: 1, y: 1, z: 1 },
 
         material: sourceData.material || { color: '#888888', opacity: 1, transparent: false },
-        autoLayout: sourceData.autoLayout || { enabled: false, direction: null, gap: 0, padding: { width: 0, height: 0, depth: 0 } },
+        autoLayout: sourceData.autoLayout || { enabled: false, direction: null, gap: 0, padding: { width: 0, height: 0, depth: 0 }, reversed: false },
         parentContainer: sourceData.parentContainer || null
     };
 }
@@ -544,7 +546,8 @@ function createEmptyObjectData(id = null) {
             enabled: false,
             direction: null,
             gap: 0,
-            padding: { width: 0, height: 0, depth: 0 }
+            padding: { width: 0, height: 0, depth: 0 },
+            reversed: false
         },
 
         parentContainer: null,

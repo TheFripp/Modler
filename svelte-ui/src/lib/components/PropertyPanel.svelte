@@ -106,26 +106,26 @@
 		{#key $displayObject.id}
 		<!-- Object Name and Type -->
 		<div class="flex items-center justify-between mb-6">
-			<h3 class="text-lg font-semibold text-foreground">{$displayObject.name}</h3>
+			<h3 class="modler-object-name">{$displayObject.name}</h3>
 			<div class="flex items-center gap-2">
 				{#if $displayObject.isContainer && $displayObject.autoLayout?.tileMode?.enabled}
-					<Badge variant="outline" class="bg-blue-500/20 text-blue-400 border-blue-500/30">
+					<Badge variant="outline" style="background-color: hsl(var(--modler-selection) / 0.25); color: hsl(var(--modler-selection)); border-color: hsl(var(--modler-selection) / 0.3);">
 						Tile
 					</Badge>
 				{:else if $displayObject.isContainer}
-					<Badge variant="outline">
+					<Badge variant="outline" style="background-color: hsl(var(--modler-container) / 0.25); color: hsl(var(--modler-container)); border-color: hsl(var(--modler-container) / 0.3);">
 						Container
 					</Badge>
 				{:else if $displayObject.type === 'multi'}
-					<Badge variant="secondary">
+					<Badge variant="outline" style="background-color: hsl(var(--modler-selection) / 0.25); color: hsl(var(--modler-selection)); border-color: hsl(var(--modler-selection) / 0.3);">
 						Mixed
 					</Badge>
 				{:else if $displayObject.type === 'mixed'}
-					<Badge variant="secondary">
+					<Badge variant="outline" style="background-color: hsl(var(--modler-selection) / 0.25); color: hsl(var(--modler-selection)); border-color: hsl(var(--modler-selection) / 0.3);">
 						Mixed Types
 					</Badge>
 				{:else}
-					<Badge variant="secondary">
+					<Badge variant="outline" style="background-color: hsl(var(--modler-object) / 0.25); color: hsl(var(--modler-object)); border-color: hsl(var(--modler-object) / 0.3);">
 						{$displayObject.type}
 					</Badge>
 				{/if}
@@ -178,7 +178,7 @@
 	{:else}
 		<!-- Empty state: Show header and disabled transform section -->
 		<div class="flex items-center justify-between mb-6">
-			<h3 class="text-lg font-semibold text-foreground/40">No Selection</h3>
+			<h3 class="modler-object-name opacity-40">No Selection</h3>
 		</div>
 
 		<TransformSection

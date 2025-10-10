@@ -143,6 +143,12 @@ function initializeInteraction() {
         modlerV2Components.sceneFoundation.camera,
         modlerV2Components.sceneFoundation.canvas
     );
+
+    // Initialize axis gizmo for orientation display
+    const gizmoContainer = document.getElementById('axis-gizmo-container');
+    if (gizmoContainer && window.AxisGizmo) {
+        modlerV2Components.axisGizmo = new AxisGizmo(gizmoContainer);
+    }
     // Initialize consolidated InputController (replaces InputFoundation + InputHandler)
     modlerV2Components.inputController = new InputController(
         modlerV2Components.sceneFoundation.canvas,
@@ -175,6 +181,12 @@ function initializeApplication() {
     // Initialize components that depend on ConfigurationManager
     if (modlerV2Components.visualizationManager) {
         modlerV2Components.visualizationManager.initializeWithConfigurationManager();
+    }
+
+    // Recreate pooled materials now that ConfigurationManager is available
+    // This ensures materials get correct config values instead of fallback defaults
+    if (modlerV2Components.supportMeshFactory) {
+        modlerV2Components.supportMeshFactory.createBaseMaterials();
     }
 
     modlerV2Components.snapController = new SnapController(
@@ -227,6 +239,13 @@ function initializeApplication() {
     // Must be initialized AFTER all other components to ensure they're available
     modlerV2Components.keyboardRouter = window.keyboardRouter;
     modlerV2Components.keyboardRouter.initialize(modlerV2Components);
+
+    // Add axis gizmo update to render loop
+    if (modlerV2Components.axisGizmo) {
+        modlerV2Components.sceneFoundation.addAnimationCallback(() => {
+            modlerV2Components.axisGizmo.updateOrientation(modlerV2Components.sceneFoundation.camera);
+        });
+    }
 }
 
 /**

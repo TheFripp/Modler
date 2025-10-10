@@ -29,6 +29,7 @@ class BaseFaceToolBehavior {
         // Shared hover state
         this.hoveredObject = null;
         this.hoveredHit = null;
+        this.hoveredFaceIndex = null; // Track which face is hovered to prevent repositioning flicker
     }
 
     /**
@@ -105,11 +106,7 @@ class BaseFaceToolBehavior {
 
             // CONTAINER MODE CHECK: Only show face highlights for containers in layout mode, not hug mode
             // This check only applies to push tool - move tool should work in hug mode
-            if (this.toolType === 'push' && this.isContainerInHugMode(targetObject)) {
-                // Container is in hug mode and push tool is active - don't show face highlights
-                this.clearHover();
-                return false;
-            }
+            const isDisabledAction = this.toolType === 'push' && this.isContainerInHugMode(targetObject);
 
             // Store the actual target object for interaction
             this.hoveredObject = targetObject;
@@ -119,16 +116,44 @@ class BaseFaceToolBehavior {
             const supportMeshes = targetObject.userData.supportMeshes;
             if (supportMeshes?.faceHighlight) {
                 // ARCHITECTURE COMPLIANCE: Position once per hover session, then show
-                const supportMeshFactory = window.modlerComponents?.supportMeshFactory;
-                if (supportMeshFactory) {
-                    supportMeshFactory.positionFaceHighlightForHit(supportMeshes.faceHighlight, hit);
+                // Only reposition if we're hovering a different face to prevent flicker
+                const currentFaceIndex = hit.face.a + '-' + hit.face.b + '-' + hit.face.c;
+                const faceChanged = this.hoveredFaceIndex !== currentFaceIndex || this.hoveredObject !== targetObject;
+
+                if (faceChanged) {
+                    this.hoveredFaceIndex = currentFaceIndex;
+                    const supportMeshFactory = window.modlerComponents?.supportMeshFactory;
+                    if (supportMeshFactory) {
+                        supportMeshFactory.positionFaceHighlightForHit(supportMeshes.faceHighlight, hit);
+                    }
                 }
+
+                // Show grey "disabled" face highlight if tool is not allowed on this object
+                // Swap material temporarily to show disabled state
+                if (isDisabledAction) {
+                    const supportMeshFactory = window.modlerComponents?.supportMeshFactory;
+                    if (supportMeshFactory && supportMeshFactory.materials.faceHighlightDisabled) {
+                        // Store original material for restoration
+                        if (!supportMeshes.faceHighlight.userData.originalMaterial) {
+                            supportMeshes.faceHighlight.userData.originalMaterial = supportMeshes.faceHighlight.material;
+                        }
+                        // Swap to grey disabled material
+                        supportMeshes.faceHighlight.material = supportMeshFactory.materials.faceHighlightDisabled;
+                    }
+                } else {
+                    // Restore original material if previously disabled
+                    if (supportMeshes.faceHighlight.userData.originalMaterial) {
+                        supportMeshes.faceHighlight.material = supportMeshes.faceHighlight.userData.originalMaterial;
+                        delete supportMeshes.faceHighlight.userData.originalMaterial;
+                    }
+                }
+
                 supportMeshes.faceHighlight.visible = true;
             } else {
                 // Fallback to Visual Effects for objects without support meshes
-                this.visualEffects.showFaceHighlight(hit);
+                this.visualEffects.showFaceHighlight(hit, isDisabledAction ? 0x888888 : null);
             }
-            return true;
+            return !isDisabledAction; // Return false if disabled so hasValidFaceHover works correctly
         } else {
             // Object not selected - clearing hover
             this.clearHover();
@@ -247,6 +272,11 @@ class BaseFaceToolBehavior {
             // Hide support mesh face highlight if it exists
             const supportMeshes = this.hoveredObject.userData.supportMeshes;
             if (supportMeshes?.faceHighlight) {
+                // Restore original material if it was swapped to disabled state
+                if (supportMeshes.faceHighlight.userData.originalMaterial) {
+                    supportMeshes.faceHighlight.material = supportMeshes.faceHighlight.userData.originalMaterial;
+                    delete supportMeshes.faceHighlight.userData.originalMaterial;
+                }
                 supportMeshes.faceHighlight.visible = false;
             } else {
                 // Fallback to Visual Effects for objects without support meshes
@@ -254,6 +284,7 @@ class BaseFaceToolBehavior {
             }
             this.hoveredObject = null;
             this.hoveredHit = null;
+            this.hoveredFaceIndex = null;
         }
     }
 

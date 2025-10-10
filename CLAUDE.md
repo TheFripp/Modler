@@ -146,4 +146,19 @@ CAD software for creative hobbyists. Rule-based parametric design with intellige
 
 ---
 
-**Keep this file concise. Detailed patterns belong in `/documentation/`.**
+## Memory & Documentation
+
+**Quick Reference** (Auto-loaded by Claude):
+- System Overview: `@memories/architecture-map.md`
+- Code Patterns: `@memories/quick-patterns.md`
+- System Index: `@memories/system-summaries.md`
+- Active Context: `@memories/active-context.md`
+
+**Detailed Documentation** (Load on-demand):
+- Full Documentation Index: `@documentation/README.md`
+- Essential Guide: `@documentation/guides/transform-vs-geometry.md`
+- Complete Data Flow: `@documentation/architecture/data-flow-architecture.md`
+
+---
+
+**Keep this file concise. Detailed patterns belong in `/documentation/` and `/memories/`.**

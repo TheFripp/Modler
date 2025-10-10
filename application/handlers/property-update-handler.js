@@ -437,13 +437,26 @@ class PropertyUpdateHandler {
 
             // Handle sizing mode changes
             if (property === 'sizingMode') {
+                // Get old value for undo
+                const oldValue = objectData.sizingMode;
+
                 // Update object data
                 objectData.sizingMode = value;
 
                 // Trigger container update with new sizing mode
                 if (objectData.mesh) {
                     const success = this.containerCrudManager.resizeContainerToFitChildren(objectData, false, true);
+
                     if (success) {
+                        // Register with history manager for undo/redo support
+                        if (oldValue !== value) {
+                            const historyManager = window.modlerComponents?.historyManager;
+                            if (historyManager) {
+                                const command = new UpdatePropertyCommand(objectId, property, oldValue, value);
+                                historyManager.executeCommand(command);
+                                logger.debug(`📝 Registered sizing mode change in history: ${property}`);
+                            }
+                        }
                         return true;
                     } else {
                         console.error('Failed to update container sizing:', { objectId, property, value });

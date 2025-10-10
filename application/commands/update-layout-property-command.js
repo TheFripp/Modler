@@ -164,6 +164,63 @@ class UpdateLayoutPropertyCommand extends BaseCommand {
     }
 
     /**
+     * Redo the layout property change
+     */
+    redo() {
+        try {
+            const sceneController = window.modlerComponents?.sceneController;
+            const objectStateManager = window.modlerComponents?.objectStateManager;
+
+            if (!sceneController) {
+                console.error('UpdateLayoutPropertyCommand: SceneController not available for redo');
+                return false;
+            }
+
+            // Get container data
+            const containerData = sceneController.getObject(this.containerId);
+            if (!containerData || !containerData.isContainer) {
+                console.error('UpdateLayoutPropertyCommand: Container not found for redo');
+                return false;
+            }
+
+            // Restore the new layout state (from execute)
+            if (this.newLayoutState) {
+                containerData.autoLayout = JSON.parse(JSON.stringify(this.newLayoutState));
+            }
+
+            // Check if layout is now enabled
+            const layoutNowEnabled = containerData.autoLayout?.enabled || false;
+
+            // Apply layout if enabled
+            if (layoutNowEnabled) {
+                const layoutResult = sceneController.updateContainerLayout(this.containerId);
+                if (!layoutResult || !layoutResult.success) {
+                    console.warn('UpdateLayoutPropertyCommand: Layout update failed during redo');
+                }
+            }
+
+            // Trigger unified state updates
+            if (objectStateManager) {
+                objectStateManager.updateObject(this.containerId, {
+                    layout: containerData.autoLayout
+                });
+            } else if (window.modlerComponents?.propertyManager) {
+                window.modlerComponents.propertyManager.notifyObjectModified(containerData);
+            }
+
+            console.log(`↪️ UpdateLayoutPropertyCommand redone: ${this.description}`, {
+                property: this.property,
+                restoredValue: this.newValue
+            });
+            return true;
+
+        } catch (error) {
+            console.error('UpdateLayoutPropertyCommand redo error:', error);
+            return false;
+        }
+    }
+
+    /**
      * Check if this command can be undone
      */
     canUndo() {

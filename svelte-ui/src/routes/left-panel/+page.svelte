@@ -32,7 +32,7 @@
 		<button
 			type="button"
 			onclick={() => (activeTab = 'objects')}
-			class="flex-1 px-8 py-6 text-sm font-medium transition-colors {activeTab === 'objects'
+			class="flex-1 px-8 py-6 modler-section-title transition-colors {activeTab === 'objects'
 				? 'text-foreground border-b-2 border-blue-500'
 				: 'text-foreground/60 hover:text-foreground/80'}"
 		>
@@ -41,7 +41,7 @@
 		<button
 			type="button"
 			onclick={() => (activeTab = 'settings')}
-			class="flex-1 px-8 py-6 text-sm font-medium transition-colors {activeTab === 'settings'
+			class="flex-1 px-8 py-6 modler-section-title transition-colors {activeTab === 'settings'
 				? 'text-foreground border-b-2 border-blue-500'
 				: 'text-foreground/60 hover:text-foreground/80'}"
 		>

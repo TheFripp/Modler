@@ -40,6 +40,7 @@
 
 		const currentDirection = displayObject.autoLayout?.direction;
 		const isCurrentlyEnabled = displayObject.autoLayout?.enabled;
+		const currentReversed = displayObject.autoLayout?.reversed ?? false;
 
 		// Build complete autoLayout object
 		const autoLayout = {
@@ -48,7 +49,39 @@
 			gap: displayObject.autoLayout?.gap ?? 0,
 			padding: displayObject.autoLayout?.padding ?? {
 				width: 0, height: 0, depth: 0
+			},
+			alignment: displayObject.autoLayout?.alignment ?? { x: 'center', y: 'center', z: 'center' },
+			reversed: currentReversed
+		};
+
+		updateThreeJSProperty(objectId, 'autoLayout', autoLayout, 'property-panel');
+	}
+
+	// Handle layout button hover for face highlighting
+	function handleLayoutHover(axis: string, isHovering: boolean) {
+		window.parent.postMessage({
+			type: 'layout-button-hover',
+			data: {
+				objectId: objectId,
+				axis: axis,
+				isHovering: isHovering
 			}
+		}, '*');
+	}
+
+	// Handle reverse layout direction (not object order)
+	function toggleReverseLayout() {
+		const isReversed = displayObject.autoLayout?.reversed ?? false;
+
+		const autoLayout = {
+			enabled: displayObject.autoLayout?.enabled ?? false,
+			direction: displayObject.autoLayout?.direction ?? '',
+			gap: displayObject.autoLayout?.gap ?? 0,
+			padding: displayObject.autoLayout?.padding ?? {
+				width: 0, height: 0, depth: 0
+			},
+			alignment: displayObject.autoLayout?.alignment ?? { x: 'center', y: 'center', z: 'center' },
+			reversed: !isReversed
 		};
 
 		updateThreeJSProperty(objectId, 'autoLayout', autoLayout, 'property-panel');
@@ -56,21 +89,32 @@
 
 	// Handle grid-based alignment changes
 	function updateGridAlignment(horizontalValue: string, verticalValue: string) {
+		const currentReversed = displayObject.autoLayout?.reversed ?? false;
+
 		// Map grid selection to alignment based on layout direction
 		let alignment = { x: 'center', y: 'center', z: 'center' };
 
 		if (layoutDirection === 'x') {
 			// Layout along X, grid controls Y (vertical) and Z (horizontal)
-			alignment.z = horizontalValue; // Left/Center/Right maps to Back/Center/Front
-			alignment.y = verticalValue;   // Top/Center/Bottom
+			// Map horizontal grid position to Z axis alignment
+			if (horizontalValue === 'left') alignment.z = 'back';
+			else if (horizontalValue === 'right') alignment.z = 'front';
+			else alignment.z = 'center';
+			// Vertical already uses same values (top/center/bottom)
+			alignment.y = verticalValue;
 		} else if (layoutDirection === 'y') {
 			// Layout along Y, grid controls X (horizontal) and Z (vertical)
-			alignment.x = horizontalValue; // Left/Center/Right
-			alignment.z = verticalValue;   // Top/Center/Bottom maps to Back/Center/Front
+			// Horizontal already uses same values (left/center/right)
+			alignment.x = horizontalValue;
+			// Map vertical grid position to Z axis alignment
+			if (verticalValue === 'top') alignment.z = 'back';
+			else if (verticalValue === 'bottom') alignment.z = 'front';
+			else alignment.z = 'center';
 		} else if (layoutDirection === 'z') {
 			// Layout along Z, grid controls X (horizontal) and Y (vertical)
-			alignment.x = horizontalValue; // Left/Center/Right
-			alignment.y = verticalValue;   // Top/Center/Bottom
+			// Both already use same values
+			alignment.x = horizontalValue;
+			alignment.y = verticalValue;
 		}
 
 		const autoLayout = {
@@ -80,7 +124,8 @@
 			padding: displayObject.autoLayout?.padding ?? {
 				width: 0, height: 0, depth: 0
 			},
-			alignment
+			alignment,
+			reversed: currentReversed
 		};
 
 		updateThreeJSProperty(objectId, 'autoLayout', autoLayout, 'property-panel');
@@ -111,25 +156,45 @@
 	})();
 </script>
 
-<PropertyGroup title="Layout">
+<PropertyGroup title="Layout" align="right">
 	<div class="space-y-4">
-		<!-- Layout Direction -->
+		<!-- Direction -->
 		<div class="space-y-2">
-			<label class="block text-sm font-medium text-muted-foreground">
-				Layout Direction
-				{#if !isLayoutEnabled}
-					<span class="text-[10px] text-muted-foreground/60">(off)</span>
-				{/if}
-			</label>
+			<div class="flex items-center gap-2 mb-2">
+				<div class="flex-1 border-t border-[#2E2E2E]/50"></div>
+				<label class="modler-property-label text-right whitespace-nowrap">
+					Direction
+				</label>
+			</div>
 
-			<div class="grid grid-cols-3 gap-2">
+			<div class="flex gap-2">
+				<!-- Reverse Layout Button -->
+				<button
+					type="button"
+					onclick={toggleReverseLayout}
+					disabled={!isLayoutEnabled}
+					class="px-3 py-2 text-xs font-medium border border-[#2E2E2E] hover:border-[#404040] rounded-md transition-all flex items-center justify-center {!isLayoutEnabled ? 'opacity-30 cursor-not-allowed' : ''}"
+					title="Reverse layout direction"
+				>
+					<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-muted-foreground">
+						<path d="m2 9 3-3 3 3"></path>
+						<path d="M13 18H7a2 2 0 0 1-2-2V6"></path>
+						<path d="m22 15-3 3-3-3"></path>
+						<path d="M11 6h6a2 2 0 0 1 2 2v10"></path>
+					</svg>
+				</button>
+
+				<!-- Layout Direction Buttons -->
+				<div class="grid grid-cols-3 gap-2 flex-1">
 				<button
 					type="button"
 					onclick={() => selectLayoutAxis('x')}
-					class="px-3 py-2 text-xs font-medium border-2 rounded-md transition-all flex items-center justify-center {isXActive ? 'border-blue-500 text-foreground shadow-sm' : 'border-[#2E2E2E] text-muted-foreground hover:border-[#404040] hover:text-foreground'}"
+					onmouseenter={() => handleLayoutHover('x', true)}
+					onmouseleave={() => handleLayoutHover('x', false)}
+					class="px-3 py-2 text-xs font-medium border rounded-md transition-all flex items-center justify-center {isXActive ? 'border-[#404040] shadow-sm' : 'border-[#2E2E2E] hover:border-[#404040]'}"
 					title="Width (X axis)"
 				>
-					<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+					<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="{isXActive ? 'text-blue-500' : 'text-muted-foreground'}">
 						<polyline points="5 9 2 12 5 15"></polyline>
 						<polyline points="19 9 22 12 19 15"></polyline>
 						<line x1="2" y1="12" x2="22" y2="12"></line>
@@ -138,10 +203,12 @@
 				<button
 					type="button"
 					onclick={() => selectLayoutAxis('y')}
-					class="px-3 py-2 text-xs font-medium border-2 rounded-md transition-all flex items-center justify-center {isYActive ? 'border-blue-500 text-foreground shadow-sm' : 'border-[#2E2E2E] text-muted-foreground hover:border-[#404040] hover:text-foreground'}"
+					onmouseenter={() => handleLayoutHover('y', true)}
+					onmouseleave={() => handleLayoutHover('y', false)}
+					class="px-3 py-2 text-xs font-medium border rounded-md transition-all flex items-center justify-center {isYActive ? 'border-[#404040] shadow-sm' : 'border-[#2E2E2E] hover:border-[#404040]'}"
 					title="Height (Y axis)"
 				>
-					<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+					<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="{isYActive ? 'text-blue-500' : 'text-muted-foreground'}">
 						<polyline points="9 19 12 22 15 19"></polyline>
 						<polyline points="9 5 12 2 15 5"></polyline>
 						<line x1="12" y1="2" x2="12" y2="22"></line>
@@ -150,56 +217,51 @@
 				<button
 					type="button"
 					onclick={() => selectLayoutAxis('z')}
-					class="px-3 py-2 text-xs font-medium border-2 rounded-md transition-all flex items-center justify-center {isZActive ? 'border-blue-500 text-foreground shadow-sm' : 'border-[#2E2E2E] text-muted-foreground hover:border-[#404040] hover:text-foreground'}"
+					onmouseenter={() => handleLayoutHover('z', true)}
+					onmouseleave={() => handleLayoutHover('z', false)}
+					class="px-3 py-2 text-xs font-medium border rounded-md transition-all flex items-center justify-center {isZActive ? 'border-[#404040] shadow-sm' : 'border-[#2E2E2E] hover:border-[#404040]'}"
 					title="Depth (Z axis)"
 				>
-					<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-						<polyline points="17 8 21 12 17 16"></polyline>
-						<polyline points="7 16 3 12 7 8"></polyline>
-						<line x1="3" y1="12" x2="21" y2="12"></line>
-						<polyline points="12 3 16 7 12 11"></polyline>
-						<polyline points="12 21 8 17 12 13"></polyline>
+					<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="{isZActive ? 'text-blue-500' : 'text-muted-foreground'}">
+						<polyline points="13 5 19 5 19 11"></polyline>
+						<polyline points="11 19 5 19 5 13"></polyline>
+						<line x1="19" y1="5" x2="5" y2="19"></line>
 					</svg>
 				</button>
+				</div>
 			</div>
 		</div>
 
-		<!-- Gap Controls -->
-		<div class="space-y-2">
-			<label class="block text-sm font-medium text-muted-foreground">
-				Gap ({currentUnit})
+		<!-- Gap Controls and Alignment Grid -->
+		<div class="flex items-start gap-3 {!isLayoutEnabled ? 'opacity-30' : ''}">
+			<div class="w-1/2">
+				<InlineInput
+					label="Gap"
+					type="number"
+					value={gapValue}
+					{objectId}
+					property="autoLayout.gap"
+					min={0}
+					step={0.1}
+					disabled={!isLayoutEnabled}
+				/>
 				{#if displayObject.calculatedGap !== undefined}
 					<span class="text-muted-foreground text-[10px]">(auto)</span>
 				{/if}
-			</label>
-			<InlineInput
-				label="Gap"
-				type="number"
-				value={gapValue}
-				{objectId}
-				property="autoLayout.gap"
-				min={0}
-				step={0.1}
-			/>
-		</div>
+			</div>
 
-		<!-- Alignment Grid (only show when layout is enabled) -->
-		{#if isLayoutEnabled}
-			<div class="space-y-2">
-				<label class="block text-sm font-medium text-muted-foreground">
-					Alignment
-					<span class="text-[10px] text-muted-foreground/60">(cross-section view)</span>
-				</label>
-
+			<!-- Alignment Grid -->
+			<div class="flex-shrink-0">
 				<!-- 3x3 Grid Control -->
-				<div class="grid grid-cols-3 gap-1.5 w-fit mx-auto">
+				<div class="grid grid-cols-3 gap-1.5">
 					{#each ['top', 'center', 'bottom'] as vertical}
 						{#each ['left', 'center', 'right'] as horizontal}
-							{@const isActive = currentGridPosition.horizontal === horizontal && currentGridPosition.vertical === vertical}
+							{@const isActive = isLayoutEnabled && currentGridPosition.horizontal === horizontal && currentGridPosition.vertical === vertical}
 							<button
 								type="button"
 								onclick={() => updateGridAlignment(horizontal, vertical)}
-								class="w-4 h-4 rounded transition-all {isActive ? 'bg-blue-500' : 'bg-[#2E2E2E] hover:bg-[#404040]'}"
+								disabled={!isLayoutEnabled}
+								class="w-3.5 h-3.5 rounded transition-all {isActive ? 'bg-blue-500' : 'bg-[#2E2E2E] hover:bg-[#404040]'} {!isLayoutEnabled ? 'cursor-not-allowed' : ''}"
 								title="{vertical}-{horizontal}"
 							>
 							</button>
@@ -207,11 +269,14 @@
 					{/each}
 				</div>
 			</div>
-		{/if}
+		</div>
 
 		<!-- Padding Controls -->
-		<div class="space-y-2">
-			<h4 class="text-xs font-medium text-foreground/80 uppercase tracking-wide">Padding</h4>
+		<div class="space-y-2 {!isLayoutEnabled ? 'opacity-30' : ''}">
+			<div class="flex items-center gap-2 mb-2">
+				<div class="flex-1 border-t border-[#2E2E2E]/50"></div>
+				<h4 class="modler-property-label text-right whitespace-nowrap">Padding</h4>
+			</div>
 			<div class="grid grid-cols-3 gap-2">
 				<InlineInput
 					label="W"
@@ -221,6 +286,7 @@
 					property="autoLayout.padding.width"
 					min={0}
 					step={0.1}
+					disabled={!isLayoutEnabled}
 				/>
 				<InlineInput
 					label="H"
@@ -230,6 +296,7 @@
 					property="autoLayout.padding.height"
 					min={0}
 					step={0.1}
+					disabled={!isLayoutEnabled}
 				/>
 				<InlineInput
 					label="D"
@@ -239,15 +306,9 @@
 					property="autoLayout.padding.depth"
 					min={0}
 					step={0.1}
+					disabled={!isLayoutEnabled}
 				/>
 			</div>
-		</div>
-
-		<div class="text-xs text-muted-foreground italic">
-			{displayObject.autoLayout?.enabled
-				? `Layout active: ${displayObject.autoLayout.direction?.toUpperCase()} axis`
-				: 'No layout active - container in hug mode'
-			}
 		</div>
 	</div>
 </PropertyGroup>

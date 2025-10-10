@@ -56,19 +56,8 @@ class PushTool {
         const targetObject = this.faceToolBehavior.getTargetObject(hit);
         if (!targetObject) return false;
 
-        // Check if this is a container
-        const sceneController = window.modlerComponents?.sceneController;
-        if (sceneController && targetObject.userData?.id) {
-            const objectData = sceneController.getObjectByMesh(targetObject);
-            if (objectData?.isContainer) {
-                // Only allow push on containers in layout mode
-                const isLayoutEnabled = objectData.autoLayout?.enabled;
-                if (!isLayoutEnabled) {
-                    return false; // Block containers in hug mode
-                }
-            }
-        }
-
+        // Let base-face-tool-behavior handle showing disabled state for containers in hug mode
+        // The actual push operation blocking happens in startPush()
         return true;
     }
 
@@ -115,13 +104,26 @@ class PushTool {
         const targetObject = this.faceToolBehavior.getTargetObject(hit);
         if (!targetObject) return;
 
+        // Block push operation on containers in hug mode
+        const sceneController = window.modlerComponents?.sceneController;
+        if (sceneController && targetObject.userData?.id) {
+            const objectData = sceneController.getObjectByMesh(targetObject);
+            if (objectData?.isContainer) {
+                const isLayoutEnabled = objectData.autoLayout?.enabled;
+                if (!isLayoutEnabled) {
+                    // Container is in hug mode - cannot push
+                    console.log('⚠️ Push blocked: Container is in hug mode');
+                    return;
+                }
+            }
+        }
+
         this.isPushing = true;
         this.pushedObject = targetObject;
         this.pushedFace = hit.face;
         this.cumulativeAmount = 0;
 
         // Disable hug updates during push to prevent interference
-        const sceneController = window.modlerComponents?.sceneController;
         if (sceneController && typeof sceneController.disableHugUpdates === 'function') {
             sceneController.disableHugUpdates();
         }

@@ -47,24 +47,23 @@
 
 <div class={cn('color-input-container', className)} {...restProps}>
 	<!-- Horizontal layout with label, hex value, and color square -->
-	<div class="flex items-center bg-[#212121]/50 rounded-md h-8 border border-[#2E2E2E]/50 focus-within:border-[#6b7280] transition-colors">
+	<div class="flex items-center bg-[#212121]/50 rounded-md h-8 border border-[#2E2E2E]/50 focus-within:border-[#6b7280] transition-colors overflow-hidden">
 		<span class="text-xs text-muted-foreground px-2 py-1 flex-shrink-0 min-w-0 truncate">{label}</span>
 		<input
 			type="text"
 			value={formattedValue}
 			onchange={handleColorChange}
 			onfocus={handleTextFocus}
-			class="flex-1 bg-transparent border-none outline-none text-xs text-foreground px-1 py-1 font-mono min-w-0"
+			class="flex-1 bg-transparent border-none outline-none text-xs text-foreground py-1 font-mono min-w-0 text-right"
+			style="padding-left: 0.25rem; padding-right: 0.5rem;"
 			{placeholder}
 		/>
-		<div class="border-l border-[#2E2E2E]/50 px-1">
-			<input
-				type="color"
-				value={formattedValue}
-				onchange={handleColorChange}
-				class="w-7 h-7 rounded cursor-pointer bg-transparent border border-[#171717]"
-				style="border-radius: 4px;"
-			/>
-		</div>
+		<input
+			type="color"
+			value={formattedValue}
+			onchange={handleColorChange}
+			class="w-8 h-8 cursor-pointer"
+			style="-webkit-appearance: none; -moz-appearance: none; appearance: none; padding: 4px; margin: 0; border: none; outline: none;"
+		/>
 	</div>
 </div>

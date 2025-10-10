@@ -125,6 +125,13 @@ const CONFIGURATION_SCHEMA = {
         description: 'Container wireframe line width'
     },
 
+    'visual.containers.faceHighlightOpacity': {
+        type: 'number',
+        default: 0.3,
+        constraint: CONSTRAINT_TYPES.RANGE_0_1,
+        description: 'Container face highlight opacity'
+    },
+
     'visual.containers.renderOrder': {
         type: 'number',
         default: 998,

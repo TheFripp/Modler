@@ -390,10 +390,10 @@
 					/>
 				{/if}
 
-				<span class="truncate text-xs">{object.name}</span>
+				<span class="truncate text-sm">{object.name}</span>
 
 				{#if object.isContainer && object.autoLayout?.tileMode?.enabled}
-					<span class="text-xs text-[#10B981] font-mono shrink-0">×{object.autoLayout.tileMode.repeat}</span>
+					<span class="text-sm text-[#10B981] font-mono shrink-0">×{object.autoLayout.tileMode.repeat}</span>
 				{/if}
 			</button>
 		</div>

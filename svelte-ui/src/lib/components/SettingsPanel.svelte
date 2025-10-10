@@ -1,42 +1,31 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { toolState } from '$lib/stores/modler';
 	import { unifiedCommunication } from '$lib/services/unified-communication';
-	import { toggleSnapInScene } from '$lib/bridge/threejs-bridge';
 	import PropertyGroup from '$lib/components/ui/property-group.svelte';
 	import InlineInput from '$lib/components/ui/inline-input.svelte';
 	import ColorInput from '$lib/components/ui/color-input.svelte';
 
 	// Settings state
 	let visualSettings = {
-		selection: {
-			color: '#ff6600',
+		object: {
+			outlineColor: '#888888',
+			selectionColor: '#ff6600',
 			lineWidth: 2,
 			opacity: 80,
 			faceHighlightOpacity: 30
 		},
-		containers: {
-			wireframeColor: '#00ff00',
+		container: {
+			selectionColor: '#00ff00',
 			lineWidth: 1,
-			opacity: 80
+			opacity: 80,
+			faceHighlightOpacity: 30
 		}
-	};
-
-	let cadWireframeSettings = {
-		color: '#888888',
-		lineWidth: 1,
-		opacity: 50
 	};
 
 	let sceneSettings = {
 		backgroundColor: '#1a1a1a',
 		gridMainColor: '#444444',
 		gridSubColor: '#2a2a2a'
-	};
-
-	let interfaceSettings = {
-		accentColor: '#3b82f6',
-		toolbarOpacity: 95
 	};
 
 	let currentUnit = 'm';
@@ -50,12 +39,26 @@
 		{ value: 'ft', label: 'Feet (ft)' }
 	];
 
-	function updateVisualSettings(category: 'selection' | 'containers', property: string, value: any) {
+	function updateVisualSettings(category: 'object' | 'container', property: string, value: any) {
 		visualSettings[category][property] = value;
 
-		const configPath = category === 'selection'
-			? `visual.selection.${property}`
-			: `visual.containers.${property}`;
+		// Map to old config paths for backward compatibility
+		let configPath: string;
+		if (category === 'object') {
+			if (property === 'outlineColor') {
+				configPath = 'visual.cad.wireframe.color';
+			} else if (property === 'selectionColor') {
+				configPath = 'visual.selection.color';
+			} else {
+				configPath = `visual.selection.${property}`;
+			}
+		} else {
+			if (property === 'selectionColor') {
+				configPath = 'visual.containers.wireframeColor';
+			} else {
+				configPath = `visual.containers.${property}`;
+			}
+		}
 
 		const actualValue = (property === 'opacity' || property === 'faceHighlightOpacity') ? value / 100 : value;
 
@@ -64,30 +67,12 @@
 		}).catch(console.error);
 	}
 
-	function handleSnapToggle() {
-		try {
-			toggleSnapInScene();
-		} catch (error) {
-			console.error('❌ Snap toggle failed:', error);
-		}
-	}
-
 	function selectUnit(unit: string) {
 		currentUnit = unit;
 		if (unitConverter) {
 			unitConverter.setUserUnit(unit);
 			window.dispatchEvent(new CustomEvent('unit-changed', { detail: { unit } }));
 		}
-	}
-
-	function updateCadWireframeSettings(property: string, value: any) {
-		cadWireframeSettings[property] = value;
-		const configPath = `visual.cad.wireframe.${property}`;
-		const actualValue = property === 'opacity' ? value / 100 : value;
-
-		unifiedCommunication.sendVisualSettings('cad-wireframe', {
-			[configPath]: actualValue
-		}).catch(console.error);
 	}
 
 	function updateSceneSettings(property: string, value: any) {
@@ -99,38 +84,23 @@
 		}).catch(console.error);
 	}
 
-	function updateInterfaceSettings(property: string, value: any) {
-		interfaceSettings[property] = value;
-		const configPath = `interface.${property}`;
-		const actualValue = property === 'toolbarOpacity' ? value / 100 : value;
-
-		unifiedCommunication.sendVisualSettings('interface', {
-			[configPath]: actualValue
-		}).catch(console.error);
-	}
-
 	function handleSettingsResponse(event: MessageEvent) {
 		if (event.data.type === 'visual-settings-response') {
 			const settings = event.data.settings;
 			visualSettings = {
-				selection: {
-					color: settings.selection.color,
-					lineWidth: settings.selection.lineWidth,
-					opacity: settings.selection.opacity * 100,
-					faceHighlightOpacity: (settings.selection.faceHighlightOpacity || 0.3) * 100
+				object: {
+					outlineColor: settings.cad?.wireframe?.color || '#888888',
+					selectionColor: settings.selection?.color || '#ff6600',
+					lineWidth: settings.selection?.lineWidth || 2,
+					opacity: (settings.selection?.opacity || 0.8) * 100,
+					faceHighlightOpacity: (settings.selection?.faceHighlightOpacity || 0.3) * 100
 				},
-				containers: {
-					wireframeColor: settings.containers.wireframeColor,
-					lineWidth: settings.containers.lineWidth,
-					opacity: settings.containers.opacity * 100
+				container: {
+					selectionColor: settings.containers?.wireframeColor || '#00ff00',
+					lineWidth: settings.containers?.lineWidth || 1,
+					opacity: (settings.containers?.opacity || 0.8) * 100,
+					faceHighlightOpacity: (settings.containers?.faceHighlightOpacity || 0.3) * 100
 				}
-			};
-		} else if (event.data.type === 'cad-wireframe-settings-response') {
-			const settings = event.data.settings;
-			cadWireframeSettings = {
-				color: settings.color,
-				lineWidth: settings.lineWidth,
-				opacity: settings.opacity * 100
 			};
 		} else if (event.data.type === 'scene-settings-response') {
 			const settings = event.data.settings;
@@ -139,20 +109,12 @@
 				gridMainColor: settings.gridMainColor,
 				gridSubColor: settings.gridSubColor
 			};
-		} else if (event.data.type === 'interface-settings-response') {
-			const settings = event.data.settings;
-			interfaceSettings = {
-				accentColor: settings.accentColor,
-				toolbarOpacity: settings.toolbarOpacity * 100
-			};
 		}
 	}
 
 	function loadSettings() {
 		window.parent.postMessage({ type: 'get-visual-settings' }, '*');
-		window.parent.postMessage({ type: 'get-cad-wireframe-settings' }, '*');
 		window.parent.postMessage({ type: 'get-scene-settings' }, '*');
-		window.parent.postMessage({ type: 'get-interface-settings' }, '*');
 	}
 
 	onMount(() => {
@@ -176,138 +138,84 @@
 </script>
 
 <div class="h-full overflow-y-auto px-4 py-4 space-y-4">
-	<!-- Visual Settings -->
-	<PropertyGroup title="Visual Settings">
-		<!-- Selection -->
-		<div class="space-y-2 mb-4">
-			<h4 class="text-xs font-medium text-foreground/80 uppercase tracking-wide text-right">Selection</h4>
-			<ColorInput
-				label="Color"
-				value={visualSettings.selection.color}
-				onchange={(value) => updateVisualSettings('selection', 'color', value)}
-			/>
-			<div class="flex gap-2">
-				<InlineInput
-					label="Line Width"
-					type="number"
-					value={visualSettings.selection.lineWidth}
-					objectId={null}
-					property="visual.selection.lineWidth"
-					min={1}
-					max={10}
-					step={0.5}
-					onchange={(value) => updateVisualSettings('selection', 'lineWidth', value)}
-				/>
-				<InlineInput
-					label="Opacity"
-					type="number"
-					value={visualSettings.selection.opacity}
-					objectId={null}
-					property="visual.selection.opacity"
-					min={0}
-					max={100}
-					step={1}
-					onchange={(value) => updateVisualSettings('selection', 'opacity', Math.round(value))}
-				/>
+	<!-- Visuals -->
+	<PropertyGroup title="Visuals" align="left">
+		<!-- Object -->
+		<div class="space-y-2 mb-8">
+			<div class="flex items-center gap-2 mb-2">
+				<h4 class="modler-property-label opacity-70 whitespace-nowrap">Object</h4>
+				<div class="flex-1 border-t border-[#2E2E2E]/50"></div>
 			</div>
-			<InlineInput
-				label="Face Opacity"
-				type="number"
-				value={visualSettings.selection.faceHighlightOpacity}
-				objectId={null}
-				property="visual.selection.faceHighlightOpacity"
-				min={0}
-				max={100}
-				step={1}
-				onchange={(value) => updateVisualSettings('selection', 'faceHighlightOpacity', Math.round(value))}
-			/>
-		</div>
-
-		<!-- Containers -->
-		<div class="space-y-2 mb-4">
-			<h4 class="text-xs font-medium text-foreground/80 uppercase tracking-wide text-right">Containers</h4>
 			<ColorInput
-				label="Wireframe"
-				value={visualSettings.containers.wireframeColor}
-				onchange={(value) => updateVisualSettings('containers', 'wireframeColor', value)}
+				label="Outline"
+				value={visualSettings.object.outlineColor}
+				onchange={(value) => updateVisualSettings('object', 'outlineColor', value)}
 			/>
 			<div class="flex gap-2">
-				<InlineInput
-					label="Line Width"
-					type="number"
-					value={visualSettings.containers.lineWidth}
-					objectId={null}
-					property="visual.containers.lineWidth"
-					min={1}
-					max={10}
-					step={0.5}
-					onchange={(value) => updateVisualSettings('containers', 'lineWidth', value)}
-				/>
-				<InlineInput
-					label="Opacity"
-					type="number"
-					value={visualSettings.containers.opacity}
-					objectId={null}
-					property="visual.containers.opacity"
-					min={0}
-					max={100}
-					step={1}
-					onchange={(value) => updateVisualSettings('containers', 'opacity', Math.round(value))}
-				/>
+				<div style="flex: 0 1 200px; min-width: 0;">
+					<ColorInput
+						label="Selection"
+						value={visualSettings.object.selectionColor}
+						onchange={(value) => updateVisualSettings('object', 'selectionColor', value)}
+					/>
+				</div>
+				<div class="w-20 flex-shrink-0">
+					<InlineInput
+						label=""
+						type="number"
+						value={visualSettings.object.faceHighlightOpacity}
+						objectId={null}
+						property="visual.selection.faceHighlightOpacity"
+						min={0}
+						max={100}
+						step={1}
+						suffix="%"
+						onchange={(event) => {
+							const numValue = parseFloat((event.target as HTMLInputElement).value);
+							updateVisualSettings('object', 'faceHighlightOpacity', Math.round(numValue));
+						}}
+					/>
+				</div>
 			</div>
 		</div>
 
-		<!-- Snapping -->
-		<div class="space-y-2 mb-4">
-			<h4 class="text-xs font-medium text-foreground/80 uppercase tracking-wide text-right">Snapping</h4>
-			<button
-				type="button"
-				onclick={handleSnapToggle}
-				class="w-full px-3 py-2 text-sm rounded-md transition-colors {$toolState.snapEnabled
-					? 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
-					: 'bg-[#2E2E2E] text-foreground/70 border border-[#404040] hover:bg-[#404040]'}"
-			>
-				{$toolState.snapEnabled ? 'Snap Enabled' : 'Snap Disabled'}
-			</button>
-		</div>
-
-		<!-- CAD Wireframes -->
+		<!-- Container -->
 		<div class="space-y-2">
-			<h4 class="text-xs font-medium text-foreground/80 uppercase tracking-wide text-right">CAD Wireframes</h4>
-			<ColorInput
-				label="Color"
-				value={cadWireframeSettings.color}
-				onchange={(value) => updateCadWireframeSettings('color', value)}
-			/>
+			<div class="flex items-center gap-2 mb-2">
+				<h4 class="modler-property-label opacity-70 whitespace-nowrap">Container</h4>
+				<div class="flex-1 border-t border-[#2E2E2E]/50"></div>
+			</div>
 			<div class="flex gap-2">
-				<InlineInput
-					label="Line Width"
-					type="number"
-					value={cadWireframeSettings.lineWidth}
-					objectId={null}
-					property="visual.cad.wireframe.lineWidth"
-					min={1}
-					max={10}
-					step={0.5}
-					onchange={(value) => updateCadWireframeSettings('lineWidth', value)}
-				/>
-				<InlineInput
-					label="Opacity"
-					type="number"
-					value={cadWireframeSettings.opacity}
-					objectId={null}
-					property="visual.cad.wireframe.opacity"
-					min={0}
-					max={100}
-					step={1}
-					onchange={(value) => updateCadWireframeSettings('opacity', Math.round(value))}
-				/>
+				<div style="flex: 0 1 200px; min-width: 0;">
+					<ColorInput
+						label="Selection"
+						value={visualSettings.container.selectionColor}
+						onchange={(value) => updateVisualSettings('container', 'selectionColor', value)}
+					/>
+				</div>
+				<div class="w-20 flex-shrink-0">
+					<InlineInput
+						label=""
+						type="number"
+						value={visualSettings.container.faceHighlightOpacity}
+						objectId={null}
+						property="visual.containers.faceHighlightOpacity"
+						min={0}
+						max={100}
+						step={1}
+						suffix="%"
+						onchange={(event) => {
+							const numValue = parseFloat((event.target as HTMLInputElement).value);
+							updateVisualSettings('container', 'faceHighlightOpacity', Math.round(numValue));
+						}}
+					/>
+				</div>
 			</div>
 		</div>
 	</PropertyGroup>
 
-	<!-- Scene Settings -->
-	<PropertyGroup title="Scene Settings">
+	<!-- Scene -->
+	<PropertyGroup title="Scene" align="left">
 		<div class="space-y-2">
 			<ColorInput
 				label="Background"
@@ -324,39 +232,16 @@
 				value={sceneSettings.gridSubColor}
 				onchange={(value) => updateSceneSettings('gridSubColor', value)}
 			/>
-		</div>
-	</PropertyGroup>
 
-	<!-- Interface Settings -->
-	<PropertyGroup title="Interface Settings">
-		<div class="space-y-2">
-			<ColorInput
-				label="Accent Color"
-				value={interfaceSettings.accentColor}
-				onchange={(value) => updateInterfaceSettings('accentColor', value)}
-			/>
-			<InlineInput
-				label="Toolbar Opacity"
-				type="number"
-				value={interfaceSettings.toolbarOpacity}
-				objectId={null}
-				property="interface.toolbarOpacity"
-				min={0}
-				max={100}
-				step={1}
-				onchange={(value) => updateInterfaceSettings('toolbarOpacity', Math.round(value))}
-			/>
-		</div>
-	</PropertyGroup>
-
-	<!-- System Settings -->
-	<PropertyGroup title="System Settings">
-		<div class="space-y-2">
-			<label class="block text-sm text-foreground/80">Unit System</label>
+			<div class="flex items-center gap-2 pt-2 mb-2">
+				<h4 class="modler-property-label opacity-70 whitespace-nowrap">Units</h4>
+				<div class="flex-1 border-t border-[#2E2E2E]/50"></div>
+			</div>
 			<select
 				bind:value={currentUnit}
 				onchange={() => selectUnit(currentUnit)}
-				class="w-full px-3 py-2 bg-[#2E2E2E] border border-[#404040] rounded-md text-sm text-foreground focus:outline-none focus:border-blue-500"
+				class="w-full h-8 px-3 pr-8 bg-[#212121]/50 border border-[#2E2E2E]/50 rounded-md text-xs text-foreground focus:outline-none focus:border-[#6b7280] transition-colors appearance-none"
+				style="background-image: url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20width%3D%2210%22%20height%3D%225%22%20viewBox%3D%220%200%2010%205%22%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%3E%3Cpath%20fill%3D%22%23999%22%20d%3D%22M0%200l5%205%205-5z%22/%3E%3C/svg%3E'); background-repeat: no-repeat; background-position: right 0.75rem center; background-size: 8px 4px;"
 			>
 				{#each units as unit}
 					<option value={unit.value}>{unit.label}</option>

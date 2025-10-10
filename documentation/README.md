@@ -1,5 +1,11 @@
 # Modler V2 Documentation
 
+**For high-level guidance**: See `/memories/` directory (architecture map, quick patterns, system summaries)
+
+**For detailed implementation**: Browse categories below
+
+---
+
 ## 🎯 Core Documentation
 - **System Architecture**: [`/core/architecture-v2.md`](core/architecture-v2.md) - V2 principles and patterns
 - **Feature Roadmap**: [`/core/feature-roadmap.md`](core/feature-roadmap.md) - Live development planning

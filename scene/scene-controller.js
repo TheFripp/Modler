@@ -1141,6 +1141,7 @@ class SceneController {
                 }
                 // Handle layout mode containers
                 else if (container.autoLayout && container.autoLayout.enabled) {
+                    console.log('🔄 Updating layout for container after object drop:', parentId);
                     const layoutResult = this.updateLayout(parentId);
 
                     // Resize container to fit new children
@@ -1676,7 +1677,12 @@ class SceneController {
             mesh.remove(cadWireframe);
 
             // Create new CAD wireframe with updated settings
-            const newCadWireframe = supportMeshFactory.createCadWireframe(mesh);
+            // Use correct method based on object type (containers use different wireframe material)
+            const isContainer = mesh.userData.isContainer;
+            const newCadWireframe = isContainer
+                ? supportMeshFactory.createContainerWireframe(mesh)
+                : supportMeshFactory.createCadWireframe(mesh);
+
             if (newCadWireframe) {
                 mesh.add(newCadWireframe);
                 newCadWireframe.visible = true; // Ensure visibility

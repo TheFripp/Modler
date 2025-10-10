@@ -6,6 +6,7 @@
 		class?: string;
 		collapsible?: boolean;
 		collapsed?: boolean;
+		align?: 'left' | 'right';
 	}
 
 	let {
@@ -13,6 +14,7 @@
 		class: className = '',
 		collapsible = false,
 		collapsed = false,
+		align = 'left',
 		children,
 		...restProps
 	}: Props = $props();
@@ -27,6 +29,9 @@
 </script>
 
 <div class={cn('property-group', className)} {...restProps}>
+	<!-- Section divider line above title -->
+	<div class="border-t border-[#2E2E2E] mb-4"></div>
+
 	<div
 		class={cn(
 			"property-group-header mb-2",
@@ -37,7 +42,10 @@
 		tabindex={collapsible ? 0 : undefined}
 	>
 		<div class="flex items-center justify-between">
-			<h3 class="text-xs font-medium text-muted-foreground text-left">{title}</h3>
+			<h3 class={cn(
+				"modler-section-title w-full",
+				align === 'right' ? 'text-right' : 'text-left'
+			)}>{title}</h3>
 			{#if collapsible}
 				<span class="text-xs text-muted-foreground transition-transform" style="transform: rotate({isCollapsed ? -90 : 0}deg)">▼</span>
 			{/if}

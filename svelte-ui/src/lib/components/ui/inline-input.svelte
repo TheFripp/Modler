@@ -11,6 +11,7 @@
 		disabled?: boolean;
 		class?: string;
 		id?: string;
+		suffix?: string;
 		// Property controller integration
 		objectId?: string;
 		property?: PropertyPath;
@@ -29,6 +30,7 @@
 		disabled = false,
 		class: className = '',
 		id,
+		suffix = '',
 		objectId,
 		property,
 		// Legacy handlers
@@ -352,7 +354,7 @@
 <div class={cn('inline-input-container', className)}>
 	<div class="relative flex items-center bg-[#212121]/50 rounded-md h-8 border border-[#2E2E2E]/50 focus-within:border-[#6b7280] transition-colors">
 		<!-- Label -->
-		<span class="text-xs text-muted-foreground px-1.5 py-1 flex-shrink-0">
+		<span class="modler-property-label px-1.5 py-1 flex-shrink-0">
 			{label}
 		</span>
 
@@ -371,13 +373,19 @@
 			onblur={handleBlur}
 			onfocus={handleInputFocus}
 			onkeydown={handleKeyDown}
-			class="flex-1 bg-transparent border-none outline-none text-xs text-foreground pl-0.5 pr-1 py-1 min-w-0 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+			class="modler-input-value flex-1 bg-transparent border-none outline-none text-xs pl-0.5 py-1 min-w-0 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+			style="padding-right: {suffix ? '0' : '0.5rem'};"
 			{...restProps}
 		/>
 
+		<!-- Suffix -->
+		{#if suffix}
+			<span class="text-xs text-muted-foreground pr-1 flex-shrink-0">{suffix}</span>
+		{/if}
+
 		<!-- Interactive Controls -->
 		{#if showArrows && type === 'number'}
-			<div class="flex flex-col border-l border-[#2E2E2E] flex-shrink-0">
+			<div class="flex flex-col border-l border-[#2E2E2E] flex-shrink-0" style="padding-left: 0.25rem; padding-right: 0.25rem;">
 				<button
 					type="button"
 					tabindex="-1"

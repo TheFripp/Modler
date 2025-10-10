@@ -14,6 +14,8 @@ class SupportMeshFactory {
         this.materials = {
             selectionWireframe: null,
             faceHighlight: null,
+            faceHighlightContainer: null,
+            faceHighlightDisabled: null, // Grey color for disabled tool states
             containerWireframe: null,
             containerInteractive: null,
             cadWireframe: null
@@ -29,6 +31,31 @@ class SupportMeshFactory {
         // Use MaterialManager for centralized material creation and caching
         this.materials.selectionWireframe = this.materialManager.createSelectionEdgeMaterial();
         this.materials.faceHighlight = this.materialManager.createFaceHighlightMaterial();
+        this.materials.faceHighlightContainer = this.materialManager.createContainerFaceHighlightMaterial();
+
+        // Create disabled state material (grey with same opacity as face highlights)
+        // Create directly without MaterialManager to avoid it being updated when face highlight colors change
+        const configManager = this.materialManager.getConfigManager();
+        const faceOpacity = configManager?.get('visual.selection.faceHighlightOpacity') || 0.3;
+        this.materials.faceHighlightDisabled = new THREE.MeshBasicMaterial({
+            color: 0x888888, // Dark grey
+            transparent: true,
+            opacity: faceOpacity,
+            side: THREE.DoubleSide,
+            depthTest: true,
+            depthWrite: false
+        });
+        this.materials.faceHighlightDisabled.renderOrder = 1000;
+
+        // Subscribe to opacity changes to keep disabled material in sync
+        if (configManager) {
+            configManager.subscribe('visual.selection.faceHighlightOpacity', (newOpacity) => {
+                if (this.materials.faceHighlightDisabled) {
+                    this.materials.faceHighlightDisabled.opacity = newOpacity;
+                }
+            });
+        }
+
         this.materials.containerWireframe = this.materialManager.createContainerWireframeMaterial();
         this.materials.cadWireframe = this.materialManager.createCadEdgeMaterial();
 
@@ -38,6 +65,46 @@ class SupportMeshFactory {
             side: THREE.DoubleSide,
             depthTest: true // Enable depth test for proper rendering
         });
+
+        // Update existing objects to use new materials
+        // This is needed when materials are recreated after ConfigurationManager initialization
+        this.updateExistingFaceHighlightMaterials();
+    }
+
+    /**
+     * Update all existing face highlight meshes to use the new pooled materials
+     * Called after materials are recreated to ensure all objects use updated materials
+     */
+    updateExistingFaceHighlightMaterials() {
+        const sceneController = window.modlerComponents?.sceneController;
+        if (!sceneController) return;
+
+        let updatedCount = 0;
+
+        // Iterate through all objects and update their face highlight materials
+        for (const [id, objectData] of sceneController.objects) {
+            const mesh = objectData.mesh;
+            if (!mesh || !mesh.userData.supportMeshes) continue;
+
+            const faceHighlight = mesh.userData.supportMeshes.faceHighlight;
+            if (!faceHighlight) continue;
+
+            // Determine correct material based on object type
+            const isContainer = mesh.userData.isContainer;
+            const newMaterial = isContainer
+                ? this.materials.faceHighlightContainer
+                : this.materials.faceHighlight;
+
+            // Update the material reference
+            if (faceHighlight.material !== newMaterial) {
+                faceHighlight.material = newMaterial;
+                updatedCount++;
+            }
+        }
+
+        if (updatedCount > 0) {
+            console.log(`✓ Updated ${updatedCount} face highlight materials to use new pooled materials`);
+        }
     }
 
     /**
@@ -70,7 +137,9 @@ class SupportMeshFactory {
                     if (mesh.geometry) {
                         this.geometryFactory.returnGeometry(mesh.geometry, 'edge');
                     }
-                    if (mesh.material && mesh.material !== this.materials.faceHighlight) {
+                    if (mesh.material &&
+                        mesh.material !== this.materials.faceHighlight &&
+                        mesh.material !== this.materials.faceHighlightContainer) {
                         this.materialManager.disposeMaterial(mesh.material);
                     }
                 }
@@ -79,12 +148,12 @@ class SupportMeshFactory {
 
         // Create support meshes - containers and objects use same pattern
         const supportMeshes = isContainer ? {
-            faceHighlight: this.createFaceHighlight(mainMesh),
+            faceHighlight: this.createFaceHighlight(mainMesh, true), // true = isContainer
             interactiveMesh: this.createContainerInteractiveMesh(mainMesh),
             cadWireframe: this.createContainerWireframe(mainMesh) // Containers use containerWireframe for ContainerVisualizer compatibility
         } : {
             selectionWireframe: this.createSelectionWireframe(mainMesh),
-            faceHighlight: this.createFaceHighlight(mainMesh),
+            faceHighlight: this.createFaceHighlight(mainMesh, false), // false = not container
             cadWireframe: this.createCadWireframe(mainMesh)
         };
 
@@ -231,13 +300,20 @@ class SupportMeshFactory {
 
     /**
      * Create face highlight mesh - ARCHITECTURE: position once per hover, no repositioning during geometry changes
+     * Uses pooled shared materials for consistent opacity across all objects
+     * @param {THREE.Mesh} mainMesh - The main mesh to create face highlight for
+     * @param {boolean} isContainer - Whether this is for a container (uses different material/opacity)
      */
-    createFaceHighlight(mainMesh) {
+    createFaceHighlight(mainMesh, isContainer = false) {
         // Create generic plane geometry using GeometryFactory
         const faceGeometry = this.geometryFactory.createPlaneGeometry(1, 1);
 
-        // Get fresh material from MaterialManager to pick up current config values
-        const material = this.materialManager.createFaceHighlightMaterial();
+        // Use pre-created shared material from pool
+        // This ensures all objects share the same material instance, so opacity updates affect all objects
+        const material = isContainer
+            ? this.materials.faceHighlightContainer
+            : this.materials.faceHighlight;
+
         const faceHighlight = this.resourcePool.getMeshHighlight(faceGeometry, material);
         faceHighlight.position.set(0, 0, 0); // Initial position - will be set when first shown
         faceHighlight.raycast = () => {}; // Non-raycastable
@@ -638,7 +714,9 @@ class SupportMeshFactory {
                     this.geometryFactory.returnGeometry(mesh.geometry, 'edge');
                 }
                 // Return material to pool if it's not shared
-                if (mesh.material && mesh.material !== this.materials.faceHighlight) {
+                if (mesh.material &&
+                    mesh.material !== this.materials.faceHighlight &&
+                    mesh.material !== this.materials.faceHighlightContainer) {
                     this.materialManager.disposeMaterial(mesh.material);
                 }
             }
