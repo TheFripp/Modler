@@ -3,19 +3,22 @@
  *
  * Displays a small 3D axis visualization in the top-right corner that rotates
  * with the main camera to show current orientation. Features three axes (X, Y, Z)
- * with labeled endpoints and synchronizes with main scene rotation.
+ * with labeled circles that move along the edge of a background circle.
  */
 
 class AxisGizmo {
     constructor(containerElement) {
         this.container = containerElement;
-        this.size = 60; // 25% taller than 48px toolbar buttons
+        this.size = 80; // Increased size for better visibility
 
         // Create separate renderer, scene, and camera for the gizmo
         this.renderer = null;
         this.scene = null;
         this.camera = null;
         this.axisGroup = null;
+        this.backgroundCircle = null;
+        this.axisLines = [];
+        this.axisSprites = [];
 
         this.init();
     }
@@ -42,7 +45,7 @@ class AxisGizmo {
         this.scene = new THREE.Scene();
 
         // Create orthographic camera for consistent sizing
-        const frustumSize = 2;
+        const frustumSize = 1.5;
         this.camera = new THREE.OrthographicCamera(
             -frustumSize, frustumSize,
             frustumSize, -frustumSize,
@@ -50,6 +53,9 @@ class AxisGizmo {
         );
         this.camera.position.set(0, 0, 10);
         this.camera.lookAt(0, 0, 0);
+
+        // Create background circle (matches toolbar styling)
+        this.createBackgroundCircle();
 
         // Create axis group
         this.axisGroup = new THREE.Group();
@@ -59,70 +65,107 @@ class AxisGizmo {
         this.render();
     }
 
+    createBackgroundCircle() {
+        const radius = 1.2;
+        const segments = 64;
+
+        // Create circle outline using line loop
+        const points = [];
+        for (let i = 0; i <= segments; i++) {
+            const angle = (i / segments) * Math.PI * 2;
+            points.push(new THREE.Vector3(
+                Math.cos(angle) * radius,
+                Math.sin(angle) * radius,
+                0
+            ));
+        }
+
+        const ringGeometry = new THREE.BufferGeometry().setFromPoints(points);
+        const ringMaterial = new THREE.LineBasicMaterial({
+            color: 0x3a3a3a, // Match toolbar border color (#3a3a3a)
+            transparent: true,
+            opacity: 1.0,
+            linewidth: 2
+        });
+
+        this.backgroundCircle = new THREE.Line(ringGeometry, ringMaterial);
+        this.scene.add(this.backgroundCircle);
+    }
+
     createAxes() {
-        const axisLength = 1;
-        const sphereRadius = 0.15;
+        const circleRadius = 1.2; // Same as background circle
+        const endCircleRadius = 0.3; // Larger circles for readability
         const lineWidth = 2;
 
-        // Define axes with their directions and labels
+        // Define axes with their directions, labels, and colors
         const axes = [
-            { axis: 'x', direction: new THREE.Vector3(1, 0, 0), label: 'X' },
-            { axis: 'y', direction: new THREE.Vector3(0, 1, 0), label: 'Y' },
-            { axis: 'z', direction: new THREE.Vector3(0, 0, 1), label: 'Z' }
+            { axis: 'x', direction: new THREE.Vector3(1, 0, 0), label: 'X', lineColor: 0xff6b6b, circleColor: 0x9acd32 }, // Red line, yellow-green circle
+            { axis: 'y', direction: new THREE.Vector3(0, 1, 0), label: 'Y', lineColor: 0x6bff6b, circleColor: 0x6495ed }, // Green line, blue circle
+            { axis: 'z', direction: new THREE.Vector3(0, 0, 1), label: 'Z', lineColor: 0x6b6bff, circleColor: 0xcd5c5c }  // Blue line, red circle
         ];
 
-        axes.forEach(({ axis, direction, label }) => {
-            // Create line
+        axes.forEach(({ axis, direction, label, lineColor, circleColor }) => {
+            // Calculate endpoint position on the circle edge
+            const endPoint = direction.clone().multiplyScalar(circleRadius);
+
+            // Create line from origin to circle edge (will be updated dynamically)
             const lineGeometry = new THREE.BufferGeometry().setFromPoints([
                 new THREE.Vector3(0, 0, 0),
-                direction.clone().multiplyScalar(axisLength)
+                endPoint
             ]);
 
             const lineMaterial = new THREE.LineBasicMaterial({
-                color: 0xffffff,
+                color: lineColor,
                 linewidth: lineWidth,
                 transparent: true,
                 opacity: 0.8
             });
 
             const line = new THREE.Line(lineGeometry, lineMaterial);
+            line.userData.direction = direction.clone();
+            line.userData.circleRadius = circleRadius;
             this.axisGroup.add(line);
+            this.axisLines.push(line);
 
-            // Create sphere at endpoint
-            const sphereGeometry = new THREE.SphereGeometry(sphereRadius, 16, 16);
-            const sphereMaterial = new THREE.MeshBasicMaterial({
-                color: 0xffffff,
-                transparent: true,
-                opacity: 0.9
-            });
-
-            const sphere = new THREE.Mesh(sphereGeometry, sphereMaterial);
-            sphere.position.copy(direction.clone().multiplyScalar(axisLength));
-            this.axisGroup.add(sphere);
-
-            // Create text label using canvas texture
+            // Create filled circle at endpoint (on the edge of background circle)
+            // Use sprite so it always faces the camera
             const canvas = document.createElement('canvas');
             const context = canvas.getContext('2d');
-            canvas.width = 64;
-            canvas.height = 64;
+            const canvasSize = 256;
+            canvas.width = canvasSize;
+            canvas.height = canvasSize;
 
-            context.fillStyle = 'white';
-            context.font = 'bold 48px Arial';
+            // Draw colored circle background
+            const centerX = canvasSize / 2;
+            const centerY = canvasSize / 2;
+            const radius = canvasSize / 2 - 4; // Leave small margin
+
+            context.fillStyle = '#' + circleColor.toString(16).padStart(6, '0');
+            context.beginPath();
+            context.arc(centerX, centerY, radius, 0, Math.PI * 2);
+            context.fill();
+
+            // Draw text label
+            context.fillStyle = '#1a1a1a'; // Dark text for contrast
+            context.font = 'bold 140px Arial';
             context.textAlign = 'center';
             context.textBaseline = 'middle';
-            context.fillText(label, 32, 32);
+            context.fillText(label, centerX, centerY);
 
             const texture = new THREE.CanvasTexture(canvas);
             const spriteMaterial = new THREE.SpriteMaterial({
                 map: texture,
                 transparent: true,
-                opacity: 0.9
+                opacity: 1.0
             });
 
             const sprite = new THREE.Sprite(spriteMaterial);
-            sprite.scale.set(0.4, 0.4, 1);
-            sprite.position.copy(direction.clone().multiplyScalar(axisLength + 0.3));
+            sprite.scale.set(endCircleRadius * 2, endCircleRadius * 2, 1);
+            sprite.position.copy(endPoint);
+            sprite.userData.direction = direction.clone();
+            sprite.userData.circleRadius = circleRadius;
             this.axisGroup.add(sprite);
+            this.axisSprites.push(sprite);
         });
     }
 
@@ -134,8 +177,35 @@ class AxisGizmo {
         if (!mainCamera || !this.axisGroup) return;
 
         // Use inverse of camera rotation so gizmo shows what camera is looking at
-        // (not the camera's rotation itself)
         this.axisGroup.quaternion.copy(mainCamera.quaternion).invert();
+
+        // Update sprite positions to stay on the circle edge
+        // This ensures circles are always positioned on the background circle line
+        this.axisSprites.forEach((sprite, index) => {
+            // Get the rotated direction vector
+            const direction = sprite.userData.direction.clone();
+            direction.applyQuaternion(this.axisGroup.quaternion);
+
+            // Project to 2D plane (XY) and normalize to circle radius
+            const projected2D = new THREE.Vector2(direction.x, direction.y);
+            const length2D = projected2D.length();
+
+            if (length2D > 0.001) {
+                // Normalize and scale to circle radius
+                projected2D.normalize().multiplyScalar(sprite.userData.circleRadius);
+
+                // Update position to be on the circle edge in 2D
+                sprite.position.set(projected2D.x, projected2D.y, 0);
+
+                // Update corresponding line to match
+                const line = this.axisLines[index];
+                const positions = line.geometry.attributes.position.array;
+                positions[3] = projected2D.x; // endpoint x
+                positions[4] = projected2D.y; // endpoint y
+                positions[5] = 0; // endpoint z
+                line.geometry.attributes.position.needsUpdate = true;
+            }
+        });
 
         this.render();
     }

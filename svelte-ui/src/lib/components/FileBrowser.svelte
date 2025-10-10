@@ -1,10 +1,9 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { FileText, Trash2, Plus, MoreVertical } from 'lucide-svelte';
+	import { FileText, MoreVertical } from 'lucide-svelte';
 
 	// State
 	let files: any[] = [];
-	let currentFileState: any = { fileName: 'Untitled', isDirty: false, lastSaved: null };
 	let isLoading = false;
 	let errorMessage = '';
 	let isFileManagerReady = false;
@@ -15,9 +14,6 @@
 
 	// Menu state
 	let openMenuFileId: string | null = null;
-	let showCurrentFileMenu = false;
-	let isRenaming = false;
-	let renameValue = '';
 
 	// Request tracking
 	let requestId = 0;
@@ -96,11 +92,6 @@
 			case 'file-loaded':
 			case 'file-deleted':
 				refreshFileList();
-				updateCurrentFileState();
-				break;
-
-			case 'dirty-state-changed':
-				updateCurrentFileState();
 				break;
 
 			case 'unsaved-changes-prompt':
@@ -128,7 +119,6 @@
 
 		// Load initial data
 		await refreshFileList();
-		await updateCurrentFileState();
 
 		// Auto-load last opened scene if it exists
 		try {
@@ -178,58 +168,9 @@
 		}
 	}
 
-	async function updateCurrentFileState() {
-		if (!isFileManagerReady) return;
-
-		try {
-			const result = await sendFileRequest('getCurrentFileState');
-			currentFileState = result.state || { fileName: 'Untitled', isDirty: false, lastSaved: null };
-		} catch (error) {
-			console.error('Failed to get file state:', error);
-		}
-	}
-
-	async function handleNewScene() {
-		if (!isFileManagerReady) return;
-
-		isLoading = true;
-		errorMessage = '';
-
-		try {
-			const result = await sendFileRequest('newScene');
-			if (result.success) {
-				await refreshFileList();
-				await updateCurrentFileState();
-			} else if (!result.cancelled) {
-				errorMessage = result.error || 'Failed to create new scene';
-			}
-		} catch (error) {
-			console.error('Failed to create new scene:', error);
-			errorMessage = 'Failed to create new scene';
-		} finally {
-			isLoading = false;
-		}
-	}
 
 	async function handleOpenFile(fileId: string) {
 		if (!isFileManagerReady) return;
-
-		// If clicking the same file that's already open, do nothing
-		if (fileId === currentFileState.fileId) {
-			return;
-		}
-
-		// If current file has unsaved changes, save it first
-		if (currentFileState.isDirty) {
-			try {
-				const saveResult = await sendFileRequest('saveScene');
-				if (!saveResult.success) {
-					console.warn('Failed to auto-save before switching files:', saveResult.error);
-				}
-			} catch (error) {
-				console.warn('Failed to auto-save before switching files:', error);
-			}
-		}
 
 		isLoading = true;
 		errorMessage = '';
@@ -238,7 +179,6 @@
 			const result = await sendFileRequest('loadScene', { fileId });
 			if (result.success) {
 				await refreshFileList();
-				await updateCurrentFileState();
 			} else if (!result.cancelled) {
 				errorMessage = result.error || 'Failed to open file';
 			}
@@ -266,35 +206,12 @@
 			const result = await sendFileRequest('deleteScene', { fileId });
 			if (result.success) {
 				await refreshFileList();
-				await updateCurrentFileState();
 			} else {
 				errorMessage = result.error || 'Failed to delete file';
 			}
 		} catch (error) {
 			console.error('Failed to delete file:', error);
 			errorMessage = 'Failed to delete file';
-		} finally {
-			isLoading = false;
-		}
-	}
-
-	async function handleSaveCurrentFile() {
-		if (!isFileManagerReady) return;
-
-		isLoading = true;
-		errorMessage = '';
-
-		try {
-			const result = await sendFileRequest('saveScene');
-			if (result.success) {
-				await refreshFileList();
-				await updateCurrentFileState();
-			} else {
-				errorMessage = result.error || 'Failed to save file';
-			}
-		} catch (error) {
-			console.error('Failed to save file:', error);
-			errorMessage = 'Failed to save file';
 		} finally {
 			isLoading = false;
 		}
@@ -314,81 +231,6 @@
 
 	function closeMenu() {
 		openMenuFileId = null;
-	}
-
-	function toggleCurrentFileMenu() {
-		showCurrentFileMenu = !showCurrentFileMenu;
-	}
-
-	function closeCurrentFileMenu() {
-		showCurrentFileMenu = false;
-	}
-
-	function startRename() {
-		renameValue = currentFileState.fileName;
-		isRenaming = true;
-		closeCurrentFileMenu();
-	}
-
-	async function handleRename() {
-		if (!renameValue.trim() || renameValue === currentFileState.fileName) {
-			isRenaming = false;
-			return;
-		}
-
-		try {
-			const result = await sendFileRequest('renameCurrentFile', { newName: renameValue.trim() });
-			if (result.success) {
-				await updateCurrentFileState();
-			} else {
-				errorMessage = result.error || 'Failed to rename file';
-			}
-		} catch (error) {
-			console.error('Failed to rename file:', error);
-			errorMessage = 'Failed to rename file';
-		} finally {
-			isRenaming = false;
-		}
-	}
-
-	function cancelRename() {
-		isRenaming = false;
-		renameValue = '';
-	}
-
-	async function handleDeleteCurrentFile() {
-		if (!currentFileState.fileId) {
-			errorMessage = 'No file to delete';
-			return;
-		}
-
-		const confirmed = confirm(`Delete "${currentFileState.fileName}"? This cannot be undone.`);
-		if (!confirmed) return;
-
-		closeCurrentFileMenu();
-
-		try {
-			const result = await sendFileRequest('deleteScene', { fileId: currentFileState.fileId });
-			if (result.success) {
-				// Refresh file list first
-				await refreshFileList();
-
-				// If there are other files, load the first one
-				// Otherwise, just clear the scene without auto-saving
-				if (files.length > 0) {
-					await handleOpenFile(files[0].id);
-				} else {
-					// Clear scene without creating a new file
-					await sendFileRequest('newScene', { skipAutoSave: true });
-					await updateCurrentFileState();
-				}
-			} else {
-				errorMessage = result.error || 'Failed to delete file';
-			}
-		} catch (error) {
-			console.error('Failed to delete file:', error);
-			errorMessage = 'Failed to delete file';
-		}
 	}
 
 	function formatTimestamp(timestamp: number | null): string {
@@ -423,102 +265,6 @@
 
 <!-- File Browser Container -->
 <div class="file-browser flex flex-col h-full bg-[#171717] text-foreground">
-	<!-- Current File Status -->
-	<div class="current-file-status border-b border-[#2E2E2E] p-4 shrink-0">
-		<div class="text-xs text-foreground/60 mb-1">Currently editing:</div>
-
-		{#if isRenaming}
-			<!-- Rename Input -->
-			<div class="flex items-center gap-2 mb-2">
-				<input
-					type="text"
-					bind:value={renameValue}
-					class="flex-1 px-2 py-1 bg-[#2E2E2E] border border-[#3A3A3A] rounded text-sm focus:outline-none focus:border-blue-500"
-					onkeydown={(e) => {
-						if (e.key === 'Enter') handleRename();
-						if (e.key === 'Escape') cancelRename();
-					}}
-					autofocus
-				/>
-				<button
-					onclick={handleRename}
-					class="px-2 py-1 bg-blue-600 hover:bg-blue-700 rounded text-xs transition-colors"
-				>
-					Save
-				</button>
-				<button
-					onclick={cancelRename}
-					class="px-2 py-1 bg-[#2E2E2E] hover:bg-[#3A3A3A] rounded text-xs transition-colors"
-				>
-					Cancel
-				</button>
-			</div>
-		{:else}
-			<!-- File Name Display -->
-			<div class="flex items-center justify-between mb-2">
-				<div class="flex items-center gap-2 flex-1 min-w-0">
-					<div class="font-medium truncate">
-						{currentFileState.fileName}
-						{#if currentFileState.isDirty}
-							<span class="text-blue-500 ml-2">●</span>
-						{/if}
-					</div>
-				</div>
-
-				<div class="flex items-center gap-2 flex-shrink-0">
-					{#if currentFileState.lastSaved}
-						<div class="text-xs text-foreground/60">
-							Saved {formatTimestamp(currentFileState.lastSaved)}
-						</div>
-					{/if}
-
-					<!-- Menu Button -->
-					<div class="relative">
-						<button
-							onclick={toggleCurrentFileMenu}
-							class="p-1 rounded hover:bg-[#2E2E2E] transition-colors"
-							disabled={!isFileManagerReady}
-						>
-							<MoreVertical size={16} class="text-foreground/60" />
-						</button>
-
-						<!-- Dropdown Menu -->
-						{#if showCurrentFileMenu}
-							<div
-								class="absolute right-0 top-full mt-1 bg-[#2E2E2E] border border-[#3A3A3A] rounded-lg shadow-lg overflow-hidden z-10 min-w-[120px]"
-								onclick={(e) => e.stopPropagation()}
-							>
-								<button
-									onclick={startRename}
-									class="w-full px-4 py-2 text-left text-sm hover:bg-[#3A3A3A] transition-colors"
-								>
-									Rename
-								</button>
-								<button
-									onclick={handleDeleteCurrentFile}
-									class="w-full px-4 py-2 text-left text-sm hover:bg-[#3A3A3A] transition-colors text-red-400"
-								>
-									Delete
-								</button>
-							</div>
-						{/if}
-					</div>
-				</div>
-			</div>
-		{/if}
-	</div>
-
-	<!-- Actions -->
-	<div class="actions p-4 border-b border-[#2E2E2E] shrink-0">
-		<button
-			onclick={handleNewScene}
-			class="w-full flex items-center justify-center gap-2 px-4 py-3 bg-[#2E2E2E] hover:bg-[#3A3A3A] rounded transition-colors"
-			disabled={isLoading || !isFileManagerReady}
-		>
-			<Plus size={18} />
-			<span>New Scene</span>
-		</button>
-	</div>
 
 	<!-- Error Message -->
 	{#if errorMessage}
