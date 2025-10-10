@@ -254,7 +254,60 @@ visualizationManager.clearHighlight(objectId);
 visualizationManager.highlightObject(objectId);
 ```
 
-### 3. Update Support Mesh
+### 3. Face Highlight Materials & States
+
+```javascript
+// Face highlights use different materials for different states
+const supportMeshFactory = window.modlerComponents?.supportMeshFactory;
+
+// Materials are pooled for consistent updates:
+// - faceHighlight: Regular objects (object color at user-defined opacity)
+// - faceHighlightContainer: Containers (container color at user-defined opacity)
+// - faceHighlightDisabled: Disabled state (grey #888888 at user-defined opacity)
+
+// Swap to disabled state (grey) when tool not allowed on object
+if (supportMeshFactory && supportMeshFactory.materials.faceHighlightDisabled) {
+    // Store original material for restoration
+    if (!supportMeshes.faceHighlight.userData.originalMaterial) {
+        supportMeshes.faceHighlight.userData.originalMaterial = supportMeshes.faceHighlight.material;
+    }
+    // Swap to grey disabled material
+    supportMeshes.faceHighlight.material = supportMeshFactory.materials.faceHighlightDisabled;
+}
+
+// Restore original material
+if (supportMeshes.faceHighlight.userData.originalMaterial) {
+    supportMeshes.faceHighlight.material = supportMeshes.faceHighlight.userData.originalMaterial;
+    supportMeshes.faceHighlight.userData.originalMaterial = null;
+}
+```
+
+### 4. Prevent Face Highlight Flicker
+
+```javascript
+// Track which face is hovered to prevent repositioning on every mouse move
+this.hoveredFaceIndex = null;
+
+onHover(hit) {
+    // Create unique face identifier from vertex indices
+    const currentFaceIndex = hit.face.a + '-' + hit.face.b + '-' + hit.face.c;
+    const faceChanged = this.hoveredFaceIndex !== currentFaceIndex || this.hoveredObject !== targetObject;
+
+    // Only reposition if we're hovering a different face
+    if (faceChanged) {
+        this.hoveredFaceIndex = currentFaceIndex;
+        supportMeshFactory.positionFaceHighlightForHit(supportMeshes.faceHighlight, hit);
+    }
+}
+
+// Clear tracked face on hover end
+clearHover() {
+    this.hoveredFaceIndex = null;
+    // ... clear visuals
+}
+```
+
+### 5. Update Support Mesh
 
 ```javascript
 // Support meshes update automatically when geometry changes
@@ -343,6 +396,71 @@ export class MyTool {
         this.currentHighlight = null;
         // Clear visual feedback
     }
+}
+```
+
+### 1a. Tool State Separation Pattern (Visual Feedback vs Operation Blocking)
+
+```javascript
+// PATTERN: Separate visual feedback from operation blocking
+// Show disabled state visuals while blocking actual operation
+
+// Example: Push tool on hug-mode container
+// - Show grey face highlight (visual feedback)
+// - Block push operation (functionality)
+
+export class PushTool {
+    // Allow visual feedback for all valid objects
+    shouldShowFaceHighlight(hit) {
+        if (!hit || !hit.object) return false;
+        const targetObject = this.faceToolBehavior.getTargetObject(hit);
+        if (!targetObject) return false;
+
+        // Let base-face-tool-behavior handle disabled state visuals
+        // Operation blocking happens later in startPush()
+        return true;
+    }
+
+    // Block actual operation for invalid states
+    startPush(hit) {
+        const targetObject = this.faceToolBehavior.getTargetObject(hit);
+        if (!targetObject) return;
+
+        // Check if operation is allowed
+        const sceneController = window.modlerComponents?.sceneController;
+        if (sceneController && targetObject.userData?.id) {
+            const objectData = sceneController.getObjectByMesh(targetObject);
+
+            // Block push on containers in hug mode
+            if (objectData?.isContainer) {
+                const isLayoutEnabled = objectData.autoLayout?.enabled;
+                if (!isLayoutEnabled) {
+                    console.log('⚠️ Push blocked: Container is in hug mode');
+                    return;  // Block operation, but visual feedback already shown
+                }
+            }
+        }
+
+        // Proceed with operation
+        this.performPush(targetObject, hit);
+    }
+}
+
+// In base-face-tool-behavior.js - handles visual feedback
+onHover(hit) {
+    // Determine if operation is disabled
+    const isDisabledAction = !this.isActionAllowed(targetObject);
+
+    // Show face highlight with appropriate material
+    if (isDisabledAction) {
+        // Swap to grey disabled material
+        if (!supportMeshes.faceHighlight.userData.originalMaterial) {
+            supportMeshes.faceHighlight.userData.originalMaterial = supportMeshes.faceHighlight.material;
+        }
+        supportMeshes.faceHighlight.material = supportMeshFactory.materials.faceHighlightDisabled;
+    }
+
+    supportMeshes.faceHighlight.visible = true;
 }
 ```
 
@@ -554,6 +672,81 @@ const {
 
 ---
 
+## Serialization & Schema Patterns
+
+### 1. ObjectDataFormat Schema
+
+```javascript
+// File: /application/serialization/object-data-format.js
+// CRITICAL: All object properties MUST be in schema or they will be stripped during sync
+
+// Schema defines allowed properties and types
+const schema = {
+    autoLayout: {
+        enabled: 'boolean',
+        direction: 'string|null',
+        gap: 'number',
+        padding: 'object',
+        alignment: 'object|undefined',
+        reversed: 'boolean|undefined',  // Add new properties here
+        tileMode: 'object|undefined'
+    }
+};
+
+// Default objects must include ALL schema properties
+const defaultAutoLayout = {
+    enabled: false,
+    direction: null,
+    gap: 0,
+    padding: { width: 0, height: 0, depth: 0 },
+    reversed: false,  // Add defaults here too
+    alignment: null
+};
+```
+
+### 2. Adding New Properties (Checklist)
+
+When adding a new object property that needs to persist:
+
+1. **Add to schema** (`object-data-format.js` line ~51-58)
+   ```javascript
+   autoLayout: {
+       // ... existing properties
+       newProperty: 'type|undefined'  // e.g., 'boolean|undefined'
+   }
+   ```
+
+2. **Add to ALL default objects** (search for `autoLayout: {` in same file)
+   ```javascript
+   autoLayout: {
+       enabled: false,
+       direction: null,
+       // ... existing defaults
+       newProperty: defaultValue  // e.g., false, null, 0
+   }
+   ```
+
+3. **Update UI components** that use the property
+   ```typescript
+   // Preserve property when updating
+   const currentValue = displayObject.autoLayout?.newProperty ?? defaultValue;
+   ```
+
+### 3. Schema Validation Gotchas
+
+**Problem**: Property works in code but doesn't persist or sync to UI
+**Cause**: Missing from ObjectDataFormat schema
+**Solution**: Add to schema + all default objects
+
+```javascript
+// Example: reversed property was missing from schema
+// Symptom: UI showed reversed: false even after clicking reverse button
+// Fix: Added reversed: 'boolean|undefined' to schema (line 57)
+//      Added reversed: false to all default autoLayout objects
+```
+
+---
+
 ## Common Mistakes to Avoid
 
 ❌ **DON'T**:
@@ -575,6 +768,9 @@ createEdges(object);  // WRONG - show/hide only
 
 // Wrong import paths
 import { ObjectStateManager } from '../core/ObjectStateManager.js';  // WRONG (PascalCase)
+
+// Add new property without updating schema
+autoLayout.newProp = true;  // WRONG - will be stripped during sync
 ```
 
 ✅ **DO**:
@@ -595,6 +791,11 @@ import { LayoutEngine } from '../layout/layout-engine.js';  // CORRECT
 
 // Or use global components
 const ObjectStateManager = window.modlerComponents.objectStateManager;
+
+// Add new property to schema first
+// 1. Update schema in object-data-format.js
+// 2. Add to all default objects
+// 3. Then use in code
 ```
 
 ---

@@ -16,6 +16,10 @@
 ### Geometry & Materials
 - **geometry-utils** (`/application/utilities/`) - Geometry creation and manipulation; CAD operations (push, resize, create)
 - **material-manager** (`/application/utilities/`) - Material creation, caching, and management; use for all materials
+  - **Material pooling**: Shared material instances for consistent updates
+  - **Material types**: WIREFRAME, WIREFRAME_HIGHLIGHTED, FACE_HIGHLIGHT, FACE_HIGHLIGHT_CONTAINER
+  - **ConfigurationManager integration**: Materials auto-update when settings change
+  - **Avoid tagging**: Create materials directly without MaterialManager if you don't want automatic updates
 - **transformation-manager** (`/application/utilities/`) - Object transformations (position, rotation, scale); centralized API
 - **geometry-factory** (`/application/utilities/`) - Centralized geometry creation with object pooling
 
@@ -36,6 +40,9 @@
 - **object-visualizer** (`/interaction/`) - Individual object visualization effects
 - **container-visualizer** (`/interaction/`) - Container-specific visualization (wireframes, bounds)
 - **support-mesh-factory** (`/interaction/`) - Creates support meshes for objects (edges, measurements, etc.)
+  - **Face highlight materials**: faceHighlight (objects), faceHighlightContainer (containers), faceHighlightDisabled (grey, blocked operations)
+  - **Material swapping pattern**: Store original material in userData.originalMaterial, swap for visual states, restore on clear
+  - **Opacity syncing**: All face highlight materials subscribe to ConfigurationManager for opacity updates
 
 ### Camera & Navigation
 - **camera-controller** (`/interaction/`) - Camera orbit, pan, zoom controls
