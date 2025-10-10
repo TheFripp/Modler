@@ -1237,60 +1237,6 @@ class SceneController {
         }
     }
 
-    /**
-     * Update object position (proxy pattern for ObjectStateManager)
-     * @param {string} objectId - ID of the object to update
-     * @param {string} axis - Axis to update ('x', 'y', or 'z')
-     * @param {number} newPosition - New position value
-     * @returns {boolean} Success status
-     */
-    updateObjectPosition(objectId, axis, newPosition) {
-        const objectData = this.getObject(objectId);
-        if (!objectData || !objectData.mesh) {
-            console.warn('Cannot update position: object or mesh not found', objectId);
-            return false;
-        }
-
-        // Update mesh position
-        objectData.mesh.position[axis] = newPosition;
-        objectData.mesh.updateMatrixWorld(true);
-
-        // Update object metadata
-        if (!objectData.position) objectData.position = { x: 0, y: 0, z: 0 };
-        objectData.position[axis] = newPosition;
-
-        // Notify transform changed for container updates
-        this.notifyObjectTransformChanged(objectId);
-
-        return true;
-    }
-
-    /**
-     * Update object rotation (proxy pattern for ObjectStateManager)
-     * @param {string} objectId - ID of the object to update
-     * @param {string} axis - Axis to update ('x', 'y', or 'z')
-     * @param {number} newRotation - New rotation value in radians
-     * @returns {boolean} Success status
-     */
-    updateObjectRotation(objectId, axis, newRotation) {
-        const objectData = this.getObject(objectId);
-        if (!objectData || !objectData.mesh) {
-            console.warn('Cannot update rotation: object or mesh not found', objectId);
-            return false;
-        }
-
-        // Update mesh rotation
-        objectData.mesh.rotation[axis] = newRotation;
-
-        // Update object metadata
-        if (!objectData.rotation) objectData.rotation = { x: 0, y: 0, z: 0 };
-        objectData.rotation[axis] = newRotation;
-
-        // Notify transform changed for container updates
-        this.notifyObjectTransformChanged(objectId);
-
-        return true;
-    }
 
     /**
      * Notify that an object's transform (position/rotation/scale) has changed
