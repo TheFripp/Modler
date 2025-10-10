@@ -185,7 +185,18 @@ function initializeApplication() {
 
     // Recreate pooled materials now that ConfigurationManager is available
     // This ensures materials get correct config values instead of fallback defaults
-    if (modlerV2Components.supportMeshFactory) {
+    if (modlerV2Components.supportMeshFactory && modlerV2Components.materialManager) {
+        // Clear material cache to force recreation with correct config values
+        modlerV2Components.materialManager.invalidateCacheForType(
+            modlerV2Components.materialManager.materialTypes.FACE_HIGHLIGHT
+        );
+        modlerV2Components.materialManager.invalidateCacheForType(
+            modlerV2Components.materialManager.materialTypes.FACE_HIGHLIGHT_CONTAINER
+        );
+        modlerV2Components.materialManager.invalidateCacheForType(
+            modlerV2Components.materialManager.materialTypes.FACE_HIGHLIGHT_DISABLED
+        );
+
         modlerV2Components.supportMeshFactory.createBaseMaterials();
     }
 
