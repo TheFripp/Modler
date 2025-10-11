@@ -128,17 +128,31 @@ class SceneSerializer {
 
         // Serialize each object using ObjectSerializer for consistency
         const serializedObjects = sceneObjects.map(obj => {
+            let serialized;
             if (this.objectSerializer) {
                 // Use existing ObjectSerializer for standardized format
-                return this.objectSerializer.serializeObject(obj.mesh, {
+                serialized = this.objectSerializer.serializeObject(obj.mesh, {
                     includeGeometry: true,
                     includeHierarchy: true,
                     useCache: false // Don't use cache for file save
                 });
             } else {
+                console.warn('[SceneSerializer] ObjectSerializer not available, using fallback');
                 // Fallback: serialize essential properties directly
-                return this.serializeObjectFallback(obj);
+                serialized = this.serializeObjectFallback(obj);
             }
+
+            // DEBUG: Log what we're saving
+            if (serialized) {
+                console.log('[SceneSerializer] Saving object:', {
+                    id: serialized.id,
+                    name: serialized.name,
+                    dimensions: serialized.dimensions,
+                    position: serialized.position
+                });
+            }
+
+            return serialized;
         }).filter(Boolean); // Remove any null entries
 
         return {

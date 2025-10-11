@@ -267,18 +267,43 @@ class SceneDeserializer {
 
         // CRITICAL: Establish THREE.js hierarchy after all objects are created
         // setParentContainer() must be called AFTER both parent and child exist
+        console.log('[SceneDeserializer] Establishing hierarchy...');
         for (const objData of sortedObjects) {
             if (objData.parentContainer) {
                 // Don't update layout yet - we'll do that after all hierarchies are established
                 this.sceneController.setParentContainer(objData.id, objData.parentContainer, false);
+
+                // DEBUG: Log position after hierarchy change
+                const obj = this.sceneController.getObject(objData.id);
+                if (obj) {
+                    console.log('[SceneDeserializer] After setParentContainer:', {
+                        id: obj.id,
+                        name: obj.name,
+                        meshPosition: obj.mesh.position,
+                        parent: obj.parentContainer
+                    });
+                }
             }
         }
 
         // Now update layouts for all containers with children
+        console.log('[SceneDeserializer] Updating layouts...');
         const containers = sortedObjects.filter(obj => obj.isContainer && obj.childrenOrder && obj.childrenOrder.length > 0);
         for (const container of containers) {
             if (container.autoLayout?.enabled) {
+                console.log('[SceneDeserializer] Running layout for container:', container.id, container.name);
                 this.sceneController.updateLayout(container.id);
+
+                // DEBUG: Log child positions after layout
+                const children = this.sceneController.getChildObjects(container.id);
+                children.forEach(child => {
+                    console.log('[SceneDeserializer] After layout, child:', {
+                        id: child.id,
+                        name: child.name,
+                        meshPosition: child.mesh.position,
+                        dimensions: child.dimensions
+                    });
+                });
             }
         }
 
@@ -330,6 +355,15 @@ class SceneDeserializer {
      */
     async restoreObject(objData) {
         try {
+            // DEBUG: Log what we're restoring
+            console.log('[SceneDeserializer] Restoring object:', {
+                id: objData.id,
+                name: objData.name,
+                dimensions: objData.dimensions,
+                position: objData.position,
+                parentContainer: objData.parentContainer
+            });
+
             // Create geometry based on type
             let geometry;
             if (objData.isContainer) {
@@ -413,6 +447,14 @@ class SceneDeserializer {
             if (createdObject) {
                 createdObject.visible = objData.visible ?? true;
                 createdObject.locked = objData.locked || false;
+
+                // DEBUG: Log what was actually created
+                console.log('[SceneDeserializer] Object created:', {
+                    id: createdObject.id,
+                    name: createdObject.name,
+                    dimensions: createdObject.dimensions,
+                    meshPosition: createdObject.mesh.position
+                });
             }
 
         } catch (error) {
