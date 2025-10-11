@@ -240,10 +240,15 @@ class SceneController {
         } else {
             return null;
         }
-        
-        // Generate unique ID
-        const id = this.nextId++;
-        
+
+        // Generate unique ID (use provided ID for deserialization, generate new for creation)
+        const id = options.id || this.nextId++;
+
+        // If using a restored ID, ensure nextId counter stays above it
+        if (options.id && options.id >= this.nextId) {
+            this.nextId = options.id + 1;
+        }
+
         // Set up object metadata
         const objectData = this.createObjectMetadata(id, mesh, options);
         
