@@ -325,6 +325,9 @@ class PushTool {
                 return;
             }
 
+            // Check if this container has layout enabled
+            const hasLayoutEnabled = objectData2?.autoLayout?.enabled;
+
             // Calculate position shift based on anchor mode
             let positionShift = 0;
             if (anchorMode === 'center') {
@@ -333,7 +336,14 @@ class PushTool {
             } else {
                 // Edge-anchored: shift to keep anchor face fixed
                 const shiftAmount = (newDimension - currentDims[this.pushAxis]) / 2;
-                positionShift = this.pushDirection > 0 ? shiftAmount : -shiftAmount;
+
+                // CRITICAL FIX: Don't shift position for layout-enabled containers
+                // Layout engine will reposition children based on new size + anchor
+                if (hasLayoutEnabled) {
+                    positionShift = 0;  // Let layout engine handle positioning
+                } else {
+                    positionShift = this.pushDirection > 0 ? shiftAmount : -shiftAmount;
+                }
             }
 
             // Create new centered geometry
@@ -357,9 +367,6 @@ class PushTool {
                 // Layout containers will handle positioning via their layout engine
                 this.pushedObject.position[this.pushAxis] += positionShift;
             }
-
-            // Check if this container has layout enabled
-            const hasLayoutEnabled = objectData2?.autoLayout?.enabled;
 
             if (!hasLayoutEnabled) {
                 // NON-LAYOUT CONTAINERS (hug mode): Counter-shift children to keep them visually in place
@@ -468,97 +475,23 @@ class PushTool {
         });
 
         if (hasFillObjects) {
-            // WITH FILL OBJECTS on push axis: Resize them to match new container size
-            this.updateFillObjectsDuringPush(objectData, children);
+            // WITH FILL OBJECTS: Call layout engine with push context
+            // This resizes fill objects AND repositions all children based on anchor
+            const pushContext = {
+                axis: this.pushAxis,
+                anchorMode: this.pushDirection > 0 ? 'min' : 'max'
+            };
+            sceneController.updateLayout(objectData.id, pushContext);
         } else if (this.pushAxis === layoutDirection) {
             // NO FILL OBJECTS, pushing on layout axis: Use space-between distribution
             const pushContext = {
                 axis: this.pushAxis,
-                // Use cumulative movement to determine anchor
                 anchorMode: this.cumulativeAmount > 0 ? 'min' : 'max'
             };
             sceneController.updateLayout(objectData.id, pushContext);
         }
         // If pushing perpendicular to layout direction with no fill objects, do nothing
         // (children positions along layout axis don't change)
-    }
-
-    /**
-     * Update fill objects directly during push without recalculating layout
-     */
-    updateFillObjectsDuringPush(containerData, children) {
-        const geometryUtils = window.GeometryUtils;
-        if (!geometryUtils) return;
-
-        const containerSize = geometryUtils.getGeometryDimensions(this.pushedObject.geometry);
-        if (!containerSize) return;
-
-        const layoutConfig = containerData.autoLayout;
-        const gap = layoutConfig.gap || 0;
-        const padding = layoutConfig.padding || {};
-
-        // Calculate available space for fill objects
-        const axis = this.pushAxis;
-        const containerAxisSize = containerSize[axis];
-
-        // Get correct padding for this axis
-        let paddingTotal = 0;
-        if (axis === 'x') paddingTotal = (padding.width || 0) * 2;
-        else if (axis === 'y') paddingTotal = (padding.height || 0) * 2;
-        else if (axis === 'z') paddingTotal = (padding.depth || 0) * 2;
-
-        let totalFixedSize = 0;
-        let fillCount = 0;
-
-        children.forEach(child => {
-            const sizeProperty = `size${axis.toUpperCase()}`;
-            if (child.layoutProperties?.[sizeProperty] === 'fill') {
-                fillCount++;
-            } else if (child.mesh?.geometry) {
-                const dims = geometryUtils.getGeometryDimensions(child.mesh.geometry);
-                totalFixedSize += dims[axis];
-            }
-        });
-
-        if (fillCount === 0) return;
-
-        const totalGaps = (children.length - 1) * gap;
-        const availableSpace = Math.max(0, containerAxisSize - totalFixedSize - totalGaps - paddingTotal);
-        const fillSizePerObject = availableSpace / fillCount;
-
-        // Resize fill objects
-        const geometryFactory = window.modlerComponents?.geometryFactory;
-        if (!geometryFactory) return;
-
-        children.forEach(child => {
-            const sizeProperty = `size${axis.toUpperCase()}`;
-
-            if (child.layoutProperties?.[sizeProperty] === 'fill' && child.mesh) {
-                const currentDims = geometryUtils.getGeometryDimensions(child.mesh.geometry);
-                // Use calculated fill size directly - no minimum constraint
-                // If calculation results in negative/zero, that means container is too small
-                const newDimension = Math.max(fillSizePerObject, 0.01);
-
-                // FILL OBJECTS: Replace geometry instead of vertex manipulation
-                // This keeps geometry centered and avoids position shifts
-                const oldGeometry = child.mesh.geometry;
-                const newGeometry = geometryFactory.createBoxGeometry(
-                    axis === 'x' ? newDimension : currentDims.x,
-                    axis === 'y' ? newDimension : currentDims.y,
-                    axis === 'z' ? newDimension : currentDims.z
-                );
-
-                // Replace geometry
-                child.mesh.geometry = newGeometry;
-                geometryFactory.returnGeometry(oldGeometry, 'box');
-
-                // Update support meshes
-                geometryUtils.updateSupportMeshGeometries(child.mesh, false);
-
-                // Update object data
-                child.dimensions[axis] = newDimension;
-            }
-        });
     }
 
     /**
