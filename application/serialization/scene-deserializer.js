@@ -264,6 +264,23 @@ class SceneDeserializer {
             await this.restoreObject(objData);
         }
 
+        // CRITICAL: Establish THREE.js hierarchy after all objects are created
+        // setParentContainer() must be called AFTER both parent and child exist
+        for (const objData of sortedObjects) {
+            if (objData.parentContainer) {
+                // Don't update layout yet - we'll do that after all hierarchies are established
+                this.sceneController.setParentContainer(objData.id, objData.parentContainer, false);
+            }
+        }
+
+        // Now update layouts for all containers with children
+        const containers = sortedObjects.filter(obj => obj.isContainer && obj.childrenOrder && obj.childrenOrder.length > 0);
+        for (const container of containers) {
+            if (container.autoLayout?.enabled) {
+                this.sceneController.updateLayout(container.id);
+            }
+        }
+
         // Restore root children order
         if (sceneContent.rootChildrenOrder) {
             this.sceneController.rootChildrenOrder = [...sceneContent.rootChildrenOrder];
