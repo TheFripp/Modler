@@ -229,18 +229,14 @@ class SceneSerializer {
     /**
      * Serialize visual configuration settings
      * @returns {Object} Configuration data
+     *
+     * NOTE: Visual settings (colors, opacity, etc.) should NOT be saved per-file.
+     * They are app-wide settings stored in ConfigurationManager and persist separately.
+     * This method returns an empty object to maintain file format compatibility.
      */
     serializeConfiguration() {
-        if (!this.configurationManager) {
-            return {}; // No configuration to save
-        }
-
-        // Get all configuration settings
-        // ConfigurationManager stores settings in this.config object
-        const config = this.configurationManager.config || {};
-
-        // Deep clone to avoid reference issues
-        return JSON.parse(JSON.stringify(config));
+        // Return empty object - visual configuration is app-wide, not per-file
+        return {};
     }
 
     /**

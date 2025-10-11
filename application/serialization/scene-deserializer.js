@@ -100,8 +100,9 @@ class SceneDeserializer {
             // Restore camera state
             this.restoreCameraState(migratedData.camera);
 
-            // Restore configuration
-            this.restoreConfiguration(migratedData.configuration);
+            // NOTE: Don't restore configuration - visual settings are app-wide, not per-file
+            // Configuration (colors, opacity, etc.) persists separately in ConfigurationManager
+            // this.restoreConfiguration(migratedData.configuration);
 
             // Repair any broken references
             this.repairBrokenReferences();
