@@ -110,9 +110,9 @@ html {
 .axis-gizmo-container {
     position: absolute;
     top: 12px;
-    right: 12px;
-    width: 60px;
-    height: 60px;
+    left: calc(50% + 40% + 12px); /* Position just right of toolbar: 50% (center) + 40% (half toolbar width) + 12px gap */
+    width: 48px; /* Match toolbar button size */
+    height: 48px; /* Match toolbar button size */
     z-index: 1000;
     background: #171717;
     border: 1px solid #2E2E2E;

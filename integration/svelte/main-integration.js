@@ -636,9 +636,6 @@
      * REVOLUTIONARY SIMPLIFICATION: All property updates in ~10 lines
      */
     function handlePropertyUpdate(objectId, property, value, source = 'input') {
-        // DEBUG: Log that we received the property update
-        console.log('[handlePropertyUpdate] Received:', { objectId, property, value, source });
-
         const objectStateManager = window.modlerComponents?.objectStateManager;
         if (!objectStateManager) {
             console.warn('❌ ObjectStateManager not available');
@@ -652,18 +649,14 @@
         const formatConverter = window.propertyFormatConverter;
         if (formatConverter) {
             const result = formatConverter.convertToInternal(property, value);
-            console.log('[handlePropertyUpdate] Format conversion result:', result);
             if (!result.isValid) {
                 console.warn(`❌ Property format validation failed for ${property}:`, result.error);
             }
             updates[property] = result.value;
         } else {
-            console.log('[handlePropertyUpdate] No formatConverter, using fallback');
             // Fallback to basic conversion if PropertyFormatConverter not available
             updates[property] = parseFloat(value) || value;
         }
-
-        console.log('[handlePropertyUpdate] Calling objectStateManager.updateObject with:', { objectId, updates, source });
 
         // Handle special cases
         if (property === 'autoLayout.enabled' && value) {

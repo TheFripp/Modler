@@ -114,8 +114,11 @@ class SceneFoundation {
                     if (child.name === 'Floor Plane') {
                         child.visible = !isBelowFloor;
                     }
-                    // Update grid line opacity
-                    else if (child.material && child.material.opacity !== undefined) {
+                    // Update grid line opacity (only for grid materials, not face highlights)
+                    else if (child.material &&
+                             child.material.opacity !== undefined &&
+                             child.material.userData?.materialManagerType !== 'face-highlight' &&
+                             child.material.userData?.materialManagerType !== 'face-highlight-container') {
                         // Smoothly transition opacity
                         if (Math.abs(child.material.opacity - targetOpacity) > 0.01) {
                             const lerp = (a, b, t) => a + (b - a) * t;

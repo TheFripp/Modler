@@ -28,6 +28,10 @@
 		gridSubColor: '#2a2a2a'
 	};
 
+	let toolSettings = {
+		measurementColor: '#ff0000'
+	};
+
 	let currentUnit = 'm';
 	let unitConverter: any = null;
 
@@ -80,6 +84,15 @@
 		const configPath = `scene.${property}`;
 
 		unifiedCommunication.sendVisualSettings('scene', {
+			[configPath]: value
+		}).catch(console.error);
+	}
+
+	function updateToolSettings(property: string, value: any) {
+		toolSettings[property] = value;
+		const configPath = `visual.measurement.${property === 'measurementColor' ? 'color' : property}`;
+
+		unifiedCommunication.sendVisualSettings('visual', {
 			[configPath]: value
 		}).catch(console.error);
 	}
@@ -211,6 +224,19 @@
 					/>
 				</div>
 			</div>
+		</div>
+
+		<!-- Measurement Tool -->
+		<div class="space-y-2 mt-8">
+			<div class="flex items-center gap-2 mb-2">
+				<h4 class="modler-property-label opacity-70 whitespace-nowrap">Measurement Tool</h4>
+				<div class="flex-1 border-t border-[#2E2E2E]/50"></div>
+			</div>
+			<ColorInput
+				label="Color"
+				value={toolSettings.measurementColor}
+				onchange={(value) => updateToolSettings('measurementColor', value)}
+			/>
 		</div>
 	</PropertyGroup>
 

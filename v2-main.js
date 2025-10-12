@@ -212,6 +212,11 @@ function initializeApplication() {
         materialManager.updateMaterialsOfType(materialManager.materialTypes.FACE_HIGHLIGHT_CONTAINER, 'opacity', containerOpacity);
 
         materialManager.updateMaterialsOfType(materialManager.materialTypes.FACE_HIGHLIGHT_DISABLED, 'opacity', faceOpacity);
+
+        // Install development validator to monitor unauthorized material modifications
+        if (window.MaterialGuard) {
+            MaterialGuard.installDevelopmentValidator(materialManager.activeMaterials);
+        }
     }
 
     modlerV2Components.snapController = new SnapController(
@@ -228,6 +233,15 @@ function initializeApplication() {
         modlerV2Components.sceneFoundation.scene,
         modlerV2Components.sceneFoundation.renderer
     );
+
+    // Subscribe to measurement color changes
+    if (modlerV2Components.configurationManager) {
+        modlerV2Components.configurationManager.subscribe('visual.measurement.color', (newColor) => {
+            if (modlerV2Components.measurementTool) {
+                modlerV2Components.measurementTool.updateColor(newColor);
+            }
+        });
+    }
 
     // Move gizmo snap registration removed - face-based movement doesn't need grid snapping
 

@@ -9,7 +9,7 @@
 class AxisGizmo {
     constructor(containerElement) {
         this.container = containerElement;
-        this.size = 80; // Increased size for better visibility
+        this.size = 48; // Match toolbar button size
 
         // Create separate renderer, scene, and camera for the gizmo
         this.renderer = null;
@@ -66,42 +66,20 @@ class AxisGizmo {
     }
 
     createBackgroundCircle() {
-        const radius = 1.2;
-        const segments = 64;
-
-        // Create circle outline using line loop
-        const points = [];
-        for (let i = 0; i <= segments; i++) {
-            const angle = (i / segments) * Math.PI * 2;
-            points.push(new THREE.Vector3(
-                Math.cos(angle) * radius,
-                Math.sin(angle) * radius,
-                0
-            ));
-        }
-
-        const ringGeometry = new THREE.BufferGeometry().setFromPoints(points);
-        const ringMaterial = new THREE.LineBasicMaterial({
-            color: 0x3a3a3a, // Match toolbar border color (#3a3a3a)
-            transparent: true,
-            opacity: 1.0,
-            linewidth: 2
-        });
-
-        this.backgroundCircle = new THREE.Line(ringGeometry, ringMaterial);
-        this.scene.add(this.backgroundCircle);
+        // Background circle removed - colored circles will be on outer edge only
+        // No inner circle line needed
     }
 
     createAxes() {
-        const circleRadius = 1.2; // Same as background circle
-        const endCircleRadius = 0.3; // Larger circles for readability
+        const circleRadius = 1.2; // Outer edge position
+        const endCircleRadius = 0.5; // 12px diameter circles (larger for readability)
         const lineWidth = 2;
 
-        // Define axes with their directions, labels, and colors
+        // Define axes with their directions, labels, and colors (line and circle colors match)
         const axes = [
-            { axis: 'x', direction: new THREE.Vector3(1, 0, 0), label: 'X', lineColor: 0xff6b6b, circleColor: 0x9acd32 }, // Red line, yellow-green circle
-            { axis: 'y', direction: new THREE.Vector3(0, 1, 0), label: 'Y', lineColor: 0x6bff6b, circleColor: 0x6495ed }, // Green line, blue circle
-            { axis: 'z', direction: new THREE.Vector3(0, 0, 1), label: 'Z', lineColor: 0x6b6bff, circleColor: 0xcd5c5c }  // Blue line, red circle
+            { axis: 'x', direction: new THREE.Vector3(1, 0, 0), label: 'X', lineColor: 0xff6b6b, circleColor: 0xff6b6b }, // Red line, red circle
+            { axis: 'y', direction: new THREE.Vector3(0, 1, 0), label: 'Y', lineColor: 0x6bff6b, circleColor: 0x6bff6b }, // Green line, green circle
+            { axis: 'z', direction: new THREE.Vector3(0, 0, 1), label: 'Z', lineColor: 0x6b6bff, circleColor: 0x6b6bff }  // Blue line, blue circle
         ];
 
         axes.forEach(({ axis, direction, label, lineColor, circleColor }) => {

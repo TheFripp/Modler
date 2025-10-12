@@ -2,6 +2,119 @@
 // Centralized material creation, caching, and configuration management
 // Eliminates scattered material creation across visualization systems
 
+/**
+ * MaterialGuard - Validation layer for material property modifications
+ * Prevents unauthorized modifications to managed materials
+ */
+class MaterialGuard {
+    /**
+     * Safely set material opacity with validation
+     * @param {THREE.Material} material - Material to modify
+     * @param {number} value - New opacity value (0-1)
+     * @param {string} modifierName - Name of component making the modification
+     * @returns {boolean} Success status
+     */
+    static setOpacity(material, value, modifierName = 'Unknown') {
+        if (!material) {
+            console.warn('[MaterialGuard] Cannot set opacity: material is null');
+            return false;
+        }
+
+        // Check if material is managed
+        const isManaged = material.userData?.isManaged;
+        const allowedModifiers = material.userData?.allowedModifiers || [];
+
+        if (isManaged && !allowedModifiers.includes(modifierName)) {
+            console.warn(`[MaterialGuard] Blocked unauthorized opacity modification:`, {
+                modifier: modifierName,
+                materialType: material.userData?.materialManagerType,
+                allowedModifiers,
+                attemptedValue: value,
+                currentValue: material.opacity
+            });
+            return false;
+        }
+
+        // Validate value
+        if (typeof value !== 'number' || isNaN(value) || value < 0 || value > 1) {
+            console.warn('[MaterialGuard] Invalid opacity value:', value);
+            return false;
+        }
+
+        // Apply modification
+        material.opacity = value;
+        material.needsUpdate = true;
+        return true;
+    }
+
+    /**
+     * Check if a material modification is allowed
+     * @param {THREE.Material} material - Material to check
+     * @param {string} modifierName - Name of component requesting modification
+     * @returns {boolean} Whether modification is allowed
+     */
+    static canModify(material, modifierName = 'Unknown') {
+        if (!material) return false;
+
+        const isManaged = material.userData?.isManaged;
+        if (!isManaged) return true; // Unmanaged materials can be modified
+
+        const allowedModifiers = material.userData?.allowedModifiers || [];
+        return allowedModifiers.includes(modifierName);
+    }
+
+    /**
+     * Install development validator to monitor unauthorized material modifications
+     * Only runs in development mode (when isDevelopment is true)
+     * @param {Set} managedMaterials - Set of materials to monitor
+     */
+    static installDevelopmentValidator(managedMaterials) {
+        // Check if in development mode
+        const isDevelopment = window.location.hostname === 'localhost' ||
+                            window.location.hostname === '127.0.0.1' ||
+                            window.location.search.includes('debug=true');
+
+        if (!isDevelopment) {
+            return; // Skip in production
+        }
+
+        console.log('[MaterialGuard] Installing development validator for', managedMaterials.size, 'managed materials');
+
+        // Install opacity trap on all managed materials
+        for (const material of managedMaterials) {
+            if (!material.userData?.isManaged) continue;
+
+            // Store original opacity value
+            let _opacity = material.opacity;
+            const materialType = material.userData.materialManagerType;
+
+            // Replace opacity property with getter/setter that logs modifications
+            Object.defineProperty(material, 'opacity', {
+                get() {
+                    return _opacity;
+                },
+                set(value) {
+                    // Log unauthorized modifications
+                    const stack = new Error().stack;
+                    const stackLines = stack.split('\n');
+                    const caller = stackLines[2] || 'unknown'; // Get calling location
+
+                    console.warn('[MaterialGuard DEV] Opacity modification detected:', {
+                        materialType,
+                        oldValue: _opacity,
+                        newValue: value,
+                        caller: caller.trim(),
+                        isManaged: true
+                    });
+
+                    _opacity = value;
+                },
+                configurable: true // Allow reconfiguration if needed
+            });
+        }
+    }
+}
+
 class MaterialManager {
     constructor() {
         // Material cache - prevents duplicate materials
@@ -105,6 +218,7 @@ class MaterialManager {
         // Container materials
         this.registerConfigCallback('visual.containers.wireframeColor', (newValue) => {
             this.updateMaterialsOfType(this.materialTypes.CONTAINER_WIREFRAME, 'color', newValue);
+            this.updateMaterialsOfType(this.materialTypes.FACE_HIGHLIGHT_CONTAINER, 'color', newValue);
             this.invalidateCacheForType(this.materialTypes.CONTAINER_WIREFRAME);
         });
 
@@ -190,6 +304,7 @@ class MaterialManager {
             transparent: true,
             depthTest: true,   // Enable depth test - hide back edges
             depthWrite: false, // Don't write to depth buffer
+            clippingPlanes: [],
             ...options
         };
 
@@ -241,6 +356,7 @@ class MaterialManager {
             transparent: true,
             depthTest: false,  // Render on top of geometry
             depthWrite: false, // Don't write to depth buffer
+            clippingPlanes: [],
             ...options
         };
 
@@ -284,14 +400,17 @@ class MaterialManager {
         const configManager = this.getConfigManager();
 
         // Build configuration
+        const configOpacity = configManager?.get('visual.selection.faceHighlightOpacity');
+
         const config = {
             color: options.color || configManager?.get('visual.selection.color') || '#ff6600',
-            opacity: options.opacity || configManager?.get('visual.selection.faceHighlightOpacity') || 0.3,
+            opacity: options.opacity || configOpacity || 0.3,
             renderOrder: options.renderOrder || configManager?.get('visual.effects.materials.face.renderOrder') || 1000,
             side: THREE.DoubleSide,
             transparent: true,
             depthTest: true,
             depthWrite: false,
+            clippingPlanes: [],
             ...options
         };
 
@@ -344,6 +463,7 @@ class MaterialManager {
             transparent: true,
             depthTest: true,
             depthWrite: false,
+            clippingPlanes: [],
             ...options
         };
 
@@ -396,6 +516,7 @@ class MaterialManager {
             transparent: true,
             depthTest: true,
             depthWrite: false,
+            clippingPlanes: [],
             ...options
         };
 
@@ -556,6 +677,7 @@ class MaterialManager {
             transparent: true,
             depthTest: true,   // Enable depth test - hide back edges
             depthWrite: false, // Don't write to depth buffer
+            clippingPlanes: [],
             ...options
         };
 
@@ -704,7 +826,8 @@ class MaterialManager {
             config.transparent || 'false',
             config.side || 'front',
             config.depthTest || 'true',
-            config.depthWrite || 'true'
+            config.depthWrite || 'true',
+            config.clippingPlanes && config.clippingPlanes.length === 0 ? 'noclip' : 'default' // Include clipping planes state
         ];
 
         return keyProps.join('_');
@@ -738,11 +861,13 @@ class MaterialManager {
         // Track as active
         this.activeMaterials.add(material);
 
-        // Add metadata for tracking
+        // Add metadata for tracking and protection
         material.userData = material.userData || {};
         material.userData.materialManagerType = type;
         material.userData.cacheKey = key;
         material.userData.createdAt = Date.now();
+        material.userData.isManaged = true; // Mark as MaterialManager-controlled
+        material.userData.allowedModifiers = ['MaterialManager']; // Whitelist
 
         this.stats.created++;
         return material;
@@ -795,7 +920,6 @@ class MaterialManager {
                 }
             }
         }
-
 
         // Note: ConfigurationManager handles visualization refresh via its subscribe callbacks
         // No need to trigger refresh here as it would create duplicate refreshes
@@ -883,7 +1007,8 @@ class MaterialManager {
             color: normalizedOptions.color,
             opacity: normalizedOptions.opacity,
             transparent: normalizedOptions.transparent,
-            wireframe: normalizedOptions.wireframe
+            wireframe: normalizedOptions.wireframe,
+            clippingPlanes: [] // Disable clipping - always render objects
         });
 
         // Add metadata and cache
@@ -937,7 +1062,8 @@ class MaterialManager {
             wireframe: normalizedOptions.wireframe,
             colorWrite: normalizedOptions.colorWrite,
             depthWrite: normalizedOptions.depthWrite,
-            side: normalizedOptions.side
+            side: normalizedOptions.side,
+            clippingPlanes: [] // Disable clipping - always render objects
         });
 
         // Add metadata and cache
@@ -1097,3 +1223,4 @@ class MaterialManager {
 
 // Export for use in main application
 window.MaterialManager = MaterialManager;
+window.MaterialGuard = MaterialGuard;

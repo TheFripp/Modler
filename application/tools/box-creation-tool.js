@@ -512,7 +512,7 @@ class BoxCreationTool {
 
         // CRITICAL: Create a new material instance (not pooled) to avoid affecting other boxes
         // During creation, we need opacity 0, but other boxes need opacity 1
-        const material = new THREE.MeshLambertMaterial({
+        const material = this.materialManager.createMeshLambertMaterial({
             color: 0x888888,
             transparent: true,
             opacity: 0.0,

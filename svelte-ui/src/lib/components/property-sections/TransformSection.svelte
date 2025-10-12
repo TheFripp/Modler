@@ -136,6 +136,7 @@
 					values={displayObject?.rotation || emptyVector}
 					{objectId}
 					propertyBase="rotation"
+					step={1.0}
 					disableAll={isDisabled}
 					hideValues={isDisabled}
 				/>

@@ -1242,6 +1242,68 @@ class SceneController {
         }
     }
 
+    /**
+     * Update a single axis of an object's position
+     * @param {string} objectId - ID of the object to update
+     * @param {string} axis - Axis to update ('x', 'y', or 'z')
+     * @param {number} value - New position value
+     * @returns {boolean} - Success status
+     */
+    updateObjectPosition(objectId, axis, value) {
+        // Validate input parameters
+        if (typeof value !== 'number' || isNaN(value)) {
+            console.warn('Cannot update position: invalid value', value);
+            return false;
+        }
+
+        const objectData = this.getObject(objectId);
+        if (!objectData || !objectData.mesh) {
+            console.warn('Cannot update position: object not found', objectId);
+            return false;
+        }
+
+        try {
+            // Update the mesh position directly
+            objectData.mesh.position[axis] = value;
+            return true;
+        } catch (error) {
+            console.error('Failed to update object position:', error);
+            return false;
+        }
+    }
+
+    /**
+     * Update a single axis of an object's rotation
+     * @param {string} objectId - ID of the object to update
+     * @param {string} axis - Axis to update ('x', 'y', or 'z')
+     * @param {number} valueDegrees - New rotation value in degrees
+     * @returns {boolean} - Success status
+     */
+    updateObjectRotation(objectId, axis, valueDegrees) {
+        // Validate input parameters
+        if (typeof valueDegrees !== 'number' || isNaN(valueDegrees)) {
+            console.warn('Cannot update rotation: invalid value', valueDegrees);
+            return false;
+        }
+
+        const objectData = this.getObject(objectId);
+        if (!objectData || !objectData.mesh) {
+            console.warn('Cannot update rotation: object not found', objectId);
+            return false;
+        }
+
+        try {
+            // Convert degrees to radians (THREE.js uses radians)
+            const valueRadians = (valueDegrees * Math.PI) / 180;
+
+            // Update the mesh rotation directly
+            objectData.mesh.rotation[axis] = valueRadians;
+            return true;
+        } catch (error) {
+            console.error('Failed to update object rotation:', error);
+            return false;
+        }
+    }
 
     /**
      * Notify that an object's transform (position/rotation/scale) has changed

@@ -778,7 +778,14 @@ class ContainerCrudManager {
             if (wireframeChild.material && wireframeChild.userData.isHidden) {
                 const originalOpacity = wireframeChild.userData.originalOpacity;
                 if (originalOpacity !== undefined) {
-                    wireframeChild.material.opacity = originalOpacity;
+                    // Use MaterialGuard for safe opacity modification
+                    const guard = window.MaterialGuard;
+                    if (guard) {
+                        guard.setOpacity(wireframeChild.material, originalOpacity, 'ContainerCrudManager');
+                    } else {
+                        // Fallback if MaterialGuard not available
+                        wireframeChild.material.opacity = originalOpacity;
+                    }
                 }
                 wireframeChild.userData.isHidden = false;
             }

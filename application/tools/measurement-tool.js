@@ -13,9 +13,9 @@ class MeasurementTool {
         this.scene = null;
         this.renderer = null;
 
-        // Configuration
-        this.lineColor = 0xff0000; // Red
-        this.labelColor = '#ff0000'; // Red
+        // Configuration - will be updated from settings
+        this.lineColor = 0xff0000; // Red (default)
+        this.labelColor = '#ff0000'; // Red (default)
         this.dashSize = 0.2;
         this.gapSize = 0.1;
         this.screenSpaceLineWidth = 3; // Target width in screen pixels
@@ -23,6 +23,9 @@ class MeasurementTool {
         // Current measurement state for Tab key focus
         this.currentEdgeAxis = null; // 'x', 'y', or 'z' - which dimension is being measured
         this.currentObject = null; // The object being measured
+
+        // Load color from configuration
+        this.loadColorFromConfig();
     }
 
     /**
@@ -649,7 +652,7 @@ class MeasurementTool {
 
         // Add 3D text label at the offset line's midpoint (centered on the line)
         const edgeLabelPos = offsetStart.clone().add(offsetEnd).multiplyScalar(0.5);
-        const label = this.create3DLabel(length.toFixed(1), edgeLabelPos);
+        const label = this.create3DLabel(this.formatMeasurementWithUnit(length), edgeLabelPos);
         group.add(label);
 
         // Add to scene
@@ -835,7 +838,7 @@ class MeasurementTool {
 
         // Add 3D text label at the midpoint of the dashed line
         const labelPosition = offsetStart.clone().add(offsetEnd).multiplyScalar(0.5);
-        const label = this.create3DLabel(distance.toFixed(1), labelPosition);
+        const label = this.create3DLabel(this.formatMeasurementWithUnit(distance), labelPosition);
         group.add(label);
 
         // Add to scene
@@ -904,6 +907,49 @@ class MeasurementTool {
     }
 
     /**
+     * Format measurement value with unit suffix
+     * @param {number} valueInMeters - Measurement value in internal meters
+     * @returns {string} Formatted string like "1.2m" or "2' 3\""
+     */
+    formatMeasurementWithUnit(valueInMeters) {
+        const unitConverter = window.modlerComponents?.unitConverter;
+
+        if (!unitConverter) {
+            // Fallback to meters with 1 decimal if no converter available
+            return `${valueInMeters.toFixed(1)}m`;
+        }
+
+        const userUnit = unitConverter.userUnit;
+
+        // Handle imperial feet/inches format specially
+        if (userUnit === 'ft' || userUnit === 'in') {
+            // Convert to inches first
+            const totalInches = valueInMeters * unitConverter.conversionFromMeters['in'];
+
+            if (userUnit === 'ft') {
+                // Display as feet and inches (e.g., "2' 3\"")
+                const feet = Math.floor(totalInches / 12);
+                const inches = Math.round(totalInches % 12);
+
+                if (inches === 0) {
+                    return `${feet}'`;
+                } else {
+                    return `${feet}' ${inches}"`;
+                }
+            } else {
+                // Just inches
+                return `${Math.round(totalInches)}"`;
+            }
+        }
+
+        // For metric and other units, use standard formatting
+        const convertedValue = unitConverter.convertFromInternal(valueInMeters);
+        const precision = unitConverter.unitPrecision[userUnit] || 1;
+
+        return `${convertedValue.toFixed(precision)}${userUnit}`;
+    }
+
+    /**
      * Clear current measurement visualization
      */
     clearMeasurement() {
@@ -923,6 +969,30 @@ class MeasurementTool {
         }
 
         this.currentMeasurement = null;
+    }
+
+    /**
+     * Load measurement color from configuration
+     */
+    loadColorFromConfig() {
+        const configManager = window.modlerComponents?.configurationManager;
+        if (configManager) {
+            const colorHex = configManager.get('visual.measurement.color');
+            if (colorHex) {
+                // Convert hex string to number for THREE.js
+                this.lineColor = parseInt(colorHex.replace('#', ''), 16);
+                this.labelColor = colorHex; // Keep as string for canvas text
+            }
+        }
+    }
+
+    /**
+     * Update measurement color (called when settings change)
+     * @param {string} colorHex - New color in hex format
+     */
+    updateColor(colorHex) {
+        this.lineColor = parseInt(colorHex.replace('#', ''), 16);
+        this.labelColor = colorHex;
     }
 
     /**

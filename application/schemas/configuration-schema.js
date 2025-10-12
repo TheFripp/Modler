@@ -223,6 +223,14 @@ const CONFIGURATION_SCHEMA = {
         description: 'Snap indicator render order'
     },
 
+    // Measurement tool
+    'visual.measurement.color': {
+        type: 'string',
+        default: '#ff0000',
+        constraint: CONSTRAINT_TYPES.COLOR,
+        description: 'Measurement tool line and label color'
+    },
+
     // Visual effects materials
     'visual.effects.materials.face.color': {
         type: 'string',
