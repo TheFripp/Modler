@@ -379,14 +379,20 @@ function createFallbackObjectData(id?: string): ObjectData {
 
 // Update Three.js from Svelte store changes using ObjectStateManager
 export function updateThreeJSProperty(objectId: string, property: string, value: any, source: string = 'input') {
+	// DEBUG: Log property update attempt
+	console.log('[updateThreeJSProperty]', { objectId, property, value, source });
+
 	// Check if we're in an iframe - use PostMessage for cross-origin communication
 	const isInIframe = window !== window.parent;
+	console.log('[updateThreeJSProperty] isInIframe:', isInIframe);
 
 	if (isInIframe) {
+		console.log('[updateThreeJSProperty] Using iframe/PostMessage mode');
 		// Use unified communication system instead of direct PostMessage
 		try {
 			// Dynamic import to avoid SSR issues
 			import('$lib/services/unified-communication').then(({ unifiedCommunication }) => {
+				console.log('[updateThreeJSProperty] Sending via unifiedCommunication');
 				// Send property update through unified communication system
 				// Note: This could be expanded to use a dedicated property update method if needed
 				unifiedCommunication.sendNavigationCommand('property-update', { objectId, property, value, source }).catch(error => {
@@ -402,6 +408,7 @@ export function updateThreeJSProperty(objectId: string, property: string, value:
 		}
 	}
 
+	console.log('[updateThreeJSProperty] Using direct ObjectStateManager mode');
 	// Direct access for non-iframe context - use ObjectStateManager
 	const components = (window as any)?.modlerComponents || modlerComponentsBridge;
 	const objectStateManager = components?.objectStateManager;
