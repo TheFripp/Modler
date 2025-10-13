@@ -15,7 +15,7 @@
  */
 
 import { get } from 'svelte/store';
-import { selectedObject, objectHierarchy } from '$lib/stores/modler';
+import { selectedObject, objectHierarchy, toolState } from '$lib/stores/modler';
 
 // Message protocol types (will be loaded from window)
 type Message = any;
@@ -151,6 +151,10 @@ class UIAdapter {
                 this.handleGeometryUpdatedMessage(message);
                 break;
 
+            case MessageProtocol.MESSAGE_TYPES.TOOL_STATE_CHANGED:
+                this.handleToolStateChangedMessage(message);
+                break;
+
             default:
                 console.warn('UIAdapter: Unknown message type:', message.type);
         }
@@ -270,6 +274,22 @@ class UIAdapter {
     private handleGeometryUpdatedMessage(message: Message): void {
         // Similar to state changed, but specifically for geometry
         this.handleStateChangedMessage(message);
+    }
+
+    /**
+     * Handle tool state changed messages
+     * @private
+     */
+    private handleToolStateChangedMessage(message: Message): void {
+        const { activeTool, snapEnabled } = message.payload;
+
+        // Update toolState store
+        toolState.set({
+            activeTool,
+            snapEnabled
+        });
+
+        this.stats.storeUpdates++;
     }
 
     /**

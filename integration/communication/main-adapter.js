@@ -180,6 +180,13 @@ class MainAdapter {
             }, { subscriberId: 'main-adapter-parametric' })
         );
 
+        // Tool state changes (tool activation, snap toggle)
+        this.subscriptions.push(
+            eventBus.subscribe(EVENT_TYPES.TOOL_STATE, (event) => {
+                this.handleToolStateEvent(event);
+            }, { subscriberId: 'main-adapter-tool-state' })
+        );
+
         console.log(`📡 MainAdapter subscribed to ${this.subscriptions.length} event types`);
     }
 
@@ -376,6 +383,25 @@ class MainAdapter {
                 ...changeData
             },
             'parametric'
+        );
+
+        this.send(message);
+    }
+
+    /**
+     * Handle tool state events (tool activation, snap toggle)
+     * @private
+     */
+    handleToolStateEvent(event) {
+        this.stats.eventsReceived++;
+
+        const { changeData } = event;
+        const { activeTool, snapEnabled } = changeData;
+
+        // Build tool state message
+        const message = window.MessageProtocol.MessageBuilders.toolStateChanged(
+            activeTool,
+            snapEnabled
         );
 
         this.send(message);

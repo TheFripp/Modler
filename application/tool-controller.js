@@ -83,12 +83,24 @@ class ToolController {
             this.activeTool.activate();
         }
 
-        // Notify tool state change for UI synchronization
-        if (window.notifyToolStateChanged) {
-            window.notifyToolStateChanged(toolName);
+        // Emit TOOL_STATE event for UI synchronization
+        if (window.objectEventBus) {
+            window.objectEventBus.emit(window.objectEventBus.EVENT_TYPES.TOOL_STATE, {
+                changeData: {
+                    activeTool: toolName,
+                    snapEnabled: this.getSnapEnabled()
+                }
+            });
         }
 
         return true;
+    }
+
+    /**
+     * Get snap enabled state from InputController
+     */
+    getSnapEnabled() {
+        return this.inputController?.snapEnabled || false;
     }
     
     /**

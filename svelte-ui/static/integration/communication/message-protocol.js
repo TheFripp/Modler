@@ -25,6 +25,7 @@ const MESSAGE_TYPES = {
     SELECTION_CHANGED: 'selection-changed',
     HIERARCHY_UPDATED: 'hierarchy-updated',
     GEOMETRY_UPDATED: 'geometry-updated',
+    TOOL_STATE_CHANGED: 'tool-state-changed',
 
     // Bidirectional (Request/Response)
     REQUEST: 'request',
@@ -222,6 +223,20 @@ const MessageBuilders = {
             priority: MESSAGE_PRIORITY.HIGH,
             strategy: EMISSION_STRATEGY.IMMEDIATE,
             source: 'scene-controller'
+        });
+    },
+
+    /**
+     * Tool state changed notification (Main → UI)
+     */
+    toolStateChanged(activeTool, snapEnabled) {
+        return new Message(MESSAGE_TYPES.TOOL_STATE_CHANGED, {
+            activeTool,
+            snapEnabled
+        }, {
+            priority: MESSAGE_PRIORITY.NORMAL,
+            strategy: EMISSION_STRATEGY.THROTTLED,
+            source: 'tool-controller'
         });
     },
 
