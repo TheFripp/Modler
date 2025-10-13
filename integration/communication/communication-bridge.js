@@ -153,12 +153,24 @@ class CommunicationBridge {
             this.trackMessage(message);
 
             // Send through appropriate adapter
-            if (direction === 'ui' && this.uiAdapter) {
-                this.uiAdapter.send(message);
-            } else if (direction === 'main' && this.mainAdapter) {
-                this.mainAdapter.send(message);
+            if (direction === 'ui') {
+                // Main → UI: Use postMessage (UI adapter is in iframe)
+                if (this.uiAdapter) {
+                    this.uiAdapter.send(message);
+                } else {
+                    // Fallback: Direct postMessage when no UIAdapter (Main side)
+                    this.sendDirectToUI(message);
+                }
+            } else if (direction === 'main') {
+                // UI → Main: Use adapter
+                if (this.mainAdapter) {
+                    this.mainAdapter.send(message);
+                } else {
+                    console.error('❌ No adapter for direction: main');
+                    return false;
+                }
             } else {
-                console.error('❌ No adapter for direction:', direction);
+                console.error('❌ Unknown direction:', direction);
                 return false;
             }
 
@@ -351,6 +363,30 @@ class CommunicationBridge {
         }
 
         this.stats.requestsHandled++;
+    }
+
+    /**
+     * Send message directly to UI iframes via postMessage
+     * Used when UIAdapter is not available (Main side sending to UI)
+     * @private
+     */
+    sendDirectToUI(message) {
+        try {
+            const serialized = message.serialize();
+
+            // Send to all iframes (property panel, left panel, toolbar)
+            const iframes = document.querySelectorAll('iframe');
+            iframes.forEach(iframe => {
+                if (iframe.contentWindow) {
+                    iframe.contentWindow.postMessage(serialized, '*');
+                }
+            });
+
+            return true;
+        } catch (error) {
+            console.error('❌ sendDirectToUI error:', error);
+            return false;
+        }
     }
 
     /**
