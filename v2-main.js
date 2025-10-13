@@ -112,6 +112,12 @@ function initializeScene() {
         modlerV2Components.sceneController.rootChildrenOrder
     );
 
+    // Layout manager (Phase 5.2 Refactoring)
+    modlerV2Components.sceneLayoutManager = new SceneLayoutManager();
+    modlerV2Components.sceneLayoutManager.initialize(
+        modlerV2Components.sceneController
+    );
+
     // Inject centralized factories (Phase 1 - Factory Consolidation)
     modlerV2Components.visualEffects = new VisualEffects(
         modlerV2Components.sceneFoundation.scene,
