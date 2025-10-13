@@ -394,13 +394,15 @@ This refactoring plan addresses critical architectural complexity identified in 
 - ⚠️ Unit tests not created (manual testing done, all working)
 
 **Known Issues**:
-- ⚠️ Counter synchronization: SceneLifecycleManager has local counters that may desync
-- ⚠️ Documentation pending: Need SCENE-CONTROLLER-SPLIT.md
+- ✅ Counter synchronization: FIXED - Initialize with literal values, delegation pattern ensures sync
+- ✅ Documentation: SCENE-CONTROLLER-SPLIT.md exists and updated
 
 **Commits**:
 - ✅ `9971a3b` - feat: extract SceneHierarchyManager from SceneController (Phase 5.1)
 - ✅ `8fdea0f` - feat: extract SceneLayoutManager from SceneController (Phase 5.2)
 - ✅ `2893e23` - feat: extract SceneLifecycleManager from SceneController (Phase 5.3)
+- ✅ `e70ea67` - fix: correct counter initialization in SceneLifecycleManager
+- ✅ `d0ef3ef` - docs: update SCENE-CONTROLLER-SPLIT.md with correct counter initialization
 
 ---
 
