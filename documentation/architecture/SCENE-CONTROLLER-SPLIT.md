@@ -224,9 +224,9 @@ function initializeScene() {
         modlerV2Components.sceneController.objects,
         modlerV2Components.sceneController.rootChildrenOrder,
         {
-            nextId: modlerV2Components.sceneController.nextId,
-            nextBoxNumber: modlerV2Components.sceneController.nextBoxNumber,
-            nextContainerNumber: modlerV2Components.sceneController.nextContainerNumber
+            nextId: 1,
+            nextBoxNumber: 1,
+            nextContainerNumber: 1
         },
         modlerV2Components.sceneController.eventCallbacks
     );
@@ -236,7 +236,8 @@ function initializeScene() {
 **Key Points**:
 - SceneController owns `objects` Map and `rootChildrenOrder` array
 - Managers receive references to shared data structures
-- Counters initialized by value, then accessed via getters/setters
+- Counters initialized with defaults (1,1,1), then accessed via getters/setters
+- **IMPORTANT**: Cannot read from `sceneController.nextId` during initialization because lifecycle manager isn't assigned yet - getters would return defaults anyway
 - Lazy loading ensures managers are ready before use
 
 ---
