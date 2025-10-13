@@ -93,8 +93,8 @@ class ObjectEventBus {
         } = options;
 
         try {
-            // Validate parameters
-            if (!eventType || !objectId) {
+            // Validate parameters (objectId can be null for global events like tool:state)
+            if (!eventType || objectId === undefined) {
                 console.error('ObjectEventBus.emit: Missing required parameters', {
                     eventType, objectId, source
                 });
