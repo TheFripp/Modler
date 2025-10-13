@@ -15,7 +15,7 @@
  */
 
 import { get } from 'svelte/store';
-import { selectedObject, objectHierarchy, toolState } from '$lib/stores/modler';
+import { selectedObjects, selectedObject, objectHierarchy, toolState } from '$lib/stores/modler';
 
 // Message protocol types (will be loaded from window)
 type Message = any;
@@ -87,10 +87,10 @@ class UIAdapter {
 
             const message = MessageProtocol.Message.deserialize(event.data);
 
-            // Pass to bridge for routing
-            if (this.bridge) {
-                this.bridge.receiveMessage(message, this);
-            }
+            // Phase 3 FIX: Directly handle message instead of routing through bridge
+            // The bridge is for coordinating TWO adapters in the same window
+            // Here, postMessage IS the bridge between windows, so directly deliver
+            this.receive(message);
 
         } catch (error) {
             console.error('❌ UIAdapter postMessage error:', error);
@@ -188,9 +188,9 @@ class UIAdapter {
             );
 
             // Clear selection if deleted object was selected
-            const currentSelection = get(selectedObject);
-            if (currentSelection?.id === objectId) {
-                selectedObject.set(null);
+            const currentSelection = get(selectedObjects);
+            if (currentSelection.some(obj => obj.id === objectId)) {
+                selectedObjects.update(objs => objs.filter(obj => obj.id !== objectId));
             }
 
             this.stats.storeUpdates++;
@@ -198,17 +198,19 @@ class UIAdapter {
         }
 
         // Handle property updates for existing objects
-        // Update selectedObject store if this object is selected
-        const currentSelection = get(selectedObject);
-        if (currentSelection && currentSelection.id === objectId) {
-            // Merge changes into selected object
-            selectedObject.update(obj => {
-                if (!obj) return obj;
+        // Update selectedObjects store if this object is selected
+        const currentSelection = get(selectedObjects);
+        const selectedIndex = currentSelection.findIndex(obj => obj.id === objectId);
 
-                return {
-                    ...obj,
+        if (selectedIndex !== -1) {
+            // Merge changes into selected object
+            selectedObjects.update(objs => {
+                const updated = [...objs];
+                updated[selectedIndex] = {
+                    ...updated[selectedIndex],
                     ...changes
                 };
+                return updated;
             });
 
             this.stats.storeUpdates++;
@@ -233,22 +235,20 @@ class UIAdapter {
      * @private
      */
     private handleSelectionChangedMessage(message: Message): void {
-        const { selectedObjectIds, objectData } = message.payload;
+        const { selectedObjectIds, objectData, allObjectData } = message.payload;
 
         if (selectedObjectIds.length === 0) {
             // Clear selection
-            selectedObject.set(null);
-        } else if (selectedObjectIds.length === 1 && objectData) {
-            // Single selection - update with full data
-            selectedObject.set(objectData);
+            selectedObjects.set([]);
+        } else if (allObjectData && allObjectData.length > 0) {
+            // Multi-selection or single selection - use allObjectData if available
+            selectedObjects.set(allObjectData);
+        } else if (objectData) {
+            // Fallback: single object data only
+            selectedObjects.set([objectData]);
         } else {
-            // Multi-selection - set special multi-selection object
-            selectedObject.set({
-                id: 'multi-selection',
-                name: `${selectedObjectIds.length} objects selected`,
-                isMultiSelection: true,
-                selectedIds: selectedObjectIds
-            });
+            // No object data - just clear
+            selectedObjects.set([]);
         }
 
         this.stats.storeUpdates++;

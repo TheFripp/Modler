@@ -381,7 +381,18 @@ class ObjectStateManager extends EventTarget {
      * must flow through ObjectStateManager to maintain consistency and enable
      * undo/redo, UI sync, and layout propagation.
      */
-    updateObject(objectId, updates, source = 'input') {
+    updateObject(objectId, updates, sourceOrOptions = 'input') {
+        // Support both old signature (source string) and new signature (options object)
+        let source = 'input';
+        let options = {};
+
+        if (typeof sourceOrOptions === 'string') {
+            source = sourceOrOptions;
+        } else if (typeof sourceOrOptions === 'object') {
+            options = sourceOrOptions;
+            source = options.source || 'input';
+        }
+
         let object = this.objects.get(objectId);
 
         // Auto-create object if it doesn't exist (handles timing issues)
@@ -428,8 +439,8 @@ class ObjectStateManager extends EventTarget {
         // Update lastModified timestamp
         object.lastModified = Date.now();
 
-        // Track this object for propagation with source
-        this.pendingChanges.set(objectId, source);
+        // Track this object for propagation with source and options
+        this.pendingChanges.set(objectId, { source, options });
         this.scheduleUpdate();
 
         return true;
@@ -557,16 +568,23 @@ class ObjectStateManager extends EventTarget {
     propagateChanges() {
         if (this.pendingChanges.size === 0) return;
 
-        // Build array of {object, source} pairs
-        const changedItems = Array.from(this.pendingChanges.entries()).map(([id, source]) => ({
-            object: this.objects.get(id),
-            source
-        }));
+        // Build array of {object, source, options} tuples
+        const changedItems = Array.from(this.pendingChanges.entries()).map(([id, data]) => {
+            // Support both old format (string source) and new format ({source, options})
+            const source = typeof data === 'string' ? data : data.source;
+            const options = typeof data === 'object' ? data.options : {};
+
+            return {
+                object: this.objects.get(id),
+                source,
+                options
+            };
+        });
 
         // Extract objects for methods that don't need source
         const changedObjects = changedItems.map(item => item.object);
 
-        // Update 3D scene (with source information to skip geometry updates for 'drag')
+        // Update 3D scene (with source and options information)
         this.updateSceneController(changedItems);
 
         // Update UI systems
@@ -633,7 +651,7 @@ class ObjectStateManager extends EventTarget {
             return;
         }
 
-        changedItems.forEach(({ object, source }) => {
+        changedItems.forEach(({ object, source, options }) => {
             // PROXY PATTERN: Apply ALL geometry updates directly to SceneController
             // SceneController is the single source of truth for all 3D properties
 
@@ -642,9 +660,12 @@ class ObjectStateManager extends EventTarget {
                 this.sceneController.setParentContainer(object.id, object.parentContainer, true);
             }
 
-            // Apply dimension updates (triggers parent layout on change, UNLESS source is push-tool)
+            // Check if layout propagation should be skipped (optimization for material/transform changes)
+            const skipLayoutPropagation = options?.skipLayoutPropagation || false;
+
+            // Apply dimension updates (triggers parent layout on change, UNLESS source is push-tool or skipLayoutPropagation is true)
             // Push tool suppresses layout updates during drag for performance and to prevent container movement
-            const shouldTriggerLayout = source !== 'push-tool';
+            const shouldTriggerLayout = source !== 'push-tool' && !skipLayoutPropagation;
             this.applyGeometryUpdate(object, 'Dimension', 'updateObjectDimensions', shouldTriggerLayout);
 
             // Apply position updates
@@ -826,11 +847,17 @@ class ObjectStateManager extends EventTarget {
 
     /**
      * Selection management
+     *
+     * Note: This is a state synchronization method called by SelectionController.
+     * SelectionController is responsible for emitting selection events through ObjectEventBus.
+     * We don't emit events here to avoid duplicate emissions.
      */
     setSelection(objectIds) {
         this.selection.clear();
         objectIds.forEach(id => this.selection.add(id));
 
+        // Legacy CustomEvent (deprecated - will be removed in future)
+        // Kept for backward compatibility with any code listening to this event
         this.dispatchEvent(new CustomEvent('selection-changed', {
             detail: { selection: Array.from(this.selection) }
         }));

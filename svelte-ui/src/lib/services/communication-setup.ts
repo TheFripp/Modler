@@ -26,10 +26,10 @@ export function initializeCommunication(): boolean {
     }
 
     try {
-        // Wait for MessageProtocol to be loaded
+        // Wait for MessageProtocol to be loaded (from app.html script tags)
         const MessageProtocol = (window as any).MessageProtocol;
         if (!MessageProtocol) {
-            console.error('❌ MessageProtocol not loaded - cannot initialize communication');
+            console.error('❌ MessageProtocol not loaded - check app.html script tags');
             return false;
         }
 
@@ -39,7 +39,7 @@ export function initializeCommunication(): boolean {
         // Create CommunicationBridge (UI side)
         const CommunicationBridge = (window as any).CommunicationBridge;
         if (!CommunicationBridge) {
-            console.error('❌ CommunicationBridge not loaded');
+            console.error('❌ CommunicationBridge not loaded - check app.html script tags');
             return false;
         }
 
@@ -58,7 +58,13 @@ export function initializeCommunication(): boolean {
         (window as any).uiAdapter = uiAdapter;
         (window as any).communicationBridge = bridge;
 
-        console.log('✅ UI Communication initialized');
+        // Request initial state from Main now that we're ready
+        const panelName = window.location.pathname.split('/').pop() || 'unknown';
+        window.parent.postMessage({
+            type: 'ui-panel-ready',
+            data: { panelName }
+        }, '*');
+
         return true;
 
     } catch (error) {

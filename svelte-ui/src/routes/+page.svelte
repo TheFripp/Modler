@@ -11,6 +11,16 @@
 		// Try to initialize the bridge with Three.js
 		initializeBridge();
 
+		// Phase 3: Initialize DirectStoreBridge for direct store updates
+		if ((window as any).DirectStoreBridge) {
+			(window as any).DirectStoreBridge.initialize({
+				selectedObjects,
+				objectHierarchy,
+				toolState
+			});
+			console.log('✅ DirectStoreBridge initialized from +page.svelte');
+		}
+
 		// Set up demo data for development
 		if (demoMode) {
 			selectedObjects.set([

@@ -109,7 +109,10 @@ class SelectionController {
         if (!object) return false;
 
         const sceneController = this.getSceneController();
-        if (!sceneController) return false;
+        if (!sceneController) {
+            console.warn('⚠️ SceneController not available');
+            return false;
+        }
 
         // Resolve which object to actually select (container-first logic)
         const { targetObject, shouldNavigate } = this.resolveSelectionTarget(object);
@@ -268,33 +271,29 @@ class SelectionController {
 
     notifySelectionChange() {
         const selectedObjects = this.getSelectedObjects();
+        const selectedObjectIds = selectedObjects
+            .map(mesh => this.getObjectData(mesh)?.id)
+            .filter(Boolean);
 
-        // Emit ObjectEventBus events for each selected object
-        if (window.objectEventBus && selectedObjects.length > 0) {
-            selectedObjects.forEach(selectedObject => {
-                const objectData = this.getObjectData(selectedObject);
-                if (objectData) {
-                    window.objectEventBus.emit(
-                        window.objectEventBus.EVENT_TYPES?.SELECTION || 'object:selection',
-                        objectData.id,
-                        {
-                            selected: true,
-                            objectType: objectData.type,
-                            name: objectData.name,
-                            mesh: selectedObject
-                        },
-                        { immediate: true, source: 'SelectionController.notifySelectionChange' }
-                    );
-                }
-            });
+        // Phase 3: Emit consolidated selection event for UI panels (MainAdapter → UIAdapter)
+        // This is the PRIMARY event for Phase 3 communication architecture
+        if (window.objectEventBus) {
+            window.objectEventBus.emit(
+                window.objectEventBus.EVENT_TYPES?.SELECTION || 'object:selection',
+                null, // No single objectId - this is a multi-object selection event
+                {
+                    selected: selectedObjectIds.length > 0, // Overall selection state
+                    selectedObjectIds: selectedObjectIds,   // All selected IDs for UI
+                    selectionCount: selectedObjectIds.length,
+                    source: 'SelectionController.notifySelectionChange'
+                },
+                { immediate: true, source: 'SelectionController.notifySelectionChange' }
+            );
         }
 
         // Sync selection to ObjectStateManager
         const objectStateManager = this.getObjectStateManager();
         if (objectStateManager) {
-            const selectedObjectIds = selectedObjects
-                .map(mesh => this.getObjectData(mesh)?.id)
-                .filter(Boolean);
             objectStateManager.setSelection(selectedObjectIds);
         }
 

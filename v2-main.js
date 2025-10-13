@@ -221,6 +221,10 @@ function initializeApplication() {
     // Initialize PropertyUpdateHandler for property-panel driven layout system
     modlerV2Components.propertyUpdateHandler = new PropertyUpdateHandler();
 
+    // Initialize PropertyUpdateRouter for optimized property updates (Phase 6)
+    modlerV2Components.propertyUpdateRouter = new PropertyUpdateRouter();
+    console.log('✅ PropertyUpdateRouter initialized');
+
     // Initialize PropertyManager for object property updates and fill functionality
     modlerV2Components.propertyManager = new PropertyManager();
 

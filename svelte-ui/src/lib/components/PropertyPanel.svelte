@@ -12,6 +12,9 @@
 	import LayoutSection from '$lib/components/property-sections/LayoutSection.svelte';
 	import TileSection from '$lib/components/property-sections/TileSection.svelte';
 
+	// Phase 3: Initialize store bridge for direct mounting
+	import '$lib/bridge/store-bridge-init';
+
 	// Unit system state
 	let currentUnit = 'm';
 	let unitConverter: any = null;

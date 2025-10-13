@@ -562,12 +562,15 @@
         });
 
         // Listen to selection events
+        // NOTE: Phase 3 - Selection events are now handled by MainAdapter
+        // MainAdapter subscribes to object:selection events and routes them to UIAdapter
+        // This legacy listener is kept only for ObjectStateManager sync
         window.objectEventBus.subscribe('object:selection', (event) => {
-            // ObjectEventBus selection event received (logging removed to reduce console noise)
-
-            // Sync selection state
-            if (event.changeData.selected) {
-                objectStateManager.setSelection([event.objectId]);
+            // Sync selection state to ObjectStateManager
+            // MainAdapter handles UI communication separately
+            if (event.changeData.selectedObjectIds) {
+                // Phase 3 format: consolidated selection event with all IDs
+                objectStateManager.setSelection(event.changeData.selectedObjectIds);
             }
         });
 
@@ -606,6 +609,30 @@
      * REVOLUTIONARY SIMPLIFICATION: All property updates in ~10 lines
      */
     function handlePropertyUpdate(objectId, property, value, source = 'input') {
+        // PHASE 6: Try optimized router first, fallback to standard handler
+        const propertyUpdateRouter = window.modlerComponents?.propertyUpdateRouter;
+
+        if (propertyUpdateRouter) {
+            // Use PropertyFormatConverter for proper type conversion
+            const formatConverter = window.propertyFormatConverter;
+            let convertedValue = value;
+
+            if (formatConverter) {
+                const result = formatConverter.convertToInternal(property, value);
+                if (!result.isValid) {
+                    console.warn(`❌ Property format validation failed for ${property}:`, result.error);
+                }
+                convertedValue = result.value;
+            } else {
+                convertedValue = parseFloat(value) || value;
+            }
+
+            // Route through optimized path
+            const success = propertyUpdateRouter.routeUpdate(objectId, property, convertedValue);
+            if (success) return; // Fast path succeeded
+        }
+
+        // Fallback to standard path (for special cases or if router not available)
         const objectStateManager = window.modlerComponents?.objectStateManager;
         if (!objectStateManager) {
             console.warn('❌ ObjectStateManager not available');
@@ -688,9 +715,13 @@
             }
 
             switch (type) {
+                case 'ui-panel-ready':
                 case 'left-panel-ready':
-                    // Left panel is ready - Phase 3 communication handles this automatically
-                    // MainAdapter sends initial state on panel mount
+                    // UI panel is ready - send initial state now
+                    const mainAdapter = window.modlerComponents?.communicationBridge?.mainAdapter;
+                    if (mainAdapter && mainAdapter.sendInitialState) {
+                        mainAdapter.sendInitialState();
+                    }
                     break;
                 case 'object-select':
                     // Handle object selection from UI list
