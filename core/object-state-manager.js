@@ -38,9 +38,8 @@ class ObjectStateManager extends EventTarget {
         this.pendingChanges = new Map(); // objectId -> source
         this.updateScheduled = false;
 
-        // Performance optimization: Layout propagation tracking
-        this.depthCache = new Map(); // containerId -> depth (cleared on hierarchy change)
-        this.nextFramePropagations = new Set(); // Deferred propagations for next frame
+        // Layout propagation manager (Phase 4 refactoring)
+        this.layoutPropagationManager = null; // Lazy-initialized
     }
 
     // ====== COMPONENT GETTERS (reduce repeated lookups) ======
@@ -55,6 +54,13 @@ class ObjectStateManager extends EventTarget {
 
     getVisualEffects() {
         return window.modlerComponents?.visualEffects;
+    }
+
+    getLayoutPropagationManager() {
+        if (!this.layoutPropagationManager) {
+            this.layoutPropagationManager = window.modlerComponents?.layoutPropagationManager;
+        }
+        return this.layoutPropagationManager;
     }
 
     /**
@@ -861,164 +867,33 @@ class ObjectStateManager extends EventTarget {
     /**
      * BIDIRECTIONAL HIERARCHICAL PROPAGATION
      * Schedules layout updates for parent containers when child changes
+     * DELEGATED to LayoutPropagationManager (Phase 4 refactoring)
      */
     scheduleParentLayoutUpdate(childObjectId) {
-        const childObject = this.sceneController?.getObject(childObjectId);
-        if (!childObject || !childObject.parentContainer) return;
-
-        const parentContainer = this.sceneController.getObject(childObject.parentContainer);
-        if (!parentContainer?.autoLayout?.enabled) return;
-
-        // Initialize scheduled updates set
-        if (!this.scheduledLayoutUpdates) {
-            this.scheduledLayoutUpdates = new Set();
+        const manager = this.getLayoutPropagationManager();
+        if (manager) {
+            manager.scheduleParentLayoutUpdate(childObjectId);
         }
-
-        // Add parent to scheduled updates
-        this.scheduledLayoutUpdates.add(childObject.parentContainer);
-
-        // Process in next frame (after current propagation completes)
-        if (!this.layoutUpdateScheduled) {
-            this.layoutUpdateScheduled = true;
-            requestAnimationFrame(() => {
-                this.processScheduledLayouts();
-                this.layoutUpdateScheduled = false;
-            });
-        }
-    }
-
-    /**
-     * Process all scheduled layout updates (bottom-up order)
-     * Deepest containers are updated first to ensure proper propagation
-     *
-     * PERFORMANCE OPTIMIZATIONS:
-     * - Caches container depths to avoid O(n×d) recalculation during sort
-     * - Defers grandparent propagations to next frame to avoid re-processing
-     */
-    processScheduledLayouts() {
-        if (!this.scheduledLayoutUpdates || this.scheduledLayoutUpdates.size === 0) return;
-
-        // OPTIMIZATION: Build depth cache for this batch
-        const containersToProcess = Array.from(this.scheduledLayoutUpdates);
-        const depthMap = new Map();
-
-        containersToProcess.forEach(containerId => {
-            depthMap.set(containerId, this.getContainerDepthCached(containerId));
-        });
-
-        // Sort by container depth (deepest first) using cached depths
-        const sorted = containersToProcess.sort((a, b) => {
-            return depthMap.get(b) - depthMap.get(a); // Descending order (deepest first)
-        });
-
-        // OPTIMIZATION: Collect propagations for next frame instead of re-adding to current batch
-        const deferredPropagations = new Set();
-
-        // Update each container's layout
-        sorted.forEach(containerId => {
-            const container = this.sceneController.getObject(containerId);
-            if (container?.autoLayout?.enabled) {
-                // Trigger layout recalculation
-                const layoutResult = this.sceneController.updateLayout(containerId);
-
-                // CRITICAL ARCHITECTURE: Only auto-resize in HUG mode
-                // In LAYOUT mode, container size is ground truth - no auto-resize
-                if (layoutResult?.success && layoutResult.layoutBounds) {
-                    const isLayoutMode = container.autoLayout?.enabled;
-
-                    if (!isLayoutMode) {
-                        // HUG MODE: Container wraps children
-                        const containerCrudManager = this.getContainerCrudManager();
-                        if (containerCrudManager) {
-                            containerCrudManager.resizeContainerToLayoutBounds(container, layoutResult.layoutBounds);
-                        }
-                    }
-                    // LAYOUT MODE: No auto-resize
-                }
-
-                // OPTIMIZATION: Defer grandparent propagations to next frame
-                if (container.parentContainer) {
-                    const grandparent = this.sceneController.getObject(container.parentContainer);
-                    if (grandparent?.autoLayout?.enabled) {
-                        deferredPropagations.add(container.parentContainer);
-                    }
-                }
-            }
-        });
-
-        this.scheduledLayoutUpdates.clear();
-
-        // Schedule deferred propagations for next frame
-        if (deferredPropagations.size > 0) {
-            this.nextFramePropagations = new Set([...this.nextFramePropagations, ...deferredPropagations]);
-
-            if (!this.deferredPropagationScheduled) {
-                this.deferredPropagationScheduled = true;
-                requestAnimationFrame(() => {
-                    // Move deferred propagations to scheduled updates
-                    this.nextFramePropagations.forEach(id => {
-                        this.scheduledLayoutUpdates.add(id);
-                    });
-                    this.nextFramePropagations.clear();
-                    this.deferredPropagationScheduled = false;
-
-                    // Process the propagations
-                    this.processScheduledLayouts();
-                });
-            }
-        }
-    }
-
-    /**
-     * Get container nesting depth with caching (0 for root-level containers)
-     * PERFORMANCE: Caches depths to avoid O(d) recalculation for each container during sort
-     */
-    getContainerDepthCached(containerId) {
-        // Check cache first
-        if (this.depthCache.has(containerId)) {
-            return this.depthCache.get(containerId);
-        }
-
-        // Calculate and cache
-        const depth = this.calculateContainerDepth(containerId);
-        this.depthCache.set(containerId, depth);
-        return depth;
     }
 
     /**
      * Get container nesting depth (0 for root-level containers)
-     * Use getContainerDepthCached() for better performance in batch operations
+     * DELEGATED to LayoutPropagationManager (Phase 4 refactoring)
      */
     getContainerDepth(containerId) {
-        return this.calculateContainerDepth(containerId);
-    }
-
-    /**
-     * Calculate container depth by walking up parent chain
-     * @private
-     */
-    calculateContainerDepth(containerId) {
-        let depth = 0;
-        let current = this.sceneController?.getObject(containerId);
-
-        while (current?.parentContainer) {
-            depth++;
-            current = this.sceneController.getObject(current.parentContainer);
-            if (depth > 50) {
-                console.error('ObjectStateManager: Detected circular parent chain for container', containerId);
-                break;
-            }
-        }
-
-        return depth;
+        const manager = this.getLayoutPropagationManager();
+        return manager ? manager.getContainerDepth(containerId) : 0;
     }
 
     /**
      * Clear depth cache when hierarchy changes
-     * Called automatically on hierarchy modifications
+     * DELEGATED to LayoutPropagationManager (Phase 4 refactoring)
      */
     clearDepthCache() {
-        this.depthCache.clear();
+        const manager = this.getLayoutPropagationManager();
+        if (manager) {
+            manager.clearDepthCache();
+        }
     }
 }
 

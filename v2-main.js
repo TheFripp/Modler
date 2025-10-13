@@ -116,6 +116,13 @@ function initializeScene() {
         modlerV2Components.sceneFoundation.camera,
         modlerV2Components.sceneFoundation.canvas
     );
+
+    // Layout propagation manager (Phase 4 Refactoring)
+    modlerV2Components.layoutPropagationManager = new LayoutPropagationManager();
+    modlerV2Components.layoutPropagationManager.initialize(
+        modlerV2Components.sceneController,
+        null // containerCrudManager will be set later in initializeInteraction
+    );
 }
 
 /**
@@ -129,6 +136,11 @@ function initializeInteraction() {
     modlerV2Components.containerCrudManager = new ContainerCrudManager();
     modlerV2Components.transformationManager = new TransformationManager();
     modlerV2Components.fieldNavigationManager = new FieldNavigationManager();
+
+    // Wire up containerCrudManager to layoutPropagationManager (Phase 4 Refactoring)
+    if (modlerV2Components.layoutPropagationManager) {
+        modlerV2Components.layoutPropagationManager.containerCrudManager = modlerV2Components.containerCrudManager;
+    }
 
     // Initialize unified visualization system components
     modlerV2Components.visualizationManager = new VisualizationManager();
