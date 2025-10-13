@@ -1280,12 +1280,23 @@
             childrenArray = [...parent.childrenOrder];
         } else {
             // Root level - use rootChildrenOrder
+            // Always rebuild from current root objects to ensure consistency
+            const currentRootObjects = Array.from(sceneController.objects.values())
+                .filter(obj => !obj.parentContainer)
+                .map(obj => obj.id);
+
+            // Initialize rootChildrenOrder if needed, otherwise verify it's up-to-date
             if (!sceneController.rootChildrenOrder || !Array.isArray(sceneController.rootChildrenOrder)) {
-                // Initialize from current root objects
-                sceneController.rootChildrenOrder = Array.from(sceneController.objects.values())
-                    .filter(obj => !obj.parentContainer)
-                    .map(obj => obj.id);
+                sceneController.rootChildrenOrder = currentRootObjects;
+            } else {
+                // Add any new root objects that aren't in the order array
+                currentRootObjects.forEach(id => {
+                    if (!sceneController.rootChildrenOrder.includes(id)) {
+                        sceneController.rootChildrenOrder.push(id);
+                    }
+                });
             }
+
             childrenArray = [...sceneController.rootChildrenOrder];
         }
 
@@ -1295,6 +1306,11 @@
 
         if (targetIndex === -1) {
             console.warn('❌ Target object not found in children array');
+            console.warn('   Target ID:', targetId);
+            console.warn('   Children array:', childrenArray);
+            console.warn('   All root objects:', Array.from(sceneController.objects.values())
+                .filter(obj => !obj.parentContainer)
+                .map(obj => obj.id));
             return;
         }
 
