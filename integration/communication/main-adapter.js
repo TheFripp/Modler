@@ -137,6 +137,11 @@ class MainAdapter {
             return; // Object might have been deleted
         }
 
+        // Skip UI sync for preview objects (box creation tool, etc.)
+        if (objectData.mesh?.userData?.hideFromSelection) {
+            return; // Preview object - don't send to UI
+        }
+
         // Build message with updated state
         const message = window.MessageProtocol.MessageBuilders.stateChanged(
             objectId,
