@@ -118,6 +118,20 @@ function initializeScene() {
         modlerV2Components.sceneController
     );
 
+    // Lifecycle manager (Phase 5.3 Refactoring)
+    modlerV2Components.sceneLifecycleManager = new SceneLifecycleManager();
+    modlerV2Components.sceneLifecycleManager.initialize(
+        modlerV2Components.sceneFoundation.scene,
+        modlerV2Components.sceneController.objects,
+        modlerV2Components.sceneController.rootChildrenOrder,
+        {
+            nextId: modlerV2Components.sceneController.nextId,
+            nextBoxNumber: modlerV2Components.sceneController.nextBoxNumber,
+            nextContainerNumber: modlerV2Components.sceneController.nextContainerNumber
+        },
+        modlerV2Components.sceneController.eventCallbacks
+    );
+
     // Inject centralized factories (Phase 1 - Factory Consolidation)
     modlerV2Components.visualEffects = new VisualEffects(
         modlerV2Components.sceneFoundation.scene,
