@@ -635,11 +635,7 @@ class SceneDeserializer {
      * Trigger UI refresh after scene load
      */
     refreshUI() {
-        // Use PropertyPanelSync to refresh UI (proper architectural pattern)
-        const propertyPanelSync = window.modlerComponents?.propertyPanelSync;
-        if (propertyPanelSync && propertyPanelSync.refreshCompleteHierarchy) {
-            propertyPanelSync.refreshCompleteHierarchy();
-        }
+        // Phase 3: UI refresh happens automatically via ObjectEventBus → MainAdapter
 
         // Clear selection
         const selectionController = window.modlerComponents?.selectionController;

@@ -245,29 +245,10 @@ class DirectComponentManager {
      * ARCHITECTURE: Uses PropertyPanelSync for all postMessage communication
      */
     sendToComponent(componentName, message) {
-        // ARCHITECTURE: Route through PropertyPanelSync (ONLY authorized postMessage source)
-        const propertyPanelSync = window.modlerComponents?.propertyPanelSync;
-        if (!propertyPanelSync) {
-            console.warn('DirectComponentManager: PropertyPanelSync not available');
-            return;
-        }
-
-        // Map component name to panel name
-        const panelMap = {
-            'PropertyPanel': 'right',
-            'ObjectListPanel': 'left',
-            'MainToolbar': 'mainToolbar',
-            'SystemToolbar': 'systemToolbar'
-        };
-
-        const panelName = panelMap[componentName];
-        if (panelName) {
-            propertyPanelSync.sendToUI(message.type || 'data-update', [], {
-                throttle: false,
-                panels: [panelName],
-                includeContext: false,
-                customData: message.data || message
-            });
+        // Phase 3: Direct postMessage to component iframe
+        const component = this.components.get(componentName);
+        if (component && component.iframe && component.iframe.contentWindow) {
+            component.iframe.contentWindow.postMessage(message, '*');
         } else {
             console.warn(`DirectComponentManager: Unknown component ${componentName}`);
         }

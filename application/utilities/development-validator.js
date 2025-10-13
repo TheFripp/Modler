@@ -186,18 +186,8 @@ class DevelopmentValidator {
      * Initialize messaging validation
      */
     initializeMessagingValidation() {
-        // Monitor PropertyPanelSync for direct postMessage usage
-        setTimeout(() => {
-            const propertyPanelSync = window.modlerComponents?.propertyPanelSync;
-            if (propertyPanelSync?.iframe?.contentWindow) {
-                const originalPostMessage = propertyPanelSync.iframe.contentWindow.postMessage;
-
-                propertyPanelSync.iframe.contentWindow.postMessage = function(...args) {
-                    developmentValidator.validatePostMessage(args[0]);
-                    return originalPostMessage.apply(this, args);
-                };
-            }
-        }, 500);
+        // Phase 3: postMessage validation removed (PropertyPanelSync no longer exists)
+        // MainAdapter/UIAdapter handle all communication automatically
 
         // Monitor ALL window.postMessage calls to catch bypasses
         this.monitorGlobalPostMessage();

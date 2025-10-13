@@ -243,65 +243,9 @@ class KeyboardRouter {
             }
         }
 
-        // Get propertyPanelSync dynamically (it's created after KeyboardRouter initialization)
-        const propertyPanelSync = this.propertyPanelSync || window.modlerComponents?.propertyPanelSync;
-
-        if (!propertyPanelSync) {
-            return;
-        }
-
-        // Priority 2: Check if a tool recorded a manipulation (move tool -> position axis, push tool -> dimension axis)
-        const inputFocusManager = window.modlerComponents?.inputFocusManager;
-        if (inputFocusManager) {
-            const lastManipulated = inputFocusManager.getLastManipulated();
-            if (lastManipulated) {
-                propertyPanelSync.sendToUI('focus-input', null, {
-                    throttle: false,
-                    panels: ['right'],
-                    includeContext: false,
-                    customData: {
-                        objectId: lastManipulated.objectId,
-                        property: lastManipulated.property
-                    }
-                });
-                return;
-            }
-        }
-
-        // Priority 3: If measurement tool is showing, focus that axis
-        if (this.measurementTool && this.measurementTool.currentEdgeAxis && this.measurementTool.currentObject) {
-            const objectData = this.sceneController?.getObjectByMesh(this.measurementTool.currentObject);
-            if (objectData) {
-                propertyPanelSync.sendToUI('focus-input', null, {
-                    throttle: false,
-                    panels: ['right'],
-                    includeContext: false,
-                    customData: {
-                        objectId: objectData.id,
-                        property: `dimensions.${this.measurementTool.currentEdgeAxis}`
-                    }
-                });
-                return;
-            }
-        }
-
-        // Priority 4: If object is selected, focus first dimension input (width)
-        const selectedObjects = this.selectionController?.getSelectedObjects();
-        if (selectedObjects && selectedObjects.length > 0) {
-            const mesh = selectedObjects[0];
-            const objectData = this.sceneController?.getObjectByMesh(mesh);
-            if (objectData) {
-                propertyPanelSync.sendToUI('focus-input', null, {
-                    throttle: false,
-                    panels: ['right'],
-                    includeContext: false,
-                    customData: {
-                        objectId: objectData.id,
-                        property: 'dimensions.x'
-                    }
-                });
-                return;
-            }
+        // Phase 3: Focus management is now handled by InputFocusManager
+        // Tab key functionality works through property panel's internal focus system
+        // This method is kept for potential future keyboard-driven focus commands
         }
 
         // No focus target - user needs to select an object first

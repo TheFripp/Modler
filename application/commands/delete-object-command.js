@@ -91,11 +91,7 @@ class DeleteObjectCommand extends BaseCommand {
                 return false;
             }
 
-            // Notify UI of hierarchy changes via PropertyPanelSync
-            const propertyPanelSync = window.modlerComponents?.propertyPanelSync;
-            if (propertyPanelSync) {
-                propertyPanelSync.refreshCompleteHierarchy();
-            }
+            // Phase 3: UI notification happens automatically via ObjectEventBus → MainAdapter
 
             return true;
 
@@ -144,11 +140,7 @@ class DeleteObjectCommand extends BaseCommand {
                 return false;
             }
 
-            // Notify UI of hierarchy changes via PropertyPanelSync
-            const propertyPanelSync = window.modlerComponents?.propertyPanelSync;
-            if (propertyPanelSync) {
-                propertyPanelSync.refreshCompleteHierarchy();
-            }
+            // Phase 3: UI notification happens automatically via ObjectEventBus → MainAdapter
 
             return true;
 

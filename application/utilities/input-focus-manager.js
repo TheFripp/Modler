@@ -89,18 +89,8 @@ class InputFocusManager {
             detail: { objectId, property }
         }));
 
-        // ARCHITECTURE: Route through PropertyPanelSync (ONLY authorized postMessage source)
-        const propertyPanelSync = window.modlerComponents?.propertyPanelSync;
-        if (propertyPanelSync) {
-            propertyPanelSync.sendToUI('focus-input', [], {
-                throttle: false,
-                panels: ['right'], // Property panel where focus is needed
-                includeContext: false,
-                customData: { objectId, property }
-            });
-        } else {
-            console.warn('InputFocusManager: PropertyPanelSync not available for focus notification');
-        }
+        // Phase 3: Focus notification removed
+        // Property panel handles focus internally through Svelte stores
     }
 }
 

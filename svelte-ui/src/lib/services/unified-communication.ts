@@ -1,8 +1,8 @@
 /**
- * Unified Communication Service
+ * Unified Communication Service (Phase 3)
  *
- * Provides Svelte components with access to PropertyPanelSync unified communication methods.
- * Replaces all direct PostMessage calls with centralized, reliable communication.
+ * Provides Svelte UI components with postMessage communication to Main.
+ * All UI→Main communication goes through this service.
  */
 
 interface UnifiedCommunicationService {
@@ -18,130 +18,43 @@ interface UnifiedCommunicationService {
 }
 
 class UnifiedCommunication implements UnifiedCommunicationService {
-    private propertyPanelSync: any = null;
-    private initialized = false;
-
     constructor() {
-        this.initializeConnection();
-    }
-
-    /**
-     * Initialize connection to PropertyPanelSync
-     */
-    private initializeConnection() {
-        // Browser check for SSR compatibility
-        if (typeof window === 'undefined') {
-            return;
-        }
-
-        // Try to get PropertyPanelSync from various sources
-        const tryGetSync = () => {
-            // Browser check for SSR compatibility
-            if (typeof window === 'undefined') {
-                return false;
-            }
-
-            // From global window (main application)
-            if ((window as any).propertyPanelSync) {
-                this.propertyPanelSync = (window as any).propertyPanelSync;
-                this.initialized = true;
-                return true;
-            }
-
-            // From parent window (iframe context) - use PostMessage pattern instead of direct access
-            if (window.parent && window.parent !== window) {
-                // Don't try direct access as it gets blocked by CORS
-                // Will fall through to PostMessage fallback which is the correct approach
-            }
-
-            // From modler components
-            if ((window as any).modlerComponents?.propertyPanelSync) {
-                this.propertyPanelSync = (window as any).modlerComponents.propertyPanelSync;
-                this.initialized = true;
-                return true;
-            }
-
-            return false;
-        };
-
-        // Try immediately
-        if (tryGetSync()) {
-            return;
-        }
-
-        // Poll for availability
-        const pollInterval = setInterval(() => {
-            if (tryGetSync()) {
-                clearInterval(pollInterval);
-            }
-        }, 100);
-
-        // Stop polling after 500ms in dev mode (cross-origin), 2s in production
-        const isDev = window.location.port === '5173'; // Vite dev server port
-        const pollTimeout = isDev ? 500 : 2000;
-        setTimeout(() => {
-            clearInterval(pollInterval);
-        }, pollTimeout);
+        // Phase 3: Direct postMessage communication, no initialization needed
     }
 
     /**
      * Send object movement/reordering commands
      */
     async sendObjectMovement(operation: string, data: any): Promise<boolean> {
-        if (this.propertyPanelSync) {
-            return this.propertyPanelSync.sendObjectMovement(operation, data);
-        }
-
-        // Fallback to direct PostMessage
-        return this.fallbackPostMessage(`object-${operation}`, data);
+        return this.sendPostMessage(`object-${operation}`, data);
     }
 
     /**
      * Send tool activation commands
      */
     async sendToolActivation(toolName: string, additionalData: any = {}): Promise<boolean> {
-        if (this.propertyPanelSync) {
-            return this.propertyPanelSync.sendToolActivation(toolName, additionalData);
-        }
-
-        // Fallback to direct PostMessage
-        return this.fallbackPostMessage('tool-activation', { toolName, ...additionalData });
+        return this.sendPostMessage('tool-activation', { toolName, ...additionalData });
     }
 
     /**
      * Send snap toggle commands
      */
     async sendSnapToggle(): Promise<boolean> {
-        if (this.propertyPanelSync) {
-            return this.propertyPanelSync.sendSnapToggle();
-        }
-
-        // Fallback to direct PostMessage
-        return this.fallbackPostMessage('snap-toggle', {});
+        return this.sendPostMessage('snap-toggle', {});
     }
 
     /**
      * Send visual settings updates
      */
     async sendVisualSettings(settingsType: string, settings: any): Promise<boolean> {
-        if (this.propertyPanelSync) {
-            return this.propertyPanelSync.sendVisualSettings(settingsType, settings);
-        }
-
-        // Fallback to direct PostMessage
-        return this.fallbackPostMessage(`${settingsType}-settings-changed`, { settings });
+        return this.sendPostMessage(`${settingsType}-settings-changed`, { settings });
     }
 
     /**
      * Send navigation/selection commands
      */
     async sendNavigationCommand(commandType: string, data: any): Promise<boolean> {
-        if (this.propertyPanelSync) {
-            return this.propertyPanelSync.sendNavigationCommand(commandType, data);
-        }
-
-        // Fallback to direct PostMessage
-        return this.fallbackPostMessage(commandType, data);
+        return this.sendPostMessage(commandType, data);
     }
 
     /**
@@ -159,36 +72,21 @@ class UnifiedCommunication implements UnifiedCommunicationService {
      * Send settings request commands
      */
     async sendSettingsRequest(requestType: string): Promise<boolean> {
-        if (this.propertyPanelSync) {
-            return this.propertyPanelSync.sendSettingsRequest(requestType);
-        }
-
-        // Fallback to direct PostMessage
-        return this.fallbackPostMessage(requestType, {});
+        return this.sendPostMessage(requestType, {});
     }
 
     /**
      * Send delete selected objects command
      */
     async sendDeleteSelected(): Promise<boolean> {
-        if (this.propertyPanelSync) {
-            return this.propertyPanelSync.sendNavigationCommand('delete-selected', {});
-        }
-
-        // Fallback to direct PostMessage
-        return this.fallbackPostMessage('delete-selected', {});
+        return this.sendPostMessage('delete-selected', {});
     }
 
     /**
      * Send property update command (e.g., for renaming objects)
      */
     async sendPropertyUpdate(objectId: string, property: string, value: any): Promise<boolean> {
-        if (this.propertyPanelSync) {
-            return this.propertyPanelSync.sendPropertyUpdate(objectId, property, value);
-        }
-
-        // Fallback to direct PostMessage
-        return this.fallbackPostMessage('property-update', {
+        return this.sendPostMessage('property-update', {
             objectId,
             property,
             value
@@ -196,10 +94,9 @@ class UnifiedCommunication implements UnifiedCommunicationService {
     }
 
     /**
-     * Fallback to direct PostMessage when PropertyPanelSync is not available
-     * Attempts to authorize through global PropertyPanelSync if available
+     * Phase 3: Direct PostMessage to Main window
      */
-    private fallbackPostMessage(type: string, data: any): Promise<boolean> {
+    private sendPostMessage(type: string, data: any): Promise<boolean> {
         return new Promise((resolve) => {
             try {
                 if (window.parent && window.parent !== window) {
@@ -207,16 +104,8 @@ class UnifiedCommunication implements UnifiedCommunicationService {
                         type,
                         data,
                         timestamp: Date.now(),
-                        source: 'UnifiedCommunication_Fallback'
+                        source: 'UnifiedCommunication'
                     };
-
-                    // Try to authorize through global PropertyPanelSync if available
-                    const globalPropertyPanelSync = (window as any).propertyPanelSync;
-
-                    if (globalPropertyPanelSync && globalPropertyPanelSync.authorizePostMessage) {
-                        // Authorize the message before sending
-                        globalPropertyPanelSync.authorizePostMessage(message);
-                    }
 
                     window.parent.postMessage(message, '*');
                     resolve(true);
@@ -224,26 +113,25 @@ class UnifiedCommunication implements UnifiedCommunicationService {
                     resolve(false);
                 }
             } catch (error) {
-                console.error('UnifiedCommunication fallback error:', error);
+                console.error('UnifiedCommunication error:', error);
                 resolve(false);
             }
         });
     }
 
     /**
-     * Check if the service is properly initialized
+     * Phase 3: Service is always initialized
      */
     isInitialized(): boolean {
-        return this.initialized;
+        return true;
     }
 
     /**
      * Get connection status for debugging
      */
-    getStatus(): { initialized: boolean; hasPropertyPanelSync: boolean } {
+    getStatus(): { initialized: boolean } {
         return {
-            initialized: this.initialized,
-            hasPropertyPanelSync: !!this.propertyPanelSync
+            initialized: true
         };
     }
 }
