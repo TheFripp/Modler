@@ -28,7 +28,7 @@ CAD software for creative hobbyists. Rule-based parametric design with intellige
 ### Architecture & Implementation
 
 10. **Foundation systems first** - Establish "why" before "how", understand architectural context before coding
-11. **Single source of truth** - ObjectStateManager for state, SceneController for geometry, PropertyPanelSync for UI communication
+11. **Single source of truth** - ObjectStateManager for state, SceneController coordinates geometry (delegates to SceneHierarchyManager, SceneLayoutManager, SceneLifecycleManager), PropertyPanelSync for UI communication
 12. **CAD geometry, never transforms** - All manipulation through geometry, never visual-only transforms
 13. **Support mesh principle** - Create once as children, then show/hide. Master object is truth.
 14. **State-first pattern** - Tools use ObjectStateManager.updateObject(), never direct mesh manipulation
@@ -74,7 +74,10 @@ CAD software for creative hobbyists. Rule-based parametric design with intellige
 
 ### Core Systems (Single Source of Truth)
 - **ObjectStateManager** (`/core/`) - ALL state changes, use updateObject() for everything
-- **SceneController** (`/scene/`) - 3D geometry owner (position, dimensions, rotation, childrenOrder)
+- **SceneController** (`/scene/`) - 3D geometry coordinator, delegates to specialized scene managers
+- **SceneHierarchyManager** (`/scene/`) - Parent-child relationships, nesting validation, root objects
+- **SceneLayoutManager** (`/scene/`) - Layout calculations, container sizing, fill/fixed/hug modes
+- **SceneLifecycleManager** (`/scene/`) - Object creation, deletion, ID generation, support meshes
 - **ToolController** (`/application/`) - Tool activation/switching only
 
 ### Communication & UI
@@ -91,7 +94,10 @@ CAD software for creative hobbyists. Rule-based parametric design with intellige
 
 ### Decision Tree (Where Does Code Go?)
 - State change? → `ObjectStateManager.updateObject()`
-- 3D geometry update? → `SceneController` methods (via ObjectStateManager)
+- Object creation/deletion? → `SceneLifecycleManager` (via SceneController)
+- Parent-child relationships? → `SceneHierarchyManager` (via SceneController)
+- Layout operations? → `SceneLayoutManager` (via SceneController)
+- 3D geometry coordination? → `SceneController` (delegates to managers)
 - UI property update? → `PropertyUpdateHandler` → `ObjectStateManager`
 - UI notification (3D → UI)? → `PropertyPanelSync.sendToUI()`
 - UI command (UI → 3D)? → `UnifiedCommunication` or `PropertyPanelSync`
