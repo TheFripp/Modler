@@ -102,8 +102,9 @@ class MainAdapter {
             this.send(hierarchyMessage);
 
             // Send current selection
-            const selectedObjectIds = this.selectionController?.getSelectedObjectIds() || [];
-            if (selectedObjectIds.length > 0) {
+            const selectedObjects = this.selectionController?.getSelectedObjects() || [];
+            if (selectedObjects.length > 0) {
+                const selectedObjectIds = selectedObjects.map(obj => obj.id);
                 const objectData = this.getObjectDataForUI(selectedObjectIds[0]);
                 const selectionMessage = window.MessageProtocol.MessageBuilders.selectionChanged(
                     selectedObjectIds,
