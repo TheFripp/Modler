@@ -318,20 +318,8 @@
                 return false;
             }
 
-            // Initialize PropertyPanelSync for direct communication
-            if (window.PropertyPanelSync) {
-                propertyPanelSync = new window.PropertyPanelSync(window.objectEventBus, directComponentManager);
-                window.modlerComponents.propertyPanelSync = propertyPanelSync;
-
-                // Expose global hierarchy notification function for backward compatibility
-                window.notifyObjectHierarchyChanged = function() {
-                    if (propertyPanelSync && propertyPanelSync.refreshCompleteHierarchy) {
-                        propertyPanelSync.refreshCompleteHierarchy();
-                    } else {
-                        console.warn('   ⚠️ PropertyPanelSync.refreshCompleteHierarchy not available');
-                    }
-                };
-            }
+            // PHASE 3B: PropertyPanelSync disabled - MainAdapter handles all communication
+            console.log('✅ Using MainAdapter for UI communication (PropertyPanelSync disabled)');
 
             return true;
 
@@ -369,20 +357,8 @@
             // Step 4: Initialize iframe panel management
             panelManager = new window.SveltePanelManager(portDetector);
 
-            // Step 5: Initialize PropertyPanelSync for iframe communication
-            if (window.PropertyPanelSync) {
-                propertyPanelSync = new window.PropertyPanelSync(window.objectEventBus, panelManager);
-                window.modlerComponents.propertyPanelSync = propertyPanelSync;
-
-                // Expose global hierarchy notification function for backward compatibility
-                window.notifyObjectHierarchyChanged = function() {
-                    if (propertyPanelSync && propertyPanelSync.refreshCompleteHierarchy) {
-                        propertyPanelSync.refreshCompleteHierarchy();
-                    } else {
-                        console.warn('   ⚠️ PropertyPanelSync.refreshCompleteHierarchy not available');
-                    }
-                };
-            }
+            // PHASE 3B: PropertyPanelSync disabled - MainAdapter handles all communication
+            console.log('✅ Using MainAdapter for UI communication (PropertyPanelSync disabled)');
 
             // Step 6: Create and show iframe panels
             createIframePanels();
