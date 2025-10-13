@@ -142,6 +142,13 @@ class MainAdapter {
             return; // Preview object - don't send to UI
         }
 
+        // Skip UI sync for preview/drag operations (push tool during drag, etc.)
+        // These are intermediate states - final state will be sent when operation completes
+        const source = changeData?.source;
+        if (source === 'push-tool' || source === 'move-tool-drag') {
+            return; // Preview operation - don't send to UI during drag
+        }
+
         // Build message with updated state
         const message = window.MessageProtocol.MessageBuilders.stateChanged(
             objectId,
