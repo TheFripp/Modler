@@ -1528,7 +1528,7 @@
         }
         // MainAdapter handles tool state updates automatically
         // Silently skip if UI not initialized yet - will sync when ready
-
+    }
 
     // Bridge function: Notify tool state changed (for keyboard shortcuts)
     window.notifyToolStateChanged = function(toolName) {
@@ -1627,4 +1627,4 @@
     // Export for manual initialization if needed
     window.initializeUnifiedIntegration = initialize;
 
-})();
+}})();
