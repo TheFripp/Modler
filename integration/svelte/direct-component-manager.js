@@ -65,13 +65,50 @@ class DirectComponentManager {
 
     /**
      * Mount all Svelte components directly in DOM containers
+     * OPTIMIZED: Progressive loading for faster startup
      */
     async mountAllComponents() {
         const loadStart = performance.now();
 
         try {
-            // Get initial data with error handling
-            let leftPanelData, propertyPanelData, toolbarData;
+            // PHASE 1: Load toolbar first (most critical for UX)
+            // This makes the app interactive much faster
+            let toolbarData;
+            try {
+                toolbarData = this.getInitialToolbarData();
+            } catch (error) {
+                console.warn('⚠️ Error getting toolbar data:', error);
+                toolbarData = { currentTool: 'select', availableTools: ['select', 'box', 'move', 'push'] };
+            }
+
+            await this.mountComponent('mainToolbar', 'main-toolbar-container', {
+                initialData: toolbarData
+            });
+
+            const toolbarTime = (performance.now() - loadStart).toFixed(0);
+            console.log(`✅ Toolbar loaded in ${toolbarTime}ms - App is interactive!`);
+
+            // PHASE 2: Lazy load side panels in background
+            // User can start working while panels load
+            this.mountSidePanelsLazy();
+
+        } catch (error) {
+            console.error('❌ Failed to mount components:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * Lazy load side panels after toolbar is ready
+     * Improves perceived performance - user can interact immediately
+     */
+    async mountSidePanelsLazy() {
+        // Small delay to let the main thread breathe
+        await new Promise(resolve => setTimeout(resolve, 100));
+
+        try {
+            // Get panel data
+            let leftPanelData, propertyPanelData;
 
             try {
                 leftPanelData = this.getInitialLeftPanelData();
@@ -87,30 +124,19 @@ class DirectComponentManager {
                 propertyPanelData = { selectedObjects: [], properties: {} };
             }
 
-            try {
-                toolbarData = this.getInitialToolbarData();
-            } catch (error) {
-                console.warn('⚠️ Error getting toolbar data:', error);
-                toolbarData = { currentTool: 'select', availableTools: ['select', 'box', 'move', 'push'] };
-            }
-
-            // Mount all panels in parallel instead of sequential
+            // Load side panels in parallel
             await Promise.all([
                 this.mountComponent('leftPanel', 'left-panel-container', {
                     initialData: leftPanelData
                 }),
                 this.mountComponent('propertyPanel', 'property-panel-container', {
                     initialData: propertyPanelData
-                }),
-                this.mountComponent('mainToolbar', 'main-toolbar-container', {
-                    initialData: toolbarData
                 })
             ]);
 
-            const loadTime = (performance.now() - loadStart).toFixed(0);
-            console.log(`✅ All panels loaded in ${loadTime}ms`);
+            console.log('✅ Side panels loaded');
 
-            // Show resize gutters after panels are loaded
+            // Show resize gutters after all panels are loaded
             setTimeout(() => {
                 document.querySelectorAll('.gutter').forEach(gutter => {
                     gutter.classList.add('loaded');
@@ -118,8 +144,7 @@ class DirectComponentManager {
             }, 100);
 
         } catch (error) {
-            console.error('❌ Failed to mount components:', error);
-            throw error;
+            console.error('❌ Failed to mount side panels:', error);
         }
     }
 
