@@ -426,7 +426,13 @@ function detectSourceFormat(sourceData) {
         return 'three_js';
     }
 
-    // Check for ObjectStateManager format (has mesh reference)
+    // Check for SceneController/ObjectStateManager format (has mesh reference + id)
+    // This is the format from SceneController.getObject() - has mesh but position is on mesh, not directly on object
+    if (sourceData.mesh && sourceData.id && !sourceData.position) {
+        return 'object_state_manager';
+    }
+
+    // Check for ObjectStateManager format (has mesh reference + _sceneObjectData)
     if (sourceData.mesh && sourceData._sceneObjectData) {
         return 'object_state_manager';
     }
