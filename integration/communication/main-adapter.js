@@ -172,6 +172,12 @@ class MainAdapter {
 
         const { objectId, changeData } = event;
 
+        // Skip UI sync for preview/drag operations
+        const source = changeData?.source;
+        if (source === 'push-tool' || source === 'move-tool-drag' || source === 'layout-preview') {
+            return; // Preview operation - don't send to UI during drag
+        }
+
         // Transform events use throttled emission for smooth dragging
         const message = window.MessageProtocol.MessageBuilders.stateChanged(
             objectId,
@@ -219,6 +225,12 @@ class MainAdapter {
         this.stats.eventsReceived++;
 
         const { objectId, changeData } = event;
+
+        // Skip UI sync for preview/drag operations (layout updates during push)
+        const source = changeData?.source;
+        if (source === 'push-tool' || source === 'layout-preview' || source === 'layout-drag-update') {
+            return; // Preview operation - don't send to UI during drag
+        }
 
         // Hierarchy changes often affect multiple objects - use batched
         const message = window.MessageProtocol.MessageBuilders.hierarchyUpdated(
