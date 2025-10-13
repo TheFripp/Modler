@@ -480,6 +480,12 @@ class SceneDeserializer {
                 createdObject.visible = objData.visible ?? true;
                 createdObject.locked = objData.locked || false;
 
+                // CRITICAL: Restore layout properties for children in layout containers
+                // Without these, push tool and layout updates break after scene reload
+                if (objData.layoutProperties) {
+                    createdObject.layoutProperties = objData.layoutProperties;
+                }
+
                 // VALIDATION: Verify geometry dimensions match saved dimensions
                 // Use DimensionManager for validation (single source of truth)
                 if (objData.dimensions && window.dimensionManager) {
