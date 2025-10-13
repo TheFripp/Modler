@@ -186,6 +186,10 @@ function serializeForPostMessage(objectData) {
     if (!objectData) return null;
 
     try {
+        // FIX: First standardize the data to ensure position/rotation are extracted from mesh
+        // SceneController objectData has mesh.position, not direct position property
+        const standardData = standardizeObjectData(objectData);
+
         // ARCHITECTURE: Schema-driven serialization is required
         // This eliminates dual code paths and ensures consistency
         if (!window.SchemaSerializer) {
@@ -194,7 +198,7 @@ function serializeForPostMessage(objectData) {
         }
 
         const serialized = window.SchemaSerializer.serializeWithSchema(
-            objectData,
+            standardData,
             STANDARD_OBJECT_DATA_SCHEMA,
             { createNewReferences: true }
         );
