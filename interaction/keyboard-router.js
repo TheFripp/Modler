@@ -246,8 +246,6 @@ class KeyboardRouter {
         // Phase 3: Focus management is now handled by InputFocusManager
         // Tab key functionality works through property panel's internal focus system
         // This method is kept for potential future keyboard-driven focus commands
-        }
-
         // No focus target - user needs to select an object first
         console.log('Tab: No object selected. Select an object to focus its property inputs.');
     }
