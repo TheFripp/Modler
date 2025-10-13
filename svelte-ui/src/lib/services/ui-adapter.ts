@@ -1,0 +1,345 @@
+/**
+ * UI Adapter - Integrates Communication Bridge with Svelte UI
+ *
+ * Responsibilities:
+ * - Receive postMessages from Main window
+ * - Route messages to Svelte stores
+ * - Send messages to Main via postMessage
+ * - Handle responses from Main
+ * - Integrate with existing UI state management
+ *
+ * Replaces: UnifiedCommunication receiving logic + PropertyController partial
+ *
+ * Version: 1.0.0
+ * Part of: Phase 3 - Communication Layer Consolidation
+ */
+
+import { get } from 'svelte/store';
+import { selectedObject, hierarchyData } from '$lib/stores/modler';
+
+// Message protocol types (will be loaded from window)
+type Message = any;
+type MessageProtocol = any;
+
+class UIAdapter {
+    private bridge: any = null;
+    private initialized: boolean = false;
+    private messageListener: ((event: MessageEvent) => void) | null = null;
+
+    // Statistics
+    private stats = {
+        messagesReceived: 0,
+        messagesSent: 0,
+        storeUpdates: 0,
+        requestsHandled: 0
+    };
+
+    /**
+     * Set bridge reference (called by CommunicationBridge)
+     */
+    setBridge(bridge: any): void {
+        this.bridge = bridge;
+    }
+
+    /**
+     * Initialize and set up postMessage listener
+     */
+    initialize(): boolean {
+        if (this.initialized) {
+            console.warn('UIAdapter already initialized');
+            return false;
+        }
+
+        // Set up postMessage listener
+        this.messageListener = (event: MessageEvent) => {
+            this.handlePostMessage(event);
+        };
+
+        window.addEventListener('message', this.messageListener);
+
+        this.initialized = true;
+        console.log('✅ UIAdapter initialized');
+        return true;
+    }
+
+    /**
+     * Handle incoming postMessage from Main window
+     * @private
+     */
+    private handlePostMessage(event: MessageEvent): void {
+        // Security check - verify origin if needed
+        // if (event.origin !== expectedOrigin) return;
+
+        // Check if this is a Message Protocol message
+        if (!event.data || !event.data.type || !event.data.id) {
+            return; // Not a protocol message, ignore
+        }
+
+        this.stats.messagesReceived++;
+
+        try {
+            // Deserialize message
+            const MessageProtocol = (window as any).MessageProtocol;
+            if (!MessageProtocol) {
+                console.error('❌ MessageProtocol not loaded');
+                return;
+            }
+
+            const message = MessageProtocol.Message.deserialize(event.data);
+
+            // Pass to bridge for routing
+            if (this.bridge) {
+                this.bridge.receiveMessage(message, this);
+            }
+
+        } catch (error) {
+            console.error('❌ UIAdapter postMessage error:', error);
+        }
+    }
+
+    /**
+     * Send message through bridge to Main
+     */
+    send(message: Message): boolean {
+        if (!this.bridge) {
+            console.error('❌ UIAdapter: Bridge not set');
+            return false;
+        }
+
+        const sent = this.bridge.sendToMain(message);
+        if (sent) {
+            this.stats.messagesSent++;
+        }
+        return sent;
+    }
+
+    /**
+     * Send message directly via postMessage (low-level)
+     * Called by CommunicationBridge when routing to UI
+     */
+    sendViaPostMessage(message: Message): void {
+        try {
+            const serialized = message.serialize();
+            window.parent.postMessage(serialized, '*');
+        } catch (error) {
+            console.error('❌ UIAdapter postMessage send error:', error);
+        }
+    }
+
+    /**
+     * Receive message from bridge (Main → UI)
+     * Routes to appropriate store updates
+     */
+    receive(message: Message): void {
+        const MessageProtocol = (window as any).MessageProtocol;
+
+        // Route based on message type
+        switch (message.type) {
+            case MessageProtocol.MESSAGE_TYPES.STATE_CHANGED:
+                this.handleStateChangedMessage(message);
+                break;
+
+            case MessageProtocol.MESSAGE_TYPES.SELECTION_CHANGED:
+                this.handleSelectionChangedMessage(message);
+                break;
+
+            case MessageProtocol.MESSAGE_TYPES.HIERARCHY_UPDATED:
+                this.handleHierarchyUpdatedMessage(message);
+                break;
+
+            case MessageProtocol.MESSAGE_TYPES.GEOMETRY_UPDATED:
+                this.handleGeometryUpdatedMessage(message);
+                break;
+
+            default:
+                console.warn('UIAdapter: Unknown message type:', message.type);
+        }
+    }
+
+    /**
+     * Handle state changed messages
+     * @private
+     */
+    private handleStateChangedMessage(message: Message): void {
+        const { objectId, changes, eventType } = message.payload;
+
+        // Update selectedObject store if this object is selected
+        const currentSelection = get(selectedObject);
+        if (currentSelection && currentSelection.id === objectId) {
+            // Merge changes into selected object
+            selectedObject.update(obj => {
+                if (!obj) return obj;
+
+                return {
+                    ...obj,
+                    ...changes
+                };
+            });
+
+            this.stats.storeUpdates++;
+        }
+
+        // TODO: Update hierarchy data if this affects tree
+    }
+
+    /**
+     * Handle selection changed messages
+     * @private
+     */
+    private handleSelectionChangedMessage(message: Message): void {
+        const { selectedObjectIds, objectData } = message.payload;
+
+        if (selectedObjectIds.length === 0) {
+            // Clear selection
+            selectedObject.set(null);
+        } else if (selectedObjectIds.length === 1 && objectData) {
+            // Single selection - update with full data
+            selectedObject.set(objectData);
+        } else {
+            // Multi-selection - set special multi-selection object
+            selectedObject.set({
+                id: 'multi-selection',
+                name: `${selectedObjectIds.length} objects selected`,
+                isMultiSelection: true,
+                selectedIds: selectedObjectIds
+            });
+        }
+
+        this.stats.storeUpdates++;
+    }
+
+    /**
+     * Handle hierarchy updated messages
+     * @private
+     */
+    private handleHierarchyUpdatedMessage(message: Message): void {
+        const { objects, rootObjects } = message.payload;
+
+        // Update hierarchy store
+        hierarchyData.set({
+            objects: objects || [],
+            rootObjects: rootObjects || []
+        });
+
+        this.stats.storeUpdates++;
+    }
+
+    /**
+     * Handle geometry updated messages
+     * @private
+     */
+    private handleGeometryUpdatedMessage(message: Message): void {
+        // Similar to state changed, but specifically for geometry
+        this.handleStateChangedMessage(message);
+    }
+
+    /**
+     * Handle request from Main window
+     * @private
+     */
+    async handleRequest(message: Message): Promise<any> {
+        this.stats.requestsHandled++;
+
+        const { requestType, data } = message.payload;
+
+        // Route based on request type
+        switch (requestType) {
+            case 'get-ui-state':
+                return this.getUIState();
+
+            case 'get-selected-object':
+                return get(selectedObject);
+
+            default:
+                throw new Error(`Unknown request type: ${requestType}`);
+        }
+    }
+
+    /**
+     * Get current UI state
+     * @private
+     */
+    private getUIState(): any {
+        return {
+            selectedObject: get(selectedObject),
+            hierarchyData: get(hierarchyData)
+        };
+    }
+
+    /**
+     * Send property update to Main (convenience method)
+     */
+    sendPropertyUpdate(objectId: string, property: string, value: any, source: string = 'input'): boolean {
+        const MessageProtocol = (window as any).MessageProtocol;
+        if (!MessageProtocol) {
+            console.error('❌ MessageProtocol not loaded');
+            return false;
+        }
+
+        const message = MessageProtocol.MessageBuilders.propertyUpdate(
+            objectId,
+            property,
+            value,
+            source
+        );
+
+        return this.send(message);
+    }
+
+    /**
+     * Send tool activation to Main (convenience method)
+     */
+    sendToolActivate(toolName: string, options: any = {}): boolean {
+        const MessageProtocol = (window as any).MessageProtocol;
+        if (!MessageProtocol) {
+            console.error('❌ MessageProtocol not loaded');
+            return false;
+        }
+
+        const message = MessageProtocol.MessageBuilders.toolActivate(toolName, options);
+        return this.send(message);
+    }
+
+    /**
+     * Send request and wait for response (convenience method)
+     */
+    async sendRequest(requestType: string, data: any): Promise<any> {
+        if (!this.bridge) {
+            throw new Error('Bridge not set');
+        }
+
+        const MessageProtocol = (window as any).MessageProtocol;
+        if (!MessageProtocol) {
+            throw new Error('MessageProtocol not loaded');
+        }
+
+        const message = MessageProtocol.MessageBuilders.request(requestType, data);
+        return this.bridge.sendRequest(message, 'main');
+    }
+
+    /**
+     * Get statistics
+     */
+    getStats(): any {
+        return { ...this.stats };
+    }
+
+    /**
+     * Dispose and cleanup
+     */
+    dispose(): void {
+        if (this.messageListener) {
+            window.removeEventListener('message', this.messageListener);
+            this.messageListener = null;
+        }
+
+        this.initialized = false;
+        console.log('🗑️ UIAdapter disposed');
+    }
+}
+
+// Create singleton instance
+export const uiAdapter = new UIAdapter();
+
+// Also export class for testing
+export { UIAdapter };

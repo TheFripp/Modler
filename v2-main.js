@@ -656,6 +656,48 @@ function getModlerV2Status() {
 }
 
 /**
+ * Initialize Communication Bridge (Phase 3 Refactoring)
+ * Sets up unified bidirectional communication between Main and UI
+ */
+function initializeCommunicationBridge() {
+    try {
+        // Check if classes are available
+        if (!window.CommunicationBridge || !window.MainAdapter) {
+            console.warn('⚠️ CommunicationBridge not available - skipping initialization');
+            return false;
+        }
+
+        // Create instances
+        const bridge = new window.CommunicationBridge();
+        const mainAdapter = new window.MainAdapter();
+
+        // Initialize bridge with adapters
+        bridge.initialize(mainAdapter, null); // UIAdapter will connect from Svelte
+
+        // Initialize main adapter
+        const success = mainAdapter.initialize();
+
+        if (success) {
+            // Store in global components
+            window.modlerComponents.communicationBridge = bridge;
+            window.modlerComponents.mainAdapter = mainAdapter;
+
+            console.log('✅ CommunicationBridge initialized (Main side)');
+            console.log('📊 Bridge stats:', bridge.getStats());
+
+            return true;
+        } else {
+            console.error('❌ MainAdapter initialization failed');
+            return false;
+        }
+
+    } catch (error) {
+        console.error('❌ Communication Bridge initialization error:', error);
+        return false;
+    }
+}
+
+/**
  * Auto-load the last opened scene if it exists
  * Called after FileManager initialization to restore user's last working state
  */
@@ -713,6 +755,9 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!success) {
                 console.error('❌ Auto-initialization completed with errors');
             }
+
+            // Initialize Communication Bridge (Phase 3 Refactoring)
+            initializeCommunicationBridge();
         }).catch(error => {
             console.error('❌ Modler V2 auto-initialization failed:', error);
 
