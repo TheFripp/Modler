@@ -195,6 +195,37 @@ const MessageBuilders = {
     },
 
     /**
+     * Object created notification (Main → UI)
+     */
+    objectCreated(objectId, objectData) {
+        return new Message(MESSAGE_TYPES.STATE_CHANGED, {
+            objectId,
+            objectData,
+            eventType: 'created',
+            changeType: 'lifecycle'
+        }, {
+            priority: MESSAGE_PRIORITY.HIGH,
+            strategy: EMISSION_STRATEGY.IMMEDIATE,
+            source: 'scene-controller'
+        });
+    },
+
+    /**
+     * Object deleted notification (Main → UI)
+     */
+    objectDeleted(objectId) {
+        return new Message(MESSAGE_TYPES.STATE_CHANGED, {
+            objectId,
+            eventType: 'deleted',
+            changeType: 'lifecycle'
+        }, {
+            priority: MESSAGE_PRIORITY.HIGH,
+            strategy: EMISSION_STRATEGY.IMMEDIATE,
+            source: 'scene-controller'
+        });
+    },
+
+    /**
      * Request message with response expectation
      */
     request(requestType, data) {

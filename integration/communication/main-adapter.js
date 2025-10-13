@@ -119,6 +119,20 @@ class MainAdapter {
             }, { subscriberId: 'main-adapter-selection' })
         );
 
+        // Lifecycle changes (object creation, deletion)
+        this.subscriptions.push(
+            eventBus.subscribe(EVENT_TYPES.LIFECYCLE, (event) => {
+                this.handleLifecycleEvent(event);
+            }, { subscriberId: 'main-adapter-lifecycle' })
+        );
+
+        // Parametric design updates
+        this.subscriptions.push(
+            eventBus.subscribe(EVENT_TYPES.PARAMETRIC_UPDATE, (event) => {
+                this.handleParametricEvent(event);
+            }, { subscriberId: 'main-adapter-parametric' })
+        );
+
         console.log(`📡 MainAdapter subscribed to ${this.subscriptions.length} event types`);
     }
 
@@ -271,6 +285,56 @@ class MainAdapter {
     }
 
     /**
+     * Handle lifecycle events (object creation, deletion)
+     * @private
+     */
+    handleLifecycleEvent(event) {
+        this.stats.eventsReceived++;
+
+        const { objectId, changeData } = event;
+        const eventType = changeData?.eventType; // 'created' or 'deleted'
+
+        if (eventType === 'created') {
+            // Object creation - notify UI to add to hierarchy
+            const objectData = this.sceneController.getObject(objectId);
+            if (!objectData) return;
+
+            const message = window.MessageProtocol.MessageBuilders.objectCreated(
+                objectId,
+                this.getObjectDataForUI(objectId)
+            );
+            this.send(message);
+
+        } else if (eventType === 'deleted') {
+            // Object deletion - notify UI to remove from hierarchy
+            const message = window.MessageProtocol.MessageBuilders.objectDeleted(objectId);
+            this.send(message);
+        }
+    }
+
+    /**
+     * Handle parametric design events
+     * @private
+     */
+    handleParametricEvent(event) {
+        this.stats.eventsReceived++;
+
+        const { objectId, changeData } = event;
+
+        // Forward parametric updates to UI
+        const message = window.MessageProtocol.MessageBuilders.stateChanged(
+            objectId,
+            {
+                changeType: 'parametric',
+                ...changeData
+            },
+            'parametric'
+        );
+
+        this.send(message);
+    }
+
+    /**
      * Get object data formatted for UI
      * @private
      */
@@ -405,30 +469,47 @@ class MainAdapter {
     }
 
     /**
-     * Handle object creation messages
+     * Handle object creation messages (from UI)
      * @private
      */
     handleObjectCreateMessage(message) {
-        // TODO: Implement object creation routing
-        console.log('TODO: Handle object create:', message);
+        // UI-initiated object creation (e.g., "Add Box" button)
+        // In practice, tools like BoxCreationTool handle creation
+        // This is here for completeness but might not be actively used
+        console.log('[MainAdapter] Object create request from UI:', message);
+
+        // If UI sends explicit create requests, route to appropriate tool
+        const { objectType, options } = message.data || {};
+        if (objectType && this.sceneController) {
+            // Could trigger tool activation or direct creation
+            console.log(`[MainAdapter] Create ${objectType} requested`);
+        }
     }
 
     /**
-     * Handle object deletion messages
+     * Handle object deletion messages (from UI)
      * @private
      */
     handleObjectDeleteMessage(message) {
-        // TODO: Implement object deletion routing
-        console.log('TODO: Handle object delete:', message);
+        // UI-initiated object deletion (e.g., Delete key, context menu)
+        const objectId = message.data?.objectId;
+        if (objectId && this.sceneController) {
+            console.log(`[MainAdapter] Delete object ${objectId} requested`);
+            this.sceneController.removeObject(objectId);
+        }
     }
 
     /**
-     * Handle hierarchy change messages
+     * Handle hierarchy change messages (from UI)
      * @private
      */
     handleHierarchyChangeMessage(message) {
-        // TODO: Implement hierarchy change routing
-        console.log('TODO: Handle hierarchy change:', message);
+        // UI-initiated hierarchy change (e.g., drag-drop in ObjectTree)
+        const { objectId, newParentId } = message.data || {};
+        if (objectId && this.sceneController) {
+            console.log(`[MainAdapter] Move object ${objectId} to parent ${newParentId}`);
+            this.sceneController.setParentContainer(objectId, newParentId);
+        }
     }
 
     /**
