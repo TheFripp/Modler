@@ -56,10 +56,12 @@ CAD software for creative hobbyists. Rule-based parametric design with intellige
 - **SceneController + Managers** → Execute geometry changes, emit events for UI synchronization
 - **Why**: Clear separation prevents competing updates, ensures event emission, maintains consistency. Never bypass ObjectStateManager for state changes.
 
-### UI ↔ 3D Communication
-- **PropertyPanelSync**: ONLY source for 3D → UI PostMessages (enforced by DevelopmentValidator)
-- **UnifiedCommunication**: UI → 3D message routing with PropertyPanelSync or fallback PostMessage
-- **Why**: Centralized communication prevents bypasses, enables validation, provides fallback resilience
+### UI ↔ 3D Communication (Phase 3)
+- **MainAdapter**: Subscribes to ObjectEventBus, translates events → MessageProtocol → postMessage to UI
+- **UIAdapter**: Receives messages from Main, updates Svelte stores (selectedObject, objectHierarchy, toolState)
+- **MessageProtocol**: Defines message types (STATE_CHANGED, SELECTION_CHANGED, HIERARCHY_UPDATED, TOOL_STATE_CHANGED)
+- **CommunicationBridge**: Handles postMessage serialization/deserialization between Main and UI iframes
+- **Why**: Event-driven architecture, single communication path, type-safe messages, automatic UI synchronization
 
 ### Support Mesh Architecture
 - Created once as children at object creation, then only show/hide via VisualizationManager
@@ -83,9 +85,11 @@ CAD software for creative hobbyists. Rule-based parametric design with intellige
 - **SceneLifecycleManager** (`/scene/`) - Object creation, deletion, ID generation, support meshes
 - **ToolController** (`/application/`) - Tool activation/switching only
 
-### Communication & UI
-- **PropertyPanelSync** (`/integration/svelte/`) - 3D → UI PostMessages (enforced by validator)
-- **UnifiedCommunication** (`/svelte-ui/src/lib/services/`) - UI → 3D message routing
+### Communication & UI (Phase 3)
+- **MainAdapter** (`/integration/communication/`) - ObjectEventBus → MessageProtocol → postMessage (Main side)
+- **UIAdapter** (`/svelte-ui/src/lib/services/`) - Receives messages → Updates Svelte stores (UI side)
+- **MessageProtocol** (`/integration/communication/`) - Message type definitions and builders
+- **CommunicationBridge** (`/integration/communication/`) - postMessage serialization layer
 - **PropertyController** (`/svelte-ui/src/lib/services/`) - UI property state management
 - **PropertySectionRegistry** (`/svelte-ui/src/lib/services/`) - Maps object types to UI sections
 
@@ -103,8 +107,8 @@ CAD software for creative hobbyists. Rule-based parametric design with intellige
 - Layout calculation? → `SceneController.updateLayout()` (delegates to SceneLayoutManager)
 - Layout propagation? → Automatic via `ObjectStateManager.updateObject()` (delegates to LayoutPropagationManager)
 - UI property update? → `PropertyUpdateHandler` → `ObjectStateManager`
-- UI notification (3D → UI)? → `PropertyPanelSync.sendToUI()`
-- UI command (UI → 3D)? → `UnifiedCommunication` or `PropertyPanelSync`
+- UI notification (3D → UI)? → Automatic via `ObjectEventBus` → `MainAdapter` → `MessageProtocol`
+- UI command (UI → 3D)? → `postMessage` → handler in `main-integration.js`
 - Container operation? → `ContainerCrudManager`
 - Visual effect? → `VisualizationManager`
 - Undo/redo? → `HistoryManager.executeCommand()`
@@ -145,7 +149,7 @@ CAD software for creative hobbyists. Rule-based parametric design with intellige
 - Bypass ObjectStateManager for state changes
 - Call specialized managers directly (SceneHierarchyManager, SceneLayoutManager, SceneLifecycleManager, LayoutPropagationManager)
 - Use visual transforms instead of CAD geometry
-- Call `window.postMessage` directly (use PropertyPanelSync or UnifiedCommunication)
+- Call `window.postMessage` directly from Main (ObjectEventBus → MainAdapter is automatic)
 - Recreate support meshes (show/hide only)
 - Make assumptions without investigation
 - Add complexity without clear architectural benefit

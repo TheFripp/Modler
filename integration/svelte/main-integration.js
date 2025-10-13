@@ -4,42 +4,37 @@
  * ARCHITECTURAL OVERVIEW:
  * This file is the INTEGRATION LAYER that connects:
  * - ObjectStateManager (data/state management)
- * - PropertyPanelSync (UI communication)
+ * - MainAdapter/UIAdapter (UI communication via Phase 3 architecture)
  * - Svelte UI panels (user interface)
  *
- * THREE-LAYER ARCHITECTURE:
+ * THREE-LAYER ARCHITECTURE (Phase 3):
  * ┌─────────────────────────────────────────────────────────────┐
  * │ Layer 1: DATA LAYER (ObjectStateManager)                    │
  * │ - Single source of truth for all object state               │
  * │ - Handles state updates, validation, propagation            │
- * │ - Emits 'objects-changed' and 'selection-changed' events    │
+ * │ - Emits ObjectEventBus events for all state changes         │
  * └─────────────────────────────────────────────────────────────┘
  *                              ↓
  * ┌─────────────────────────────────────────────────────────────┐
  * │ Layer 2: INTEGRATION LAYER (this file)                      │
- * │ - Listens to ObjectStateManager events                      │
- * │ - Routes transform/selection updates via unified-update     │
  * │ - Handles PostMessage from UI → ObjectStateManager          │
- * │ - Coordinates PropertyPanelSync for specialized events      │
+ * │ - Manages tool activation, settings, file operations        │
+ * │ - Coordinates DirectComponentManager for panel communication│
  * └─────────────────────────────────────────────────────────────┘
  *                              ↓
  * ┌─────────────────────────────────────────────────────────────┐
- * │ Layer 3: COMMUNICATION LAYER (PropertyPanelSync)            │
- * │ - Translates ObjectEventBus events → PostMessage format     │
- * │ - Handles iframe communication complexity                   │
- * │ - Routes to specific panels (left, right, toolbars)         │
- * │ - Handles geometry, material, selection, hierarchy events   │
+ * │ Layer 3: COMMUNICATION LAYER (MainAdapter/UIAdapter)        │
+ * │ - MainAdapter: Subscribes to ObjectEventBus events          │
+ * │ - Translates events → MessageProtocol → postMessage         │
+ * │ - UIAdapter: Receives messages → Updates Svelte stores      │
+ * │ - Handles all event types: geometry, material, selection,   │
+ * │   hierarchy, lifecycle, tool state                          │
  * └─────────────────────────────────────────────────────────────┘
  *
- * DATA FLOW FOR PROPERTY UPDATES:
+ * DATA FLOW FOR PROPERTY UPDATES (Phase 3):
  * UI Input → PostMessage → handlePropertyUpdate() → ObjectStateManager.updateObject()
- *   → propagateChanges() → emits events → main-integration catches events
- *   → notifyUISystems() → PropertyPanelSync.sendToUI() → PostMessage → UI Update
- *
- * WHY TWO PATHS (ObjectStateManager + PropertyPanelSync)?
- * - ObjectStateManager: Handles transform/selection (complete object data)
- * - PropertyPanelSync: Handles geometry/material/hierarchy (event-specific data)
- * - This division prevents data conflicts and optimizes network traffic
+ *   → ObjectEventBus.emit() → MainAdapter.handleEvent() → CommunicationBridge
+ *   → postMessage → UIAdapter.receive() → Svelte stores → UI Update
  */
 
 (function() {
@@ -54,7 +49,6 @@
     let portDetector = null;
     let panelManager = null;
     let directComponentManager = null;
-    let propertyPanelSync = null;
     let splitPanelController = null;
     let settingsHandler = null;
     let fileManagerHandler = null;
@@ -318,8 +312,8 @@
                 return false;
             }
 
-            // PHASE 3B: PropertyPanelSync disabled - MainAdapter handles all communication
-            console.log('✅ Using MainAdapter for UI communication (PropertyPanelSync disabled)');
+            // Phase 3: MainAdapter handles all Main → UI communication
+            console.log('✅ Using MainAdapter for UI communication');
 
             return true;
 
@@ -357,8 +351,8 @@
             // Step 4: Initialize iframe panel management
             panelManager = new window.SveltePanelManager(portDetector);
 
-            // PHASE 3B: PropertyPanelSync disabled - MainAdapter handles all communication
-            console.log('✅ Using MainAdapter for UI communication (PropertyPanelSync disabled)');
+            // Phase 3: MainAdapter handles all Main → UI communication
+            console.log('✅ Using MainAdapter for UI communication');
 
             // Step 6: Create and show iframe panels
             createIframePanels();
@@ -554,8 +548,8 @@
         }
 
         // Setting up ObjectEventBus listeners for unified data flow
-        // NOTE: LIFECYCLE events (create/delete) are handled by PropertyPanelSync
-        // This avoids duplicate hierarchy updates sent to UI
+        // NOTE: LIFECYCLE events (create/delete) are handled by MainAdapter
+        // UI receives updates via ObjectEventBus → MainAdapter → MessageProtocol
 
         // Listen to transform events (position, rotation, scale changes)
         window.objectEventBus.subscribe('object:transform', (event) => {
@@ -695,10 +689,8 @@
 
             switch (type) {
                 case 'left-panel-ready':
-                    // Left panel is ready - send initial hierarchy immediately
-                    if (propertyPanelSync && propertyPanelSync.refreshCompleteHierarchy) {
-                        propertyPanelSync.refreshCompleteHierarchy();
-                    }
+                    // Left panel is ready - Phase 3 communication handles this automatically
+                    // MainAdapter sends initial state on panel mount
                     break;
                 case 'object-select':
                     // Handle object selection from UI list
@@ -829,10 +821,8 @@
                     handleMoveToRoot(data.objectId);
                     break;
                 case 'request-hierarchy-refresh':
-                    // Force immediate hierarchy refresh after drag-drop
-                    if (propertyPanelSync) {
-                        propertyPanelSync.refreshCompleteHierarchy();
-                    }
+                    // Phase 3: MainAdapter listens to ObjectEventBus and sends hierarchy updates automatically
+                    // No manual refresh needed
                     break;
                 case 'object-reorder':
                     handleObjectReorder(data.objectId, data.targetId, data.position, data.parentId);
@@ -871,7 +861,7 @@
     }
 
     // ==================================================================================
-    // UI NOTIFICATION (Replaces complex PropertyPanelSync)
+    // UI NOTIFICATION (Phase 3: DirectComponentManager → MainAdapter)
     // ==================================================================================
 
     // Throttling for UI updates
@@ -908,7 +898,7 @@
     function sendUIUpdate(message) {
         lastUpdateTime = Date.now();
 
-        // Use direct component communication or PropertyPanelSync
+        // Phase 3: Use DirectComponentManager for iframe communication
         if (directComponentManager) {
             try {
                 // Direct communication with mounted components
@@ -916,67 +906,15 @@
             } catch (error) {
                 console.error('❌ Direct component communication failed:', error);
             }
-        } else if (propertyPanelSync) {
-            try {
-                // Map message types to PropertyPanelSync methods
-                if (message.type === 'data-update') {
-                    // Map data-update to sendToUI with appropriate updateType
-                    const data = message.data;
-                    propertyPanelSync.sendToUI(data.updateType || 'data-update', data.selectedObjects || [], {
-                        hierarchy: data.objectHierarchy,
-                        containerContext: data.containerContext,
-                        newObjectId: data.newObjectId,
-                        newObjectData: data.newObjectData,
-                        deletedObjectId: data.deletedObjectId
-                    });
-                } else if (message.type === 'property-update') {
-                    // Use sendToUI for property updates
-                    propertyPanelSync.sendToUI('property-refresh', message.data.updatedObject ? [message.data.updatedObject] : [], {
-                        property: message.data.property,
-                        value: message.data.value,
-                        objectId: message.data.objectId,
-                        source: message.data.updateSource
-                    });
-                } else if (message.type === 'tool-state-update') {
-                    // Use sendToolStateUpdate for tool state changes
-                    propertyPanelSync.sendToolStateUpdate(message.data.toolState?.activeTool || 'unknown', message.data);
-                } else if (message.type === 'object-list-update') {
-                    // Map object-list-update to hierarchy-changed
-                    propertyPanelSync.sendToUI('hierarchy-changed', [], {
-                        hierarchy: message.data.hierarchy,
-                        updateType: message.data.updateType,
-                        addedObjectId: message.data.addedObjectId,
-                        removedObjectId: message.data.removedObjectId
-                    });
-                } else {
-                    // Fallback for other message types - use sendToUI with custom type
-                    propertyPanelSync.sendToUI(message.type, message.data?.selectedObjects || [], {
-                        ...message.data
-                    });
-                }
-            } catch (error) {
-                console.error('❌ PropertyPanelSync communication failed:', error);
-                // Fallback to legacy behavior only on error
-                fallbackToLegacyPostMessage(message);
-            }
         } else {
-            console.warn('⚠️ No communication system available');
-            fallbackToLegacyPostMessage(message);
+            console.warn('⚠️ DirectComponentManager not available - this should not happen in Phase 3');
         }
     }
 
     /**
-     * Fallback to PropertyPanelSync when main communication fails
-     * CRITICAL FIX: Remove direct postMessage bypass - always route through PropertyPanelSync
+     * Phase 3: Legacy fallback removed
+     * All communication now goes through DirectComponentManager → MainAdapter → UIAdapter
      */
-    function fallbackToLegacyPostMessage(message) {
-        // BYPASS ELIMINATED: No longer use direct postMessage - force through PropertyPanelSync
-        console.warn('❌ PropertyPanelSync should have handled this message:', message.type);
-        console.warn('❌ This indicates a communication bypass that needs investigation');
-
-        // Don't create parallel communication paths - let the failure be visible
-        // This forces proper PropertyPanelSync usage and prevents race conditions
-    }
 
     /**
      * Sanitize data for PostMessage - SIMPLIFIED VERSION
@@ -1365,10 +1303,7 @@
             }
         }
 
-        // Refresh UI
-        if (propertyPanelSync) {
-            propertyPanelSync.refreshCompleteHierarchy();
-        }
+        // Phase 3: UI refresh happens automatically via ObjectEventBus → MainAdapter
     }
 
     /**
@@ -1561,10 +1496,8 @@
 
         if (directComponentManager) {
             directComponentManager.broadcastToAll(toolStateMessage);
-        } else if (propertyPanelSync) {
-            propertyPanelSync.sendToolStateUpdate(toolName, { snapEnabled });
         }
-        // Silently skip if UI not initialized yet - will sync when ready
+        // Phase 3: Tool state automatically sent via ObjectEventBus → MainAdapter
     }
 
 
