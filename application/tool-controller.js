@@ -89,8 +89,11 @@ class ToolController {
                 window.objectEventBus.EVENT_TYPES.TOOL_STATE,
                 null, // objectId - tool state is global, not tied to specific object
                 {
-                    activeTool: toolName,
-                    snapEnabled: this.getSnapEnabled()
+                    toolName: toolName,
+                    active: true,
+                    toolState: {
+                        snapEnabled: this.getSnapEnabled()
+                    }
                 },
                 {
                     source: 'tool-controller',

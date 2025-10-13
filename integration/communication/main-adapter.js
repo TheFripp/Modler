@@ -397,11 +397,12 @@ class MainAdapter {
         this.stats.eventsReceived++;
 
         const { changeData } = event;
-        const { activeTool, snapEnabled } = changeData;
+        const { toolName, toolState } = changeData;
+        const snapEnabled = toolState?.snapEnabled || false;
 
         // Build tool state message
         const message = window.MessageProtocol.MessageBuilders.toolStateChanged(
-            activeTool,
+            toolName,
             snapEnabled
         );
 
