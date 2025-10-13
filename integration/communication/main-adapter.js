@@ -68,7 +68,54 @@ class MainAdapter {
 
         this.initialized = true;
         console.log('✅ MainAdapter initialized');
+
+        // Send initial state after panels are ready
+        this.waitForPanelsAndSendInitialState();
+
         return true;
+    }
+
+    /**
+     * Wait for UI panels to be ready, then send initial state
+     * @private
+     */
+    waitForPanelsAndSendInitialState() {
+        // Wait a short delay for iframes to fully load
+        setTimeout(() => {
+            this.sendInitialState();
+        }, 500);
+    }
+
+    /**
+     * Send initial state to UI panels
+     * @private
+     */
+    sendInitialState() {
+        try {
+            // Send current hierarchy
+            const hierarchyData = this.getHierarchyData();
+
+            const hierarchyMessage = window.MessageProtocol.MessageBuilders.hierarchyUpdated(
+                hierarchyData.objects,
+                hierarchyData.rootObjects
+            );
+            this.send(hierarchyMessage);
+
+            // Send current selection
+            const selectedObjectIds = this.selectionController?.getSelectedObjectIds() || [];
+            if (selectedObjectIds.length > 0) {
+                const objectData = this.getObjectDataForUI(selectedObjectIds[0]);
+                const selectionMessage = window.MessageProtocol.MessageBuilders.selectionChanged(
+                    selectedObjectIds,
+                    objectData
+                );
+                this.send(selectionMessage);
+            }
+
+            console.log('📤 Initial state sent to UI panels');
+        } catch (error) {
+            console.error('❌ Failed to send initial state:', error);
+        }
     }
 
     /**

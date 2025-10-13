@@ -15,7 +15,7 @@
  */
 
 import { get } from 'svelte/store';
-import { selectedObject, hierarchyData } from '$lib/stores/modler';
+import { selectedObject, objectHierarchy } from '$lib/stores/modler';
 
 // Message protocol types (will be loaded from window)
 type Message = any;
@@ -161,8 +161,39 @@ class UIAdapter {
      * @private
      */
     private handleStateChangedMessage(message: Message): void {
-        const { objectId, changes, eventType } = message.payload;
+        const { objectId, changes, eventType, objectData } = message.payload;
 
+        // Handle lifecycle events (created, deleted)
+        if (eventType === 'created' && objectData) {
+            // Add new object to hierarchy
+            objectHierarchy.update(hierarchy => {
+                const exists = hierarchy.some(obj => obj.id === objectId);
+                if (!exists) {
+                    return [...hierarchy, objectData];
+                }
+                return hierarchy;
+            });
+            this.stats.storeUpdates++;
+            return;
+        }
+
+        if (eventType === 'deleted') {
+            // Remove object from hierarchy
+            objectHierarchy.update(hierarchy =>
+                hierarchy.filter(obj => obj.id !== objectId)
+            );
+
+            // Clear selection if deleted object was selected
+            const currentSelection = get(selectedObject);
+            if (currentSelection?.id === objectId) {
+                selectedObject.set(null);
+            }
+
+            this.stats.storeUpdates++;
+            return;
+        }
+
+        // Handle property updates for existing objects
         // Update selectedObject store if this object is selected
         const currentSelection = get(selectedObject);
         if (currentSelection && currentSelection.id === objectId) {
@@ -179,7 +210,18 @@ class UIAdapter {
             this.stats.storeUpdates++;
         }
 
-        // TODO: Update hierarchy data if this affects tree
+        // Update object in hierarchy if it exists
+        if (changes) {
+            objectHierarchy.update(hierarchy => {
+                const index = hierarchy.findIndex(obj => obj.id === objectId);
+                if (index !== -1) {
+                    const updatedHierarchy = [...hierarchy];
+                    updatedHierarchy[index] = { ...updatedHierarchy[index], ...changes };
+                    return updatedHierarchy;
+                }
+                return hierarchy;
+            });
+        }
     }
 
     /**
@@ -213,13 +255,10 @@ class UIAdapter {
      * @private
      */
     private handleHierarchyUpdatedMessage(message: Message): void {
-        const { objects, rootObjects } = message.payload;
+        const { objects } = message.payload;
 
-        // Update hierarchy store
-        hierarchyData.set({
-            objects: objects || [],
-            rootObjects: rootObjects || []
-        });
+        // Update hierarchy store (it's just an array of objects)
+        objectHierarchy.set(objects || []);
 
         this.stats.storeUpdates++;
     }
@@ -262,7 +301,7 @@ class UIAdapter {
     private getUIState(): any {
         return {
             selectedObject: get(selectedObject),
-            hierarchyData: get(hierarchyData)
+            objectHierarchy: get(objectHierarchy)
         };
     }
 
