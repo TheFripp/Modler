@@ -217,10 +217,13 @@ class MainAdapter {
             return; // Preview operation - don't send to UI during drag
         }
 
-        // Build message with updated state
+        // FIX: Send complete object data for selected objects, not just changes
+        // This ensures PropertyPanel has all properties (position, rotation, dimensions)
+        const completeData = this.getObjectDataForUI(objectId);
+
         const message = window.MessageProtocol.MessageBuilders.stateChanged(
             objectId,
-            {
+            completeData || {
                 changeType: 'geometry',
                 dimensions: changeData.dimensions || this.getDimensions(objectData),
                 ...changeData
@@ -246,10 +249,12 @@ class MainAdapter {
             return; // Preview operation - don't send to UI during drag
         }
 
-        // Transform events use throttled emission for smooth dragging
+        // FIX: Send complete object data for selected objects
+        const completeData = this.getObjectDataForUI(objectId);
+
         const message = window.MessageProtocol.MessageBuilders.stateChanged(
             objectId,
-            {
+            completeData || {
                 changeType: 'transform',
                 position: changeData.position,
                 rotation: changeData.rotation,
@@ -273,9 +278,12 @@ class MainAdapter {
 
         const { objectId, changeData } = event;
 
+        // FIX: Send complete object data for selected objects
+        const completeData = this.getObjectDataForUI(objectId);
+
         const message = window.MessageProtocol.MessageBuilders.stateChanged(
             objectId,
-            {
+            completeData || {
                 changeType: 'material',
                 ...changeData
             },
