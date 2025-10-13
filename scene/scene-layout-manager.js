@@ -309,7 +309,8 @@ class SceneLayoutManager {
                         {
                             type: 'layout-property-changed',
                             property: 'calculatedGap',
-                            value: layoutResult.calculatedGap
+                            value: layoutResult.calculatedGap,
+                            source: 'layout-drag-update' // Mark as preview operation for MainAdapter filtering
                         },
                         { immediate: true, source: 'SceneLayoutManager.updateLayout' }
                     );
