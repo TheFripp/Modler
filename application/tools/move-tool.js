@@ -208,6 +208,11 @@ class MoveTool {
     }
 
     performPositionUpdate(newPosition) {
+        // Safety check: dragObject might have been cleared by deactivate()
+        if (!this.dragObject) {
+            return;
+        }
+
         this.lastPositionUpdateTime = Date.now();
 
         // Get object ID for state management
@@ -862,6 +867,12 @@ class MoveTool {
             endCallback: () => this.endFaceDrag()
         });
         this.eventHandler.handleToolDeactivate(deactivationCallbacks);
+
+        // Clear any pending position updates to prevent null access
+        if (this.pendingPositionUpdate) {
+            clearTimeout(this.pendingPositionUpdate);
+            this.pendingPositionUpdate = null;
+        }
 
         // Clean up snap detection state
         const snapController = window.modlerComponents?.snapController;
