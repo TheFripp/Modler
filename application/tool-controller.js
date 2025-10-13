@@ -85,14 +85,18 @@ class ToolController {
 
         // Emit TOOL_STATE event for UI synchronization
         if (window.objectEventBus) {
-            window.objectEventBus.emit(window.objectEventBus.EVENT_TYPES.TOOL_STATE, {
-                objectId: null, // Tool state is global, not tied to specific object
-                changeData: {
+            window.objectEventBus.emit(
+                window.objectEventBus.EVENT_TYPES.TOOL_STATE,
+                null, // objectId - tool state is global, not tied to specific object
+                {
                     activeTool: toolName,
                     snapEnabled: this.getSnapEnabled()
                 },
-                source: 'tool-controller'
-            });
+                {
+                    source: 'tool-controller',
+                    immediate: true
+                }
+            );
         }
 
         return true;
