@@ -612,11 +612,10 @@ class MainAdapter {
      */
     getHierarchyData() {
         const allObjects = this.sceneController.getAllObjects();
-        const rootObjects = this.sceneController.getRootObjects();
 
         return {
             objects: allObjects.map(obj => this.getObjectDataForUI(obj.id)),
-            rootObjects: rootObjects.map(obj => obj.id)
+            rootObjects: [] // UI handles tree structure via parentContainer field
         };
     }
 
