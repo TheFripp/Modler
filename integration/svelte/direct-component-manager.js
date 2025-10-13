@@ -275,21 +275,15 @@ class DirectComponentManager {
 
     /**
      * Broadcast message to all components
-     * ARCHITECTURE: Uses PropertyPanelSync for all postMessage communication
+     * ARCHITECTURE: Direct postMessage to mounted components (MainAdapter handles ObjectEventBus events)
      */
     broadcastToAll(message) {
-        // ARCHITECTURE: Route through PropertyPanelSync (ONLY authorized postMessage source)
-        const propertyPanelSync = window.modlerComponents?.propertyPanelSync;
-        if (propertyPanelSync) {
-            propertyPanelSync.sendToUI(message.type || 'data-update', [], {
-                throttle: false,
-                panels: ['right', 'left', 'mainToolbar', 'systemToolbar'],
-                includeContext: false,
-                customData: message.data || message
-            });
-        } else {
-            console.warn('DirectComponentManager: PropertyPanelSync not available for broadcast');
-        }
+        // Send directly to all mounted component iframes
+        Object.values(this.components).forEach(component => {
+            if (component.iframe && component.iframe.contentWindow) {
+                component.iframe.contentWindow.postMessage(message, '*');
+            }
+        });
     }
 
     /**
