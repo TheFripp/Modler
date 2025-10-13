@@ -114,9 +114,12 @@
 
 ## UI & Communication
 
-### 3D ↔ UI Communication
-- **property-panel-sync** (`/integration/svelte/`) - ONLY source for 3D → UI PostMessages; enforced by validator
-- **unified-communication** (`/svelte-ui/src/lib/services/`) - UI → 3D message routing with PropertyPanelSync or fallback PostMessage
+### 3D ↔ UI Communication (Phase 3)
+- **main-adapter** (`/integration/communication/`) - Subscribes to ObjectEventBus, sends events to UI via MessageProtocol
+- **ui-adapter** (`/svelte-ui/src/lib/services/`) - Receives MessageProtocol messages, updates Svelte stores
+- **message-protocol** (`/integration/communication/`) - Message type definitions and builders (STATE_CHANGED, SELECTION_CHANGED, etc.)
+- **communication-bridge** (`/integration/communication/`) - postMessage serialization/deserialization layer
+- **unified-communication** (`/svelte-ui/src/lib/services/`) - UI → Main command sending via postMessage
 - **property-controller** (`/svelte-ui/src/lib/services/`) - UI property state management; Svelte stores
 - **property-section-registry** (`/svelte-ui/src/lib/services/`) - Maps object types to UI panel sections
 
@@ -191,8 +194,7 @@
 ## Critical Patterns Checklist
 
 ✅ **ALWAYS**:
-- Use `ObjectStateManager.updateObject()` for state changes
-- Use `PropertyPanelSync.sendToUI()` for UI notifications
+- Use `ObjectStateManager.updateObject()` for state changes (Phase 3: UI updates automatically)
 - Use `VisualizationManager` to show/hide support meshes (never recreate)
 - Use CAD geometry operations, never visual transforms
 - Keep call stacks < 5 function calls
@@ -201,7 +203,7 @@
 
 ❌ **NEVER**:
 - Bypass `ObjectStateManager` for state changes
-- Call `window.postMessage` directly (use PropertyPanelSync or UnifiedCommunication)
+- Call `window.postMessage` directly from Main (ObjectEventBus → MainAdapter is automatic)
 - Recreate support meshes (show/hide only)
 - Use visual transforms instead of CAD geometry
 - Make assumptions without investigation
@@ -212,15 +214,16 @@
 
 ## Layer Boundaries
 
-**Cross-layer communication rules**:
+**Cross-layer communication rules (Phase 3)**:
 - Application → Interaction ✅
 - Interaction → Scene ✅
 - Scene → Foundation ✅
 - Any → ObjectStateManager ✅
-- Any → PropertyPanelSync ✅
 - Application → THREE.js directly ❌
 - Tools → SceneController directly ❌ (use ObjectStateManager)
 - UI → SceneController directly ❌ (use PropertyUpdateHandler)
+- Main → UI: ObjectEventBus → MainAdapter (automatic) ✅
+- UI → Main: UnifiedCommunication.send() ✅
 
 ---
 
@@ -284,7 +287,8 @@ const {
     inputController,          // /interaction/input-controller.js
     cameraController,         // /interaction/camera-controller.js
     containerCrudManager,     // /application/tools/container-crud-manager.js
-    propertyPanelSync         // /integration/svelte/property-panel-sync.js
+    mainAdapter,              // /integration/communication/main-adapter.js (Phase 3)
+    communicationBridge       // /integration/communication/communication-bridge.js (Phase 3)
 } = window.modlerComponents;
 ```
 

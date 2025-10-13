@@ -63,12 +63,15 @@
 | **geometry-utils** | `/application/utilities/` | Geometry operations | Geometry creation/manipulation |
 | **material-manager** | `/application/utilities/` | Material creation & caching | Create/update materials |
 
-### Communication & UI
+### Communication & UI (Phase 3)
 
 | File | Location | Responsibility | When to Use |
 |------|----------|---------------|-------------|
-| **property-panel-sync** | `/integration/svelte/` | 3D → UI messages | Send data to UI |
-| **unified-communication** | `/svelte-ui/src/lib/services/` | UI → 3D routing | Handle UI commands |
+| **main-adapter** | `/integration/communication/` | ObjectEventBus → postMessage | Automatic (Main side) |
+| **ui-adapter** | `/svelte-ui/src/lib/services/` | postMessage → Svelte stores | Automatic (UI side) |
+| **message-protocol** | `/integration/communication/` | Message types & builders | Message definitions |
+| **communication-bridge** | `/integration/communication/` | postMessage serialization | Automatic |
+| **unified-communication** | `/svelte-ui/src/lib/services/` | UI → Main commands | Send commands from UI |
 | **property-controller** | `/svelte-ui/src/lib/services/` | UI property state | UI state management |
 | **property-update-handler** | `/application/handlers/` | UI property changes → 3D | Route property updates |
 
@@ -107,10 +110,10 @@
 │  └─→ PropertyUpdateHandler → ObjectStateManager
 │
 ┌─ UI notification (3D → UI)?
-│  └─→ PropertyPanelSync.sendToUI()
+│  └─→ Automatic via ObjectEventBus → MainAdapter → MessageProtocol
 │
 ┌─ UI command (UI → 3D)?
-│  └─→ UnifiedCommunication or PropertyPanelSync
+│  └─→ UnifiedCommunication.send() → postMessage → main-integration.js
 │
 ┌─ Container operation?
 │  └─→ ContainerCrudManager
@@ -129,23 +132,26 @@
 
 ## Common Workflows
 
-### 1. State Change Flow
+### 1. State Change Flow (Phase 3)
 ```javascript
 // User action → State update → UI notification
 Tool/Handler
   → ObjectStateManager.updateObject(objectId, updates)
     → SceneController.updateGeometry()
-    → PropertyPanelSync.sendToUI('objectUpdated', data)
+    → ObjectEventBus.emit('object:geometry', event)
+      → MainAdapter.handleEvent() → MessageProtocol
+        → postMessage → UIAdapter.receive() → Svelte stores update
 ```
 
-### 2. UI Property Change Flow
+### 2. UI Property Change Flow (Phase 3)
 ```javascript
 // User edits property → Update 3D → Reflect in UI
 UI Panel (Svelte)
-  → UnifiedCommunication.send('updateProperty', data)
-    → PropertyUpdateHandler.handlePropertyChange()
-      → ObjectStateManager.updateObject()
-        → PropertyPanelSync.sendToUI('propertyUpdated')
+  → UnifiedCommunication.sendPropertyUpdate(objectId, property, value)
+    → postMessage → main-integration.js
+      → PropertyUpdateHandler.handlePropertyChange()
+        → ObjectStateManager.updateObject()
+          → ObjectEventBus.emit() → MainAdapter → UIAdapter → UI updates
 ```
 
 ### 3. Container Creation Flow

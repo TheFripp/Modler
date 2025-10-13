@@ -59,55 +59,57 @@ if (ObjectStateManager.getObject(objectId)) {
 **⚠️ CRITICAL: NEVER access window.parent.modlerComponents from Svelte iframes!**
 - Svelte iframes run on different origin (localhost:5173 vs localhost:3000)
 - Browser blocks cross-origin direct access → SecurityError
-- **ALWAYS use PostMessage** for ALL iframe ↔ parent communication
-- Use PropertyPanelSync (3D→UI) or UnifiedCommunication (UI→3D)
+- **Phase 3**: Automatic communication via MainAdapter/UIAdapter
+- UI updates happen automatically when ObjectEventBus emits events
 
-### 1. Send Data to UI (3D → UI)
+### 1. Send Data to UI (3D → UI) - Phase 3
 
 ```javascript
-// ALWAYS use PropertyPanelSync
-// Available globally via window.modlerComponents
-const PropertyPanelSync = window.modlerComponents.propertyPanelSync;
+// Phase 3: Automatic via ObjectEventBus → MainAdapter
+// NO manual UI notification needed - just emit events!
 
-// Notify UI of object update
-PropertyPanelSync.sendToUI('objectUpdated', {
-    objectId: objectId,
-    updates: { position, dimensions, rotation }
+// Object state changes automatically notify UI
+ObjectStateManager.updateObject(objectId, {
+    position: newPosition,
+    dimensions: newDimensions
 });
+// → ObjectEventBus emits events
+// → MainAdapter listens and sends to UI
+// → UIAdapter updates Svelte stores
+// → UI automatically re-renders
 
-// Notify UI of selection change
-PropertyPanelSync.sendToUI('selectionChanged', {
-    selectedId: objectId,
-    objectData: ObjectStateManager.getObject(objectId)
-});
-
-// Notify UI of object addition
-PropertyPanelSync.sendToUI('objectAdded', {
-    objectId: newId,
-    objectData: ObjectStateManager.getObject(newId)
-});
-
-// Notify UI of object deletion
-PropertyPanelSync.sendToUI('objectDeleted', {
-    objectId: deletedId
-});
+// For direct ObjectEventBus emission (rare):
+window.objectEventBus.emit(
+    window.objectEventBus.EVENT_TYPES.GEOMETRY,
+    objectId,
+    { dimensions: newDimensions },
+    { source: 'my-system' }
+);
 ```
 
-### 2. Handle UI Commands (UI → 3D)
+### 2. Send Commands to Main (UI → 3D) - Phase 3
 
 ```javascript
-// In property-update-handler.js or similar
-handlePropertyChange(objectId, propertyName, value) {
-    // Validate input
-    if (!objectId || !propertyName) return;
+// In Svelte component
+import { unifiedCommunication } from '$lib/services/unified-communication';
 
-    // Route to ObjectStateManager
-    ObjectStateManager.updateObject(objectId, {
-        [propertyName]: value
-    });
+// Send property update
+await unifiedCommunication.instance.sendPropertyUpdate(
+    objectId,
+    'dimensions.x',
+    newValue
+);
 
-    // UI will be notified automatically via ObjectStateManager events
-}
+// Send tool activation
+await unifiedCommunication.instance.sendToolActivation('move');
+
+// Send object selection
+await unifiedCommunication.instance.sendSelectionChange(objectId);
+
+// All commands use direct postMessage to main-integration.js
+// → Handlers route to ObjectStateManager
+// → ObjectEventBus emits events
+// → MainAdapter sends updates back to UI
 ```
 
 ---
@@ -912,13 +914,11 @@ autoLayout.newProp = true;  // WRONG - will be stripped during sync
 
 ✅ **DO**:
 ```javascript
-// Use ObjectStateManager
+// Use ObjectStateManager (Phase 3: UI updates automatically)
 ObjectStateManager.updateObject(id, {
     position: {x, y, z}
 });
-
-// Use PropertyPanelSync
-PropertyPanelSync.sendToUI('objectUpdated', data);
+// → ObjectEventBus → MainAdapter → UIAdapter → UI updates
 
 // Show/hide support meshes
 visualizationManager.showSupportMesh(id, 'edges');
