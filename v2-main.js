@@ -104,6 +104,14 @@ function initializeFoundation(canvas) {
 function initializeScene() {
     modlerV2Components.sceneController = new SceneController(modlerV2Components.sceneFoundation.scene);
 
+    // Hierarchy manager (Phase 5.1 Refactoring)
+    modlerV2Components.sceneHierarchyManager = new SceneHierarchyManager();
+    modlerV2Components.sceneHierarchyManager.initialize(
+        modlerV2Components.sceneController.objects,
+        modlerV2Components.sceneFoundation.scene,
+        modlerV2Components.sceneController.rootChildrenOrder
+    );
+
     // Inject centralized factories (Phase 1 - Factory Consolidation)
     modlerV2Components.visualEffects = new VisualEffects(
         modlerV2Components.sceneFoundation.scene,
@@ -137,9 +145,12 @@ function initializeInteraction() {
     modlerV2Components.transformationManager = new TransformationManager();
     modlerV2Components.fieldNavigationManager = new FieldNavigationManager();
 
-    // Wire up containerCrudManager to layoutPropagationManager (Phase 4 Refactoring)
+    // Wire up component references (Phase 4 & 5 Refactoring)
     if (modlerV2Components.layoutPropagationManager) {
         modlerV2Components.layoutPropagationManager.containerCrudManager = modlerV2Components.containerCrudManager;
+    }
+    if (modlerV2Components.sceneHierarchyManager) {
+        modlerV2Components.sceneHierarchyManager.setObjectStateManager(modlerV2Components.objectStateManager);
     }
 
     // Initialize unified visualization system components
