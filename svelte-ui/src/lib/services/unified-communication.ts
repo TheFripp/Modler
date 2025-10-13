@@ -14,6 +14,7 @@ interface UnifiedCommunicationService {
     sendSelectionChange(objectId: string, isShiftClick?: boolean): Promise<boolean>;
     sendSettingsRequest(requestType: string): Promise<boolean>;
     sendDeleteSelected(): Promise<boolean>;
+    sendPropertyUpdate(objectId: string, property: string, value: any): Promise<boolean>;
 }
 
 class UnifiedCommunication implements UnifiedCommunicationService {
@@ -179,6 +180,22 @@ class UnifiedCommunication implements UnifiedCommunicationService {
     }
 
     /**
+     * Send property update command (e.g., for renaming objects)
+     */
+    async sendPropertyUpdate(objectId: string, property: string, value: any): Promise<boolean> {
+        if (this.propertyPanelSync) {
+            return this.propertyPanelSync.sendPropertyUpdate(objectId, property, value);
+        }
+
+        // Fallback to direct PostMessage
+        return this.fallbackPostMessage('property-update', {
+            objectId,
+            property,
+            value
+        });
+    }
+
+    /**
      * Fallback to direct PostMessage when PropertyPanelSync is not available
      * Attempts to authorize through global PropertyPanelSync if available
      */
@@ -246,6 +263,7 @@ export const unifiedCommunication = {
                 sendNavigationCommand: async () => false,
                 sendSettingsRequest: async () => false,
                 sendDeleteSelected: async () => false,
+                sendPropertyUpdate: async () => false,
                 isInitialized: () => false,
                 getStatus: () => ({ initialized: false, hasPropertyPanelSync: false })
             } as UnifiedCommunication;
@@ -266,6 +284,7 @@ export const unifiedCommunication = {
     sendSelectionChange: async (objectId: string, isShiftClick?: boolean) => unifiedCommunication.instance.sendSelectionChange(objectId, isShiftClick),
     sendSettingsRequest: async (requestType: string) => unifiedCommunication.instance.sendSettingsRequest(requestType),
     sendDeleteSelected: async () => unifiedCommunication.instance.sendDeleteSelected(),
+    sendPropertyUpdate: async (objectId: string, property: string, value: any) => unifiedCommunication.instance.sendPropertyUpdate(objectId, property, value),
     isInitialized: () => unifiedCommunication.instance.isInitialized(),
     getStatus: () => unifiedCommunication.instance.getStatus()
 };

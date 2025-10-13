@@ -19,6 +19,10 @@
 	// Animation state
 	let isLoaded = false;
 
+	// Rename state
+	let editingObjectId = null;
+	let editingObjectName = '';
+
 	onMount(() => {
 		// Trigger fade-in animation after component mounts
 		setTimeout(() => {
@@ -139,6 +143,50 @@
 
 	function handleObjectClick(event, object) {
 		unifiedCommunication.sendSelectionChange(object.id, event.shiftKey).catch(console.error);
+	}
+
+	function handleObjectDoubleClick(event, object) {
+		event.stopPropagation();
+		event.preventDefault();
+		startRenaming(object);
+	}
+
+	function startRenaming(object) {
+		editingObjectId = object.id;
+		editingObjectName = object.name;
+
+		// Focus input after it's rendered
+		setTimeout(() => {
+			const input = document.querySelector(`#rename-input-${object.id}`);
+			if (input) {
+				input.focus();
+				input.select();
+			}
+		}, 0);
+	}
+
+	function finishRenaming() {
+		if (editingObjectId && editingObjectName.trim()) {
+			// Send rename command to 3D scene
+			unifiedCommunication.sendPropertyUpdate(editingObjectId, 'name', editingObjectName.trim())
+				.catch(console.error);
+		}
+		cancelRenaming();
+	}
+
+	function cancelRenaming() {
+		editingObjectId = null;
+		editingObjectName = '';
+	}
+
+	function handleRenameKeydown(event) {
+		if (event.key === 'Enter') {
+			event.preventDefault();
+			finishRenaming();
+		} else if (event.key === 'Escape') {
+			event.preventDefault();
+			cancelRenaming();
+		}
 	}
 
 	// Drag and drop handlers
@@ -388,48 +436,82 @@
 				<div class="w-4"></div>
 			{/if}
 
-			<button
-				type="button"
-				onclick={(e) => handleObjectClick(e, object)}
-				class={cn(
-					'flex items-center gap-2 px-2 py-2 rounded-md flex-1 min-w-0 transition-colors',
-					'text-foreground/70 hover:text-foreground hover:bg-white/5',
-					'focus:outline-none',
-					isObjectHighlighted(object) && 'bg-[#212121]/50'
-				)}
-			>
-				{#if object.isContainer && object.autoLayout?.tileMode?.enabled}
-					<SquareStack
-						class={cn(
-							"w-4 h-4 shrink-0",
-							isObjectHighlighted(object) ? "text-blue-400" : "text-foreground/50"
-						)}
-						strokeWidth={1.5}
-					/>
-				{:else if object.isContainer}
-					<BoxSelect
-						class={cn(
-							"w-4 h-4 shrink-0",
-							isObjectHighlighted(object) ? "text-blue-400" : "text-foreground/50"
-						)}
-						strokeWidth={1.5}
-					/>
-				{:else}
-					<Box
-						class={cn(
-							"w-4 h-4 shrink-0",
-							isObjectHighlighted(object) ? "text-blue-400" : "text-foreground/50"
-						)}
-						strokeWidth={1.5}
-					/>
-				{/if}
+			{#if editingObjectId === object.id}
+				<!-- Rename input mode -->
+				<div class="flex items-center gap-2 px-2 py-2 rounded-md flex-1 min-w-0 bg-[#212121]/50 border border-blue-400">
+					{#if object.isContainer && object.autoLayout?.tileMode?.enabled}
+						<SquareStack
+							class="w-4 h-4 shrink-0 text-blue-400"
+							strokeWidth={1.5}
+						/>
+					{:else if object.isContainer}
+						<BoxSelect
+							class="w-4 h-4 shrink-0 text-blue-400"
+							strokeWidth={1.5}
+						/>
+					{:else}
+						<Box
+							class="w-4 h-4 shrink-0 text-blue-400"
+							strokeWidth={1.5}
+						/>
+					{/if}
 
-				<span class="truncate text-sm">{object.name}</span>
+					<input
+						id="rename-input-{object.id}"
+						type="text"
+						bind:value={editingObjectName}
+						onkeydown={handleRenameKeydown}
+						onblur={finishRenaming}
+						class="flex-1 min-w-0 bg-transparent border-none text-sm text-foreground focus:outline-none placeholder:text-foreground/30"
+						placeholder="Object name"
+					/>
+				</div>
+			{:else}
+				<!-- Normal display mode -->
+				<button
+					type="button"
+					onclick={(e) => handleObjectClick(e, object)}
+					ondblclick={(e) => handleObjectDoubleClick(e, object)}
+					class={cn(
+						'flex items-center gap-2 px-2 py-2 rounded-md flex-1 min-w-0 transition-colors',
+						'text-foreground/70 hover:text-foreground hover:bg-white/5',
+						'focus:outline-none',
+						isObjectHighlighted(object) && 'bg-[#212121]/50'
+					)}
+				>
+					{#if object.isContainer && object.autoLayout?.tileMode?.enabled}
+						<SquareStack
+							class={cn(
+								"w-4 h-4 shrink-0",
+								isObjectHighlighted(object) ? "text-blue-400" : "text-foreground/50"
+							)}
+							strokeWidth={1.5}
+						/>
+					{:else if object.isContainer}
+						<BoxSelect
+							class={cn(
+								"w-4 h-4 shrink-0",
+								isObjectHighlighted(object) ? "text-blue-400" : "text-foreground/50"
+							)}
+							strokeWidth={1.5}
+						/>
+					{:else}
+						<Box
+							class={cn(
+								"w-4 h-4 shrink-0",
+								isObjectHighlighted(object) ? "text-blue-400" : "text-foreground/50"
+							)}
+							strokeWidth={1.5}
+						/>
+					{/if}
 
-				{#if object.isContainer && object.autoLayout?.tileMode?.enabled}
-					<span class="text-sm text-[#10B981] font-mono shrink-0">×{object.autoLayout.tileMode.repeat}</span>
-				{/if}
-			</button>
+					<span class="truncate text-sm">{object.name}</span>
+
+					{#if object.isContainer && object.autoLayout?.tileMode?.enabled}
+						<span class="text-sm text-[#10B981] font-mono shrink-0">×{object.autoLayout.tileMode.repeat}</span>
+					{/if}
+				</button>
+			{/if}
 		</div>
 
 		{#if dragOverTarget?.id === object.id && dropIndicatorPosition === 'after'}

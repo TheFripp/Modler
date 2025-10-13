@@ -11,7 +11,7 @@ class PushFaceCommand extends BaseCommand {
      * @param {Object} newPosition - New position {x, y, z}
      */
     constructor(objectId, oldDimensions, newDimensions, oldPosition, newPosition) {
-        super();
+        super('push-face', 'Push face operation');
         this.objectId = objectId;
         this.oldDimensions = { ...oldDimensions };
         this.newDimensions = { ...newDimensions };
@@ -119,12 +119,6 @@ class PushFaceCommand extends BaseCommand {
             mesh.position.set(targetPosition.x, targetPosition.y, targetPosition.z);
         }
 
-        // Update object data position
-        if (targetPosition) {
-            objectData.position = { ...targetPosition };
-        }
-        // Dimensions automatically updated via DimensionManager getter from geometry
-
         // Update support meshes
         const geometryUtils = window.GeometryUtils;
         if (geometryUtils) {
@@ -132,8 +126,12 @@ class PushFaceCommand extends BaseCommand {
         }
 
         // Notify state change to update UI
-        if (objectStateManager) {
-            objectStateManager.syncRestoredObject(objectData.id);
+        // Use updateObject to properly sync position, dimensions, and emit events
+        if (objectStateManager && targetPosition) {
+            objectStateManager.updateObject(objectData.id, {
+                position: targetPosition,
+                dimensions: targetDimensions
+            }, 'undo');
         }
 
         return true;

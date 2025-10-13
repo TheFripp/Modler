@@ -248,36 +248,18 @@ class ObjectSerializer {
     }
 
     /**
-     * Compute dimensions using GeometryUtils or fallback
-     * @deprecated Use window.dimensionManager.getDimensions() instead
+     * REMOVED: Use window.dimensionManager.getDimensions() instead
+     * This method was deprecated and has been removed as part of dimension reading simplification.
+     * All dimension queries should go through DimensionManager.
+     * @deprecated
      * @private
      */
     computeDimensions(obj) {
-        if (!obj.geometry) return { x: 1, y: 1, z: 1 };
-
-        // Try GeometryUtils first (handles modified geometries correctly)
-        if (this.geometryUtils) {
-            const dimensions = this.geometryUtils.getGeometryDimensions(obj.geometry);
-            if (dimensions) {
-                return {
-                    x: parseFloat(dimensions.x.toFixed(this.PRECISION.dimensions)),
-                    y: parseFloat(dimensions.y.toFixed(this.PRECISION.dimensions)),
-                    z: parseFloat(dimensions.z.toFixed(this.PRECISION.dimensions))
-                };
-            }
+        console.warn('ObjectSerializer.computeDimensions() is deprecated. Use window.dimensionManager.getDimensions() instead.');
+        if (!window.dimensionManager) {
+            throw new Error('DimensionManager not available - required for dimension operations');
         }
-
-        // Fallback to geometry parameters for basic geometries
-        if (obj.geometry.parameters) {
-            const params = obj.geometry.parameters;
-            return {
-                x: parseFloat((params.width || 1).toFixed(this.PRECISION.dimensions)),
-                y: parseFloat((params.height || 1).toFixed(this.PRECISION.dimensions)),
-                z: parseFloat((params.depth || 1).toFixed(this.PRECISION.dimensions))
-            };
-        }
-
-        return { x: 1, y: 1, z: 1 };
+        return window.dimensionManager.getDimensions(obj) || { x: 1, y: 1, z: 1 };
     }
 
     /**
@@ -310,32 +292,29 @@ class ObjectSerializer {
 
     /**
      * Add geometry data (dimensions) to serialized object
+     * UPDATED: Uses DimensionManager as single source of truth
      * @private
      */
     addGeometryData(serialized, obj) {
         if (!obj.geometry) return;
 
-        // Try GeometryUtils first (handles modified geometries correctly)
-        if (this.geometryUtils) {
-            const dimensions = this.geometryUtils.getGeometryDimensions(obj.geometry);
-            if (dimensions) {
-                serialized.dimensions = {
-                    x: parseFloat(dimensions.x.toFixed(this.PRECISION.dimensions)),
-                    y: parseFloat(dimensions.y.toFixed(this.PRECISION.dimensions)),
-                    z: parseFloat(dimensions.z.toFixed(this.PRECISION.dimensions))
-                };
-                return;
-            }
+        // ARCHITECTURE: Use DimensionManager as single source of truth for dimensions
+        if (!window.dimensionManager) {
+            console.error('ObjectSerializer: DimensionManager not available - cannot serialize dimensions');
+            serialized.dimensions = { x: 1, y: 1, z: 1 }; // Fallback for safety
+            return;
         }
 
-        // Fallback to geometry parameters for basic geometries
-        if (obj.geometry.parameters) {
-            const params = obj.geometry.parameters;
+        const dimensions = window.dimensionManager.getDimensions(obj);
+        if (dimensions) {
             serialized.dimensions = {
-                x: parseFloat((params.width || 1).toFixed(this.PRECISION.dimensions)),
-                y: parseFloat((params.height || 1).toFixed(this.PRECISION.dimensions)),
-                z: parseFloat((params.depth || 1).toFixed(this.PRECISION.dimensions))
+                x: parseFloat(dimensions.x.toFixed(this.PRECISION.dimensions)),
+                y: parseFloat(dimensions.y.toFixed(this.PRECISION.dimensions)),
+                z: parseFloat(dimensions.z.toFixed(this.PRECISION.dimensions))
             };
+        } else {
+            console.warn('ObjectSerializer: Could not read dimensions for object:', obj.userData?.id);
+            serialized.dimensions = { x: 1, y: 1, z: 1 }; // Fallback for safety
         }
     }
 

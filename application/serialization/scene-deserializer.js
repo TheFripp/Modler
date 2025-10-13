@@ -269,25 +269,7 @@ class SceneDeserializer {
         // setParentContainer() must be called AFTER both parent and child exist
         for (const objData of sortedObjects) {
             if (objData.parentContainer) {
-                // Don't update layout yet - we'll do that after all hierarchies are established
-                const success = this.sceneController.setParentContainer(objData.id, objData.parentContainer, false);
-                if (success) {
-                    const childObj = this.sceneController.getObject(objData.id);
-                    const parentObj = this.sceneController.getObject(objData.parentContainer);
-
-                    // CRITICAL FIX: Restore the saved LOCAL position
-                    // ONLY for children NOT in layout-enabled containers
-                    // Layout containers will recalculate positions via updateLayout() below
-                    const parentHasLayout = parentObj?.autoLayout?.enabled === true;
-                    if (childObj?.mesh && objData.position && !parentHasLayout) {
-                        // Parent doesn't use layout - restore saved position
-                        childObj.mesh.position.set(
-                            objData.position.x ?? 0,
-                            objData.position.y ?? 0,
-                            objData.position.z ?? 0
-                        );
-                    }
-                }
+                this.restoreHierarchyAndPosition(objData);
             }
         }
 
@@ -308,6 +290,44 @@ class SceneDeserializer {
         if (sceneContent.rootChildrenOrder) {
             this.sceneController.rootChildrenOrder = [...sceneContent.rootChildrenOrder];
         }
+    }
+
+    /**
+     * Restore hierarchy and position for a child object
+     * @param {Object} objData - Child object data
+     * @private
+     */
+    restoreHierarchyAndPosition(objData) {
+        // Don't update layout yet - we'll do that after all hierarchies are established
+        const success = this.sceneController.setParentContainer(objData.id, objData.parentContainer, false);
+
+        if (!success) {
+            console.warn(`Failed to set parent for object ${objData.id}`);
+            return;
+        }
+
+        const childObj = this.sceneController.getObject(objData.id);
+        const parentObj = this.sceneController.getObject(objData.parentContainer);
+
+        if (!childObj?.mesh || !parentObj) {
+            return;
+        }
+
+        // CRITICAL: Position restoration logic
+        // Two cases:
+        // 1. Parent has layout enabled → position will be recalculated by updateLayout()
+        // 2. Parent has NO layout → restore saved local position
+        const parentHasLayout = parentObj.autoLayout?.enabled === true;
+
+        if (!parentHasLayout && objData.position) {
+            // Case 2: Manual container - restore saved position
+            childObj.mesh.position.set(
+                objData.position.x ?? 0,
+                objData.position.y ?? 0,
+                objData.position.z ?? 0
+            );
+        }
+        // Case 1: Layout container - position will be set by updateLayout() below
     }
 
     /**

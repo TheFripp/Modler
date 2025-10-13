@@ -1153,6 +1153,48 @@ class PropertyPanelSync {
     }
 
     /**
+     * Send property update command (e.g., for renaming objects)
+     */
+    sendPropertyUpdate(objectId, property, value) {
+        try {
+            // Create unified message format
+            const message = {
+                type: 'property-update',
+                data: {
+                    objectId,
+                    property,
+                    value
+                },
+                timestamp: Date.now(),
+                source: 'PropertyPanelSync'
+            };
+
+            // Send to main window
+            if (window.parent && window.parent !== window) {
+                window.parent.postMessage(message, '*');
+                this.stats.messagesSucceeded++;
+                return true;
+            }
+
+            // Direct mode: update property directly
+            const propertyUpdateHandler = window.modlerComponents?.propertyUpdateHandler;
+            if (propertyUpdateHandler && propertyUpdateHandler.handlePropertyUpdate) {
+                propertyUpdateHandler.handlePropertyUpdate(objectId, property, value);
+                this.stats.messagesSucceeded++;
+                return true;
+            }
+
+            console.warn('PropertyPanelSync.sendPropertyUpdate: No handler available');
+            return false;
+
+        } catch (error) {
+            console.error('PropertyPanelSync.sendPropertyUpdate error:', error);
+            this.stats.messagesFailed++;
+            return false;
+        }
+    }
+
+    /**
      * Send settings request commands through unified system
      * For requesting current settings from main application
      */

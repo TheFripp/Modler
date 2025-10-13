@@ -178,7 +178,7 @@ function validateObjectData(objectData) {
 
 /**
  * Serialize ObjectData for PostMessage transmission
- * UPDATED: Now uses schema-driven serialization to prevent missing properties
+ * UPDATED: Uses schema-driven serialization exclusively (dual path removed)
  * @param {Object} objectData - Standard ObjectData
  * @returns {Object} PostMessage-safe object
  */
@@ -186,54 +186,22 @@ function serializeForPostMessage(objectData) {
     if (!objectData) return null;
 
     try {
-        // Use schema-driven serialization if available (preferred)
-        if (window.SchemaSerializer) {
-            const serialized = window.SchemaSerializer.serializeWithSchema(
-                objectData,
-                STANDARD_OBJECT_DATA_SCHEMA,
-                { createNewReferences: true }
-            );
-
-            // Add runtime metadata
-            serialized.formatVersion = OBJECT_DATA_FORMAT_VERSION;
-            serialized.lastModified = Date.now();
-
-            return serialized;
+        // ARCHITECTURE: Schema-driven serialization is required
+        // This eliminates dual code paths and ensures consistency
+        if (!window.SchemaSerializer) {
+            console.error('ObjectDataFormat: SchemaSerializer not available - this is a critical system dependency');
+            throw new Error('SchemaSerializer required for serialization');
         }
 
-        // Fallback to manual serialization (backwards compatibility)
-        const serialized = {
-            id: objectData.id,
-            name: objectData.name,
-            type: objectData.type,
-            isContainer: objectData.isContainer,
-            position: objectData.position ? { ...objectData.position } : undefined,
-            rotation: objectData.rotation ? { ...objectData.rotation } : undefined,
-            scale: objectData.scale ? { ...objectData.scale } : undefined,
-            dimensions: objectData.dimensions ? { ...objectData.dimensions } : undefined,
-            material: objectData.material ? { ...objectData.material } : undefined,
-            visible: objectData.visible,
-            locked: objectData.locked,
-            selectable: objectData.selectable,
-            children: objectData.children ? [...objectData.children] : [],
-            childrenOrder: objectData.childrenOrder ? [...objectData.childrenOrder] : undefined,
-            parent: objectData.parent,
-            parentContainer: objectData.parentContainer,
-            layoutMode: objectData.layoutMode,
-            autoLayout: objectData.autoLayout ? {
-                ...objectData.autoLayout,
-                padding: objectData.autoLayout.padding ? { ...objectData.autoLayout.padding } : undefined
-            } : undefined,
-            gap: objectData.gap,
-            padding: objectData.padding,
-            calculatedGap: objectData.calculatedGap,
-            constraints: objectData.constraints ? { ...objectData.constraints } : undefined,
-            userData: objectData.userData ? { ...objectData.userData } : {},
-            createdAt: objectData.createdAt,
-            modifiedAt: objectData.modifiedAt,
-            formatVersion: OBJECT_DATA_FORMAT_VERSION,
-            lastModified: Date.now()
-        };
+        const serialized = window.SchemaSerializer.serializeWithSchema(
+            objectData,
+            STANDARD_OBJECT_DATA_SCHEMA,
+            { createNewReferences: true }
+        );
+
+        // Add runtime metadata
+        serialized.formatVersion = OBJECT_DATA_FORMAT_VERSION;
+        serialized.lastModified = Date.now();
 
         return serialized;
 
