@@ -252,6 +252,9 @@ class MainAdapter {
             objectData
         );
 
+        // Use throttled strategy for rapid selection changes (shift-select, etc.)
+        message.strategy = window.MessageProtocol.EMISSION_STRATEGY.THROTTLED;
+
         this.send(message);
     }
 
