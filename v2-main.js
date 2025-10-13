@@ -181,6 +181,9 @@ function initializeApplication() {
     // Initialize PropertyManager for object property updates and fill functionality
     modlerV2Components.propertyManager = new PropertyManager();
 
+    // Initialize ObjectSerializer for consistent object serialization
+    modlerV2Components.objectSerializer = new ObjectSerializer();
+
     // Initialize File System for scene save/load
     modlerV2Components.fileManager = new FileManager();
     modlerV2Components.fileManager.startAutoSave(); // Start 30-second auto-save

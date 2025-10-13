@@ -565,26 +565,38 @@ class GeometryFactory {
     // ===== STANDARD GEOMETRY CREATION METHODS =====
 
     /**
-     * Create box geometry with pooling
+     * Create box geometry with optional pooling
      * @param {number} width - Box width
      * @param {number} height - Box height
      * @param {number} depth - Box depth
-     * @returns {THREE.BoxGeometry} Pooled box geometry
+     * @param {Object} options - Creation options
+     * @param {boolean} options.pooling - Enable geometry pooling (default: false)
+     *                                     Set true for component instances that should share geometry
+     * @returns {THREE.BoxGeometry} Box geometry (unique or pooled)
      */
-    createBoxGeometry(width, height, depth) {
+    createBoxGeometry(width, height, depth, options = {}) {
+        // Default: NO pooling (each object gets unique geometry for CAD-style manipulation)
+        // Component instances can opt-in to pooling for shared geometry behavior
+        const enablePooling = options.pooling === true;
+
         const key = `${width}_${height}_${depth}`;
 
-        // Check pool first
-        const pooledGeometry = this.getFromPool('boxes', key);
-        if (pooledGeometry) {
-            return pooledGeometry;
+        // Check pool ONLY if pooling enabled
+        if (enablePooling) {
+            const pooledGeometry = this.getFromPool('boxes', key);
+            if (pooledGeometry) {
+                return pooledGeometry;
+            }
         }
 
         // Create new geometry
         const geometry = new THREE.BoxGeometry(width, height, depth);
 
-        // Store in pool and track
-        this.storeInPool('boxes', key, geometry);
+        // Store in pool ONLY if pooling enabled
+        if (enablePooling) {
+            this.storeInPool('boxes', key, geometry);
+        }
+
         this.trackGeometry(geometry, { type: 'box', key });
 
         this.stats.created++;

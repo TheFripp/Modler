@@ -59,7 +59,7 @@ class BoxCreationTool {
         }
     }
 
-    onHover(_hit) {
+    onHover(_hit, isAltPressed) {
         if (this.state === BoxCreationState.SETTING_CORNER_1 && this.startPosition) {
             const groundHit = this.getGroundPlaneIntersection();
             if (groundHit) {
@@ -166,11 +166,14 @@ class BoxCreationTool {
             supportMeshFactory.updateSupportMeshGeometries(this.creationObject);
         }
 
-        // Make material opaque and enable depth writing
-        this.creationObject.material.opacity = 1.0;
-        this.creationObject.material.transparent = false;
-        this.creationObject.material.depthWrite = true; // Re-enable depth writing so floor doesn't show through
-        this.creationObject.material.needsUpdate = true;
+        // Replace with final opaque material (don't modify the cached transparent one)
+        const finalMaterial = this.materialManager.createMeshLambertMaterial({
+            color: this.creationObject.material.color.getHex(),
+            transparent: false,
+            opacity: 1.0,
+            depthWrite: true
+        });
+        this.creationObject.material = finalMaterial;
 
         // Update position to center
         this.creationObject.position.set(centerX, centerY, centerZ);
@@ -194,9 +197,12 @@ class BoxCreationTool {
             const objectData = sceneController.getObject(this.creationObject.userData.id);
             if (objectData) {
                 objectData.position = this.creationObject.position.clone();
-                objectData.dimensions = { x: width, y: height, z: depth };
+                // Dimensions automatically updated via DimensionManager getter from geometry
                 // Remove temporary flag so object appears in tree
                 delete objectData.isTemporary;
+
+                // Get dimensions from geometry for event
+                const dims = window.dimensionManager?.getDimensions(this.creationObject) || { x: width, y: height, z: depth };
 
                 // Emit final update event
                 if (window.objectEventBus) {
@@ -204,7 +210,7 @@ class BoxCreationTool {
                         window.objectEventBus.EVENT_TYPES.GEOMETRY,
                         objectData.id,
                         {
-                            dimensions: objectData.dimensions,
+                            dimensions: dims,
                             position: objectData.position
                         },
                         { immediate: true, source: 'BoxCreationTool.finalizeBox' }
@@ -288,12 +294,12 @@ class BoxCreationTool {
 
         // ARCHITECTURE: Create preview mesh once, update geometry on changes
         if (!this.previewBox) {
-            // First-time creation
+            // First-time creation - use selection color from settings
             const configManager = window.modlerComponents?.configurationManager;
-            const configColor = configManager?.get('visual.boxCreation.color') || '#00ff00';
+            const selectionColor = configManager?.get('visual.selection.color') || '#ff6600';
 
             const material = this.materialManager.createPreviewWireframeMaterial({
-                color: configColor,
+                color: selectionColor,
                 opacity: 0.8
             });
 
@@ -581,21 +587,17 @@ class BoxCreationTool {
         if (sceneController && this.creationObject.userData && this.creationObject.userData.id) {
             const objectData = sceneController.getObject(this.creationObject.userData.id);
             if (objectData) {
-                // Update the object data dimensions and position
+                // Update the object data position
                 objectData.position = this.creationObject.position.clone();
 
-                // Update dimensions object for property panel compatibility
-                if (!objectData.dimensions) {
-                    objectData.dimensions = {};
-                }
-                objectData.dimensions.x = Math.max(width, 0.01);
-                objectData.dimensions.y = Math.max(height, 0.01);
-                objectData.dimensions.z = Math.max(depth, 0.01);
+                // Dimensions automatically updated via DimensionManager getter from geometry
 
-                // Also update legacy properties for backward compatibility
-                objectData.width = Math.max(width, 0.01);
-                objectData.height = Math.max(height, 0.01);
-                objectData.depth = Math.max(depth, 0.01);
+                // Get dimensions from geometry for event
+                const dims = window.dimensionManager?.getDimensions(this.creationObject) || {
+                    x: Math.max(width, 0.01),
+                    y: Math.max(height, 0.01),
+                    z: Math.max(depth, 0.01)
+                };
 
                 // Emit event for UI updates (without triggering SceneController dimension update)
                 if (window.objectEventBus) {
@@ -603,7 +605,7 @@ class BoxCreationTool {
                         window.objectEventBus.EVENT_TYPES.GEOMETRY,
                         objectData.id,
                         {
-                            dimensions: objectData.dimensions,
+                            dimensions: dims,
                             position: objectData.position
                         },
                         { immediate: true, source: 'BoxCreationTool.updateInvisibleBoxDimensions' }

@@ -18,7 +18,7 @@ const ObjectStateManager = window.modlerComponents.objectStateManager;
 // Update object properties
 ObjectStateManager.updateObject(objectId, {
     position: { x: 0, y: 5, z: 0 },
-    dimensions: { width: 10, height: 10, depth: 10 },
+    dimensions: { x: 10, y: 10, z: 10 },  // x/y/z format (not width/height/depth)
     rotation: { x: 0, y: Math.PI / 4, z: 0 }
 });
 
@@ -214,13 +214,91 @@ const currentData = ObjectStateManager.getObject(objectId);
 
 ObjectStateManager.updateObject(objectId, {
     dimensions: {
-        width: newWidth,
-        height: newHeight,
-        depth: newDepth
+        x: newWidth,
+        y: newHeight,
+        z: newDepth
     }
 });
 
 // Geometry will be updated automatically
+```
+
+---
+
+## Dimension Management
+
+**⭐ NEW IN V2**: Dimensions are NO LONGER cached - always read from geometry
+
+### 1. Read Dimensions
+
+```javascript
+// Direct access via DimensionManager (recommended)
+const dimensions = window.dimensionManager.getDimensions(objectId);
+// Returns: { x: 10, y: 5, z: 8 }
+
+// Or via backward-compatible getter
+const objectData = sceneController.getObject(objectId);
+const dimensions = objectData.dimensions;  // Calls DimensionManager internally
+// Returns: { x: 10, y: 5, z: 8 }
+
+// Read single axis
+const width = window.dimensionManager.getDimension(objectId, 'x');
+// Returns: 10
+```
+
+### 2. Write Dimensions
+
+```javascript
+// Via DimensionManager (direct geometry modification)
+window.dimensionManager.setDimensions(objectId, {
+    x: 20,  // New width
+    y: 10,  // New height
+    z: 15   // New depth
+}, 'center');  // Anchor mode: 'center' | 'min' | 'max'
+
+// Or via ObjectStateManager (recommended - triggers layout updates)
+ObjectStateManager.updateObject(objectId, {
+    dimensions: { x: 20, y: 10, z: 15 }
+});
+// Internally calls DimensionManager.setDimensions()
+
+// Update single axis
+window.dimensionManager.setDimension(objectId, 'x', 20, 'center');
+```
+
+### 3. Serialization
+
+```javascript
+// SAVE: Read from geometry
+const dimensions = window.dimensionManager.getDimensionsForSerialization(objectId);
+sceneData.objects.push({
+    id: objectId,
+    dimensions: dimensions,  // { x: 10, y: 5, z: 8 }
+    // ... other properties
+});
+
+// LOAD: Validate and restore
+window.dimensionManager.restoreDimensionsFromSerialization(
+    objectId,
+    savedDimensions
+);
+// Compares with geometry, fixes mismatches if found
+```
+
+### 4. Key Principles
+
+```javascript
+// ✅ CORRECT: Dimensions always fresh from geometry
+const dimensions = objectData.dimensions;  // Getter reads from geometry
+console.log(dimensions);  // Always current, never stale
+
+// ✅ CORRECT: No caching means no sync issues
+GeometryUtils.pushGeometryFace(geometry, face, delta);
+const newDimensions = objectData.dimensions;  // Reflects push immediately
+
+// ❌ OLD SYSTEM (deprecated): Cached dimensions could be stale
+// objectData.dimensions = { x: 10, y: 5, z: 8 };  // No longer exists
+// sceneController.calculateObjectDimensions(mesh, objectData);  // Removed
 ```
 
 ---
@@ -724,6 +802,9 @@ const {
     containerCrudManager,
     propertyPanelSync
 } = window.modlerComponents;
+
+// Standalone global (not in modlerComponents)
+const dimensionManager = window.dimensionManager;  // /core/dimension-manager.js
 ```
 
 ---

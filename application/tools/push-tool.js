@@ -35,17 +35,45 @@ class PushTool {
         }, 50);
     }
 
-    onHover(hit) {
+    onHover(hit, isAltPressed) {
         if (this.isPushing) {
-            // During push, only update push movement - don't update face highlighting
-            // Face highlight is being tracked separately via trackFaceHighlightToPushedFace
+            // During push, update push movement
             this.updatePush();
-        } else {
-            // Normal hover behavior when not pushing
-            if (this.shouldShowFaceHighlight(hit)) {
-                this.faceToolBehavior.handleFaceDetection(hit);
+
+            // Show measurement overlay if Alt pressed during push
+            if (isAltPressed) {
+                const measurementTool = window.modlerComponents?.measurementTool;
+                if (measurementTool && this.pushedObject && this.pushAxis) {
+                    measurementTool.showPushMeasurement(this.pushedObject, this.pushAxis);
+                }
             } else {
-                this.faceToolBehavior.clearHover();
+                // Clear measurement when Alt released
+                const measurementTool = window.modlerComponents?.measurementTool;
+                if (measurementTool) {
+                    measurementTool.clearMeasurement();
+                }
+            }
+        } else {
+            // Normal hover behavior - check for measurement mode
+            if (isAltPressed) {
+                // Measurement mode - show edge/distance measurements
+                const measurementTool = window.modlerComponents?.measurementTool;
+                if (measurementTool) {
+                    const selectedObjects = this.selectionController?.getSelectedObjects() || [];
+                    measurementTool.onHover(hit, selectedObjects);
+                }
+            } else {
+                // Normal face highlighting
+                const measurementTool = window.modlerComponents?.measurementTool;
+                if (measurementTool) {
+                    measurementTool.clearMeasurement();
+                }
+
+                if (this.shouldShowFaceHighlight(hit)) {
+                    this.faceToolBehavior.handleFaceDetection(hit);
+                } else {
+                    this.faceToolBehavior.clearHover();
+                }
             }
         }
     }
@@ -425,13 +453,8 @@ class PushTool {
                         // Pass 'push-tool' as source to suppress parent layout updates during drag
                         // Layout will be updated once when push is complete
                         objectStateManager.updateObject(finalObjectData.id, updates, 'push-tool');
-                    } else {
-                        // Fallback to direct update
-                        finalObjectData.dimensions = { x: dims.x, y: dims.y, z: dims.z };
-                        if (isContainer) {
-                            finalObjectData.position = this.pushedObject.position.clone();
-                        }
                     }
+                    // Dimensions automatically updated via DimensionManager getter from geometry
                 }
             }
         }
@@ -724,29 +747,49 @@ class PushTool {
         const totalPadding = paddingStart + paddingEnd;
         let minSize = totalPadding; // Start with padding on both sides
 
-        // CRITICAL: Filter out fill objects - they don't contribute to minimum size
-        // Only non-fill (fixed-size) objects matter for minimum size calculation
+        // Filter children into fill and non-fill groups
         const nonFillChildren = children.filter(child => {
             return !child.layoutProperties || child.layoutProperties[sizeProperty] !== 'fill';
         });
+        const fillChildren = children.filter(child => {
+            return child.layoutProperties?.[sizeProperty] === 'fill';
+        });
 
         if (direction === axis) {
-            // Layout direction matches push axis - sum all non-fill child sizes + gaps
+            // Layout direction matches push axis
+
+            // Sum all non-fill child sizes (actual space needed)
             nonFillChildren.forEach((child, index) => {
                 const childDims = child.dimensions || { x: 1, y: 1, z: 1 };
                 minSize += childDims[axis];
             });
-            // Add gaps between ALL children (including fill), not just non-fill
+
+            // CRITICAL FIX: Add minimum size for fill objects (0.1 units each)
+            // Fill objects don't contribute their current size to minimum,
+            // but they still need their enforced minimum space (matches layout-engine.js behavior)
+            const MIN_FILL_SIZE = 0.1;
+            minSize += fillChildren.length * MIN_FILL_SIZE;
+
+            // Add gaps between ALL children (including fill objects)
             if (children.length > 1) {
                 minSize += gap * (children.length - 1);
             }
         } else {
-            // Layout direction perpendicular to push axis - find maximum non-fill child size
+            // Layout direction perpendicular to push axis
+
+            // Find maximum non-fill child size on this axis
             let maxChildSize = 0;
             nonFillChildren.forEach(child => {
                 const childDims = child.dimensions || { x: 1, y: 1, z: 1 };
                 maxChildSize = Math.max(maxChildSize, childDims[axis]);
             });
+
+            // CRITICAL FIX: Also check fill objects - they might have minimum perpendicular size
+            fillChildren.forEach(child => {
+                const childDims = child.dimensions || { x: 1, y: 1, z: 1 };
+                maxChildSize = Math.max(maxChildSize, childDims[axis]);
+            });
+
             minSize += maxChildSize;
         }
 

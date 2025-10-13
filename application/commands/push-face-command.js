@@ -119,11 +119,11 @@ class PushFaceCommand extends BaseCommand {
             mesh.position.set(targetPosition.x, targetPosition.y, targetPosition.z);
         }
 
-        // Update object data
-        objectData.dimensions = { ...targetDimensions };
+        // Update object data position
         if (targetPosition) {
             objectData.position = { ...targetPosition };
         }
+        // Dimensions automatically updated via DimensionManager getter from geometry
 
         // Update support meshes
         const geometryUtils = window.GeometryUtils;

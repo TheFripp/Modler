@@ -68,7 +68,7 @@ User Input → Tool → ObjectStateManager → SceneController → GeometryUtils
                   ▼
 ┌─────────────────────────────────────────────────────────────┐
 │ 5. STATE COORDINATION (push-tool.js → finalizePush)         │
-│    - dimensions = GeometryUtils.getGeometryDimensions()     │
+│    - DimensionManager.getDimensions(mesh) // Read from geom │
 │    - ObjectStateManager.updateObject(id, { dimensions })    │
 └─────────────────┬───────────────────────────────────────────┘
                   │
@@ -77,16 +77,16 @@ User Input → Tool → ObjectStateManager → SceneController → GeometryUtils
 │ 6. STATE PROPAGATION (object-state-manager.js)              │
 │    - propagateChanges()                                     │
 │    - updateSceneController(changedObjects)                  │
-│    - Apply dimension updates                                │
+│    - applyGeometryUpdate('Dimension', 'updateObjectDims')   │
 └─────────────────┬───────────────────────────────────────────┘
                   │
                   ▼
 ┌─────────────────────────────────────────────────────────────┐
 │ 7. SCENE CONTROLLER (scene-controller.js)                   │
 │    - updateObjectDimensions(objectId, axis, newDimension)   │
-│    - GeometryUtils.scaleGeometryAlongAxis()                 │
+│    - GeometryUtils.resizeGeometry(geometry, axis, value)    │
 │    - GeometryUtils.updateSupportMeshGeometries()            │
-│    - TransformNotificationUtils.completeDimensionChange()   │
+│    - DimensionManager reads back fresh from geometry        │
 └─────────────────┬───────────────────────────────────────────┘
                   │
                   ▼

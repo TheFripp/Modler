@@ -106,27 +106,7 @@ html {
     opacity: 1;
 }
 
-/* Axis Gizmo */
-.axis-gizmo-container {
-    position: absolute;
-    top: 12px;
-    left: calc(50% + 40% + 12px); /* Position just right of toolbar: 50% (center) + 40% (half toolbar width) + 12px gap */
-    width: 48px; /* Match toolbar button size */
-    height: 48px; /* Match toolbar button size */
-    z-index: 1000;
-    background: #171717;
-    border: 1px solid #2E2E2E;
-    border-radius: 50%;
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
-    pointer-events: none;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-
-.axis-gizmo-container canvas {
-    display: block;
-}
+/* Axis Gizmo - Now handled in Svelte toolbar component */
 
 /* Split.js Gutter Styles - Invisible with overlay divider line */
 .gutter {

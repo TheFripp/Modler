@@ -800,6 +800,12 @@
                 case 'duplicate-object':
                     handleDuplicateObject();
                     break;
+                case 'delete-selected':
+                    const deleteToolController = window.modlerComponents?.toolController;
+                    if (deleteToolController) {
+                        deleteToolController.deleteSelectedObjects();
+                    }
+                    break;
                 case 'snap-toggle':
                     handleSnapToggle();
                     break;
@@ -1394,17 +1400,6 @@
             // EXPLICIT CHECK: Only true if enabled is exactly true
             // This prevents falsy values or undefined from being treated as enabled
             inLayoutMode = container?.autoLayout?.enabled === true;
-
-            // DEBUG: Log what we're checking
-            console.log('[handleCheckLayoutMode]', {
-                objectId,
-                objectName: objectData.name,
-                parentContainer: objectData.parentContainer,
-                containerName: container?.name,
-                autoLayout: container?.autoLayout,
-                enabled: container?.autoLayout?.enabled,
-                inLayoutMode
-            });
         }
 
         source.postMessage({

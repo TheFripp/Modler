@@ -59,6 +59,7 @@
 |------|----------|---------------|-------------|
 | **object-state-manager** | `/core/` | ALL state changes | Any state modification |
 | **scene-controller** | `/scene/` | 3D geometry, object lifecycle | Add/remove/update objects |
+| **dimension-manager** | `/core/` | Dimension access layer | Read/write dimensions from geometry |
 | **geometry-utils** | `/application/utilities/` | Geometry operations | Geometry creation/manipulation |
 | **material-manager** | `/application/utilities/` | Material creation & caching | Create/update materials |
 
@@ -97,6 +98,10 @@
 │
 ┌─ Geometry manipulation?
 │  └─→ GeometryUtils (create, push, resize)
+│
+┌─ Read/write dimensions?
+│  └─→ DimensionManager.getDimensions() / setDimensions()
+│      (or objectData.dimensions getter for backward compat)
 │
 ┌─ UI property update?
 │  └─→ PropertyUpdateHandler → ObjectStateManager
@@ -246,7 +251,7 @@ UI.onChange()
 - **UI Services**: `/svelte-ui/src/lib/services/` (TypeScript: `.ts` files)
 - **UI Components**: `/svelte-ui/src/lib/components/`
 - **Integration**: `/integration/svelte/`
-- **Core**: `/core/object-state-manager.js`, `/core/logger.js`
+- **Core**: `/core/object-state-manager.js`, `/core/dimension-manager.js`, `/core/logger.js`
 - **Layout**: `/layout/layout-engine.js`
 
 ---

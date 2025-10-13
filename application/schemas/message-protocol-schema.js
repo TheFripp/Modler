@@ -124,6 +124,13 @@ const MESSAGE_PROTOCOL_SCHEMA = {
         response: null
     },
 
+    'delete-selected': {
+        direction: MESSAGE_DIRECTION.UI_TO_MAIN,
+        description: 'Delete selected object(s)',
+        payload: {},
+        response: null
+    },
+
     'tool-state-update': {
         direction: MESSAGE_DIRECTION.MAIN_TO_UI,
         description: 'Notify UI of current tool state',

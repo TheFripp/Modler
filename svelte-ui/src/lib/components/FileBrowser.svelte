@@ -7,6 +7,7 @@
 	let isLoading = false;
 	let errorMessage = '';
 	let isFileManagerReady = false;
+	let currentFileId: string | null = null;
 
 	// Unsaved changes dialog state
 	let showUnsavedDialog = false;
@@ -87,9 +88,17 @@
 	 * Handle FileManager events forwarded from parent
 	 */
 	function handleFileManagerEvent(eventType: string, data: any) {
+		// Prevent duplicate dialogs - only show if not already showing
+		if (eventType === 'unsaved-changes-prompt' && showUnsavedDialog) {
+			return;
+		}
+
 		switch (eventType) {
 			case 'file-saved':
 			case 'file-loaded':
+				refreshFileList();
+				updateCurrentFileId();
+				break;
 			case 'file-deleted':
 				refreshFileList();
 				break;
@@ -98,6 +107,20 @@
 				unsavedDialogCallback = data.callback;
 				showUnsavedDialog = true;
 				break;
+		}
+	}
+
+	/**
+	 * Update the current file ID from FileManager
+	 */
+	async function updateCurrentFileId() {
+		if (!isFileManagerReady) return;
+
+		try {
+			const result = await sendFileRequest('getCurrentFileState');
+			currentFileId = result.state?.fileId || null;
+		} catch (error) {
+			console.error('Failed to get current file ID:', error);
 		}
 	}
 
@@ -119,6 +142,7 @@
 
 		// Load initial data
 		await refreshFileList();
+		await updateCurrentFileId();
 
 		// Auto-load last opened scene if it exists
 		try {
@@ -179,6 +203,7 @@
 			const result = await sendFileRequest('loadScene', { fileId });
 			if (result.success) {
 				await refreshFileList();
+				await updateCurrentFileId();
 			} else if (!result.cancelled) {
 				errorMessage = result.error || 'Failed to open file';
 			}
@@ -193,10 +218,27 @@
 	async function handleDeleteFile(fileId: string, fileName: string) {
 		if (!isFileManagerReady) return;
 
-		// Confirm deletion
-		const confirmed = confirm(`Delete "${fileName}"? This cannot be undone.`);
-		if (!confirmed) {
-			return;
+		// Confirm deletion using notification manager
+		const notificationManager = (window as any).notificationManager;
+		if (notificationManager) {
+			const confirmed = await notificationManager.confirm(
+				`Delete "${fileName}"? This cannot be undone.`,
+				'Delete File',
+				{
+					confirmLabel: 'Delete',
+					cancelLabel: 'Cancel',
+					confirmStyle: 'primary'
+				}
+			);
+			if (!confirmed) {
+				return;
+			}
+		} else {
+			// Fallback to native confirm if notification manager not available
+			const confirmed = confirm(`Delete "${fileName}"? This cannot be undone.`);
+			if (!confirmed) {
+				return;
+			}
 		}
 
 		isLoading = true;
@@ -289,14 +331,14 @@
 			<div class="space-y-2">
 				{#each files as file}
 					<div
-						class="file-item flex items-center gap-3 p-2 rounded-lg hover:bg-[#2E2E2E] transition-colors cursor-pointer relative group"
+						class="file-item flex items-center gap-3 p-2 rounded-lg transition-colors cursor-pointer relative group {file.id === currentFileId ? 'bg-[#1A1A1A]' : 'hover:bg-[#2E2E2E]'}"
 						onclick={() => handleOpenFile(file.id)}
 					>
 						<!-- Thumbnail -->
 						<div class="flex-shrink-0">
 							{#if file.thumbnail}
-								<div class="w-14 h-14 bg-[#0A0A0A] rounded overflow-hidden">
-									<img src={file.thumbnail} alt={file.name} class="w-full h-full object-cover" />
+								<div class="w-14 h-14 bg-[#0A0A0A] rounded overflow-hidden border border-[#2E2E2E]">
+									<img src={file.thumbnail} alt={file.name} class="w-full h-full object-contain" />
 								</div>
 							{:else}
 								<div class="w-14 h-14 bg-[#2E2E2E] rounded flex items-center justify-center">
@@ -307,9 +349,9 @@
 
 						<!-- File Info -->
 						<div class="flex-1 min-w-0">
-							<div class="file-name font-medium truncate text-sm">{file.name}</div>
-							<div class="file-meta text-xs text-foreground/60">
-								Modified {formatTimestamp(file.modified)}
+							<div class="file-name truncate text-sm text-foreground/70">{file.name}</div>
+							<div class="file-meta text-xs text-foreground/40">
+								{formatTimestamp(file.modified)}
 							</div>
 						</div>
 

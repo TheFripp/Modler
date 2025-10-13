@@ -89,34 +89,29 @@ class InputController {
         // Perform raycast
         const hit = this.raycast();
 
-        // Check if Option/Alt key is held for measurement mode
-        const measurementTool = window.modlerComponents?.measurementTool;
-        if (measurementTool) {
-            const keyboardRouter = window.modlerComponents?.keyboardRouter;
-            const isAltPressed = keyboardRouter?.keys.has('AltLeft') || keyboardRouter?.keys.has('AltRight') || false;
+        // Check Alt key state from KeyboardRouter (reliable across platforms)
+        const isAltPressed = this.isAltKeyPressed();
 
-            if (isAltPressed) {
-                // Measurement mode active
-                const selectedObjects = this.selectionController?.getSelectedObjects() || [];
-                measurementTool.onHover(hit, selectedObjects);
-                return; // Skip normal tool behavior
-            } else {
-                // Option key released - clear measurement
-                measurementTool.clearMeasurement();
-            }
-        }
-
-        // Delegate to current tool
+        // Delegate to current tool - pass Alt state as boolean
         const tool = this.toolBehaviors[this.currentTool];
-
         if (tool && tool.onHover) {
-            tool.onHover(hit);
+            tool.onHover(hit, isAltPressed);
         }
 
         // Tool-specific mouse move handling
         if (tool && tool.onMouseMove) {
             tool.onMouseMove(hit, event);
         }
+    }
+
+    /**
+     * Check if Alt/Option key is currently pressed
+     * Uses KeyboardRouter for reliable cross-platform detection
+     * @returns {boolean}
+     */
+    isAltKeyPressed() {
+        const keyboardRouter = window.modlerComponents?.keyboardRouter;
+        return keyboardRouter?.keys.has('AltLeft') || keyboardRouter?.keys.has('AltRight') || false;
     }
 
     onMouseDown(event) {
@@ -229,16 +224,47 @@ class InputController {
 
         if (intersects.length === 0) return null;
 
-        // Prioritize selectable objects over floor/non-selectable objects
+        // Get support mesh factory for resolving support meshes to main objects
+        const supportMeshFactory = window.modlerComponents?.supportMeshFactory;
+
+        // Prioritize child objects over container interactive meshes
+        // First pass: Look for non-container objects (children)
         for (let hit of intersects) {
-            const objectData = this.sceneController.getObjectByMesh(hit.object);
+            // Check if this is a container interactive mesh (raycasting proxy)
+            if (hit.object.userData.isContainerInteractive) {
+                continue; // Skip container interactive meshes in first pass
+            }
+
+            // Resolve support meshes to main objects
+            const mainObject = supportMeshFactory ? supportMeshFactory.resolveMainObjectFromHit(hit) : hit.object;
+            const objectData = this.sceneController.getObjectByMesh(mainObject);
+
             if (objectData && objectData.selectable === true) {
-                return this.createHitResult(hit);
+                return {
+                    ...this.createHitResult(hit),
+                    object: mainObject
+                };
             }
         }
 
-        // Return first hit if no selectable objects found
-        return this.createHitResult(intersects[0]);
+        // Second pass: If no children found, check container interactive meshes
+        for (let hit of intersects) {
+            if (hit.object.userData.isContainerInteractive) {
+                // Resolve to container
+                const mainObject = supportMeshFactory ? supportMeshFactory.resolveMainObjectFromHit(hit) : hit.object;
+                const objectData = this.sceneController.getObjectByMesh(mainObject);
+
+                if (objectData && objectData.selectable === true) {
+                    return {
+                        ...this.createHitResult(hit),
+                        object: mainObject
+                    };
+                }
+            }
+        }
+
+        // No selectable objects found - treat as empty space
+        return null;
     }
 
     createHitResult(hit) {

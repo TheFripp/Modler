@@ -73,6 +73,10 @@ class PropertyPanelSync {
         this.uiThrottleMap = new Map(); // eventType+objectId -> timeout
         this.UI_THROTTLE_DELAY = 33; // ~30fps for UI updates (smoother than 60fps for UI)
 
+        // Hierarchy refresh throttling (prevents excessive serialization on rapid events)
+        this.hierarchyRefreshTimeout = null;
+        this.HIERARCHY_REFRESH_DELAY = 50; // 50ms debounce for hierarchy updates
+
         // Selection change tracking (prevents unnecessary UI updates)
         this.lastSerializedSelection = [];
 
@@ -648,6 +652,7 @@ class PropertyPanelSync {
 
     /**
      * Refresh complete hierarchy for left panel
+     * Uses debouncing to prevent excessive serialization on rapid events
      * @private
      */
     refreshCompleteHierarchy() {
@@ -655,6 +660,27 @@ class PropertyPanelSync {
             if (!this.initialized) {
                 console.warn('PropertyPanelSync: Not fully initialized, cannot refresh hierarchy');
             }
+            return;
+        }
+
+        // Debounce: Clear existing timeout and set new one
+        // This ensures that rapid successive calls only result in ONE actual refresh
+        if (this.hierarchyRefreshTimeout) {
+            clearTimeout(this.hierarchyRefreshTimeout);
+        }
+
+        this.hierarchyRefreshTimeout = setTimeout(() => {
+            this.performHierarchyRefresh();
+            this.hierarchyRefreshTimeout = null;
+        }, this.HIERARCHY_REFRESH_DELAY);
+    }
+
+    /**
+     * Actually perform the hierarchy refresh (called by debounced refreshCompleteHierarchy)
+     * @private
+     */
+    performHierarchyRefresh() {
+        if (!this.initialized || !this.sceneController) {
             return;
         }
 

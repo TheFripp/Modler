@@ -209,12 +209,7 @@ class SceneController {
             geometryUtils.resizeGeometry(containerData.mesh.geometry, 'y', newSize.y, 'center');
             geometryUtils.resizeGeometry(containerData.mesh.geometry, 'z', newSize.z, 'center');
 
-            // Update stored dimensions
-            containerData.dimensions = {
-                x: newSize.x,
-                y: newSize.y,
-                z: newSize.z
-            };
+            // Dimensions automatically updated via DimensionManager getter from geometry
 
             // Update support meshes (selection box, wireframe)
             const supportMeshFactory = this.getSupportMeshFactory();
@@ -251,12 +246,13 @@ class SceneController {
 
         // Set up object metadata
         const objectData = this.createObjectMetadata(id, mesh, options);
-        
+
         // Configure mesh
         this.configureMesh(mesh, objectData, options);
 
-        // Calculate dimensions from geometry for property panel consistency
-        this.calculateObjectDimensions(mesh, objectData);
+        // ARCHITECTURE: Dimensions are now managed by DimensionManager
+        // No caching needed - dimensions are read directly from geometry on demand
+        // This eliminates the circular Save→Load→Recalculate dependency
 
         // UNIFIED ARCHITECTURE: Create support meshes for all objects
         // Support mesh factory handles containers and regular objects differently
@@ -352,6 +348,24 @@ class SceneController {
         if (this.objectStateManager) {
             this.objectStateManager.objects.delete(id);
             // Note: Hierarchy is rebuilt on-demand via getHierarchy(), no need to rebuild here
+        }
+
+        // UNIFIED ARCHITECTURE: Emit ObjectEventBus LIFECYCLE event for FileManager auto-save
+        if (window.objectEventBus) {
+            window.objectEventBus.emit(
+                window.objectEventBus.EVENT_TYPES?.LIFECYCLE || 'object:lifecycle',
+                objectData.id,
+                {
+                    operation: 'deleted',
+                    objectType: objectData.type,
+                    objectData: {
+                        id: objectData.id,
+                        name: objectData.name,
+                        type: objectData.type
+                    }
+                },
+                { immediate: true, source: 'SceneController.removeObject' }
+            );
         }
 
         // Emit event for UI updates
@@ -1227,9 +1241,7 @@ class SceneController {
             // Update support mesh geometries (wireframes for both objects and containers)
             GeometryUtils.updateSupportMeshGeometries(mesh);
 
-            // Update object metadata
-            if (!objectData.dimensions) objectData.dimensions = { x: 1, y: 1, z: 1 };
-            objectData.dimensions[axis] = newDimension;
+            // Dimensions automatically updated via DimensionManager getter from geometry
 
             // Use centralized completion pattern
             TransformNotificationUtils.completeDimensionChange(mesh, axis);
@@ -1464,7 +1476,7 @@ class SceneController {
      * @returns {Object} Object metadata
      */
     createObjectMetadata(id, mesh, options) {
-        return {
+        const metadata = {
             id: id,
             mesh: mesh,
             type: options.type || 'mesh',
@@ -1487,6 +1499,10 @@ class SceneController {
             // Container sizing mode (hug = auto-size to fit children)
             isHug: options.sizingMode === 'hug' || options.isHug || false,
 
+            // Container-specific properties
+            childrenOrder: [], // Explicit child ordering for layout
+            layoutMode: null, // Layout mode for containers
+
             layoutProperties: {
                 sizeX: options.sizeX || 'fixed', // 'fixed', 'fill', 'hug'
                 sizeY: options.sizeY || 'fixed',
@@ -1494,6 +1510,18 @@ class SceneController {
                 fixedSize: options.fixedSize || null // Used when size mode is 'fixed'
             }
         };
+
+        // ARCHITECTURE: Add dimensions getter for backward compatibility
+        // Dimensions are NO LONGER cached - always read from geometry via DimensionManager
+        Object.defineProperty(metadata, 'dimensions', {
+            get() {
+                return window.dimensionManager?.getDimensions(this.mesh) || { x: 1, y: 1, z: 1 };
+            },
+            enumerable: true,
+            configurable: true
+        });
+
+        return metadata;
     }
 
     /**
@@ -1506,6 +1534,7 @@ class SceneController {
         mesh.name = objectData.name;
         mesh.userData.id = objectData.id;
         mesh.userData.type = objectData.type;
+        mesh.userData.isContainer = objectData.isContainer || false;
 
         // No shadows - keep it simple
         mesh.castShadow = false;
@@ -1554,17 +1583,14 @@ class SceneController {
     }
 
     /**
-     * Calculate object dimensions from geometry
+     * Get object dimensions from geometry (via DimensionManager)
+     * @deprecated Use window.dimensionManager.getDimensions(objectId) instead
      * @param {THREE.Object3D} mesh - Mesh to analyze
-     * @param {Object} objectData - Object metadata to update
+     * @returns {Object|null} Dimensions {x, y, z}
      */
-    calculateObjectDimensions(mesh, objectData) {
-        if (mesh.geometry) {
-            const dimensions = GeometryUtils.getGeometryDimensions(mesh.geometry);
-            if (dimensions) {
-                objectData.dimensions = dimensions;
-            }
-        }
+    getObjectDimensions(mesh) {
+        // Forward to DimensionManager (backwards compatibility)
+        return window.dimensionManager?.getDimensions(mesh) || null;
     }
 
     /**

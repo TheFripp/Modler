@@ -20,6 +20,12 @@
 		onchange?: (event: Event) => void;
 		onIncrease?: () => void;
 		onDecrease?: () => void;
+		// Fill button props
+		showFillButton?: boolean;
+		fillActive?: boolean;
+		fillTitle?: string;
+		onFillToggle?: () => void;
+		onFillHover?: (hovering: boolean) => void;
 	}
 
 	let {
@@ -38,6 +44,12 @@
 		onchange,
 		onIncrease,
 		onDecrease,
+		// Fill button
+		showFillButton = false,
+		fillActive = false,
+		fillTitle = '',
+		onFillToggle,
+		onFillHover,
 		...restProps
 	}: Props = $props();
 
@@ -405,6 +417,29 @@
 					<ChevronDown class="w-3.5 h-3.5 transition-colors" strokeWidth={1.5} />
 				</button>
 			</div>
+		{/if}
+
+		<!-- Fill Button -->
+		{#if showFillButton}
+			<button
+				type="button"
+				tabindex="-1"
+				class={cn(
+					'w-5 h-full text-xs font-medium transition-colors flex-shrink-0 p-0 flex items-center justify-center border-l border-[#2E2E2E]',
+					'rounded-r-[4px]',
+					'hover:bg-[#212121]',
+					fillActive
+						? 'bg-[#212121] text-white'
+						: 'bg-[#171717] text-muted-foreground'
+				)}
+				title={fillTitle}
+				onclick={onFillToggle}
+				onmouseenter={() => onFillHover?.(true)}
+				onmouseleave={() => onFillHover?.(false)}
+				disabled={disabled}
+			>
+				F
+			</button>
 		{/if}
 	</div>
 </div>

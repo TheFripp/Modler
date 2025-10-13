@@ -13,6 +13,7 @@ interface UnifiedCommunicationService {
     sendNavigationCommand(commandType: string, data: any): Promise<boolean>;
     sendSelectionChange(objectId: string, isShiftClick?: boolean): Promise<boolean>;
     sendSettingsRequest(requestType: string): Promise<boolean>;
+    sendDeleteSelected(): Promise<boolean>;
 }
 
 class UnifiedCommunication implements UnifiedCommunicationService {
@@ -166,6 +167,18 @@ class UnifiedCommunication implements UnifiedCommunicationService {
     }
 
     /**
+     * Send delete selected objects command
+     */
+    async sendDeleteSelected(): Promise<boolean> {
+        if (this.propertyPanelSync) {
+            return this.propertyPanelSync.sendNavigationCommand('delete-selected', {});
+        }
+
+        // Fallback to direct PostMessage
+        return this.fallbackPostMessage('delete-selected', {});
+    }
+
+    /**
      * Fallback to direct PostMessage when PropertyPanelSync is not available
      * Attempts to authorize through global PropertyPanelSync if available
      */
@@ -232,6 +245,7 @@ export const unifiedCommunication = {
                 sendVisualSettings: async () => false,
                 sendNavigationCommand: async () => false,
                 sendSettingsRequest: async () => false,
+                sendDeleteSelected: async () => false,
                 isInitialized: () => false,
                 getStatus: () => ({ initialized: false, hasPropertyPanelSync: false })
             } as UnifiedCommunication;
@@ -251,6 +265,7 @@ export const unifiedCommunication = {
     sendNavigationCommand: async (commandType: string, data: any) => unifiedCommunication.instance.sendNavigationCommand(commandType, data),
     sendSelectionChange: async (objectId: string, isShiftClick?: boolean) => unifiedCommunication.instance.sendSelectionChange(objectId, isShiftClick),
     sendSettingsRequest: async (requestType: string) => unifiedCommunication.instance.sendSettingsRequest(requestType),
+    sendDeleteSelected: async () => unifiedCommunication.instance.sendDeleteSelected(),
     isInitialized: () => unifiedCommunication.instance.isInitialized(),
     getStatus: () => unifiedCommunication.instance.getStatus()
 };

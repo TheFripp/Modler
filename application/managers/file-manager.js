@@ -364,6 +364,8 @@ class FileManager extends EventTarget {
                 // Return to CLEAN state after successful save
                 this.setState(this.FILE_STATES.CLEAN);
 
+                // No notification for successful saves - only show errors/warnings
+
                 return { success: true, fileId: fileId };
 
             } catch (innerError) {
@@ -374,6 +376,15 @@ class FileManager extends EventTarget {
 
         } catch (error) {
             console.error('FileManager: Failed to save scene:', error);
+
+            // Show error notification
+            if (window.notificationManager) {
+                window.notificationManager.error(
+                    `Failed to save scene: ${error.message}`,
+                    'Save Failed'
+                );
+            }
+
             return { success: false, error: error.message };
         }
     }
@@ -387,9 +398,29 @@ class FileManager extends EventTarget {
      */
     async loadScene(fileId, options = {}) {
         try {
-            // Auto-save if there are unsaved changes (no prompt needed with auto-save)
+            // Check for unsaved changes and prompt user
             if (!options.force && this.isDirty && this.currentFileId) {
-                await this.saveScene();
+                const notificationManager = window.notificationManager;
+                if (notificationManager) {
+                    const confirmed = await notificationManager.confirm(
+                        `You have unsaved changes in "${this.currentFileName}". Do you want to save before switching files?`,
+                        'Unsaved Changes',
+                        {
+                            confirmLabel: 'Save & Continue',
+                            cancelLabel: 'Discard Changes',
+                            confirmStyle: 'primary'
+                        }
+                    );
+
+                    if (confirmed) {
+                        // User chose to save
+                        await this.saveScene();
+                    }
+                    // If false, user chose to discard - continue loading
+                } else {
+                    // Fallback to auto-save if notification system not available
+                    await this.saveScene();
+                }
             }
 
             // Enter LOADING state to prevent auto-save during deserialization
@@ -437,10 +468,21 @@ class FileManager extends EventTarget {
                 metadata: result.metadata
             });
 
+            // No notification for successful loads - only show errors/warnings
+
             return { success: true, metadata: result.metadata };
 
         } catch (error) {
             console.error('FileManager: Failed to load scene:', error);
+
+            // Show error notification
+            if (window.notificationManager) {
+                window.notificationManager.error(
+                    `Failed to load scene: ${error.message}`,
+                    'Load Failed'
+                );
+            }
+
             return { success: false, error: error.message };
         }
     }

@@ -137,46 +137,29 @@
 			{@const isDisabled = disableAll || fieldState?.disabled || false}
 			{@const isFilled = fillStates[axis] || false}
 			<div class="flex-1 min-w-0">
-				<div class="flex items-center gap-1">
-					<div class="flex-1 min-w-0">
-						<InlineInput
-							id={idPrefix ? `${idPrefix}-${axis}` : undefined}
-							label={labels[axis]}
-							type="number"
-							value={displayValue}
-							placeholder={hideValues ? '' : (mixedState.isMixed ? 'Mixed' : (disableAll ? 'Layout Mode' : (isDisabled ? fieldState?.tooltip || 'Disabled' : '')))}
-							class={cn(
-								mixedState.isMixed ? 'text-muted-foreground/60' : '',
-								isDisabled ? 'opacity-50' : '',
-								isFilled ? 'opacity-50' : ''
-							)}
-							disabled={isDisabled || isFilled}
-							{objectId}
-							property={property}
-							oninput={onUpdate ? (e) => handleInput(axis, e) : undefined}
-							onIncrease={onUpdate ? () => handleIncrease(axis) : undefined}
-							onDecrease={onUpdate ? () => handleDecrease(axis) : undefined}
-						/>
-					</div>
-					{#if showFillButtons}
-						<button
-							type="button"
-							class={cn(
-								'w-6 h-8 rounded border text-xs font-medium transition-colors flex-shrink-0 p-0 flex items-center justify-center',
-								'hover:bg-[#212121] border-[#2E2E2E]',
-								isFilled
-									? 'bg-[#212121] text-white border-[#2E2E2E]'
-									: 'bg-[#171717] text-muted-foreground'
-							)}
-							title={`Toggle fill for ${axis.toUpperCase()}-axis`}
-							onclick={() => handleFillToggle(axis)}
-							onmouseenter={() => handleFillHover(axis, true)}
-							onmouseleave={() => handleFillHover(axis, false)}
-						>
-							F
-						</button>
-					{/if}
-				</div>
+				<InlineInput
+					id={idPrefix ? `${idPrefix}-${axis}` : undefined}
+					label={labels[axis]}
+					type="number"
+					value={displayValue}
+					placeholder={hideValues ? '' : (mixedState.isMixed ? 'Mixed' : (disableAll ? 'Layout Mode' : (isDisabled ? fieldState?.tooltip || 'Disabled' : '')))}
+					class={cn(
+						mixedState.isMixed ? 'text-muted-foreground/60' : '',
+						isDisabled ? 'opacity-50' : '',
+						isFilled ? 'opacity-50' : ''
+					)}
+					disabled={isDisabled || isFilled}
+					{objectId}
+					property={property}
+					oninput={onUpdate ? (e) => handleInput(axis, e) : undefined}
+					onIncrease={onUpdate ? () => handleIncrease(axis) : undefined}
+					onDecrease={onUpdate ? () => handleDecrease(axis) : undefined}
+					showFillButton={showFillButtons}
+					fillActive={isFilled}
+					fillTitle={`Toggle fill for ${axis.toUpperCase()}-axis`}
+					onFillToggle={() => handleFillToggle(axis)}
+					onFillHover={(hovering) => handleFillHover(axis, hovering)}
+				/>
 			</div>
 		{/each}
 	</div>

@@ -110,6 +110,8 @@
 			const result = await sendFileRequest('newScene');
 			if (result.success) {
 				await updateCurrentFileState();
+				// Switch to files tab to show the new file
+				activeTab = 'files';
 			}
 		} catch (error) {
 			console.error('Failed to create new scene:', error);

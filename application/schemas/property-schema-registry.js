@@ -60,22 +60,26 @@ class PropertySchemaRegistry {
         // Create formula evaluator
         if (window.FormulaEvaluator) {
             this.formulaEvaluator = new window.FormulaEvaluator();
-        } else {
-            console.warn('PropertySchemaRegistry: FormulaEvaluator not available');
         }
 
         // Create dependency graph
         if (window.DependencyGraph) {
             this.dependencyGraph = new window.DependencyGraph();
-        } else {
-            console.warn('PropertySchemaRegistry: DependencyGraph not available');
         }
 
         // Create constraint solver
         if (window.ConstraintSolver) {
             this.constraintSolver = new window.ConstraintSolver();
-        } else {
-            console.warn('PropertySchemaRegistry: ConstraintSolver not available');
+        }
+
+        // Log parametric system status (only once on initialization)
+        const missingComponents = [];
+        if (!this.formulaEvaluator) missingComponents.push('FormulaEvaluator');
+        if (!this.dependencyGraph) missingComponents.push('DependencyGraph');
+        if (!this.constraintSolver) missingComponents.push('ConstraintSolver');
+
+        if (missingComponents.length > 0) {
+            console.info(`PropertySchemaRegistry: Parametric features not available (${missingComponents.join(', ')} not loaded). Basic property editing works normally.`);
         }
     }
 

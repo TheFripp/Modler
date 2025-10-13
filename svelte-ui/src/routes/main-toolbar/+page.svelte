@@ -3,13 +3,13 @@
 	import { initializeBridge } from '$lib/bridge/threejs-bridge';
 	import { toolState } from '$lib/stores/modler';
 	import { activateToolInScene, toggleSnapInScene } from '$lib/bridge/threejs-bridge';
-	import { MousePointer, Move, ArrowUp, Box, Magnet, SquareStack } from 'lucide-svelte';
+	import { MousePointer, Move, FoldHorizontal, Box, Magnet, SquareStack } from 'lucide-svelte';
 
 	// Main tool configuration with Lucide icons
 	const tools = [
 		{ id: 'select', label: 'Select', shortcut: 'Q', icon: MousePointer },
 		{ id: 'move', label: 'Move', shortcut: 'W', icon: Move },
-		{ id: 'push', label: 'Push', shortcut: 'E', icon: ArrowUp },
+		{ id: 'push', label: 'Push', shortcut: 'E', icon: FoldHorizontal },
 		{ id: 'box-creation', label: 'Create Box', shortcut: 'R', icon: Box },
 		{ id: 'tile', label: 'Tile', shortcut: 'T', icon: SquareStack }
 	];
@@ -74,6 +74,9 @@
 			<Magnet size={22} />
 		</button>
 	</div>
+
+	<!-- Axis Gizmo - positioned next to toolbar -->
+	<div class="axis-gizmo-container" id="axis-gizmo-container"></div>
 </div>
 
 <style>
@@ -96,6 +99,8 @@
 		padding: 16px; /* Reduced padding by 8px (was 24px) */
 		display: flex;
 		justify-content: center;
+		align-items: flex-start;
+		gap: 12px; /* Space between toolbar and gizmo */
 		background: transparent;
 		min-height: 100vh;
 		width: 100vw;
@@ -160,5 +165,24 @@
 	/* Lucide icon styling */
 	.toolbar-btn :global(svg) {
 		flex-shrink: 0;
+	}
+
+	/* Axis Gizmo - Connected to toolbar */
+	.axis-gizmo-container {
+		width: 48px; /* Match toolbar button size */
+		height: 48px; /* Match toolbar button size */
+		background: #171717;
+		border: 1px solid #2E2E2E;
+		border-radius: 50%;
+		box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+		pointer-events: none;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		flex-shrink: 0;
+	}
+
+	.axis-gizmo-container :global(canvas) {
+		display: block;
 	}
 </style>

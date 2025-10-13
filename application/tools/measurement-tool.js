@@ -24,6 +24,10 @@ class MeasurementTool {
         this.currentEdgeAxis = null; // 'x', 'y', or 'z' - which dimension is being measured
         this.currentObject = null; // The object being measured
 
+        // Stabilization to prevent flickering
+        this.lastUpdateTime = 0; // Timestamp of last measurement update
+        this.stabilizationDelay = 500; // 0.5 seconds in milliseconds
+
         // Load color from configuration
         this.loadColorFromConfig();
     }
@@ -96,6 +100,7 @@ class MeasurementTool {
      */
     deactivate() {
         this.isActive = false;
+        this.lastUpdateTime = 0;
         this.clearMeasurement();
     }
 
@@ -110,26 +115,38 @@ class MeasurementTool {
 
         if (!intersect) {
             this.clearMeasurement();
+            this.lastUpdateTime = 0;
             return;
         }
 
-        // Case 1: No selection - show edge dimension
-        if (selectedObjects.length === 0) {
-            this.showEdgeMeasurement(intersect);
-        }
-        // Case 2: Has selection - check if hovering the same object or different object
-        else if (selectedObjects.length > 0) {
-            const selectedObject = selectedObjects[0];
-            const hoveredObject = intersect.object;
+        // Check if enough time has passed since last update
+        const currentTime = Date.now();
+        const timeSinceLastUpdate = currentTime - this.lastUpdateTime;
 
-            // If hovering the same selected object, show edge measurement
-            if (selectedObject === hoveredObject) {
+        // If no measurement exists OR stabilization delay has passed, update immediately
+        if (!this.currentMeasurement || timeSinceLastUpdate >= this.stabilizationDelay) {
+            // Case 1: No selection - show edge dimension
+            if (selectedObjects.length === 0) {
                 this.showEdgeMeasurement(intersect);
-            } else {
-                // Different object - show distance measurement
-                this.showObjectDistance(selectedObject, hoveredObject);
             }
+            // Case 2: Has selection - check if hovering the same object or different object
+            else if (selectedObjects.length > 0) {
+                const selectedObject = selectedObjects[0];
+                const hoveredObject = intersect.object;
+
+                // If hovering the same selected object, show edge measurement
+                if (selectedObject === hoveredObject) {
+                    this.showEdgeMeasurement(intersect);
+                } else {
+                    // Different object - show distance measurement
+                    this.showObjectDistance(selectedObject, hoveredObject);
+                }
+            }
+
+            // Update the last update time
+            this.lastUpdateTime = currentTime;
         }
+        // Otherwise, ignore the update (within stabilization window)
     }
 
     /**
@@ -178,6 +195,81 @@ class MeasurementTool {
 
         // Create visualization with face normal
         this.createEdgeMeasurementVisual(edge.start, edge.end, length, edge.direction);
+    }
+
+    /**
+     * Show measurement for active push operation
+     * Displays the dimension being manipulated on the push axis
+     * @param {THREE.Mesh} object - Object being pushed
+     * @param {string} pushAxis - Axis being pushed ('x', 'y', or 'z')
+     */
+    showPushMeasurement(object, pushAxis) {
+        if (!object || !pushAxis || !object.geometry) {
+            return;
+        }
+
+        // Store for Tab key functionality
+        this.currentEdgeAxis = pushAxis;
+        this.currentObject = object;
+
+        // Find edge aligned with push axis
+        const edge = this.findAxisAlignedEdge(object, pushAxis);
+        if (!edge) {
+            return;
+        }
+
+        // Calculate edge length
+        const length = edge.start.distanceTo(edge.end);
+
+        // Create measurement visual
+        this.createEdgeMeasurementVisual(edge.start, edge.end, length, edge.direction);
+    }
+
+    /**
+     * Find an edge of the object's bounding box aligned with the specified axis
+     * @param {THREE.Mesh} object - The object to measure
+     * @param {string} axis - The axis to align with ('x', 'y', or 'z')
+     * @returns {Object|null} Edge object with start, end, direction properties
+     */
+    findAxisAlignedEdge(object, axis) {
+        if (!object || !object.geometry) return null;
+
+        // Get bounding box in world space
+        const box = new THREE.Box3().setFromObject(object);
+        const min = box.min;
+        const max = box.max;
+
+        // Define edges along each axis
+        let start, end;
+
+        switch (axis) {
+            case 'x':
+                // Use bottom-front edge along X axis
+                start = new THREE.Vector3(min.x, min.y, min.z);
+                end = new THREE.Vector3(max.x, min.y, min.z);
+                break;
+            case 'y':
+                // Use front-left edge along Y axis
+                start = new THREE.Vector3(min.x, min.y, min.z);
+                end = new THREE.Vector3(min.x, max.y, min.z);
+                break;
+            case 'z':
+                // Use bottom-left edge along Z axis
+                start = new THREE.Vector3(min.x, min.y, min.z);
+                end = new THREE.Vector3(min.x, min.y, max.z);
+                break;
+            default:
+                return null;
+        }
+
+        // Calculate direction
+        const direction = end.clone().sub(start).normalize();
+
+        return {
+            start: start,
+            end: end,
+            direction: direction
+        };
     }
 
     /**
@@ -530,37 +622,57 @@ class MeasurementTool {
 
         // DEVELOPMENT_VALIDATOR_IGNORE: Measurement visuals are temporary and not pooled
         // Create dashed line with offset in the normal direction of the face
-        const offsetStart = start.clone();
-        const offsetEnd = end.clone();
+        let offsetStart = start.clone();
+        let offsetEnd = end.clone();
 
         // Calculate offset direction perpendicular to edge in the face plane
         const face = this.currentFace;
         let normalDirection;
+        let isBottomFace = false;
 
         if (face && face.normal) {
-            // Calculate direction perpendicular to both edge and face normal
-            // This gives us a direction in the plane of the face, perpendicular to the edge
-            const edgeDirection = end.clone().sub(start).normalize();
             const faceNormal = face.normal.clone().normalize();
 
-            // Cross product: perpendicular to both edge and face normal
-            normalDirection = edgeDirection.clone().cross(faceNormal).normalize();
+            // Check if this is a bottom face (normal pointing downward)
+            // Face normal Y component should be significantly negative
+            isBottomFace = faceNormal.y < -0.7;
 
-            // Make sure it points away from the face (outward)
-            // Use face normal to determine which direction is "out"
-            if (normalDirection.dot(faceNormal) < 0) {
-                normalDirection.negate();
+            if (isBottomFace) {
+                // For bottom faces, position measurement on floor plane below object
+                const object = this.currentObject;
+                if (object) {
+                    const bbox = new THREE.Box3().setFromObject(object);
+                    const floorY = bbox.min.y - 0.5; // 0.5 units below object bottom
+
+                    // Project edge points to floor plane
+                    offsetStart.y = floorY;
+                    offsetEnd.y = floorY;
+                }
+            } else {
+                // Normal offset behavior for non-bottom faces
+                // Calculate direction perpendicular to both edge and face normal
+                const edgeDirection = end.clone().sub(start).normalize();
+                normalDirection = edgeDirection.clone().cross(faceNormal).normalize();
+
+                // Make sure it points away from the face (outward)
+                if (normalDirection.dot(faceNormal) < 0) {
+                    normalDirection.negate();
+                }
+
+                // Offset 0.5 units in the calculated direction
+                const offsetAmount = 0.5;
+                const offset = normalDirection.multiplyScalar(offsetAmount);
+                offsetStart.add(offset);
+                offsetEnd.add(offset);
             }
         } else {
             // Fallback: use perpendicular to edge direction
             normalDirection = this.getPerpendicularVector(direction);
+            const offsetAmount = 0.5;
+            const offset = normalDirection.multiplyScalar(offsetAmount);
+            offsetStart.add(offset);
+            offsetEnd.add(offset);
         }
-
-        // Offset 0.5 units in the calculated direction
-        const offsetAmount = 0.5;
-        const offset = normalDirection.multiplyScalar(offsetAmount);
-        offsetStart.add(offset);
-        offsetEnd.add(offset);
 
         // DEVELOPMENT_VALIDATOR_IGNORE_START: Measurement visuals are temporary overlays, not pooled resources
         // Create connector lines from edge to measurement line
@@ -999,6 +1111,7 @@ class MeasurementTool {
      * Clean up
      */
     destroy() {
+        this.lastUpdateTime = 0;
         this.clearMeasurement();
         this.isActive = false;
     }

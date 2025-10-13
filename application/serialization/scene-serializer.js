@@ -142,16 +142,6 @@ class SceneSerializer {
                 serialized = this.serializeObjectFallback(obj);
             }
 
-            // DEBUG: Log what we're saving
-            if (serialized) {
-                console.log('[SceneSerializer] Saving object:', {
-                    id: serialized.id,
-                    name: serialized.name,
-                    dimensions: serialized.dimensions,
-                    position: serialized.position
-                });
-            }
-
             return serialized;
         }).filter(Boolean); // Remove any null entries
 
@@ -170,6 +160,9 @@ class SceneSerializer {
      * @returns {Object} Serialized object data
      */
     serializeObjectFallback(obj) {
+        // ARCHITECTURE: Read dimensions from geometry via DimensionManager (single source of truth)
+        const dimensions = window.dimensionManager?.getDimensions(obj.mesh) || { x: 1, y: 1, z: 1 };
+
         return {
             id: obj.id,
             name: obj.name,
@@ -178,7 +171,7 @@ class SceneSerializer {
             childrenOrder: obj.childrenOrder || [],
             position: obj.position ? { ...obj.position } : { x: 0, y: 0, z: 0 },
             rotation: obj.rotation ? { ...obj.rotation } : { x: 0, y: 0, z: 0 },
-            dimensions: obj.dimensions ? { ...obj.dimensions } : { x: 1, y: 1, z: 1 },
+            dimensions: dimensions,
             material: obj.material ? {
                 color: obj.material.color && obj.material.color.isColor
                     ? '#' + obj.material.color.getHexString() // Convert THREE.Color to hex string

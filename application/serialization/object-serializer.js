@@ -221,13 +221,18 @@ class ObjectSerializer {
             isContainer: objectData.isContainer,
             parentContainer: objectData.parentContainer,
 
-            // Add computed dimensions if geometry is requested
-            dimensions: includeGeometry ? this.computeDimensions(obj) : objectData.dimensions,
+            // ARCHITECTURE: Read dimensions from geometry via DimensionManager (single source of truth)
+            dimensions: includeGeometry ? (window.dimensionManager?.getDimensions(obj) || { x: 1, y: 1, z: 1 }) : { x: 1, y: 1, z: 1 },
 
             // Add hierarchy data if requested
             children: includeHierarchy ? objectData.children : undefined,
             layout: includeHierarchy ? objectData.layout : undefined,
             autoLayout: objectData.autoLayout,
+
+            // Container-specific properties
+            isHug: objectData.isHug,
+            layoutMode: objectData.layoutMode,
+            childrenOrder: objectData.childrenOrder,
 
             // Add parametric and instance data
             parametricProperties: objectData.parametricProperties,
@@ -244,6 +249,7 @@ class ObjectSerializer {
 
     /**
      * Compute dimensions using GeometryUtils or fallback
+     * @deprecated Use window.dimensionManager.getDimensions() instead
      * @private
      */
     computeDimensions(obj) {

@@ -48,7 +48,7 @@ class TileTool {
     /**
      * Handle mouse hover - track hoverable objects (no visual highlight)
      */
-    onHover(hit) {
+    onHover(hit, isAltPressed) {
         if (hit && hit.object) {
             const objectData = this.sceneController?.getObjectByMesh?.(hit.object);
 

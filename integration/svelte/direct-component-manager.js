@@ -182,8 +182,8 @@ class DirectComponentManager {
                         iframe.contentWindow.modlerComponents = window.modlerComponents;
                     }
                 } catch (error) {
-                    // Cross-origin - can't access iframe contentWindow
-                    console.warn(`⚠️ Cannot expose modlerComponents to ${componentName} iframe (cross-origin)`);
+                    // Cross-origin - can't access iframe contentWindow (expected in Vite dev mode)
+                    // Silent - not an error condition
                 }
 
                 // Trigger slide-in animation by adding 'loaded' class to parent container

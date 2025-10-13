@@ -37,6 +37,38 @@ class FileManagerHandler {
                 this.sendEventToUI('unsaved-changes-prompt', e.detail);
             });
         }
+
+        // Proactively send ready signal to all UI panels after a brief delay
+        // to ensure iframes are fully loaded
+        setTimeout(() => this.broadcastReadySignal(), 100);
+    }
+
+    /**
+     * Broadcast ready signal to all UI iframes
+     */
+    broadcastReadySignal() {
+        if (this.panelCommunication) {
+            this.panelCommunication.sendDirectMessage(
+                'file-manager-ready',
+                { isReady: true },
+                ['left'] // Send to left panel where FileBrowser lives
+            );
+        } else {
+            // Fallback: Send to all iframes
+            const iframes = document.querySelectorAll('iframe');
+            iframes.forEach(iframe => {
+                if (iframe.contentWindow) {
+                    try {
+                        iframe.contentWindow.postMessage({
+                            type: 'file-manager-ready',
+                            data: { isReady: true }
+                        }, '*');
+                    } catch (error) {
+                        // Cross-origin - expected in Vite dev mode
+                    }
+                }
+            });
+        }
     }
 
     /**

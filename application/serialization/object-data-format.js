@@ -358,7 +358,7 @@ function convertFromThreeJS(threeObject) {
             z: threeObject.scale ? parseFloat(threeObject.scale.z.toFixed(3)) : 1
         },
 
-        dimensions: userData.dimensions || { x: 1, y: 1, z: 1 },
+        dimensions: threeObject.dimensions || userData.dimensions || { x: 1, y: 1, z: 1 },
 
         material: {
             color: threeObject.material?.color ? `#${threeObject.material.color.getHexString()}` : '#888888',
@@ -368,7 +368,7 @@ function convertFromThreeJS(threeObject) {
 
         autoLayout: userData.autoLayout || { enabled: false, direction: null, gap: 0, padding: { width: 0, height: 0, depth: 0 }, reversed: false },
         calculatedGap: userData.calculatedGap, // Include dynamic gap value
-        parentContainer: userData.parentContainer || null
+        parentContainer: threeObject.parentContainer || userData.parentContainer || null
     };
 
     return standardData;

@@ -24,7 +24,33 @@
 		setTimeout(() => {
 			isLoaded = true;
 		}, 100);
+
+		// Add keyboard listener for delete key
+		const handleKeyDown = (event: KeyboardEvent) => {
+			// Check for Delete or Backspace key
+			if (event.code === 'Delete' || event.code === 'Backspace') {
+				// Only handle if we have selected objects and not in an input field
+				if ($selectedObjects.length > 0 && !isInputFocused(event.target)) {
+					event.preventDefault(); // Prevent browser back navigation on Backspace
+					unifiedCommunication.sendDeleteSelected().catch(console.error);
+				}
+			}
+		};
+
+		window.addEventListener('keydown', handleKeyDown);
+
+		// Cleanup
+		return () => {
+			window.removeEventListener('keydown', handleKeyDown);
+		};
 	});
+
+	// Helper to check if an input/textarea is focused
+	function isInputFocused(target: EventTarget | null): boolean {
+		if (!target || !(target instanceof HTMLElement)) return false;
+		const tagName = target.tagName.toLowerCase();
+		return tagName === 'input' || tagName === 'textarea' || target.isContentEditable;
+	}
 
 	// Filter out utility objects and temporary preview objects from hierarchy
 	$: filteredHierarchy = $objectHierarchy.filter(obj =>
@@ -36,6 +62,11 @@
 		!obj.isTemporary &&
 		!obj.isPreview
 	);
+
+	// DEBUG: Log what ObjectTree receives
+	$: if (filteredHierarchy.length > 0) {
+		console.log('🎄 ObjectTree filteredHierarchy:', filteredHierarchy.map(obj => `${obj.name}(isContainer=${obj.isContainer})`).join(', '));
+	}
 
 	// Build tree structure
 	$: treeStructure = buildTreeStructure(filteredHierarchy);
@@ -57,6 +88,9 @@
 				const parentObj = objectMap.get(obj.parentContainer);
 				if (parentObj) {
 					parentObj.children.push(treeObj);
+				} else {
+					// Add orphans to root as fallback
+					rootObjects.push(treeObj);
 				}
 			}
 		});

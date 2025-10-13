@@ -35,7 +35,20 @@ class DeleteObjectCommand extends BaseCommand {
             // Store object data before deletion for restoration
             this.deletedObjects = [];
 
+            // Collect all objects to delete, including children of containers
+            const objectsToDelete = new Set(this.objectIds);
+
             for (const objectId of this.objectIds) {
+                const objectData = this.sceneController.getObject(objectId);
+                if (objectData && objectData.isContainer) {
+                    // If deleting a container, also delete all its children
+                    const children = this.sceneController.getChildObjects(objectId);
+                    children.forEach(child => objectsToDelete.add(child.id));
+                }
+            }
+
+            // Create snapshots for all objects to delete
+            for (const objectId of objectsToDelete) {
                 const objectData = this.sceneController.getObject(objectId);
                 if (objectData) {
                     // Create deep copy of object data for restoration
@@ -45,6 +58,9 @@ class DeleteObjectCommand extends BaseCommand {
                     console.warn(`DeleteObjectCommand: Object ${objectId} not found`);
                 }
             }
+
+            // Update objectIds to include children
+            this.objectIds = Array.from(objectsToDelete);
 
             if (this.deletedObjects.length === 0) {
                 console.warn('DeleteObjectCommand: No valid objects to delete');
@@ -104,9 +120,20 @@ class DeleteObjectCommand extends BaseCommand {
                 return false;
             }
 
+            // Sort deleted objects: containers first, then children
+            // This ensures parents are restored before children for proper hierarchy
+            const sortedObjects = [...this.deletedObjects].sort((a, b) => {
+                // Containers (no parentContainer) come first
+                const aIsRoot = !a.parentContainer;
+                const bIsRoot = !b.parentContainer;
+                if (aIsRoot && !bIsRoot) return -1;
+                if (!aIsRoot && bIsRoot) return 1;
+                return 0;
+            });
+
             // Restore objects to scene
             let restoredCount = 0;
-            for (const objectSnapshot of this.deletedObjects) {
+            for (const objectSnapshot of sortedObjects) {
                 if (this.restoreObjectFromSnapshot(objectSnapshot)) {
                     restoredCount++;
                 }
@@ -637,10 +664,7 @@ class DeleteObjectCommand extends BaseCommand {
             restoredObjectData.childObjects = [...snapshot.childObjects];
         }
 
-        // Restore dimensions if available
-        if (snapshot.dimensions) {
-            restoredObjectData.dimensions = { ...snapshot.dimensions };
-        }
+        // Dimensions automatically restored via DimensionManager getter from geometry
 
         // Most importantly, restore the exact mesh positioning and properties
         if (restoredObjectData.mesh && snapshot.meshData) {

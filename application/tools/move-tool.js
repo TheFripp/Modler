@@ -76,11 +76,27 @@ class MoveTool {
     /**
      * Handle mouse hover events - show face highlighting for selected objects and handle dragging
      */
-    onHover(hit) {
+    onHover(hit, isAltPressed) {
         // Handle dragging movement during hover
         if (this.isDragging && this.dragObject && this.dragFaceNormal) {
             this.updateDragMovement();
             return;
+        }
+
+        // Check for measurement mode (Alt key)
+        if (isAltPressed) {
+            const measurementTool = window.modlerComponents?.measurementTool;
+            if (measurementTool) {
+                const selectedObjects = this.selectionController?.getSelectedObjects() || [];
+                measurementTool.onHover(hit, selectedObjects);
+            }
+            return;
+        }
+
+        // Clear measurement when Alt not pressed
+        const measurementTool = window.modlerComponents?.measurementTool;
+        if (measurementTool) {
+            measurementTool.clearMeasurement();
         }
 
         // Check if we should show highlight for this object

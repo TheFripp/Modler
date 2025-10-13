@@ -35,6 +35,7 @@
 - **Bi-Directional Selection**: [`/systems/bi-directional-selection.md`](systems/bi-directional-selection.md) - UI ↔ Scene selection system with NavigationController integration
 - **Container System**: [`/systems/containers.md`](systems/containers.md) - Dual geometry containers and layout
 - **Support Mesh Architecture**: [`/systems/support-mesh-architecture.md`](systems/support-mesh-architecture.md) - "Create once, show/hide only" visualization system
+- **Dimension Management**: [`/systems/dimension-management.md`](systems/dimension-management.md) - ⭐ **Geometry-driven dimension system with on-demand computation**
 - **Tool System**: [`/systems/tools.md`](systems/tools.md) - Tool coordination and shared behaviors
 - **Input & Events**: [`/systems/input-events.md`](systems/input-events.md) - Event coordination and camera controls
 - **Keyboard Router**: [`keyboard-router-architecture.md`](keyboard-router-architecture.md) - ⭐ **Centralized keyboard input with state polling pattern**

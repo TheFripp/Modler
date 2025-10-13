@@ -269,9 +269,19 @@ class SupportMeshFactory {
         const edgeGeometry = this.geometryFactory.createEdgeGeometry(mainMesh.geometry);
         const wireframe = this.resourcePool.getLineMesh(edgeGeometry, material);
 
-        wireframe.position.set(0, 0.001, 0); // Small Y offset
+        // CRITICAL: Compute bounding sphere to prevent frustum culling issues
+        // EdgesGeometry may have stale/incorrect bounding data
+        edgeGeometry.computeBoundingSphere();
+        edgeGeometry.computeBoundingBox();
+
+        wireframe.position.set(0, 0, 0); // No offset - wireframe should match geometry exactly
+        wireframe.scale.set(1, 1, 1);
         wireframe.raycast = () => {}; // Non-raycastable
         wireframe.userData.supportMeshType = 'wireframe'; // ContainerVisualizer looks for 'wireframe'
+
+        // Ensure proper rendering settings
+        wireframe.matrixAutoUpdate = true;
+        wireframe.frustumCulled = true;
 
         return wireframe;
     }
@@ -311,23 +321,29 @@ class SupportMeshFactory {
         // The main mesh uses EdgesGeometry (wireframe) which is not suitable for raycasting
         // We need to reconstruct the original box dimensions for solid geometry
 
-        // Try to get original container dimensions from scene controller data
-        const sceneController = window.modlerComponents?.sceneController;
+        // Get container dimensions from DimensionManager (single source of truth)
+        const dimensionManager = window.dimensionManager;
         let size;
 
-        if (sceneController) {
-            const objectData = sceneController.getObjectByMesh(mainMesh);
-            if (objectData && objectData.originalBounds) {
-                // Use original container creation bounds
-                size = objectData.originalBounds.size.clone();
+        if (dimensionManager) {
+            // CRITICAL: Use DimensionManager for accurate dimensions (works for both new and deserialized containers)
+            const dimensions = dimensionManager.getDimensions(mainMesh);
+            size = new THREE.Vector3(dimensions.x, dimensions.y, dimensions.z);
+        } else {
+            // Fallback: Try original bounds from scene controller
+            const sceneController = window.modlerComponents?.sceneController;
+            if (sceneController) {
+                const objectData = sceneController.getObjectByMesh(mainMesh);
+                if (objectData && objectData.originalBounds) {
+                    size = objectData.originalBounds.size.clone();
+                }
             }
-        }
 
-        let fallbackBounds = null;
-        if (!size) {
-            // Fallback: Extract from wireframe mesh bounds (less reliable)
-            fallbackBounds = new THREE.Box3().setFromObject(mainMesh);
-            size = fallbackBounds.getSize(new THREE.Vector3());
+            // Last resort: Extract from mesh bounds (least reliable)
+            if (!size) {
+                const fallbackBounds = new THREE.Box3().setFromObject(mainMesh);
+                size = fallbackBounds.getSize(new THREE.Vector3());
+            }
         }
 
         // Create solid box geometry with the extracted dimensions
@@ -342,7 +358,7 @@ class SupportMeshFactory {
 
         interactiveMesh.position.set(0, 0, 0);
         interactiveMesh.renderOrder = 1000; // High render order for raycasting priority
-        interactiveMesh.visible = false; // Hidden by default - only visible when needed for interaction
+        interactiveMesh.visible = true; // CRITICAL: Must be visible for raycaster (material is already transparent/invisible)
         interactiveMesh.userData.isContainerInteractive = true;
         interactiveMesh.userData.isContainerCollision = true;
         interactiveMesh.userData.containerMesh = mainMesh; // Direct reference to parent

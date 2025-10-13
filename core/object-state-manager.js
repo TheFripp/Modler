@@ -93,9 +93,12 @@ class ObjectStateManager extends EventTarget {
                     y: (sceneObject.mesh.rotation.y * 180) / Math.PI,
                     z: (sceneObject.mesh.rotation.z * 180) / Math.PI
                 };
-            } else if (propertyKey === 'dimension' && sceneObject.dimensions) {
-                // Dimensions are stored in sceneObject, not on mesh
-                object.dimensions = { ...sceneObject.dimensions };
+            } else if (propertyKey === 'dimension') {
+                // ARCHITECTURE: Read dimensions from geometry via DimensionManager
+                const dimensions = window.dimensionManager?.getDimensions(sceneObject.mesh);
+                if (dimensions) {
+                    object.dimensions = { ...dimensions };
+                }
             }
         }
 
@@ -257,23 +260,8 @@ class ObjectStateManager extends EventTarget {
      * @private
      */
     buildObjectStructure(objectData, includeExtendedProps = true) {
-        // Get fresh dimensions from geometry (single source of truth)
-        let dimensions = { x: 1, y: 1, z: 1 }; // Default fallback
-
-        // ALWAYS get fresh dimensions from geometry if available
-        if (objectData.mesh?.geometry && window.GeometryUtils?.getGeometryDimensions) {
-            const geometryDimensions = window.GeometryUtils.getGeometryDimensions(objectData.mesh.geometry);
-            if (geometryDimensions) {
-                dimensions = {
-                    x: geometryDimensions.x,
-                    y: geometryDimensions.y,
-                    z: geometryDimensions.z
-                };
-            }
-        } else if (objectData.dimensions) {
-            // Fallback to objectData.dimensions only if geometry not available
-            dimensions = objectData.dimensions;
-        }
+        // ARCHITECTURE: Get fresh dimensions from geometry via DimensionManager (single source of truth)
+        const dimensions = window.dimensionManager?.getDimensions(objectData.mesh) || { x: 1, y: 1, z: 1 };
 
         const structure = {
             // Core identity

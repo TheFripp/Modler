@@ -14,6 +14,11 @@
 - **history-manager** (`/application/managers/`) - Undo/redo command execution; use for reversible operations
 
 ### Geometry & Materials
+- **dimension-manager** (`/core/`) - Single source of truth for dimensions; read from geometry on-demand
+  - **No caching**: Dimensions always computed fresh from geometry bounding box
+  - **Backward compatibility**: `objectData.dimensions` is a getter that calls DimensionManager
+  - **API**: `getDimensions(objectOrId)`, `setDimensions(objectOrId, dims, anchorMode)`
+  - **Principle**: "Geometry is truth, everything else is cache"
 - **geometry-utils** (`/application/utilities/`) - Geometry creation and manipulation; CAD operations (push, resize, create)
 - **material-manager** (`/application/utilities/`) - Material creation, caching, and management; use for all materials
   - **Material pooling**: Shared material instances for consistent updates
@@ -154,6 +159,9 @@
 **Manipulate geometry**
 → `window.GeometryUtils.pushGeometryFace()`, `createBoxAtPosition()`, etc.
 
+**Read/write dimensions**
+→ `window.dimensionManager.getDimensions(id)`, `setDimensions(id, dims, anchor)`
+
 **Show visual effect**
 → `window.modlerComponents.visualizationManager.showSupportMesh(id, type)`
 
@@ -243,6 +251,7 @@ For detailed documentation on specific systems:
 - Selection: `@documentation/systems/selection.md`
 - Containers: `@documentation/systems/containers.md`
 - Support Meshes: `@documentation/systems/support-mesh-architecture.md`
+- Dimension Management: `@documentation/systems/dimension-management.md` ⭐ Geometry-driven dimensions
 - Tools: `@documentation/systems/tools.md`
 - Input Events: `@documentation/systems/input-events.md`
 - Layout: `@documentation/architecture/auto-layout-system.md`

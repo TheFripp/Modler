@@ -267,44 +267,41 @@ class SceneDeserializer {
 
         // CRITICAL: Establish THREE.js hierarchy after all objects are created
         // setParentContainer() must be called AFTER both parent and child exist
-        console.log('[SceneDeserializer] Establishing hierarchy...');
         for (const objData of sortedObjects) {
             if (objData.parentContainer) {
                 // Don't update layout yet - we'll do that after all hierarchies are established
-                this.sceneController.setParentContainer(objData.id, objData.parentContainer, false);
+                const success = this.sceneController.setParentContainer(objData.id, objData.parentContainer, false);
+                if (success) {
+                    const childObj = this.sceneController.getObject(objData.id);
+                    const parentObj = this.sceneController.getObject(objData.parentContainer);
 
-                // DEBUG: Log position after hierarchy change
-                const obj = this.sceneController.getObject(objData.id);
-                if (obj) {
-                    console.log('[SceneDeserializer] After setParentContainer:', {
-                        id: obj.id,
-                        name: obj.name,
-                        meshPosition: obj.mesh.position,
-                        parent: obj.parentContainer
-                    });
+                    // CRITICAL FIX: Restore the saved LOCAL position
+                    // ONLY for children NOT in layout-enabled containers
+                    // Layout containers will recalculate positions via updateLayout() below
+                    const parentHasLayout = parentObj?.autoLayout?.enabled === true;
+                    if (childObj?.mesh && objData.position && !parentHasLayout) {
+                        // Parent doesn't use layout - restore saved position
+                        childObj.mesh.position.set(
+                            objData.position.x ?? 0,
+                            objData.position.y ?? 0,
+                            objData.position.z ?? 0
+                        );
+                    }
                 }
             }
         }
 
-        // Now update layouts for all containers with children
-        console.log('[SceneDeserializer] Updating layouts...');
-        const containers = sortedObjects.filter(obj => obj.isContainer && obj.childrenOrder && obj.childrenOrder.length > 0);
-        for (const container of containers) {
-            if (container.autoLayout?.enabled) {
-                console.log('[SceneDeserializer] Running layout for container:', container.id, container.name);
-                this.sceneController.updateLayout(container.id);
+        // Now update layouts ONLY for containers with autoLayout enabled
+        // This preserves manually-positioned children in containers without layout
+        const layoutContainers = sortedObjects.filter(obj =>
+            obj.isContainer &&
+            obj.autoLayout?.enabled === true &&
+            obj.childrenOrder &&
+            obj.childrenOrder.length > 0
+        );
 
-                // DEBUG: Log child positions after layout
-                const children = this.sceneController.getChildObjects(container.id);
-                children.forEach(child => {
-                    console.log('[SceneDeserializer] After layout, child:', {
-                        id: child.id,
-                        name: child.name,
-                        meshPosition: child.mesh.position,
-                        dimensions: child.dimensions
-                    });
-                });
-            }
+        for (const container of layoutContainers) {
+            this.sceneController.updateLayout(container.id);
         }
 
         // Restore root children order
@@ -355,14 +352,6 @@ class SceneDeserializer {
      */
     async restoreObject(objData) {
         try {
-            // DEBUG: Log what we're restoring
-            console.log('[SceneDeserializer] Restoring object:', {
-                id: objData.id,
-                name: objData.name,
-                dimensions: objData.dimensions,
-                position: objData.position,
-                parentContainer: objData.parentContainer
-            });
 
             // Create geometry based on type
             let geometry;
@@ -397,35 +386,58 @@ class SceneDeserializer {
                     : new THREE.BoxGeometry(1, 1, 1);
             }
 
-            // Create material using MaterialManager
-            const material = this.materialManager
-                ? this.materialManager.createMeshLambertMaterial({
-                    color: objData.material?.color || '#808080',
-                    opacity: objData.material?.opacity ?? 1.0,
-                    transparent: objData.material?.transparent ?? false
-                })
-                : new THREE.MeshLambertMaterial({
-                    color: objData.material?.color || '#808080',
-                    opacity: objData.material?.opacity ?? 1.0,
-                    transparent: objData.material?.transparent ?? false
-                });
+            // Create material based on object type
+            let material;
+            if (objData.isContainer) {
+                // CRITICAL: Containers use invisible material (wireframes created by SupportMeshFactory)
+                // This matches the material used by LayoutGeometry.createContainerGeometry()
+                material = this.materialManager
+                    ? this.materialManager.createInvisibleRaycastMaterial({ wireframe: false })
+                    : new THREE.MeshBasicMaterial({
+                        transparent: true,
+                        opacity: 0.0,
+                        colorWrite: false,  // Don't write to color buffer - purely for raycasting
+                        depthWrite: false,  // Don't write to depth buffer - prevents visual artifacts
+                        wireframe: false    // Explicitly disable wireframe rendering
+                    });
+            } else {
+                // Regular objects use standard material
+                material = this.materialManager
+                    ? this.materialManager.createMeshLambertMaterial({
+                        color: objData.material?.color || '#808080',
+                        opacity: objData.material?.opacity ?? 1.0,
+                        transparent: objData.material?.transparent ?? false
+                    })
+                    : new THREE.MeshLambertMaterial({
+                        color: objData.material?.color || '#808080',
+                        opacity: objData.material?.opacity ?? 1.0,
+                        transparent: objData.material?.transparent ?? false
+                    });
+            }
 
             // Add to scene using SceneController (position and rotation set via options)
+            // CRITICAL: Don't pass parentContainer here - it causes double position conversion
+            // Hierarchy will be established later in restoreSceneContent() via setParentContainer()
+            // ARCHITECTURE: Geometry already has correct dimensions (created above), no caching needed
+            // CRITICAL: For children (objects with parentContainer), create at origin initially
+            // The correct local position will be restored after setParentContainer() establishes hierarchy
+            // This prevents double position conversion (saved local → treated as world → converted to local again)
             const createdObject = this.sceneController.addObject(geometry, material, {
                 name: objData.name,
                 type: objData.type || 'box',
                 id: objData.id,
                 isContainer: objData.isContainer || false,
-                parentContainer: objData.parentContainer || null,
-                position: {
-                    x: objData.position.x,
-                    y: objData.position.y,
-                    z: objData.position.z
+                selectable: !(objData.isContainer || false), // CRITICAL: Containers not directly selectable (matches creation)
+                // parentContainer: null, // Explicitly null - hierarchy established later
+                position: objData.parentContainer ? { x: 0, y: 0, z: 0 } : {
+                    x: objData.position?.x ?? 0,
+                    y: objData.position?.y ?? 0,
+                    z: objData.position?.z ?? 0
                 },
                 rotation: {
-                    x: objData.rotation.x,
-                    y: objData.rotation.y,
-                    z: objData.rotation.z,
+                    x: objData.rotation?.x ?? 0,
+                    y: objData.rotation?.y ?? 0,
+                    z: objData.rotation?.z ?? 0,
                     order: 'XYZ' // THREE.js default rotation order
                 }
             });
@@ -448,13 +460,14 @@ class SceneDeserializer {
                 createdObject.visible = objData.visible ?? true;
                 createdObject.locked = objData.locked || false;
 
-                // DEBUG: Log what was actually created
-                console.log('[SceneDeserializer] Object created:', {
-                    id: createdObject.id,
-                    name: createdObject.name,
-                    dimensions: createdObject.dimensions,
-                    meshPosition: createdObject.mesh.position
-                });
+                // VALIDATION: Verify geometry dimensions match saved dimensions
+                // Use DimensionManager for validation (single source of truth)
+                if (objData.dimensions && window.dimensionManager) {
+                    window.dimensionManager.restoreDimensionsFromSerialization(
+                        createdObject.id,
+                        objData.dimensions
+                    );
+                }
             }
 
         } catch (error) {
