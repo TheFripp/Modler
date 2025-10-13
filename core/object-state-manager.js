@@ -339,7 +339,47 @@ class ObjectStateManager extends EventTarget {
     }
 
     /**
-     * UNIFIED UPDATE API: Single method to update any property
+     * UNIFIED UPDATE API: Single entry point for ALL state changes
+     *
+     * This is the ONLY method you should use to change object state from outside the scene layer.
+     * Routes updates to SceneController, emits events via ObjectEventBus, and triggers layout propagation.
+     *
+     * @param {number} objectId - ID of the object to update
+     * @param {Object} updates - Object containing properties to update
+     * @param {Object} [updates.dimensions] - {x, y, z} dimensions
+     * @param {Object} [updates.position] - {x, y, z} position
+     * @param {Object} [updates.rotation] - {x, y, z} rotation (radians)
+     * @param {Object} [updates.material] - Material properties (color, opacity, etc.)
+     * @param {string} [updates.name] - Object name
+     * @param {boolean} [updates.visible] - Visibility state
+     * @param {boolean} [updates.locked] - Lock state
+     * @param {number} [updates.parentContainer] - Parent container ID
+     * @param {string} [source='input'] - Source of the update for event filtering (e.g., 'push-tool', 'dimension-input')
+     *
+     * @example
+     * // Change dimensions (triggers layout propagation if in container)
+     * objectStateManager.updateObject(objectId, {
+     *     dimensions: { x: 100, y: 50, z: 30 }
+     * }, 'dimension-input');
+     *
+     * @example
+     * // Move object during tool preview (filtered from UI sync)
+     * objectStateManager.updateObject(objectId, {
+     *     position: { x: newX, y: newY, z: newZ }
+     * }, 'push-tool');
+     *
+     * @flow
+     * 1. Validate object exists (auto-create if needed)
+     * 2. Apply updates to local state
+     * 3. Propagate to SceneController (geometry updates)
+     * 4. Emit ObjectEventBus events (UI synchronization)
+     * 5. Schedule layout propagation (if in container)
+     * 6. Queue deferred propagation for batching
+     *
+     * @architectural-note
+     * Never bypass this method to manipulate meshes directly. All state changes
+     * must flow through ObjectStateManager to maintain consistency and enable
+     * undo/redo, UI sync, and layout propagation.
      */
     updateObject(objectId, updates, source = 'input') {
         let object = this.objects.get(objectId);

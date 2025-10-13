@@ -215,6 +215,33 @@ class SceneController {
 
     /**
      * Add object to scene (DELEGATED to SceneLifecycleManager)
+     *
+     * Creates a new 3D object, adds it to the scene, generates metadata, and syncs to ObjectStateManager.
+     *
+     * @param {THREE.BufferGeometry} geometry - Three.js geometry (BoxGeometry, etc.)
+     * @param {THREE.Material} material - Three.js material
+     * @param {Object} [options={}] - Configuration options
+     * @param {string} [options.type] - Object type ('box', 'container')
+     * @param {string} [options.name] - Object name (auto-generated if not provided)
+     * @param {number} [options.id] - Explicit ID (for deserialization)
+     * @param {number} [options.parentId] - Parent container ID
+     * @param {Object} [options.position] - Initial position {x, y, z}
+     * @param {Object} [options.layoutProperties] - Layout sizing {sizeX, sizeY, sizeZ: 'fixed'|'fill'}
+     * @returns {number|null} - Created object ID, or null on failure
+     *
+     * @example
+     * const boxId = sceneController.addObject(
+     *     new THREE.BoxGeometry(50, 50, 50),
+     *     new THREE.MeshStandardMaterial({ color: 0x00ff00 }),
+     *     { type: 'box', name: 'My Box' }
+     * );
+     *
+     * @delegation This method delegates to SceneLifecycleManager, which handles:
+     * - ID generation and name generation
+     * - Mesh creation and configuration
+     * - Support mesh creation (faces, edges, wireframe)
+     * - ObjectStateManager synchronization
+     * - ObjectEventBus event emission
      */
     addObject(geometry, material, options = {}) {
         const manager = this.getLifecycleManager();
@@ -227,6 +254,25 @@ class SceneController {
     
     /**
      * Remove object from scene (DELEGATED to SceneLifecycleManager)
+     *
+     * Removes object from scene with full cleanup: support meshes, parent references, and events.
+     *
+     * @param {number} id - Object ID to remove
+     * @returns {boolean} - True if removed successfully, false if object not found
+     *
+     * @example
+     * sceneController.removeObject(objectId);
+     *
+     * @delegation This method delegates to SceneLifecycleManager, which handles:
+     * - Support mesh cleanup (faces, edges, wireframe)
+     * - Scene removal
+     * - Parent childrenOrder array update
+     * - Hierarchy event emission (triggers layout propagation)
+     * - Map entry removal
+     *
+     * @architectural-note
+     * Never call mesh.removeFromParent() directly. Always use this method to ensure
+     * proper cleanup and event emission.
      */
     removeObject(id) {
         const manager = this.getLifecycleManager();
@@ -237,7 +283,35 @@ class SceneController {
         return manager.removeObject(id);
     }
     
-    // Get object by ID
+    /**
+     * Get object by ID (DIRECT ACCESS - Single Source of Truth)
+     *
+     * Returns complete object data including mesh reference, metadata, and configuration.
+     * This is the ONLY way to read 3D object data - never cache or duplicate this data.
+     *
+     * @param {number} id - Object ID
+     * @returns {Object|null} - Object data with mesh and metadata, or null if not found
+     * @returns {number} .id - Object ID
+     * @returns {string} .name - Object name
+     * @returns {string} .type - Object type ('box', 'container')
+     * @returns {THREE.Mesh} .mesh - Three.js mesh with geometry
+     * @returns {boolean} .isContainer - Whether object is a container
+     * @returns {number|null} .parentContainer - Parent container ID
+     * @returns {Array<number>} .childrenOrder - Ordered child IDs (containers only)
+     * @returns {boolean} .visible - Visibility state
+     * @returns {boolean} .locked - Lock state
+     *
+     * @example
+     * const obj = sceneController.getObject(objectId);
+     * if (obj) {
+     *     const dimensions = dimensionManager.getDimensions(obj.mesh);
+     *     const position = obj.mesh.position;
+     * }
+     *
+     * @architectural-note
+     * Always read dimensions from geometry via DimensionManager, never cache them.
+     * SceneController is the single source of truth for all 3D data.
+     */
     getObject(id) {
         return this.objects.get(id) || null;
     }
@@ -513,6 +587,40 @@ class SceneController {
     
     /**
      * Update layout (DELEGATED to SceneLayoutManager)
+     *
+     * Calculates and applies layout for a container using LayoutEngine.
+     * Positions and sizes children based on layout mode (vertical, horizontal, grid) and sizing (fixed, fill, hug).
+     *
+     * @param {number} containerId - Container ID to update layout for
+     * @param {Object|null} [pushContext=null] - Push tool context for drag operations
+     * @param {number} [pushContext.draggedObjectId] - Object being dragged
+     * @param {Object} [pushContext.draggedDimensions] - Temporary dimensions during drag
+     * @returns {Object} - Layout result
+     * @returns {boolean} .success - Whether layout succeeded
+     * @returns {number} [.calculatedGap] - Calculated gap value (for fill mode)
+     * @returns {string} [.reason] - Error reason if failed
+     *
+     * @example
+     * // Standard layout update (triggered by dimension change)
+     * sceneController.updateLayout(containerId);
+     *
+     * @example
+     * // Layout during push tool drag (preview mode)
+     * sceneController.updateLayout(containerId, {
+     *     draggedObjectId: objectId,
+     *     draggedDimensions: { x: newWidth, y: newHeight, z: newDepth }
+     * });
+     *
+     * @delegation This method delegates to SceneLayoutManager, which:
+     * - Retrieves layout configuration (mode, gap, padding)
+     * - Collects children with layoutProperties (sizeX, sizeY, sizeZ)
+     * - Calls LayoutEngine to calculate positions and sizes
+     * - Applies calculated values via GeometryUtils
+     * - Emits hierarchy events with calculatedGap for UI sync
+     *
+     * @architectural-note
+     * Layout updates are typically triggered automatically via LayoutPropagationManager
+     * after dimension changes. Only call this directly during push tool operations.
      */
     updateLayout(containerId, pushContext = null) {
         const manager = this.getLayoutManager();
