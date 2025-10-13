@@ -125,9 +125,9 @@ function initializeScene() {
         modlerV2Components.sceneController.objects,
         modlerV2Components.sceneController.rootChildrenOrder,
         {
-            nextId: modlerV2Components.sceneController.nextId,
-            nextBoxNumber: modlerV2Components.sceneController.nextBoxNumber,
-            nextContainerNumber: modlerV2Components.sceneController.nextContainerNumber
+            nextId: 1,
+            nextBoxNumber: 1,
+            nextContainerNumber: 1
         },
         modlerV2Components.sceneController.eventCallbacks
     );
