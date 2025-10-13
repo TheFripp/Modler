@@ -4,15 +4,20 @@
  */
 class PushFaceCommand extends BaseCommand {
     /**
-     * @param {string} objectId - ID of the object being pushed
+     * @param {string|number} objectId - ID of the object being pushed
+     * @param {Object} faceNormal - Face normal direction {x, y, z}
+     * @param {number} pushDistance - Distance pushed
      * @param {Object} oldDimensions - Original dimensions {x, y, z}
      * @param {Object} newDimensions - New dimensions {x, y, z}
      * @param {Object} oldPosition - Original position {x, y, z}
      * @param {Object} newPosition - New position {x, y, z}
      */
-    constructor(objectId, oldDimensions, newDimensions, oldPosition, newPosition) {
+    constructor(objectId, faceNormal, pushDistance, oldDimensions, newDimensions, oldPosition, newPosition) {
         super('push-face', 'Push face operation');
-        this.objectId = objectId;
+        // Ensure objectId is string for schema validation
+        this.objectId = String(objectId);
+        this.faceNormal = faceNormal ? { ...faceNormal } : null;
+        this.pushDistance = pushDistance || 0;
         this.oldDimensions = { ...oldDimensions };
         this.newDimensions = { ...newDimensions };
         this.oldPosition = oldPosition ? { ...oldPosition } : null;

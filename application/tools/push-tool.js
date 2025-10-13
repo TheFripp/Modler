@@ -686,9 +686,18 @@ class PushTool {
                 Math.abs(finalPosition.z - this.initialPosition.z) > 0.001;
 
             if (dimensionsChanged || positionChanged) {
-                // ARCHITECTURAL FIX: Use PushFaceCommand for proper undo/redo
+                // Calculate push distance based on dimension change along push axis
+                let pushDistance = 0;
+                if (this.pushAxis) {
+                    const axis = this.pushAxis.toLowerCase();
+                    pushDistance = (finalDimensions[axis] - this.initialDimensions[axis]) * this.pushDirection;
+                }
+
+                // ARCHITECTURAL FIX: Use PushFaceCommand for proper undo/redo with all required parameters
                 const command = new PushFaceCommand(
                     pushedObject.userData.id,
+                    this.faceNormal,
+                    pushDistance,
                     this.initialDimensions,
                     finalDimensions,
                     this.initialPosition,
