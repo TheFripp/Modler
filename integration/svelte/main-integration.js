@@ -54,7 +54,7 @@
     let portDetector = null;
     let panelManager = null;
     let directComponentManager = null;
-    // REMOVED: propertyPanelSync - replaced by MainAdapter (Phase 3 cutover)
+    let propertyPanelSync = null;
     let splitPanelController = null;
     let settingsHandler = null;
     let fileManagerHandler = null;
@@ -318,9 +318,20 @@
                 return false;
             }
 
-            // REMOVED: PropertyPanelSync initialization (Phase 3 cutover)
-            // MainAdapter now handles all communication via ObjectEventBus subscriptions
-            console.log('✅ Using MainAdapter for UI communication (PropertyPanelSync deprecated)');
+            // Initialize PropertyPanelSync for direct communication
+            if (window.PropertyPanelSync) {
+                propertyPanelSync = new window.PropertyPanelSync(window.objectEventBus, directComponentManager);
+                window.modlerComponents.propertyPanelSync = propertyPanelSync;
+
+                // Expose global hierarchy notification function for backward compatibility
+                window.notifyObjectHierarchyChanged = function() {
+                    if (propertyPanelSync && propertyPanelSync.refreshCompleteHierarchy) {
+                        propertyPanelSync.refreshCompleteHierarchy();
+                    } else {
+                        console.warn('   ⚠️ PropertyPanelSync.refreshCompleteHierarchy not available');
+                    }
+                };
+            }
 
             return true;
 
@@ -358,9 +369,20 @@
             // Step 4: Initialize iframe panel management
             panelManager = new window.SveltePanelManager(portDetector);
 
-            // Step 5: REMOVED - PropertyPanelSync initialization (Phase 3 cutover)
-            // MainAdapter now handles all communication via ObjectEventBus subscriptions
-            console.log('✅ Using MainAdapter for iframe communication (PropertyPanelSync deprecated)');
+            // Step 5: Initialize PropertyPanelSync for iframe communication
+            if (window.PropertyPanelSync) {
+                propertyPanelSync = new window.PropertyPanelSync(window.objectEventBus, panelManager);
+                window.modlerComponents.propertyPanelSync = propertyPanelSync;
+
+                // Expose global hierarchy notification function for backward compatibility
+                window.notifyObjectHierarchyChanged = function() {
+                    if (propertyPanelSync && propertyPanelSync.refreshCompleteHierarchy) {
+                        propertyPanelSync.refreshCompleteHierarchy();
+                    } else {
+                        console.warn('   ⚠️ PropertyPanelSync.refreshCompleteHierarchy not available');
+                    }
+                };
+            }
 
             // Step 6: Create and show iframe panels
             createIframePanels();
@@ -697,9 +719,10 @@
 
             switch (type) {
                 case 'left-panel-ready':
-                    // Left panel is ready - MainAdapter will send hierarchy via ObjectEventBus
-                    // No action needed - MainAdapter handles this automatically
-                    console.log('[Main Integration] Left panel ready - using MainAdapter');
+                    // Left panel is ready - send initial hierarchy immediately
+                    if (propertyPanelSync && propertyPanelSync.refreshCompleteHierarchy) {
+                        propertyPanelSync.refreshCompleteHierarchy();
+                    }
                     break;
                 case 'object-select':
                     // Handle object selection from UI list
@@ -830,8 +853,10 @@
                     handleMoveToRoot(data.objectId);
                     break;
                 case 'request-hierarchy-refresh':
-                    // MainAdapter handles hierarchy refresh automatically via ObjectEventBus
-                    console.log('[Main Integration] Hierarchy refresh requested - using MainAdapter');
+                    // Force immediate hierarchy refresh after drag-drop
+                    if (propertyPanelSync) {
+                        propertyPanelSync.refreshCompleteHierarchy();
+                    }
                     break;
                 case 'object-reorder':
                     handleObjectReorder(data.objectId, data.targetId, data.position, data.parentId);
@@ -907,28 +932,60 @@
     function sendUIUpdate(message) {
         lastUpdateTime = Date.now();
 
-        // NEW: MainAdapter handles all ObjectEventBus events automatically
-        // This function is now primarily for direct component communication
-        const mainAdapter = window.modlerComponents?.mainAdapter;
-
+        // Use direct component communication or PropertyPanelSync
         if (directComponentManager) {
             try {
-                // Direct communication with mounted components (iframe panels)
+                // Direct communication with mounted components
                 directComponentManager.broadcastToAll(message);
             } catch (error) {
                 console.error('❌ Direct component communication failed:', error);
             }
-        } else if (mainAdapter) {
-            // MainAdapter is active - most events already handled via ObjectEventBus subscriptions
-            // This path is only for ObjectStateManager events that don't go through ObjectEventBus
-            console.log('[Main Integration] MainAdapter active, message:', message.type);
-            // Most updates are handled automatically by MainAdapter's event subscriptions
-            // No action needed here - MainAdapter already sent the message
+        } else if (propertyPanelSync) {
+            try {
+                // Map message types to PropertyPanelSync methods
+                if (message.type === 'data-update') {
+                    // Map data-update to sendToUI with appropriate updateType
+                    const data = message.data;
+                    propertyPanelSync.sendToUI(data.updateType || 'data-update', data.selectedObjects || [], {
+                        hierarchy: data.objectHierarchy,
+                        containerContext: data.containerContext,
+                        newObjectId: data.newObjectId,
+                        newObjectData: data.newObjectData,
+                        deletedObjectId: data.deletedObjectId
+                    });
+                } else if (message.type === 'property-update') {
+                    // Use sendToUI for property updates
+                    propertyPanelSync.sendToUI('property-refresh', message.data.updatedObject ? [message.data.updatedObject] : [], {
+                        property: message.data.property,
+                        value: message.data.value,
+                        objectId: message.data.objectId,
+                        source: message.data.updateSource
+                    });
+                } else if (message.type === 'tool-state-update') {
+                    // Use sendToolStateUpdate for tool state changes
+                    propertyPanelSync.sendToolStateUpdate(message.data.toolState?.activeTool || 'unknown', message.data);
+                } else if (message.type === 'object-list-update') {
+                    // Map object-list-update to hierarchy-changed
+                    propertyPanelSync.sendToUI('hierarchy-changed', [], {
+                        hierarchy: message.data.hierarchy,
+                        updateType: message.data.updateType,
+                        addedObjectId: message.data.addedObjectId,
+                        removedObjectId: message.data.removedObjectId
+                    });
+                } else {
+                    // Fallback for other message types - use sendToUI with custom type
+                    propertyPanelSync.sendToUI(message.type, message.data?.selectedObjects || [], {
+                        ...message.data
+                    });
+                }
+            } catch (error) {
+                console.error('❌ PropertyPanelSync communication failed:', error);
+                // Fallback to legacy behavior only on error
+                fallbackToLegacyPostMessage(message);
+            }
         } else {
             console.warn('⚠️ No communication system available');
-            console.warn('   Message type:', message.type);
-            console.warn('   Direct component manager:', !!directComponentManager);
-            console.warn('   Main adapter:', !!mainAdapter);
+            fallbackToLegacyPostMessage(message);
         }
     }
 
@@ -1332,8 +1389,11 @@
             }
         }
 
-        // Refresh UI - MainAdapter handles this automatically
-        console.log('[Main Integration] Reorder complete - MainAdapter will sync');
+        // Refresh UI
+        if (propertyPanelSync) {
+            propertyPanelSync.refreshCompleteHierarchy();
+        }
+    }
 
     /**
      * Check if object is in a layout-enabled container
@@ -1525,10 +1585,12 @@
 
         if (directComponentManager) {
             directComponentManager.broadcastToAll(toolStateMessage);
+        } else if (propertyPanelSync) {
+            propertyPanelSync.sendToolStateUpdate(toolName, { snapEnabled });
         }
-        // MainAdapter handles tool state updates automatically
         // Silently skip if UI not initialized yet - will sync when ready
     }
+
 
     // Bridge function: Notify tool state changed (for keyboard shortcuts)
     window.notifyToolStateChanged = function(toolName) {
@@ -1627,4 +1689,4 @@
     // Export for manual initialization if needed
     window.initializeUnifiedIntegration = initialize;
 
-}})();
+})();
