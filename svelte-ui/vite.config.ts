@@ -5,7 +5,20 @@ export default defineConfig({
 	plugins: [sveltekit()],
 	server: {
 		port: 5173,
-		host: true // Allow external connections for iframe integration
+		host: true, // Allow external connections for iframe integration
+		fs: {
+			strict: false // Allow serving files outside root for better caching
+		}
+	},
+	optimizeDeps: {
+		// Pre-bundle heavy dependencies to reduce load time
+		include: ['tailwindcss']
+	},
+	css: {
+		devSourcemap: false, // Disable CSS sourcemaps for faster dev builds
+		preprocessorOptions: {
+			// Tailwind optimization: reduce JIT work
+		}
 	},
 	build: {
 		rollupOptions: {
