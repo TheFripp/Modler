@@ -51,8 +51,10 @@ CAD software for creative hobbyists. Rule-based parametric design with intellige
 - **Why**: Layout engines need predictable, user-controllable object sequence. Drag-drop in ObjectTree directly maps to 3D layout order.
 
 ### State Management Flow
-- **ObjectStateManager** → Single source of truth for all state changes
-- **Why**: Prevents competing updates, ensures event emission, maintains consistency. Never bypass.
+- **ObjectStateManager** → Single entry point for ALL state changes, delegates to specialized systems
+- **LayoutPropagationManager** → Handles bottom-up layout propagation through container hierarchies
+- **SceneController + Managers** → Execute geometry changes, emit events for UI synchronization
+- **Why**: Clear separation prevents competing updates, ensures event emission, maintains consistency. Never bypass ObjectStateManager for state changes.
 
 ### UI ↔ 3D Communication
 - **PropertyPanelSync**: ONLY source for 3D → UI PostMessages (enforced by DevelopmentValidator)
@@ -74,8 +76,9 @@ CAD software for creative hobbyists. Rule-based parametric design with intellige
 
 ### Core Systems (Single Source of Truth)
 - **ObjectStateManager** (`/core/`) - ALL state changes, use updateObject() for everything
+- **LayoutPropagationManager** (`/layout/`) - Bottom-up layout propagation, depth caching, deferred updates
 - **SceneController** (`/scene/`) - 3D geometry coordinator, delegates to specialized scene managers
-- **SceneHierarchyManager** (`/scene/`) - Parent-child relationships, nesting validation, root objects
+- **SceneHierarchyManager** (`/scene/`) - Parent-child relationships, nesting validation, root ordering
 - **SceneLayoutManager** (`/scene/`) - Layout calculations, container sizing, fill/fixed/hug modes
 - **SceneLifecycleManager** (`/scene/`) - Object creation, deletion, ID generation, support meshes
 - **ToolController** (`/application/`) - Tool activation/switching only
@@ -93,11 +96,12 @@ CAD software for creative hobbyists. Rule-based parametric design with intellige
 - **HistoryManager** (`/application/managers/`) - Undo/redo command execution
 
 ### Decision Tree (Where Does Code Go?)
-- State change? → `ObjectStateManager.updateObject()`
-- Object creation/deletion? → `SceneLifecycleManager` (via SceneController)
-- Parent-child relationships? → `SceneHierarchyManager` (via SceneController)
-- Layout operations? → `SceneLayoutManager` (via SceneController)
-- 3D geometry coordination? → `SceneController` (delegates to managers)
+- State change? → `ObjectStateManager.updateObject()` (single entry point, never bypass)
+- Reading object data? → `SceneController.getObject()`
+- Object creation/deletion? → `SceneController.addObject/removeObject()` (delegates to SceneLifecycleManager)
+- Parent-child relationships? → `SceneController` methods (delegate to SceneHierarchyManager)
+- Layout calculation? → `SceneController.updateLayout()` (delegates to SceneLayoutManager)
+- Layout propagation? → Automatic via `ObjectStateManager.updateObject()` (delegates to LayoutPropagationManager)
 - UI property update? → `PropertyUpdateHandler` → `ObjectStateManager`
 - UI notification (3D → UI)? → `PropertyPanelSync.sendToUI()`
 - UI command (UI → 3D)? → `UnifiedCommunication` or `PropertyPanelSync`
@@ -105,6 +109,8 @@ CAD software for creative hobbyists. Rule-based parametric design with intellige
 - Visual effect? → `VisualizationManager`
 - Undo/redo? → `HistoryManager.executeCommand()`
 - New object type UI? → `PropertySectionRegistry.register()`
+
+**NEVER**: Call specialized managers (SceneHierarchyManager, SceneLayoutManager, SceneLifecycleManager, LayoutPropagationManager) directly - always use coordinators (ObjectStateManager or SceneController)
 
 ---
 
@@ -137,6 +143,7 @@ CAD software for creative hobbyists. Rule-based parametric design with intellige
 
 ❌ **NEVER**:
 - Bypass ObjectStateManager for state changes
+- Call specialized managers directly (SceneHierarchyManager, SceneLayoutManager, SceneLifecycleManager, LayoutPropagationManager)
 - Use visual transforms instead of CAD geometry
 - Call `window.postMessage` directly (use PropertyPanelSync or UnifiedCommunication)
 - Recreate support meshes (show/hide only)
@@ -162,6 +169,9 @@ CAD software for creative hobbyists. Rule-based parametric design with intellige
 
 **Detailed Documentation** (Load on-demand):
 - Full Documentation Index: `@documentation/README.md`
+- State Management Decision Matrix: `@documentation/architecture/STATE-OWNERSHIP-MATRIX.md` (NEW - Phase 4.2)
+- State Ownership Architecture: `@documentation/architecture/STATE-OWNERSHIP.md`
+- SceneController Split Details: `@documentation/architecture/SCENE-CONTROLLER-SPLIT.md` (Phase 5)
 - Essential Guide: `@documentation/guides/transform-vs-geometry.md`
 - Complete Data Flow: `@documentation/architecture/data-flow-architecture.md`
 
