@@ -519,6 +519,34 @@ class SceneLifecycleManager {
             nextContainerNumber: this.nextContainerNumber
         };
     }
+
+    /**
+     * Set ID counters (used during scene deserialization)
+     * @param {Object} counters - Counter values to set
+     * @param {number} counters.nextId - Next available object ID
+     * @param {number} counters.nextBoxNumber - Next box number for naming
+     * @param {number} counters.nextContainerNumber - Next container number for naming
+     */
+    setCounters(counters) {
+        if (counters.nextId !== undefined) {
+            this.nextId = counters.nextId;
+        }
+        if (counters.nextBoxNumber !== undefined) {
+            this.nextBoxNumber = counters.nextBoxNumber;
+        }
+        if (counters.nextContainerNumber !== undefined) {
+            this.nextContainerNumber = counters.nextContainerNumber;
+        }
+    }
+
+    /**
+     * Reset all counters to 1 (used when clearing scene)
+     */
+    resetCounters() {
+        this.nextId = 1;
+        this.nextBoxNumber = 1;
+        this.nextContainerNumber = 1;
+    }
 }
 
 // Export for use in Modler V2

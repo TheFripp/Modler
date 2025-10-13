@@ -5,12 +5,7 @@ class SceneController {
     constructor(scene) {
         this.scene = scene;
         this.objects = new Map(); // id -> object data
-        this.nextId = 1;
         this.eventCallbacks = {}; // Event system for UI notifications
-
-        // Sequential naming counters
-        this.nextBoxNumber = 1;
-        this.nextContainerNumber = 1;
 
         // Root-level object ordering (similar to container childrenOrder)
         this.rootChildrenOrder = [];
@@ -88,6 +83,46 @@ class SceneController {
             this.lifecycleManager = window.modlerComponents?.sceneLifecycleManager;
         }
         return this.lifecycleManager;
+    }
+
+    /**
+     * Counter getters/setters - delegate to SceneLifecycleManager
+     * These maintain backward compatibility with serialization code
+     */
+    get nextId() {
+        const manager = this.getLifecycleManager();
+        return manager ? manager.nextId : 1;
+    }
+
+    set nextId(value) {
+        const manager = this.getLifecycleManager();
+        if (manager) {
+            manager.nextId = value;
+        }
+    }
+
+    get nextBoxNumber() {
+        const manager = this.getLifecycleManager();
+        return manager ? manager.nextBoxNumber : 1;
+    }
+
+    set nextBoxNumber(value) {
+        const manager = this.getLifecycleManager();
+        if (manager) {
+            manager.nextBoxNumber = value;
+        }
+    }
+
+    get nextContainerNumber() {
+        const manager = this.getLifecycleManager();
+        return manager ? manager.nextContainerNumber : 1;
+    }
+
+    set nextContainerNumber(value) {
+        const manager = this.getLifecycleManager();
+        if (manager) {
+            manager.nextContainerNumber = value;
+        }
     }
 
     /**
