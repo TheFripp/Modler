@@ -326,6 +326,15 @@ const MESSAGE_PROTOCOL_SCHEMA = {
         response: null // Triggers immediate hierarchy refresh
     },
 
+    'ui-panel-ready': {
+        direction: MESSAGE_DIRECTION.UI_TO_MAIN,
+        description: 'UI panel has loaded and is ready to receive data',
+        payload: {
+            panelName: { type: DATA_TYPES.STRING, required: false }
+        },
+        response: null // Triggers initial state sync
+    },
+
     // ===========================
     // LAYOUT MODE
     // ===========================
