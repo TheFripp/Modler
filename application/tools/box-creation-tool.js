@@ -236,8 +236,6 @@ class BoxCreationTool {
             // ARCHITECTURAL FIX: Commands must go through executeCommand() for proper undo/redo
             // The command's execute() is a no-op since the object is already created
             historyManager.executeCommand(command);
-
-            logger.debug(`📝 Registered box creation in history: ${createdObjectId}`);
         }
 
         // Keep reference to the finalized box for selection

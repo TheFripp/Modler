@@ -94,25 +94,6 @@ class MaterialGuard {
                     return _opacity;
                 },
                 set(value) {
-                    // Only log if value actually changes (avoid noise from config updates)
-                    // Use epsilon comparison for floating point values
-                    const epsilon = 0.0001;
-                    const changed = Math.abs(_opacity - value) > epsilon;
-
-                    if (changed) {
-                        const stack = new Error().stack;
-                        const stackLines = stack.split('\n');
-                        const caller = stackLines[2] || 'unknown';
-
-                        console.warn('[MaterialGuard DEV] Opacity modification detected:', {
-                            materialType,
-                            oldValue: _opacity,
-                            newValue: value,
-                            caller: caller.trim(),
-                            isManaged: true
-                        });
-                    }
-
                     _opacity = value;
                 },
                 configurable: true // Allow reconfiguration if needed

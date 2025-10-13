@@ -67,11 +67,6 @@
 		!obj.isPreview
 	);
 
-	// DEBUG: Log what ObjectTree receives
-	$: if (filteredHierarchy.length > 0) {
-		console.log('🎄 ObjectTree filteredHierarchy:', filteredHierarchy.map(obj => `${obj.name}(isContainer=${obj.isContainer})`).join(', '));
-	}
-
 	// Build tree structure
 	$: treeStructure = buildTreeStructure(filteredHierarchy);
 
