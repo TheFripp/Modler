@@ -103,8 +103,8 @@ class DirectComponentManager {
      * Improves perceived performance - user can interact immediately
      */
     async mountSidePanelsLazy() {
-        // Small delay to let the main thread breathe
-        await new Promise(resolve => setTimeout(resolve, 100));
+        // Load immediately - no delay needed (Vite has already warmed up from toolbar load)
+        // await new Promise(resolve => setTimeout(resolve, 100));
 
         try {
             // Get panel data
