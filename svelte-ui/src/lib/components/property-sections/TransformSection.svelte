@@ -24,14 +24,22 @@
 	// Default empty values for when no object is selected
 	const emptyVector = { x: 0, y: 0, z: 0 };
 
-	// Request fill button visibility and state when displayObject changes
+	// Track last requested object ID to prevent redundant requests
+	let lastRequestedObjectId: string | null = null;
+
+	// Request fill button visibility and state when displayObject ID changes (not on every update)
 	$: if (displayObject && !displayObject.isContainer) {
-		requestFillButtonCheck(displayObject.id);
-		requestFillButtonState(displayObject.id);
-		requestLayoutMode(displayObject.id);
+		// Only request if object ID actually changed
+		if (displayObject.id !== lastRequestedObjectId) {
+			requestFillButtonCheck(displayObject.id);
+			requestFillButtonState(displayObject.id);
+			requestLayoutMode(displayObject.id);
+			lastRequestedObjectId = displayObject.id;
+		}
 	} else {
 		showFillButtons = false;
 		inLayoutMode = false;
+		lastRequestedObjectId = null;
 	}
 
 	// Disabled state when no object is selected
