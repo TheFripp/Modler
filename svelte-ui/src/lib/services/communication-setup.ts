@@ -9,10 +9,10 @@
  * Call once per panel during onMount()
  */
 
-import { UIAdapter } from './ui-adapter';
+import { uiAdapter } from './ui-adapter';
 
-let uiAdapter: UIAdapter | null = null;
 let bridge: any = null;
+let initialized: boolean = false;
 
 /**
  * Initialize the UI communication system
@@ -20,7 +20,7 @@ let bridge: any = null;
  */
 export function initializeCommunication(): boolean {
     // Only initialize once per window
-    if (uiAdapter) {
+    if (initialized) {
         console.log('ℹ️ Communication already initialized');
         return true;
     }
@@ -33,8 +33,7 @@ export function initializeCommunication(): boolean {
             return false;
         }
 
-        // Create UIAdapter
-        uiAdapter = new UIAdapter();
+        // Use the singleton UIAdapter instance from ui-adapter.ts
 
         // Create CommunicationBridge (UI side)
         const CommunicationBridge = (window as any).CommunicationBridge;
@@ -58,6 +57,9 @@ export function initializeCommunication(): boolean {
         (window as any).uiAdapter = uiAdapter;
         (window as any).communicationBridge = bridge;
 
+        // Mark as initialized
+        initialized = true;
+
         // Request initial state from Main now that we're ready
         const panelName = window.location.pathname.split('/').pop() || 'unknown';
         window.parent.postMessage({
@@ -74,9 +76,9 @@ export function initializeCommunication(): boolean {
 }
 
 /**
- * Get the UIAdapter instance
+ * Get the UIAdapter instance (returns the singleton from ui-adapter.ts)
  */
-export function getUIAdapter(): UIAdapter | null {
+export function getUIAdapter() {
     return uiAdapter;
 }
 
