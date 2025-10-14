@@ -162,12 +162,12 @@ class CommunicationBridge {
                     this.sendDirectToUI(message);
                 }
             } else if (direction === 'main') {
-                // UI → Main: Use adapter
+                // UI → Main: Use adapter or fallback to postMessage
                 if (this.mainAdapter) {
                     this.mainAdapter.send(message);
                 } else {
-                    console.error('❌ No adapter for direction: main');
-                    return false;
+                    // Fallback: Direct postMessage when no MainAdapter (UI side)
+                    this.sendDirectToMain(message);
                 }
             } else {
                 console.error('❌ Unknown direction:', direction);
@@ -385,6 +385,25 @@ class CommunicationBridge {
             return true;
         } catch (error) {
             console.error('❌ sendDirectToUI error:', error);
+            return false;
+        }
+    }
+
+    /**
+     * Send message directly to Main window via postMessage
+     * Used when MainAdapter is not available (UI side sending to Main)
+     * @private
+     */
+    sendDirectToMain(message) {
+        try {
+            const serialized = message.serialize();
+
+            // Send to parent window (Main)
+            window.parent.postMessage(serialized, '*');
+
+            return true;
+        } catch (error) {
+            console.error('❌ sendDirectToMain error:', error);
             return false;
         }
     }
