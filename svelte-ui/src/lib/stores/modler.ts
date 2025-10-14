@@ -383,21 +383,18 @@ export function updateThreeJSProperty(objectId: string, property: string, value:
 	const isInIframe = window !== window.parent;
 
 	if (isInIframe) {
-		// PHASE 3.5: Use UIAdapter for property updates (new unified path)
+		// SimpleCommunication: Use direct postMessage to CommandRouter
 		try {
-			// Dynamic import to avoid SSR issues
-			import('$lib/services/ui-adapter').then(({ uiAdapter }) => {
-				// Send property update through UIAdapter → CommunicationBridge → Main
-				const sent = uiAdapter.sendPropertyUpdate(objectId, property, value, source);
-				if (!sent) {
-					console.error('❌ UIAdapter property update failed');
-				}
-			}).catch(error => {
-				console.error('❌ Failed to load UIAdapter:', error);
-			});
+			window.parent.postMessage({
+				type: 'update-property',
+				objectId,
+				property,
+				value,
+				source
+			}, '*');
 			return;
 		} catch (error) {
-			console.error('❌ UIAdapter property update failed:', error);
+			console.error('❌ Property update postMessage failed:', error);
 			return;
 		}
 	}

@@ -24,62 +24,24 @@
 	// Default empty values for when no object is selected
 	const emptyVector = { x: 0, y: 0, z: 0 };
 
-	// Track last requested object ID to prevent redundant requests
-	let lastRequestedObjectId: string | null = null;
-
-	// Request fill button visibility and state when displayObject ID changes (not on every update)
-	$: if (displayObject && !displayObject.isContainer) {
-		// Only request if object ID actually changed
-		if (displayObject.id !== lastRequestedObjectId) {
-			requestFillButtonCheck(displayObject.id);
-			requestFillButtonState(displayObject.id);
-			requestLayoutMode(displayObject.id);
-			lastRequestedObjectId = displayObject.id;
-		}
-	} else {
-		showFillButtons = false;
-		inLayoutMode = false;
-		lastRequestedObjectId = null;
-	}
+	// SimpleCommunication: ALL computed properties come automatically with displayObject!
+	// No need to request fill button state, layout mode, etc. - StateSerializer includes everything
+	$: showFillButtons = displayObject?.canHaveFillButtons || false;
+	$: fillStates = displayObject?.fillButtonStates || { x: false, y: false, z: false };
+	$: inLayoutMode = displayObject?.isInLayoutMode || false;
 
 	// Disabled state when no object is selected
 	$: isDisabled = !displayObject;
 
-	// Phase 3.6: Use UIAdapter for fill button operations
-	function requestFillButtonCheck(id: string) {
-		import('$lib/services/ui-adapter').then(({ uiAdapter }) => {
-			// Guard: Only send if bridge is initialized
-			if ((window as any).communicationBridge) {
-				uiAdapter.sendFillModeCheck(id);
-			}
-		});
-	}
-
-	function requestFillButtonState(id: string) {
-		import('$lib/services/ui-adapter').then(({ uiAdapter }) => {
-			// Guard: Only send if bridge is initialized
-			if ((window as any).communicationBridge) {
-				uiAdapter.sendFillModeCheck(id);
-				uiAdapter.sendFillStatesRequest(id);
-			}
-		});
-	}
-
-	function requestLayoutMode(id: string) {
-		import('$lib/services/ui-adapter').then(({ uiAdapter }) => {
-			// Guard: Only send if bridge is initialized
-			if ((window as any).communicationBridge) {
-				uiAdapter.sendLayoutModeCheck(id);
-			}
-		});
-	}
-
 	function handleFillToggle(axis: 'x' | 'y' | 'z') {
 		if (!displayObject) return;
 
-		import('$lib/services/ui-adapter').then(({ uiAdapter }) => {
-			uiAdapter.sendFillModeToggle(displayObject.id, axis);
-		});
+		// SimpleCommunication: Direct postMessage to CommandRouter
+		window.parent.postMessage({
+			type: 'toggle-fill-mode',
+			objectId: displayObject.id,
+			axis
+		}, '*');
 
 		// Don't optimistically toggle - wait for backend confirmation
 		// The backend will emit events that trigger UI updates with correct state
@@ -88,26 +50,18 @@
 	function handleFillHover(axis: 'x' | 'y' | 'z', isHovering: boolean = true) {
 		if (!displayObject) return;
 
-		import('$lib/services/ui-adapter').then(({ uiAdapter }) => {
-			uiAdapter.sendFillButtonHover(displayObject.id, axis, isHovering);
-		});
+		// SimpleCommunication: Direct postMessage to CommandRouter
+		window.parent.postMessage({
+			type: 'fill-button-hover',
+			objectId: displayObject.id,
+			axis,
+			isHovering
+		}, '*');
 	}
 
-	// Listen for fill button and layout mode responses
-	onMount(() => {
-		const handleMessageResponse = (event: MessageEvent) => {
-			if (event.data.type === 'fill-button-check-response') {
-				showFillButtons = event.data.data.shouldShow || false;
-			} else if (event.data.type === 'fill-button-states-response') {
-				fillButtonStates = event.data.data.states || { x: false, y: false, z: false };
-			} else if (event.data.type === 'layout-mode-response') {
-				inLayoutMode = event.data.data.inLayoutMode || false;
-			}
-		};
-
-		window.addEventListener('message', handleMessageResponse);
-		return () => window.removeEventListener('message', handleMessageResponse);
-	});
+	// SimpleCommunication: No message listeners needed!
+	// All data (canHaveFillButtons, fillButtonStates, isInLayoutMode) comes automatically
+	// with displayObject from StateSerializer. No request/response needed.
 </script>
 
 <PropertyGroup title="Transform ({currentUnit})" align="right">
