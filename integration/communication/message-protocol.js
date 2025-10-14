@@ -20,6 +20,24 @@ const MESSAGE_TYPES = {
     TOOL_DEACTIVATE: 'tool-deactivate',
     HIERARCHY_CHANGE: 'hierarchy-change',
 
+    // Container Operations (Phase 3.6)
+    CONTAINER_CREATE: 'create-layout-container',
+    CONTAINER_CREATE_TILED: 'create-tiled-container',
+    OBJECT_MOVE_TO_CONTAINER: 'object-move-to-container',
+    OBJECT_CONTAINER_MOVE_TO_CONTAINER: 'object-container-move-to-container',
+    OBJECT_MOVE_TO_ROOT: 'object-move-to-root',
+    OBJECT_REORDER: 'object-reorder',
+    REVERSE_CHILD_ORDER: 'reverse-child-order',
+    HIERARCHY_REFRESH_REQUEST: 'request-hierarchy-refresh',
+
+    // Layout/Transform Features (Phase 3.6)
+    FILL_MODE_TOGGLE: 'fill-button-toggle',
+    FILL_MODE_CHECK: 'fill-button-check',
+    FILL_STATES_REQUEST: 'fill-button-get-states',
+    FILL_BUTTON_HOVER: 'fill-button-hover',
+    LAYOUT_MODE_CHECK: 'check-layout-mode',
+    LAYOUT_BUTTON_HOVER: 'layout-button-hover',
+
     // Main → UI (Notifications)
     STATE_CHANGED: 'state-changed',
     SELECTION_CHANGED: 'selection-changed',
@@ -280,6 +298,202 @@ const MessageBuilders = {
             priority: MESSAGE_PRIORITY.CRITICAL,
             strategy: EMISSION_STRATEGY.IMMEDIATE,
             source: 'error-handler'
+        });
+    },
+
+    // ========== Phase 3.6: Container Operations ==========
+
+    /**
+     * Create layout container (UI → Main)
+     */
+    containerCreate() {
+        return new Message(MESSAGE_TYPES.CONTAINER_CREATE, {}, {
+            priority: MESSAGE_PRIORITY.CRITICAL,
+            strategy: EMISSION_STRATEGY.IMMEDIATE,
+            source: 'ui'
+        });
+    },
+
+    /**
+     * Create tiled container (UI → Main)
+     */
+    containerCreateTiled(objectId, axis, repeat, gap) {
+        return new Message(MESSAGE_TYPES.CONTAINER_CREATE_TILED, {
+            objectId,
+            axis,
+            repeat,
+            gap
+        }, {
+            priority: MESSAGE_PRIORITY.CRITICAL,
+            strategy: EMISSION_STRATEGY.IMMEDIATE,
+            source: 'ui'
+        });
+    },
+
+    /**
+     * Move object to container (UI → Main)
+     */
+    objectMoveToContainer(objectId, targetContainerId, insertIndex = null) {
+        return new Message(MESSAGE_TYPES.OBJECT_MOVE_TO_CONTAINER, {
+            objectId,
+            targetContainerId,
+            insertIndex
+        }, {
+            priority: MESSAGE_PRIORITY.HIGH,
+            strategy: EMISSION_STRATEGY.IMMEDIATE,
+            source: 'ui'
+        });
+    },
+
+    /**
+     * Move container to another container (UI → Main)
+     */
+    objectContainerMoveToContainer(objectId, targetContainerId, insertIndex = null) {
+        return new Message(MESSAGE_TYPES.OBJECT_CONTAINER_MOVE_TO_CONTAINER, {
+            objectId,
+            targetContainerId,
+            insertIndex
+        }, {
+            priority: MESSAGE_PRIORITY.HIGH,
+            strategy: EMISSION_STRATEGY.IMMEDIATE,
+            source: 'ui'
+        });
+    },
+
+    /**
+     * Move object to root (UI → Main)
+     */
+    objectMoveToRoot(objectId) {
+        return new Message(MESSAGE_TYPES.OBJECT_MOVE_TO_ROOT, {
+            objectId
+        }, {
+            priority: MESSAGE_PRIORITY.HIGH,
+            strategy: EMISSION_STRATEGY.IMMEDIATE,
+            source: 'ui'
+        });
+    },
+
+    /**
+     * Reorder objects in container (UI → Main)
+     */
+    objectReorder(parentId, childId, newIndex) {
+        return new Message(MESSAGE_TYPES.OBJECT_REORDER, {
+            parentId,
+            childId,
+            newIndex
+        }, {
+            priority: MESSAGE_PRIORITY.HIGH,
+            strategy: EMISSION_STRATEGY.IMMEDIATE,
+            source: 'ui'
+        });
+    },
+
+    /**
+     * Reverse child order in container (UI → Main)
+     */
+    reverseChildOrder(objectId) {
+        return new Message(MESSAGE_TYPES.REVERSE_CHILD_ORDER, {
+            objectId
+        }, {
+            priority: MESSAGE_PRIORITY.NORMAL,
+            strategy: EMISSION_STRATEGY.IMMEDIATE,
+            source: 'ui'
+        });
+    },
+
+    /**
+     * Request hierarchy refresh (UI → Main)
+     */
+    hierarchyRefreshRequest() {
+        return new Message(MESSAGE_TYPES.HIERARCHY_REFRESH_REQUEST, {}, {
+            priority: MESSAGE_PRIORITY.NORMAL,
+            strategy: EMISSION_STRATEGY.IMMEDIATE,
+            source: 'ui'
+        });
+    },
+
+    // ========== Phase 3.6: Layout/Transform Features ==========
+
+    /**
+     * Toggle fill mode on axis (UI → Main)
+     */
+    fillModeToggle(objectId, axis) {
+        return new Message(MESSAGE_TYPES.FILL_MODE_TOGGLE, {
+            objectId,
+            axis
+        }, {
+            priority: MESSAGE_PRIORITY.HIGH,
+            strategy: EMISSION_STRATEGY.IMMEDIATE,
+            source: 'ui'
+        });
+    },
+
+    /**
+     * Check if fill mode available (UI → Main)
+     */
+    fillModeCheck(objectId) {
+        return new Message(MESSAGE_TYPES.FILL_MODE_CHECK, {
+            objectId
+        }, {
+            priority: MESSAGE_PRIORITY.NORMAL,
+            strategy: EMISSION_STRATEGY.IMMEDIATE,
+            source: 'ui'
+        });
+    },
+
+    /**
+     * Request all fill button states (UI → Main)
+     */
+    fillStatesRequest(objectId) {
+        return new Message(MESSAGE_TYPES.FILL_STATES_REQUEST, {
+            objectId
+        }, {
+            priority: MESSAGE_PRIORITY.NORMAL,
+            strategy: EMISSION_STRATEGY.IMMEDIATE,
+            source: 'ui'
+        });
+    },
+
+    /**
+     * Fill button hover (UI → Main)
+     */
+    fillButtonHover(objectId, axis, isHovering) {
+        return new Message(MESSAGE_TYPES.FILL_BUTTON_HOVER, {
+            objectId,
+            axis,
+            isHovering
+        }, {
+            priority: MESSAGE_PRIORITY.LOW,
+            strategy: EMISSION_STRATEGY.THROTTLED,
+            source: 'ui'
+        });
+    },
+
+    /**
+     * Check layout mode (UI → Main)
+     */
+    layoutModeCheck(objectId) {
+        return new Message(MESSAGE_TYPES.LAYOUT_MODE_CHECK, {
+            objectId
+        }, {
+            priority: MESSAGE_PRIORITY.NORMAL,
+            strategy: EMISSION_STRATEGY.IMMEDIATE,
+            source: 'ui'
+        });
+    },
+
+    /**
+     * Layout button hover (UI → Main)
+     */
+    layoutButtonHover(objectId, axis, isHovering) {
+        return new Message(MESSAGE_TYPES.LAYOUT_BUTTON_HOVER, {
+            objectId,
+            axis,
+            isHovering
+        }, {
+            priority: MESSAGE_PRIORITY.LOW,
+            strategy: EMISSION_STRATEGY.THROTTLED,
+            source: 'ui'
         });
     }
 };

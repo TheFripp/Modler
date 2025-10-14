@@ -37,39 +37,32 @@
 	// Disabled state when no object is selected
 	$: isDisabled = !displayObject;
 
+	// Phase 3.6: Use UIAdapter for fill button operations
 	function requestFillButtonCheck(id: string) {
-		window.parent.postMessage({
-			type: 'fill-button-check',
-			data: { objectId: id }
-		}, '*');
+		import('$lib/services/ui-adapter').then(({ uiAdapter }) => {
+			uiAdapter.sendFillModeCheck(id);
+		});
 	}
 
 	function requestFillButtonState(id: string) {
-		window.parent.postMessage({
-			type: 'fill-button-check',
-			data: { objectId: id }
-		}, '*');
-
-		window.parent.postMessage({
-			type: 'fill-button-get-states',
-			data: { objectId: id }
-		}, '*');
+		import('$lib/services/ui-adapter').then(({ uiAdapter }) => {
+			uiAdapter.sendFillModeCheck(id);
+			uiAdapter.sendFillStatesRequest(id);
+		});
 	}
 
 	function requestLayoutMode(id: string) {
-		window.parent.postMessage({
-			type: 'check-layout-mode',
-			data: { objectId: id }
-		}, '*');
+		import('$lib/services/ui-adapter').then(({ uiAdapter }) => {
+			uiAdapter.sendLayoutModeCheck(id);
+		});
 	}
 
 	function handleFillToggle(axis: 'x' | 'y' | 'z') {
 		if (!displayObject) return;
 
-		window.parent.postMessage({
-			type: 'fill-button-toggle',
-			data: { objectId: displayObject.id, axis }
-		}, '*');
+		import('$lib/services/ui-adapter').then(({ uiAdapter }) => {
+			uiAdapter.sendFillModeToggle(displayObject.id, axis);
+		});
 
 		// Don't optimistically toggle - wait for backend confirmation
 		// The backend will emit events that trigger UI updates with correct state
@@ -78,14 +71,9 @@
 	function handleFillHover(axis: 'x' | 'y' | 'z', isHovering: boolean = true) {
 		if (!displayObject) return;
 
-		window.parent.postMessage({
-			type: 'fill-button-hover',
-			data: {
-				objectId: displayObject.id,
-				axis: axis,
-				isHovering: isHovering
-			}
-		}, '*');
+		import('$lib/services/ui-adapter').then(({ uiAdapter }) => {
+			uiAdapter.sendFillButtonHover(displayObject.id, axis, isHovering);
+		});
 	}
 
 	// Listen for fill button and layout mode responses

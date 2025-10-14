@@ -376,6 +376,206 @@ class UIAdapter {
         return this.bridge.sendRequest(message, 'main');
     }
 
+    // ========== Phase 3.6: Container Operations ==========
+
+    /**
+     * Create layout container (convenience method)
+     */
+    sendContainerCreate(): boolean {
+        const MessageProtocol = (window as any).MessageProtocol;
+        if (!MessageProtocol) {
+            console.error('❌ MessageProtocol not loaded');
+            return false;
+        }
+
+        const message = MessageProtocol.MessageBuilders.containerCreate();
+        return this.send(message);
+    }
+
+    /**
+     * Create tiled container (convenience method)
+     */
+    sendContainerCreateTiled(objectId: string, axis: string, repeat: number, gap: number): boolean {
+        const MessageProtocol = (window as any).MessageProtocol;
+        if (!MessageProtocol) {
+            console.error('❌ MessageProtocol not loaded');
+            return false;
+        }
+
+        const message = MessageProtocol.MessageBuilders.containerCreateTiled(objectId, axis, repeat, gap);
+        return this.send(message);
+    }
+
+    /**
+     * Move object to container (convenience method)
+     */
+    sendObjectMoveToContainer(objectId: string, targetContainerId: string, insertIndex: number | null = null): boolean {
+        const MessageProtocol = (window as any).MessageProtocol;
+        if (!MessageProtocol) {
+            console.error('❌ MessageProtocol not loaded');
+            return false;
+        }
+
+        const message = MessageProtocol.MessageBuilders.objectMoveToContainer(objectId, targetContainerId, insertIndex);
+        return this.send(message);
+    }
+
+    /**
+     * Move container to another container (convenience method)
+     */
+    sendObjectContainerMoveToContainer(objectId: string, targetContainerId: string, insertIndex: number | null = null): boolean {
+        const MessageProtocol = (window as any).MessageProtocol;
+        if (!MessageProtocol) {
+            console.error('❌ MessageProtocol not loaded');
+            return false;
+        }
+
+        const message = MessageProtocol.MessageBuilders.objectContainerMoveToContainer(objectId, targetContainerId, insertIndex);
+        return this.send(message);
+    }
+
+    /**
+     * Move object to root (convenience method)
+     */
+    sendObjectMoveToRoot(objectId: string): boolean {
+        const MessageProtocol = (window as any).MessageProtocol;
+        if (!MessageProtocol) {
+            console.error('❌ MessageProtocol not loaded');
+            return false;
+        }
+
+        const message = MessageProtocol.MessageBuilders.objectMoveToRoot(objectId);
+        return this.send(message);
+    }
+
+    /**
+     * Reorder objects in container (convenience method)
+     */
+    sendObjectReorder(parentId: string, childId: string, newIndex: number): boolean {
+        const MessageProtocol = (window as any).MessageProtocol;
+        if (!MessageProtocol) {
+            console.error('❌ MessageProtocol not loaded');
+            return false;
+        }
+
+        const message = MessageProtocol.MessageBuilders.objectReorder(parentId, childId, newIndex);
+        return this.send(message);
+    }
+
+    /**
+     * Reverse child order in container (convenience method)
+     */
+    sendReverseChildOrder(objectId: string): boolean {
+        const MessageProtocol = (window as any).MessageProtocol;
+        if (!MessageProtocol) {
+            console.error('❌ MessageProtocol not loaded');
+            return false;
+        }
+
+        const message = MessageProtocol.MessageBuilders.reverseChildOrder(objectId);
+        return this.send(message);
+    }
+
+    /**
+     * Request hierarchy refresh (convenience method)
+     */
+    sendHierarchyRefreshRequest(): boolean {
+        const MessageProtocol = (window as any).MessageProtocol;
+        if (!MessageProtocol) {
+            console.error('❌ MessageProtocol not loaded');
+            return false;
+        }
+
+        const message = MessageProtocol.MessageBuilders.hierarchyRefreshRequest();
+        return this.send(message);
+    }
+
+    // ========== Phase 3.6: Layout/Transform Features ==========
+
+    /**
+     * Toggle fill mode on axis (convenience method)
+     */
+    sendFillModeToggle(objectId: string, axis: string): boolean {
+        const MessageProtocol = (window as any).MessageProtocol;
+        if (!MessageProtocol) {
+            console.error('❌ MessageProtocol not loaded');
+            return false;
+        }
+
+        const message = MessageProtocol.MessageBuilders.fillModeToggle(objectId, axis);
+        return this.send(message);
+    }
+
+    /**
+     * Check if fill mode available (convenience method)
+     */
+    sendFillModeCheck(objectId: string): boolean {
+        const MessageProtocol = (window as any).MessageProtocol;
+        if (!MessageProtocol) {
+            console.error('❌ MessageProtocol not loaded');
+            return false;
+        }
+
+        const message = MessageProtocol.MessageBuilders.fillModeCheck(objectId);
+        return this.send(message);
+    }
+
+    /**
+     * Request all fill button states (convenience method)
+     */
+    sendFillStatesRequest(objectId: string): boolean {
+        const MessageProtocol = (window as any).MessageProtocol;
+        if (!MessageProtocol) {
+            console.error('❌ MessageProtocol not loaded');
+            return false;
+        }
+
+        const message = MessageProtocol.MessageBuilders.fillStatesRequest(objectId);
+        return this.send(message);
+    }
+
+    /**
+     * Fill button hover (convenience method)
+     */
+    sendFillButtonHover(objectId: string, axis: string, isHovering: boolean): boolean {
+        const MessageProtocol = (window as any).MessageProtocol;
+        if (!MessageProtocol) {
+            console.error('❌ MessageProtocol not loaded');
+            return false;
+        }
+
+        const message = MessageProtocol.MessageBuilders.fillButtonHover(objectId, axis, isHovering);
+        return this.send(message);
+    }
+
+    /**
+     * Check layout mode (convenience method)
+     */
+    sendLayoutModeCheck(objectId: string): boolean {
+        const MessageProtocol = (window as any).MessageProtocol;
+        if (!MessageProtocol) {
+            console.error('❌ MessageProtocol not loaded');
+            return false;
+        }
+
+        const message = MessageProtocol.MessageBuilders.layoutModeCheck(objectId);
+        return this.send(message);
+    }
+
+    /**
+     * Layout button hover (convenience method)
+     */
+    sendLayoutButtonHover(objectId: string, axis: string, isHovering: boolean): boolean {
+        const MessageProtocol = (window as any).MessageProtocol;
+        if (!MessageProtocol) {
+            console.error('❌ MessageProtocol not loaded');
+            return false;
+        }
+
+        const message = MessageProtocol.MessageBuilders.layoutButtonHover(objectId, axis, isHovering);
+        return this.send(message);
+    }
+
     /**
      * Get statistics
      */

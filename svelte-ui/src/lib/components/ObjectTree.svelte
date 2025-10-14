@@ -269,8 +269,11 @@
 		dragOverTarget = null;
 		dropIndicatorPosition = null;
 
+		// Phase 3.6: Use UIAdapter for hierarchy refresh
 		setTimeout(() => {
-			window.parent.postMessage({ type: 'request-hierarchy-refresh', data: {} }, '*');
+			import('$lib/services/ui-adapter').then(({ uiAdapter }) => {
+				uiAdapter.sendHierarchyRefreshRequest();
+			});
 		}, 50);
 	}
 
@@ -562,8 +565,11 @@
 					draggedObject = null;
 					dragOverTarget = null;
 					dropIndicatorPosition = null;
+					// Phase 3.6: Use UIAdapter for hierarchy refresh
 					setTimeout(() => {
-						window.parent.postMessage({ type: 'request-hierarchy-refresh', data: {} }, '*');
+						import('$lib/services/ui-adapter').then(({ uiAdapter }) => {
+							uiAdapter.sendHierarchyRefreshRequest();
+						});
 					}, 50);
 				}
 			}}

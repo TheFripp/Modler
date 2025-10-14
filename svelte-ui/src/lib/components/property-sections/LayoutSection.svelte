@@ -57,16 +57,11 @@
 		updateThreeJSProperty(objectId, 'autoLayout', autoLayout, 'property-panel');
 	}
 
-	// Handle layout button hover for face highlighting
+	// Phase 3.6: Handle layout button hover for face highlighting
 	function handleLayoutHover(axis: string, isHovering: boolean) {
-		window.parent.postMessage({
-			type: 'layout-button-hover',
-			data: {
-				objectId: objectId,
-				axis: axis,
-				isHovering: isHovering
-			}
-		}, '*');
+		import('$lib/services/ui-adapter').then(({ uiAdapter }) => {
+			uiAdapter.sendLayoutButtonHover(objectId, axis, isHovering);
+		});
 	}
 
 	// Handle reverse layout direction (not object order)
