@@ -383,21 +383,21 @@ export function updateThreeJSProperty(objectId: string, property: string, value:
 	const isInIframe = window !== window.parent;
 
 	if (isInIframe) {
-		// Use unified communication system instead of direct PostMessage
+		// PHASE 3.5: Use UIAdapter for property updates (new unified path)
 		try {
 			// Dynamic import to avoid SSR issues
-			import('$lib/services/unified-communication').then(({ unifiedCommunication }) => {
-				// Send property update through unified communication system
-				// Note: This could be expanded to use a dedicated property update method if needed
-				unifiedCommunication.sendNavigationCommand('property-update', { objectId, property, value, source }).catch(error => {
-					console.error('❌ Unified communication property update failed:', error);
-				});
+			import('$lib/services/ui-adapter').then(({ uiAdapter }) => {
+				// Send property update through UIAdapter → CommunicationBridge → Main
+				const sent = uiAdapter.sendPropertyUpdate(objectId, property, value, source);
+				if (!sent) {
+					console.error('❌ UIAdapter property update failed');
+				}
 			}).catch(error => {
-				console.error('❌ Failed to load unified communication:', error);
+				console.error('❌ Failed to load UIAdapter:', error);
 			});
 			return;
 		} catch (error) {
-			console.error('❌ Unified communication property update failed:', error);
+			console.error('❌ UIAdapter property update failed:', error);
 			return;
 		}
 	}

@@ -1,6 +1,10 @@
 /**
  * Unified Communication Service (Phase 3)
  *
+ * @deprecated Phase 3.5 - Use UIAdapter instead
+ * This service is deprecated and will be removed in a future version.
+ * New code should use UIAdapter.sendPropertyUpdate() and other UIAdapter methods.
+ *
  * Provides Svelte UI components with postMessage communication to Main.
  * All UI→Main communication goes through this service.
  */
@@ -18,8 +22,22 @@ interface UnifiedCommunicationService {
 }
 
 class UnifiedCommunication implements UnifiedCommunicationService {
+    private deprecationWarned: boolean = false;
+
     constructor() {
         // Phase 3: Direct postMessage communication, no initialization needed
+        this.showDeprecationWarning();
+    }
+
+    private showDeprecationWarning() {
+        if (!this.deprecationWarned) {
+            console.warn(
+                '⚠️ DEPRECATED: UnifiedCommunication is deprecated. ' +
+                'Use UIAdapter instead. ' +
+                'This service will be removed in a future version.'
+            );
+            this.deprecationWarned = true;
+        }
     }
 
     /**

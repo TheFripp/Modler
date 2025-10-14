@@ -114,6 +114,47 @@ class UIAdapter {
     }
 
     /**
+     * Send property update to Main (convenience method for UI components)
+     * @param objectId - Object to update
+     * @param property - Property path (e.g., 'position.x', 'dimensions.y')
+     * @param value - New value
+     * @param source - Update source for optimization (default: 'input')
+     */
+    sendPropertyUpdate(objectId: string, property: string, value: any, source: string = 'input'): boolean {
+        const MessageProtocol = (window as any).MessageProtocol;
+        if (!MessageProtocol) {
+            console.error('❌ MessageProtocol not loaded');
+            return false;
+        }
+
+        try {
+            // Build property update message using MessageProtocol
+            const message = {
+                type: 'property-update',
+                payload: {
+                    objectId,
+                    property,
+                    value,
+                    source
+                }
+            };
+
+            // Wrap in Message object
+            const protocolMessage = new MessageProtocol.Message(
+                MessageProtocol.generateId(),
+                message.type,
+                message.payload,
+                MessageProtocol.EMISSION_STRATEGY.IMMEDIATE
+            );
+
+            return this.send(protocolMessage);
+        } catch (error) {
+            console.error('❌ UIAdapter sendPropertyUpdate error:', error);
+            return false;
+        }
+    }
+
+    /**
      * Send message directly via postMessage (low-level)
      * Called by CommunicationBridge when routing to UI
      */
