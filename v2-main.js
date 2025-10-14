@@ -805,6 +805,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
             // Initialize Communication Bridge (Phase 3 Refactoring)
             initializeCommunicationBridge();
+
+            // Initialize SimpleCommunication (Communication Simplification 2025)
+            // Shadow mode: Both systems run side-by-side for testing
+            if (window.commandRouter && window.stateSerializer && window.simpleCommunication) {
+                window.commandRouter.initialize();
+                window.simpleCommunication.initialize();
+                console.log('✅ SimpleCommunication (shadow mode) initialized alongside Phase 3');
+            }
         }).catch(error => {
             console.error('❌ Modler V2 auto-initialization failed:', error);
 
