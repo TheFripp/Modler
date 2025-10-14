@@ -48,20 +48,29 @@
 	// Phase 3.6: Use UIAdapter for fill button operations
 	function requestFillButtonCheck(id: string) {
 		import('$lib/services/ui-adapter').then(({ uiAdapter }) => {
-			uiAdapter.sendFillModeCheck(id);
+			// Guard: Only send if bridge is initialized
+			if ((window as any).communicationBridge) {
+				uiAdapter.sendFillModeCheck(id);
+			}
 		});
 	}
 
 	function requestFillButtonState(id: string) {
 		import('$lib/services/ui-adapter').then(({ uiAdapter }) => {
-			uiAdapter.sendFillModeCheck(id);
-			uiAdapter.sendFillStatesRequest(id);
+			// Guard: Only send if bridge is initialized
+			if ((window as any).communicationBridge) {
+				uiAdapter.sendFillModeCheck(id);
+				uiAdapter.sendFillStatesRequest(id);
+			}
 		});
 	}
 
 	function requestLayoutMode(id: string) {
 		import('$lib/services/ui-adapter').then(({ uiAdapter }) => {
-			uiAdapter.sendLayoutModeCheck(id);
+			// Guard: Only send if bridge is initialized
+			if ((window as any).communicationBridge) {
+				uiAdapter.sendLayoutModeCheck(id);
+			}
 		});
 	}
 
