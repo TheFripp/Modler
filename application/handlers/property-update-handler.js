@@ -25,12 +25,88 @@ class PropertyUpdateHandler {
     // }
 
     /**
+     * Convert dot-notation property path to nested object
+     * Example: ('dimensions.x', 1.5) → { dimensions: { x: 1.5 } }
+     *
+     * @param {string} property - Property path (e.g., 'dimensions.x', 'autoLayout.gap')
+     * @param {any} value - Value to set
+     * @returns {Object} Nested object structure
+     */
+    parsePropertyPath(property, value) {
+        const parts = property.split('.');
+
+        if (parts.length === 1) {
+            return { [property]: value };
+        }
+
+        // Build nested object
+        let result = {};
+        let current = result;
+
+        for (let i = 0; i < parts.length - 1; i++) {
+            current[parts[i]] = {};
+            current = current[parts[i]];
+        }
+
+        current[parts[parts.length - 1]] = value;
+        return result;
+    }
+
+    /**
+     * Generic property update handler - routes to ObjectStateManager
+     * This is the PRIMARY entry point for ALL UI property changes
+     *
+     * Flow: UI → CommandRouter → PropertyUpdateHandler → ObjectStateManager
+     *
+     * @param {Object} data - Property update data
+     * @param {string|number} data.objectId - Object ID
+     * @param {string} data.property - Property path (can be nested like 'dimensions.x')
+     * @param {any} data.value - New value
+     * @param {string} data.source - Source of the update (for debugging)
+     * @returns {boolean} Success status
+     */
+    handlePropertyUpdate(data) {
+        const { objectId, property, value, source } = data;
+
+        if (!this.objectStateManager) {
+            console.error('PropertyUpdateHandler: ObjectStateManager not available');
+            return false;
+        }
+
+        // Special handling for container layout properties
+        // These need custom logic beyond simple state updates
+        if (property.startsWith('autoLayout.') || property === 'layoutMode') {
+            return this.handleContainerLayoutPropertyChange(objectId, property, value);
+        }
+
+        // Generic property update: route to ObjectStateManager
+        // ObjectStateManager.updateObject() handles:
+        // - State update
+        // - Layout propagation (if needed)
+        // - Event emission (which triggers SimpleCommunication → UI update)
+        try {
+            // Parse property path into nested object structure
+            const updates = this.parsePropertyPath(property, value);
+
+            this.objectStateManager.updateObject(objectId, updates, {
+                source: source || 'property-panel',
+                immediate: true
+            });
+
+            return true;
+        } catch (error) {
+            console.error('PropertyUpdateHandler: Failed to update property', error);
+            return false;
+        }
+    }
+
+    /**
      * Handle container layout property changes from property panel
      * Implements the corrected flow from container-architecture-master.md lines 138-151
      */
     handleContainerLayoutPropertyChange(containerId, property, newValue) {
 
-        if (!this.sceneController || !this.containerCrudManager) {
+        if (!this.sceneController || !this.containerCrudManager || !this.objectStateManager) {
             console.error('Required components not available for PropertyUpdateHandler');
             return false;
         }
@@ -46,51 +122,67 @@ class PropertyUpdateHandler {
             }
 
             // Step 3: PropertyUpdateHandler → handle layout enable/disable
-            if (!objectData.autoLayout) {
-                objectData.autoLayout = {
-                    enabled: false,
-                    direction: null,
-                    gap: 0,
-                    padding: { width: 0, height: 0, depth: 0 }
-                };
-            }
+            // Create a copy of autoLayout to modify
+            const updatedAutoLayout = objectData.autoLayout ? { ...objectData.autoLayout } : {
+                enabled: false,
+                direction: null,
+                gap: 0,
+                padding: { width: 0, height: 0, depth: 0 },
+                alignment: { x: 'center', y: 'center', z: 'center' },
+                reversed: false
+            };
 
             // If direction is null, disable layout mode (preserve positions)
             if (newValue === null) {
-                objectData.autoLayout.enabled = false;
-                objectData.autoLayout.direction = null;
+                updatedAutoLayout.enabled = false;
+                updatedAutoLayout.direction = null;
 
-                // Switch container back to hug mode when layout is disabled
-                objectData.isHug = true;
+                // Persist via ObjectStateManager
+                this.objectStateManager.updateObject(containerId, {
+                    autoLayout: updatedAutoLayout,
+                    isHug: true
+                }, { source: 'property-panel', immediate: true });
 
                 // No layout update needed - just preserve current positions
                 return true;
             }
 
             // Enable layout mode and disable hug mode (they are mutually exclusive)
-            objectData.autoLayout.enabled = true;
-            objectData.isHug = false;
+            updatedAutoLayout.enabled = true;
 
-            // Step 4: PropertyUpdateHandler → objectData.autoLayout[property] = newValue
+            // Step 4: PropertyUpdateHandler → autoLayout[property] = newValue
             if (property.startsWith('autoLayout.')) {
                 // Handle nested autoLayout properties (e.g., 'autoLayout.direction' -> 'direction')
                 const nestedProperty = property.split('.')[1];
                 if (nestedProperty === 'padding') {
                     // Handle padding sub-properties
                     const paddingDirection = property.split('.')[2];
-                    objectData.autoLayout.padding[paddingDirection] = newValue;
+                    if (!updatedAutoLayout.padding) {
+                        updatedAutoLayout.padding = { width: 0, height: 0, depth: 0 };
+                    }
+                    updatedAutoLayout.padding = { ...updatedAutoLayout.padding, [paddingDirection]: newValue };
                 } else {
-                    objectData.autoLayout[nestedProperty] = newValue;
+                    updatedAutoLayout[nestedProperty] = newValue;
                 }
             } else if (property.startsWith('padding.')) {
                 const paddingDirection = property.split('.')[1];
-                objectData.autoLayout.padding[paddingDirection] = newValue;
+                if (!updatedAutoLayout.padding) {
+                    updatedAutoLayout.padding = { width: 0, height: 0, depth: 0 };
+                }
+                updatedAutoLayout.padding = { ...updatedAutoLayout.padding, [paddingDirection]: newValue };
             } else {
-                objectData.autoLayout[property] = newValue;
+                updatedAutoLayout[property] = newValue;
             }
+
+            // CRITICAL FIX: Persist via ObjectStateManager instead of direct mutation
+            this.objectStateManager.updateObject(containerId, {
+                autoLayout: updatedAutoLayout,
+                isHug: false
+            }, { source: 'property-panel', immediate: true });
+
             // Only proceed with layout if enabled and has valid direction
-            if (objectData.autoLayout.enabled && objectData.autoLayout.direction && objectData.autoLayout.direction !== '') {
-                const layoutResult = sceneController.updateLayout(objectData.id);
+            if (updatedAutoLayout.enabled && updatedAutoLayout.direction && updatedAutoLayout.direction !== '') {
+                const layoutResult = sceneController.updateLayout(containerId);
 
                 if (layoutResult && layoutResult.success) {
                 // Step 10: PropertyUpdateHandler → containerCrudManager.resizeContainerToLayoutBounds(layoutBounds)
@@ -99,7 +191,7 @@ class PropertyUpdateHandler {
                 }
 
                 // Step 13: PropertyUpdateHandler → containerCrudManager.showContainer(containerId, true)
-                this.containerCrudManager.showContainer(objectData.id, true);
+                this.containerCrudManager.showContainer(containerId, true);
 
 
                 return true;
@@ -445,7 +537,11 @@ class PropertyUpdateHandler {
 
                 // Trigger container update with new sizing mode
                 if (objectData.mesh) {
-                    const success = this.containerCrudManager.resizeContainerToFitChildren(objectData, false, true);
+                    // UNIFIED API: User changed sizing mode from UI
+                    const success = this.containerCrudManager.resizeContainer(objectData, {
+                        reason: 'mode-changed',
+                        immediate: true
+                    });
 
                     if (success) {
                         // Register with history manager for undo/redo support
@@ -524,6 +620,62 @@ class PropertyUpdateHandler {
 
         } catch (error) {
             console.error('PropertyUpdateHandler layout command error:', error);
+            return false;
+        }
+    }
+
+    /**
+     * Handle fill button toggle for child objects in layout containers
+     * Toggles layoutProperties.sizeX/Y/Z between 'fixed' and 'fill'
+     *
+     * @param {string|number} objectId - Object ID
+     * @param {string} axis - Axis to toggle ('x', 'y', or 'z')
+     * @returns {boolean} Success status
+     */
+    handleFillButtonToggle(objectId, axis) {
+        if (!this.objectStateManager || !this.sceneController) {
+            console.error('PropertyUpdateHandler: Required components not available');
+            return false;
+        }
+
+        const obj = this.sceneController.getObject(objectId);
+        if (!obj) {
+            console.error('PropertyUpdateHandler: Object not found:', objectId);
+            return false;
+        }
+
+        // Initialize layoutProperties if not exists
+        if (!obj.layoutProperties) {
+            obj.layoutProperties = {
+                sizeX: 'fixed',
+                sizeY: 'fixed',
+                sizeZ: 'fixed'
+            };
+        }
+
+        // Determine property name based on axis
+        const propertyName = `size${axis.toUpperCase()}`;
+
+        // Toggle between 'fixed' and 'fill'
+        const currentValue = obj.layoutProperties[propertyName] || 'fixed';
+        const newValue = currentValue === 'fill' ? 'fixed' : 'fill';
+
+        // Update via ObjectStateManager for proper event emission
+        const updates = {
+            layoutProperties: {
+                ...obj.layoutProperties,
+                [propertyName]: newValue
+            }
+        };
+
+        try {
+            this.objectStateManager.updateObject(objectId, updates, {
+                source: 'fill-button-toggle',
+                immediate: true
+            });
+            return true;
+        } catch (error) {
+            console.error('PropertyUpdateHandler: Failed to toggle fill mode', error);
             return false;
         }
     }

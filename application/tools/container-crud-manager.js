@@ -127,6 +127,165 @@ class ContainerCrudManager {
         );
     }
 
+    // ========================================================================
+    // UNIFIED CONTAINER RESIZE API
+    // ========================================================================
+
+    /**
+     * Smart container resize - automatically detects context and chooses behavior
+     *
+     * This is the NEW unified API for all container resizing operations.
+     * Replaces the need to manually choose between resizeContainerToFitChildren
+     * and resizeContainerToLayoutBounds based on mode detection.
+     *
+     * @param {Object|string|number} containerOrId - Container data or ID
+     * @param {Object} options - Resize context and parameters
+     * @param {string} options.reason - Why resize? 'child-changed'|'child-added'|'child-removed'|'mode-changed'|'layout-updated'|'creation'
+     * @param {Object} [options.layoutBounds] - Pre-calculated layout bounds (layout mode only)
+     * @param {boolean} [options.immediate=false] - Bypass throttling for immediate update
+     * @param {Object} [options.pushContext] - Push tool context for layout bounds
+     * @returns {boolean} Success status
+     *
+     * @example
+     * // Child moved in hug container
+     * containerCrudManager.resizeContainer(containerId, { reason: 'child-changed' });
+     *
+     * @example
+     * // Layout configuration updated
+     * containerCrudManager.resizeContainer(containerId, {
+     *     reason: 'layout-updated',
+     *     layoutBounds: layoutResult.layoutBounds
+     * });
+     *
+     * @example
+     * // Object added to container
+     * containerCrudManager.resizeContainer(containerId, {
+     *     reason: 'child-added',
+     *     immediate: true
+     * });
+     */
+    resizeContainer(containerOrId, options = {}) {
+        // Resolve container from ID or object
+        const container = this.resolveContainer(containerOrId);
+        if (!container) {
+            console.warn('resizeContainer: Invalid container provided');
+            return false;
+        }
+
+        // Extract context
+        const {
+            reason = 'child-changed',  // Default reason
+            layoutBounds = null,
+            immediate = false,
+            pushContext = null
+        } = options;
+
+        // Detect container mode automatically
+        const mode = this.detectContainerMode(container);
+
+        // Route to appropriate handler based on mode
+        switch (mode) {
+            case 'layout':
+                return this.resizeForLayoutMode(container, { layoutBounds, pushContext, immediate });
+
+            case 'hug':
+                return this.resizeForHugMode(container, { reason, immediate });
+
+            case 'fixed':
+                // Fixed containers don't auto-resize
+                return false;
+
+            default:
+                console.warn('resizeContainer: Unknown container mode', mode);
+                return false;
+        }
+    }
+
+    /**
+     * Resolve container from ID or object
+     * @private
+     */
+    resolveContainer(containerOrId) {
+        // Already a container object
+        if (containerOrId && typeof containerOrId === 'object' && containerOrId.mesh) {
+            return containerOrId;
+        }
+
+        // Container ID - resolve from SceneController
+        if (typeof containerOrId === 'string' || typeof containerOrId === 'number') {
+            const sceneController = window.modlerComponents?.sceneController;
+            if (sceneController) {
+                return sceneController.getObject(containerOrId);
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Detect container mode (hug/layout/fixed)
+     * @private
+     */
+    detectContainerMode(container) {
+        // Layout mode: auto-layout enabled
+        if (container.autoLayout?.enabled) {
+            return 'layout';
+        }
+
+        // Fixed mode: explicitly set
+        if (container.sizingMode === 'fixed') {
+            return 'fixed';
+        }
+
+        // Default: hug mode (container wraps children)
+        return 'hug';
+    }
+
+    /**
+     * Resize container in hug mode (adapts to children)
+     * @private
+     */
+    resizeForHugMode(container, { reason, immediate }) {
+        // SMART DEFAULT: Preserve position for child changes, reposition for structural changes
+        const preservePosition = (
+            reason === 'child-changed' ||       // BOTTOM-UP: child moved/resized
+            reason === 'child-transformed'      // BOTTOM-UP: child rotated/scaled
+        );
+
+        return this.resizeContainerToFitChildren(
+            container,
+            null,           // newContainerSize - calculate from children
+            immediate,      // immediateUpdate - bypass throttling if requested
+            preservePosition // preservePosition - smart default based on reason
+        );
+    }
+
+    /**
+     * Resize container in layout mode (uses pre-calculated bounds)
+     * @private
+     */
+    resizeForLayoutMode(container, { layoutBounds, pushContext, immediate }) {
+        // If no bounds provided, calculate layout first
+        if (!layoutBounds) {
+            const sceneController = window.modlerComponents?.sceneController;
+            if (sceneController) {
+                const layoutResult = sceneController.updateLayout(container.id);
+                layoutBounds = layoutResult?.layoutBounds;
+            }
+        }
+
+        // No bounds available - can't resize
+        if (!layoutBounds) {
+            return false;
+        }
+
+        return this.resizeContainerToLayoutBounds(container, layoutBounds, pushContext);
+    }
+
+    // ========================================================================
+    // END UNIFIED API
+    // ========================================================================
+
     /**
      * Get child meshes suitable for bounds calculation
      */

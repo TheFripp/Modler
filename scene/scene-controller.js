@@ -689,7 +689,26 @@ class SceneController {
 
         return manager.setParentContainer(objectId, parentId, callbacks, updateLayout);
     }
-    
+
+    /**
+     * Move object to a container (convenience wrapper for setParentContainer)
+     * @param {number} objectId - Object to move
+     * @param {number} containerId - Target container ID
+     * @returns {boolean} Success status
+     */
+    moveObjectToContainer(objectId, containerId) {
+        return this.setParentContainer(objectId, containerId, true);
+    }
+
+    /**
+     * Move object to root (convenience wrapper for setParentContainer with null parent)
+     * @param {number} objectId - Object to move to root
+     * @returns {boolean} Success status
+     */
+    moveObjectToRoot(objectId) {
+        return this.setParentContainer(objectId, null, true);
+    }
+
     /**
      * Update object dimensions using CAD-style geometry modification
      * Follows geometry-based manipulation principles from CLAUDE.md
@@ -821,10 +840,13 @@ class SceneController {
 
         // Update parent containers if this object is a child
         if (obj.parentContainer) {
-            const MovementUtils = window.MovementUtils;
-            if (MovementUtils) {
-                // Use realTime = true to indicate this is a final update after drag completion
-                MovementUtils.updateParentContainer(obj.mesh, true, null, null, true);
+            const containerCrudManager = window.modlerComponents?.containerCrudManager;
+            if (containerCrudManager) {
+                // UNIFIED API: Transform changed (final update after drag/modification)
+                containerCrudManager.resizeContainer(obj.parentContainer, {
+                    reason: 'child-transformed',
+                    immediate: true  // Real-time update after transform
+                });
             }
         }
 

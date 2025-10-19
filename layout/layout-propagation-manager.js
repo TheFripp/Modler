@@ -158,23 +158,16 @@ class LayoutPropagationManager {
 
             // CRITICAL ARCHITECTURE: Only auto-resize in HUG mode
             // In LAYOUT mode, container size is ground truth - no auto-resize
-            if (layoutResult?.success && layoutResult.layoutBounds) {
-                const isLayoutMode = container.autoLayout?.enabled;
-
-                if (!isLayoutMode) {
-                    // HUG MODE: Container wraps children WITHOUT repositioning
-                    // BOTTOM-UP: Child changed, container adapts in place
-                    const containerCrudManager = this.getContainerCrudManager();
-                    if (containerCrudManager) {
-                        containerCrudManager.resizeContainerToFitChildren(
-                            container,
-                            null,    // No new size (calculate from children)
-                            false,   // Not immediate (already in RAF)
-                            true     // preservePosition=true (BOTTOM-UP adaptation)
-                        );
-                    }
+            if (layoutResult?.success) {
+                const containerCrudManager = this.getContainerCrudManager();
+                if (containerCrudManager) {
+                    // UNIFIED API: Automatically detects mode and applies correct behavior
+                    containerCrudManager.resizeContainer(container, {
+                        reason: 'child-changed',           // BOTTOM-UP: Child changed
+                        layoutBounds: layoutResult.layoutBounds,  // Provide bounds for layout mode
+                        immediate: false                   // Already in RAF, no need for immediate
+                    });
                 }
-                // LAYOUT MODE: No auto-resize
             }
 
             // OPTIMIZATION: Defer grandparent propagations to next frame

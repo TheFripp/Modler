@@ -550,8 +550,11 @@ class MoveTool {
         // Trigger container resize calculation
         const containerCrudManager = window.modlerComponents?.containerCrudManager;
         if (containerCrudManager) {
-            // Use MovementUtils for consistent container update behavior with immediate visuals
-            MovementUtils.updateParentContainer(this.dragObject, false, this.containerThrottleState, null, true);
+            // UNIFIED API: Real-time drag update (throttled)
+            containerCrudManager.resizeContainer(objectData.parentContainer, {
+                reason: 'child-changed',
+                immediate: false  // Throttling handled by requestAnimationFrame
+            });
 
             // Update the container selection highlight to reflect new size
             this.selectionController.updateContainerEdgeHighlight();
@@ -841,10 +844,11 @@ class MoveTool {
                 geometryUtils.updateSupportMeshGeometries(draggedObject);
             }
 
-            // Only trigger container repositioning when moving containers themselves
-            // For individual object moves, skip container updates to prevent unwanted container movement
+            // Update parent container after drag completion
             const sceneController = window.modlerComponents?.sceneController;
-            if (sceneController) {
+            const containerCrudManager = window.modlerComponents?.containerCrudManager;
+
+            if (sceneController && containerCrudManager) {
                 const objectData = sceneController.getObjectByMesh(draggedObject);
 
                 // Check if the dragged object itself is a container
@@ -857,12 +861,24 @@ class MoveTool {
                                           draggedObject.userData?.containerMesh;
 
                 if (isDraggedObjectContainer || representsContainer) {
-                    // Moving a container or its interactive mesh: Full container repositioning
+                    // Moving a container: Update its parent container
                     const containerToUpdate = representsContainer ? draggedObject.userData.containerMesh : draggedObject;
-                    MovementUtils.updateParentContainer(containerToUpdate, true, null, null, true, false);
-                } else {
-                    // Individual object move: Resize parent container to fit but preserve position
-                    MovementUtils.updateParentContainer(draggedObject, true, null, null, true, true);
+                    const containerData = sceneController.getObjectByMesh(containerToUpdate);
+
+                    if (containerData && containerData.parentContainer) {
+                        // UNIFIED API: Container moved - parent needs to update
+                        containerCrudManager.resizeContainer(containerData.parentContainer, {
+                            reason: 'child-changed',
+                            immediate: true
+                        });
+                    }
+                } else if (objectData && objectData.parentContainer) {
+                    // Individual object move: Resize parent container
+                    // UNIFIED API: Child object moved - parent adapts
+                    containerCrudManager.resizeContainer(objectData.parentContainer, {
+                        reason: 'child-changed',
+                        immediate: true
+                    });
                 }
             }
         }
