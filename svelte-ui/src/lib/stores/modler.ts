@@ -247,7 +247,9 @@ function validateAndNormalizeObjectData(objectData: any): ObjectData {
 			material: objectData.material ? { ...objectData.material } : undefined,
 			autoLayout: objectData.autoLayout ? {
 				...objectData.autoLayout,
-				padding: objectData.autoLayout.padding ? { ...objectData.autoLayout.padding } : undefined
+				padding: objectData.autoLayout.padding ? { ...objectData.autoLayout.padding } : undefined,
+				alignment: objectData.autoLayout.alignment ? { ...objectData.autoLayout.alignment } : undefined,
+				tileMode: objectData.autoLayout.tileMode ? { ...objectData.autoLayout.tileMode } : undefined
 			} : undefined
 		} as ObjectData;
 		return result;

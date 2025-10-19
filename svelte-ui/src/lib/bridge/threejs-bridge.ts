@@ -83,6 +83,7 @@ export function initializeBridge() {
  */
 function setupPostMessageFallback() {
 	window.addEventListener('message', (event) => {
+
 		// Verify origin for security (allow any localhost port for development)
 		// Also allow 'null' origin when parent page is loaded from file:// protocol
 		if (!event.origin.startsWith('http://localhost:') && event.origin !== 'null') {
@@ -90,73 +91,122 @@ function setupPostMessageFallback() {
 			return;
 		}
 
-		// Handle data-update messages
-		if (event.data.type === 'data-update') {
-			try {
-				const data = event.data.data;
+		const messageType = event.data.type;
+		const data = event.data.data; // SimpleCommunication sends { type: 'foo', data: {...} }
 
-				// Validate data structure
-				if (!data || typeof data !== 'object') {
-					console.warn('PostMessage: Invalid data structure received');
-					return;
-				}
-
-				// Handle tool state updates (sent via PropertyPanelSync)
-				if (data.updateType === 'tool-state-update') {
-					if (data.toolState) {
-						const update: any = { activeTool: data.toolState.activeTool };
-						if (data.snapEnabled !== undefined) {
-							update.snapEnabled = data.snapEnabled;
-						}
-						toolState.set(update);
-					}
-					return; // Done processing tool state update
-				}
-
-				// Update selected objects in store with error handling
-				if (data.selectedObjects) {
-					try {
+		// SimpleCommunication: Handle specific message types
+		switch (messageType) {
+			case 'selection-changed':
+				// SimpleCommunication sends complete selected objects data
+				try {
+					if (data && data.selectedObjects) {
 						syncSelectionFromThreeJS(data.selectedObjects);
-					} catch (error) {
-						console.error('PostMessage: Error syncing selected objects:', error);
 					}
+				} catch (error) {
+					console.error('PostMessage: Error syncing selection:', error);
 				}
+				break;
 
-				// Update object hierarchy in store with error handling
-				if (data.objectHierarchy) {
-					try {
+			case 'hierarchy-changed':
+				// SimpleCommunication sends complete hierarchy tree
+				try {
+					if (data && data.hierarchy) {
+						syncHierarchyFromThreeJS(data.hierarchy);
+					}
+				} catch (error) {
+					console.error('PostMessage: Error syncing hierarchy:', error);
+				}
+				break;
+
+			case 'object-changed':
+				// SimpleCommunication sends individual object updates
+				// Trigger selection re-sync to update property panel
+				try {
+					if (data && data.object) {
+						const currentSelection = get(selectedObjects);
+						if (currentSelection.some((obj: any) => obj.id === data.objectId)) {
+							// Updated object is selected, refresh selection to update UI
+							const updatedSelection = currentSelection.map((obj: any) =>
+								obj.id === data.objectId ? data.object : obj
+							);
+							syncSelectionFromThreeJS(updatedSelection);
+						}
+					}
+				} catch (error) {
+					console.error('PostMessage: Error syncing object change:', error);
+				}
+				break;
+
+			case 'tool-changed':
+				// SimpleCommunication sends tool state changes
+				try {
+					if (data) {
+						const update: any = {};
+						if (data.toolName) update.activeTool = data.toolName;
+						if (data.toolState?.snapEnabled !== undefined) update.snapEnabled = data.toolState.snapEnabled;
+						if (Object.keys(update).length > 0) {
+							toolState.set(update);
+						}
+					}
+				} catch (error) {
+					console.error('PostMessage: Error syncing tool state:', error);
+				}
+				break;
+
+			case 'data-update':
+				// Legacy: Keep backward compatibility with old message format
+				try {
+					if (!data || typeof data !== 'object') {
+						console.warn('PostMessage: Invalid data structure received');
+						return;
+					}
+
+					// Handle tool state updates
+					if (data.updateType === 'tool-state-update') {
+						if (data.toolState) {
+							const update: any = { activeTool: data.toolState.activeTool };
+							if (data.snapEnabled !== undefined) {
+								update.snapEnabled = data.snapEnabled;
+							}
+							toolState.set(update);
+						}
+						return;
+					}
+
+					// Update selected objects
+					if (data.selectedObjects) {
+						syncSelectionFromThreeJS(data.selectedObjects);
+					}
+
+					// Update object hierarchy
+					if (data.objectHierarchy) {
 						syncHierarchyFromThreeJS(data.objectHierarchy);
-					} catch (error) {
-						console.error('PostMessage: Error syncing hierarchy:', error);
 					}
-				}
 
-				// Update container context in store with error handling
-				if (data.containerContext) {
-					try {
+					// Update container context
+					if (data.containerContext) {
 						syncContainerContextFromThreeJS(data.containerContext);
-					} catch (error) {
-						console.error('PostMessage: Error syncing container context:', error);
 					}
+				} catch (error) {
+					console.error('PostMessage: Critical error processing data-update:', error);
 				}
-			} catch (error) {
-				console.error('PostMessage: Critical error processing data-update:', error);
-			}
-		}
+				break;
 
-		// Legacy: Handle tool state updates sent directly (backward compatibility)
-		else if (event.data.type === 'tool-state-update') {
-			// Tool state updates from keyboard shortcuts or direct tool switching
-			if (event.data.data && event.data.data.toolState) {
-				const update: any = { activeTool: event.data.data.toolState.activeTool };
-				if (event.data.data.snapEnabled !== undefined) {
-					update.snapEnabled = event.data.data.snapEnabled;
+			case 'tool-state-update':
+				// Legacy: Handle tool state updates sent directly (backward compatibility)
+				if (data && data.toolState) {
+					const update: any = { activeTool: data.toolState.activeTool };
+					if (data.snapEnabled !== undefined) {
+						update.snapEnabled = data.snapEnabled;
+					}
+					toolState.set(update);
 				}
-				toolState.set(update);
-			}
-		}
+				break;
 
-		// Handle other message types as needed
+			default:
+				// Ignore unknown message types
+				break;
+		}
 	});
 }
 

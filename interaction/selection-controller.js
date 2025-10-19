@@ -105,7 +105,7 @@ class SelectionController {
     }
 
     // Core selection methods
-    select(object) {
+    select(object, options = {}) {
         if (!object) return false;
 
         const sceneController = this.getSceneController();
@@ -115,13 +115,32 @@ class SelectionController {
         }
 
         // Resolve which object to actually select (container-first logic)
-        const { targetObject, shouldNavigate } = this.resolveSelectionTarget(object);
+        // Skip container-first logic if this is a direct selection from UI
+        let targetObject, shouldNavigate;
+
+        if (options.direct) {
+            targetObject = object;
+            shouldNavigate = false;
+
+            // If directly selecting a child object from UI, step into parent container
+            const objectData = this.getObjectData(object);
+            if (objectData && objectData.parentContainer) {
+                const navigationController = this.getNavigationController();
+                if (navigationController) {
+                    navigationController.navigateToContainer(objectData.parentContainer);
+                }
+            }
+        } else {
+            const resolved = this.resolveSelectionTarget(object);
+            targetObject = resolved.targetObject;
+            shouldNavigate = resolved.shouldNavigate;
+        }
 
         // Add to selection
         this.selectedObjects.add(targetObject);
         this.addToHistory('select', targetObject);
 
-        // Handle navigation if needed
+        // Handle navigation if needed (for container double-clicks)
         if (shouldNavigate) {
             const navigationController = this.getNavigationController();
             const objectData = this.getObjectData(targetObject);
@@ -274,6 +293,7 @@ class SelectionController {
         const selectedObjectIds = selectedObjects
             .map(mesh => this.getObjectData(mesh)?.id)
             .filter(Boolean);
+
 
         // Phase 3: Emit consolidated selection event for UI panels (MainAdapter → UIAdapter)
         // This is the PRIMARY event for Phase 3 communication architecture

@@ -64,7 +64,11 @@ class CommandRouter {
         const components = window.modlerComponents;
 
         if (!components) {
-            console.error('CommandRouter: modlerComponents not available');
+            // Listen for modlerV2Ready event to re-initialize components
+            window.addEventListener('modlerV2Ready', () => {
+                this.initializeComponents();
+            }, { once: true });
+
             return;
         }
 
@@ -97,6 +101,8 @@ class CommandRouter {
         // ═══════════════════════════════════════════════════════════
         this.handlers.set('toggle-fill-mode', this.handleFillModeToggle.bind(this));
         this.handlers.set('fill-button-toggle', this.handleFillModeToggle.bind(this)); // Alias
+        this.handlers.set('fill-button-hover', this.handleFillButtonHover.bind(this)); // Visual feedback only
+        this.handlers.set('layout-button-hover', this.handleLayoutButtonHover.bind(this)); // Visual feedback only
         this.handlers.set('update-layout-property', this.handleLayoutPropertyUpdate.bind(this));
         this.handlers.set('toggle-hug-mode', this.handleHugModeToggle.bind(this));
         this.handlers.set('update-layout-direction', this.handleLayoutDirectionUpdate.bind(this));
@@ -147,6 +153,24 @@ class CommandRouter {
         // ═══════════════════════════════════════════════════════════
         this.handlers.set('undo', this.handleUndo.bind(this));
         this.handlers.set('redo', this.handleRedo.bind(this));
+
+        // ═══════════════════════════════════════════════════════════
+        // SYSTEM OPERATIONS (Panel ready, file manager, settings)
+        // ═══════════════════════════════════════════════════════════
+        this.handlers.set('ui-panel-ready', this.handleUIPanelReady.bind(this));
+        this.handlers.set('left-panel-ready', this.handleUIPanelReady.bind(this)); // Alias
+        this.handlers.set('request-file-manager-ready', this.handleRequestFileManagerReady.bind(this));
+        this.handlers.set('file-manager-request', this.handleFileManagerRequest.bind(this));
+
+        // Settings operations - separate handlers for each type
+        this.handlers.set('cad-wireframe-settings-changed', this.handleCadWireframeSettingsUpdate.bind(this));
+        this.handlers.set('get-cad-wireframe-settings', this.handleGetCadWireframeSettings.bind(this));
+        this.handlers.set('visual-settings-changed', this.handleVisualSettingsUpdate.bind(this));
+        this.handlers.set('get-visual-settings', this.handleGetVisualSettings.bind(this));
+        this.handlers.set('scene-settings-changed', this.handleSceneSettingsUpdate.bind(this));
+        this.handlers.set('get-scene-settings', this.handleGetSceneSettings.bind(this));
+        this.handlers.set('interface-settings-changed', this.handleInterfaceSettingsUpdate.bind(this));
+        this.handlers.set('get-interface-settings', this.handleGetInterfaceSettings.bind(this));
 
         console.log(`✅ CommandRouter: Registered ${this.handlers.size} action handlers`);
     }
@@ -277,6 +301,74 @@ class CommandRouter {
         this.propertyUpdateHandler.handleFillButtonToggle(objectId, axis);
     }
 
+    handleFillButtonHover(data) {
+        this.handleAxisButtonHover(data);
+    }
+
+    handleLayoutButtonHover(data) {
+        this.handleAxisButtonHover(data);
+    }
+
+    /**
+     * Unified handler for all axis button face highlighting
+     * Used by layout buttons, fill buttons, and tile tool axis buttons
+     * @param {Object} data - {objectId, axis, isHovering}
+     */
+    handleAxisButtonHover(data) {
+        const { objectId, axis, isHovering } = data;
+
+        if (!objectId || !axis) {
+            return;
+        }
+
+        const selectionController = window.modlerComponents?.selectionController;
+        const visualEffects = window.modlerComponents?.visualEffects;
+        const supportMeshFactory = window.modlerComponents?.supportMeshFactory;
+
+        if (!selectionController || !visualEffects || !supportMeshFactory) {
+            return;
+        }
+
+        // Get selected object - must be selected for highlighting
+        const selectedObjects = selectionController.getSelectedObjects();
+        if (selectedObjects.length === 0) {
+            return;
+        }
+
+        const selectedObject = selectedObjects[0];
+
+        // Verify object ID matches (buttons send objectId for verification)
+        if (selectedObject.userData?.id !== objectId) {
+            return;
+        }
+
+        // Get support meshes
+        const supportMeshes = selectedObject.userData?.supportMeshes;
+        if (!supportMeshes?.faceHighlight) {
+            return;
+        }
+
+        if (isHovering) {
+            // Enable button highlight mode to prevent tool hover from clearing
+            visualEffects.setButtonHighlight(true);
+
+            // Position face highlight for camera-facing face on axis
+            supportMeshFactory.positionFaceHighlightForAxis(
+                supportMeshes.faceHighlight,
+                selectedObject,
+                axis,
+                true // camera-facing only
+            );
+
+            // Show the face highlight
+            supportMeshes.faceHighlight.visible = true;
+        } else {
+            // Disable button highlight mode and hide face highlight
+            visualEffects.setButtonHighlight(false);
+            supportMeshes.faceHighlight.visible = false;
+        }
+    }
+
     handleLayoutPropertyUpdate(data) {
         const { objectId, property, value } = data;
 
@@ -320,18 +412,32 @@ class CommandRouter {
     }
 
     handleSelectObject(data) {
-        const { objectId, addToSelection } = data;
+        const { objectId, addToSelection, isShiftClick, directSelection } = data;
 
-        if (!this.selectionController) {
-            console.error('CommandRouter: SelectionController not available');
+        if (!this.selectionController || !this.sceneController) {
+            console.error('CommandRouter: SelectionController or SceneController not available');
             return;
         }
 
-        if (addToSelection) {
-            this.selectionController.addToSelection(objectId);
-        } else {
-            this.selectionController.selectObject(objectId);
+        // Get the mesh object from SceneController
+        const obj = this.sceneController.getObject(objectId);
+
+        if (!obj || !obj.mesh) {
+            console.error('CommandRouter: Object or mesh not found for ID:', objectId);
+            return;
         }
+
+        // Support both parameter names (addToSelection and isShiftClick from schema)
+        const shouldAdd = addToSelection || isShiftClick;
+
+        if (!shouldAdd) {
+            // Replace selection - clear first
+            this.selectionController.clearSelection();
+        }
+
+        // Select the object (SelectionController handles visualization and events)
+        // Pass directSelection flag to bypass container-first logic when selecting from UI list
+        this.selectionController.select(obj.mesh, { direct: directSelection });
     }
 
     handleDeselectAll(data) {
@@ -340,18 +446,29 @@ class CommandRouter {
             return;
         }
 
+        // Clear selection (SelectionController handles visualization and events)
         this.selectionController.clearSelection();
+        this.selectionController.notifySelectionChange();
     }
 
     handleMultiSelect(data) {
         const { objectIds } = data;
 
-        if (!this.selectionController) {
-            console.error('CommandRouter: SelectionController not available');
+        if (!this.selectionController || !this.sceneController) {
+            console.error('CommandRouter: SelectionController or SceneController not available');
             return;
         }
 
-        this.selectionController.setSelection(objectIds);
+        // Clear existing selection
+        this.selectionController.clearSelection();
+
+        // Select all objects
+        objectIds.forEach(objectId => {
+            const obj = this.sceneController.getObject(objectId);
+            if (obj && obj.mesh) {
+                this.selectionController.select(obj.mesh);
+            }
+        });
     }
 
     handleMoveToContainer(data) {
@@ -427,12 +544,13 @@ class CommandRouter {
     handleDuplicateObject(data) {
         const { objectId } = data;
 
-        if (!this.sceneController) {
-            console.error('CommandRouter: SceneController not available');
+        if (!this.historyManager) {
+            console.error('CommandRouter: HistoryManager not available');
             return;
         }
 
-        this.sceneController.duplicateObject(objectId);
+        const command = new DuplicateObjectCommand(objectId);
+        this.historyManager.executeCommand(command);
     }
 
     handleRenameObject(data) {
@@ -501,6 +619,117 @@ class CommandRouter {
         }
 
         this.historyManager.redo();
+    }
+
+    handleUIPanelReady(data) {
+        // UI panel is ready - send initial hierarchy and selection state
+        // This ensures object list populates immediately when each panel loads
+
+        if (!window.stateSerializer || !window.simpleCommunication) {
+            console.warn('CommandRouter: StateSerializer or SimpleCommunication not available');
+            return;
+        }
+
+        // Send initial hierarchy to the newly ready panel
+        window.simpleCommunication.sendInitialHierarchySync(window.stateSerializer);
+    }
+
+    handleRequestFileManagerReady(data) {
+        const fileManagerHandler = window.modlerComponents?.fileManagerHandler;
+        if (fileManagerHandler) {
+            fileManagerHandler.handleRequestFileManagerReady(data.source);
+        }
+    }
+
+    handleFileManagerRequest(data) {
+        const fileManagerHandler = window.modlerComponents?.fileManagerHandler;
+        if (fileManagerHandler) {
+            fileManagerHandler.handleFileRequest(data.data || data, data.source);
+        }
+    }
+
+    // CAD Wireframe Settings
+    handleCadWireframeSettingsUpdate(data) {
+        const settingsHandler = window.modlerComponents?.settingsHandler;
+        if (!settingsHandler) return;
+
+        const settings = data.data?.settings || data.settings;
+        if (!settings) {
+            console.error('CommandRouter: No settings in cad-wireframe update', data);
+            return;
+        }
+
+        settingsHandler.handleCadWireframeSettingsUpdate(settings);
+    }
+
+    handleGetCadWireframeSettings(data) {
+        const settingsHandler = window.modlerComponents?.settingsHandler;
+        if (!settingsHandler) return;
+
+        settingsHandler.handleGetCadWireframeSettings(data.source);
+    }
+
+    // Visual Settings
+    handleVisualSettingsUpdate(data) {
+        const settingsHandler = window.modlerComponents?.settingsHandler;
+        if (!settingsHandler) return;
+
+        const settings = data.data?.settings || data.settings;
+        if (!settings) {
+            console.error('CommandRouter: No settings in visual update', data);
+            return;
+        }
+
+        settingsHandler.handleVisualSettingsUpdate(settings);
+    }
+
+    handleGetVisualSettings(data) {
+        const settingsHandler = window.modlerComponents?.settingsHandler;
+        if (!settingsHandler) return;
+
+        settingsHandler.handleGetVisualSettings(data.source);
+    }
+
+    // Scene Settings
+    handleSceneSettingsUpdate(data) {
+        const settingsHandler = window.modlerComponents?.settingsHandler;
+        if (!settingsHandler) return;
+
+        const settings = data.data?.settings || data.settings;
+        if (!settings) {
+            console.error('CommandRouter: No settings in scene update', data);
+            return;
+        }
+
+        settingsHandler.handleSceneSettingsUpdate(settings);
+    }
+
+    handleGetSceneSettings(data) {
+        const settingsHandler = window.modlerComponents?.settingsHandler;
+        if (!settingsHandler) return;
+
+        settingsHandler.handleGetSceneSettings(data.source);
+    }
+
+    // Interface Settings
+    handleInterfaceSettingsUpdate(data) {
+        const settingsHandler = window.modlerComponents?.settingsHandler;
+        if (!settingsHandler) return;
+
+        const settings = data.data?.settings || data.settings;
+        if (!settings) {
+            console.error('CommandRouter: No settings in interface update', data);
+            return;
+        }
+
+        settingsHandler.handleInterfaceSettingsUpdate(settings);
+    }
+
+    handleGetInterfaceSettings(data) {
+        const settingsHandler = window.modlerComponents?.settingsHandler;
+        if (!settingsHandler) return;
+
+        settingsHandler.handleGetInterfaceSettings(data.source);
     }
 
     /**

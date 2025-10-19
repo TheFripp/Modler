@@ -15,10 +15,12 @@
 	$: isYActive = isLayoutEnabled && layoutDirection === 'y';
 	$: isZActive = isLayoutEnabled && layoutDirection === 'z';
 
-	// Reactive gap value
-	$: gapValue = displayObject.calculatedGap !== undefined
+	// Reactive gap value - formatted to exactly 2 decimal places for UI display
+	// toFixed(2) ensures consistent "1.20" format instead of "1.2"
+	// (Internal calculations maintain full precision)
+	$: gapValue = Number((displayObject.calculatedGap !== undefined
 		? displayObject.calculatedGap
-		: (displayObject.autoLayout?.gap ?? 0);
+		: (displayObject.autoLayout?.gap ?? 0)).toFixed(2));
 
 	// Reactive alignment values
 	$: alignmentX = displayObject.autoLayout?.alignment?.x ?? 'center';
@@ -54,14 +56,23 @@
 			reversed: currentReversed
 		};
 
+		// Optimistic update: Update local displayObject immediately for instant UI feedback
+		displayObject = {
+			...displayObject,
+			autoLayout: autoLayout
+		};
+
 		updateThreeJSProperty(objectId, 'autoLayout', autoLayout, 'property-panel');
 	}
 
-	// Phase 3.6: Handle layout button hover for face highlighting
+	// SimpleCommunication: Handle layout button hover for face highlighting
 	function handleLayoutHover(axis: string, isHovering: boolean) {
-		import('$lib/services/ui-adapter').then(({ uiAdapter }) => {
-			uiAdapter.sendLayoutButtonHover(objectId, axis, isHovering);
-		});
+		window.parent.postMessage({
+			type: 'layout-button-hover',
+			objectId,
+			axis,
+			isHovering
+		}, '*');
 	}
 
 	// Handle reverse layout direction (not object order)
@@ -77,6 +88,12 @@
 			},
 			alignment: displayObject.autoLayout?.alignment ?? { x: 'center', y: 'center', z: 'center' },
 			reversed: !isReversed
+		};
+
+		// Optimistic update: Update local displayObject immediately for instant UI feedback
+		displayObject = {
+			...displayObject,
+			autoLayout: autoLayout
 		};
 
 		updateThreeJSProperty(objectId, 'autoLayout', autoLayout, 'property-panel');
@@ -121,6 +138,12 @@
 			},
 			alignment,
 			reversed: currentReversed
+		};
+
+		// Optimistic update: Update local displayObject immediately for instant UI feedback
+		displayObject = {
+			...displayObject,
+			autoLayout: autoLayout
 		};
 
 		updateThreeJSProperty(objectId, 'autoLayout', autoLayout, 'property-panel');

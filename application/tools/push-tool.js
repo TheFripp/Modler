@@ -267,7 +267,14 @@ class PushTool {
         if (!worldMovement) return null;
 
         // Get movement along push axis
-        const axisDelta = MovementUtils.getAxisMovement(worldMovement, this.pushAxis);
+        let axisDelta = MovementUtils.getAxisMovement(worldMovement, this.pushAxis);
+
+        // Negate delta for negative-facing faces on all axes
+        // When pushing a negative face (left/bottom/back), the mouse delta calculation
+        // produces inverted values, so we need to negate them
+        if (this.pushDirection === -1) {
+            axisDelta = -axisDelta;
+        }
 
         this.lastMousePos.copy(currentMouse);
         this.cumulativeAmount += axisDelta;

@@ -159,11 +159,19 @@ class TileTool {
         });
 
         // Configure container with tileMode
+        // SCHEMA-FIRST: Start with default schema, then override specific properties
         const autoLayout = {
+            ...(window.ObjectDataFormat?.createDefaultAutoLayout?.() || {
+                enabled: false,
+                direction: null,
+                gap: 0,
+                padding: { width: 0, height: 0, depth: 0 },
+                alignment: { x: 'center', y: 'center', z: 'center' },
+                reversed: false
+            }),
             enabled: true,
             direction: axis,
             gap: gap,
-            padding: { width: 0, height: 0, depth: 0 },
             tileMode: {
                 enabled: true,
                 repeat: repeat,

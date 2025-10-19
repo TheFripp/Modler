@@ -251,50 +251,79 @@ class SceneLifecycleManager {
     }
 
     /**
-     * Create object metadata structure
+     * Create object metadata structure using schema-based factory
+     * ARCHITECTURE: Uses ObjectDataFormat.createObjectMetadata() for schema consistency
+     *
      * @param {number} id - Object ID
      * @param {THREE.Object3D} mesh - Three.js mesh
      * @param {Object} options - Configuration options
      * @returns {Object} Object metadata
      */
     createObjectMetadata(id, mesh, options) {
+        // Use schema-based factory for complete object metadata with proper defaults
+        const objectDataFormat = window.ObjectDataFormat;
+
+        if (objectDataFormat && objectDataFormat.createObjectMetadata) {
+            // SCHEMA-FIRST: Use centralized factory (ensures autoLayout never null)
+            const metadata = objectDataFormat.createObjectMetadata({
+                ...options,
+                id,
+                mesh
+            });
+
+            // ARCHITECTURE: Add dimensions getter for backward compatibility
+            // Dimensions are NO LONGER cached - always read from geometry via DimensionManager
+            Object.defineProperty(metadata, 'dimensions', {
+                get() {
+                    return window.dimensionManager?.getDimensions(this.mesh) || { x: 1, y: 1, z: 1 };
+                },
+                enumerable: true,
+                configurable: true
+            });
+
+            return metadata;
+        }
+
+        // FALLBACK: If ObjectDataFormat not available (during initialization), use inline defaults
+        console.warn('SceneLifecycleManager: ObjectDataFormat not available, using fallback');
         const metadata = {
             id: id,
             mesh: mesh,
             type: options.type || 'mesh',
             name: options.name || `object_${id}`,
-            category: options.category || 'permanent', // 'permanent', 'ui', 'system'
+            category: options.category || 'permanent',
             created: Date.now(),
             visible: true,
-            selectable: options.selectable !== false, // default true
+            selectable: options.selectable !== false,
             userData: options.userData || {},
 
-            // Preview/temporary flag for hiding from object tree
             isTemporary: options.isTemporary || false,
             isPreview: options.isPreview || false,
 
-            // Auto layout properties
             isContainer: options.isContainer || false,
-            autoLayout: null, // Will contain layout config when enabled
+            autoLayout: options.autoLayout || {
+                enabled: false,
+                direction: null,
+                gap: 0,
+                padding: { width: 0, height: 0, depth: 0 },
+                alignment: { x: 'center', y: 'center', z: 'center' },
+                reversed: false
+            },
             parentContainer: options.parentContainer || null,
 
-            // Container sizing mode (hug = auto-size to fit children)
             isHug: options.sizingMode === 'hug' || options.isHug || false,
+            sizingMode: options.sizingMode || null,
+            childrenOrder: options.childrenOrder || [],
+            layoutMode: options.layoutMode || null,
 
-            // Container-specific properties
-            childrenOrder: [], // Explicit child ordering for layout
-            layoutMode: null, // Layout mode for containers
-
-            layoutProperties: {
-                sizeX: options.sizeX || 'fixed', // 'fixed', 'fill', 'hug'
+            layoutProperties: options.layoutProperties || {
+                sizeX: options.sizeX || 'fixed',
                 sizeY: options.sizeY || 'fixed',
                 sizeZ: options.sizeZ || 'fixed',
-                fixedSize: options.fixedSize || null // Used when size mode is 'fixed'
+                fixedSize: options.fixedSize || null
             }
         };
 
-        // ARCHITECTURE: Add dimensions getter for backward compatibility
-        // Dimensions are NO LONGER cached - always read from geometry via DimensionManager
         Object.defineProperty(metadata, 'dimensions', {
             get() {
                 return window.dimensionManager?.getDimensions(this.mesh) || { x: 1, y: 1, z: 1 };
@@ -426,7 +455,7 @@ class SceneLifecycleManager {
             // Container properties
             isContainer: objectData.isContainer || false,
             parentContainer: objectData.parentContainer || null,
-            autoLayout: objectData.autoLayout || { enabled: false, direction: 'x' },
+            autoLayout: objectData.autoLayout || window.ObjectDataFormat.createDefaultAutoLayout(),
 
             // Material properties
             material: objectData.material || { color: 0x888888 },

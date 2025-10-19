@@ -33,14 +33,28 @@ class StateSerializer {
 
     /**
      * Initialize component references
+     * CRITICAL: This is called lazily on each request, not just once at startup
      */
     initializeComponents() {
-        if (this.initialized) return;
+        if (this.initialized) return true; // Already initialized successfully
 
         const components = window.modlerComponents;
 
         if (!components) {
-            console.warn('StateSerializer: modlerComponents not available yet');
+            // Listen for modlerV2Ready event to re-initialize components
+            // Use { once: true } to ensure we only listen once
+            if (!this._modlerV2ReadyListenerAdded) {
+                this._modlerV2ReadyListenerAdded = true;
+                window.addEventListener('modlerV2Ready', () => {
+                    this.initializeComponents();
+
+                    // After successful initialization, resend hierarchy to UI
+                    if (this.initialized && window.simpleCommunication) {
+                        window.simpleCommunication.sendInitialHierarchySync(this);
+                    }
+                }, { once: true });
+            }
+
             return false;
         }
 
@@ -49,12 +63,10 @@ class StateSerializer {
         this.objectDataFormat = window.ObjectDataFormat;
 
         if (!this.objectStateManager || !this.sceneController || !this.objectDataFormat) {
-            console.warn('StateSerializer: Some components not available yet');
             return false;
         }
 
         this.initialized = true;
-        console.log('✅ StateSerializer initialized');
         return true;
     }
 
@@ -71,8 +83,8 @@ class StateSerializer {
         }
 
         try {
-            // Get base data from ObjectStateManager
-            const baseData = this.objectStateManager.getObject(objectId);
+            // Get base data from SceneController (the actual source of truth for geometry)
+            const baseData = this.sceneController.getObject(objectId);
             if (!baseData) {
                 return null;
             }
@@ -322,7 +334,8 @@ class StateSerializer {
      * @returns {Object|null}
      */
     getBasicObjectData(objectId) {
-        const obj = this.objectStateManager.getObject(objectId);
+        // CRITICAL: Read from SceneController (single source of truth for hierarchy)
+        const obj = this.sceneController.getObject(objectId);
         if (!obj) return null;
 
         return {
@@ -330,6 +343,7 @@ class StateSerializer {
             name: obj.name,
             type: obj.type,
             isContainer: obj.isContainer,
+            parentContainer: obj.parentContainer || null, // Critical for ObjectTree to build hierarchy
             selected: obj.selected,
             locked: obj.locked,
             visible: obj.visible
@@ -361,7 +375,10 @@ class StateSerializer {
     }
 
     /**
-     * Get complete hierarchy tree (for ObjectTree panel)
+     * Get complete hierarchy as flat array (for ObjectTree panel)
+     *
+     * Returns ALL objects as a flat array with parentContainer references.
+     * ObjectTree builds the tree structure itself using these references.
      *
      * @returns {Array<Object>}
      */
@@ -371,10 +388,13 @@ class StateSerializer {
         }
 
         try {
-            const rootObjects = this.sceneController.getRootObjects();
+            // Get ALL objects as flat array (not just roots)
+            const allObjects = this.sceneController.getAllObjects();
 
-            const hierarchy = rootObjects
-                .map(obj => this.getHierarchyNode(obj.userData.id))
+
+            // Map to basic object data (includes parentContainer for tree building)
+            const hierarchy = allObjects
+                .map(obj => this.getBasicObjectData(obj.id))
                 .filter(Boolean);
 
             this.stats.hierarchySerializations++;
@@ -385,25 +405,6 @@ class StateSerializer {
             this.stats.errors++;
             return [];
         }
-    }
-
-    /**
-     * Get hierarchy node (recursive for tree structure)
-     *
-     * @param {string} objectId
-     * @returns {Object|null}
-     */
-    getHierarchyNode(objectId) {
-        const basicData = this.getBasicObjectData(objectId);
-        if (!basicData) return null;
-
-        const obj = this.objectStateManager.getObject(objectId);
-
-        return {
-            ...basicData,
-            children: obj.childIds && obj.childIds.length > 0 ?
-                obj.childIds.map(childId => this.getHierarchyNode(childId)).filter(Boolean) : []
-        };
     }
 
     /**

@@ -699,6 +699,82 @@ class SupportMeshFactory {
     }
 
     /**
+     * Position face highlight for specific axis (for button hovers)
+     * Determines camera-facing face on the specified axis and positions highlight
+     * @param {THREE.Mesh} faceHighlightMesh - The face highlight mesh
+     * @param {THREE.Mesh} objectMesh - The object to highlight a face on
+     * @param {string} axis - Axis to highlight ('x', 'y', or 'z')
+     * @param {boolean} cameraFacingOnly - If true, show only camera-facing face (default: true)
+     */
+    positionFaceHighlightForAxis(faceHighlightMesh, objectMesh, axis, cameraFacingOnly = true) {
+        if (!faceHighlightMesh || !objectMesh || !axis) {
+            return;
+        }
+
+        // Get camera to determine which face is camera-facing
+        const camera = window.modlerComponents?.sceneFoundation?.camera;
+        if (!camera) {
+            console.warn('SupportMeshFactory: Camera not available for axis face highlighting');
+            return;
+        }
+
+        // Determine face normal based on axis and camera position
+        let faceNormal;
+
+        if (cameraFacingOnly) {
+            // Get camera direction in world space
+            const cameraPos = new THREE.Vector3();
+            camera.getWorldPosition(cameraPos);
+
+            const objectPos = new THREE.Vector3();
+            objectMesh.getWorldPosition(objectPos);
+
+            const cameraToObject = new THREE.Vector3().subVectors(cameraPos, objectPos);
+
+            // Determine which face on the axis is camera-facing
+            switch (axis) {
+                case 'x':
+                    faceNormal = cameraToObject.x > 0 ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3(-1, 0, 0);
+                    break;
+                case 'y':
+                    faceNormal = cameraToObject.y > 0 ? new THREE.Vector3(0, 1, 0) : new THREE.Vector3(0, -1, 0);
+                    break;
+                case 'z':
+                    faceNormal = cameraToObject.z > 0 ? new THREE.Vector3(0, 0, 1) : new THREE.Vector3(0, 0, -1);
+                    break;
+                default:
+                    console.warn('SupportMeshFactory: Invalid axis for face highlighting:', axis);
+                    return;
+            }
+        } else {
+            // Show positive side of axis regardless of camera
+            switch (axis) {
+                case 'x':
+                    faceNormal = new THREE.Vector3(1, 0, 0);
+                    break;
+                case 'y':
+                    faceNormal = new THREE.Vector3(0, 1, 0);
+                    break;
+                case 'z':
+                    faceNormal = new THREE.Vector3(0, 0, 1);
+                    break;
+                default:
+                    console.warn('SupportMeshFactory: Invalid axis for face highlighting:', axis);
+                    return;
+            }
+        }
+
+        // Create synthetic hit object for positioning
+        const syntheticHit = {
+            object: objectMesh,
+            face: { normal: faceNormal }
+        };
+
+        // Use existing positionFaceHighlightForHit logic
+        this.positionFaceHighlightForHit(faceHighlightMesh, syntheticHit);
+    }
+
+    /**
      * Show/hide support mesh by type
      */
     setSupportMeshVisibility(mainMesh, meshType, visible) {

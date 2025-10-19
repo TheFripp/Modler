@@ -1,22 +1,25 @@
 /**
  * Simple PostMessage Communication
  *
- * Replaces Phase 3 complexity (2,500 lines) with straightforward postMessage (~100 lines):
+ * SIMPLIFIED: Direct data extraction + inline computed properties
  * - Main → UI: ObjectEventBus events with COMPLETE data
  * - UI → Main: Commands routed to CommandRouter
  *
- * No adapters, bridges, protocols, validation, or circular detection needed.
- * Just simple, direct communication with complete data.
+ * Data Flow: SceneController → DataExtractor → Compute Props → postMessage
+ * NO intermediate serialization layers, NO transformation passes
  *
- * Part of: Communication Simplification (replaces Phase 3)
- * Version: 1.0.0
- * Date: 2025-10-13
+ * Part of: Communication Architecture Simplification
+ * Version: 2.0.0
+ * Date: 2025-10-16
  */
 
 class SimpleCommunication {
     constructor() {
         this.initialized = false;
-        this.iframes = null;
+
+        // Component references
+        this.sceneController = null;
+        this.dataExtractor = null;
 
         // Statistics for debugging
         this.stats = {
@@ -24,6 +27,17 @@ class SimpleCommunication {
             messagesReceived: 0,
             errors: 0
         };
+    }
+
+    /**
+     * Initialize component references
+     */
+    initializeComponents() {
+        if (!this.sceneController) {
+            this.sceneController = window.modlerComponents?.sceneController;
+            this.dataExtractor = window.DataExtractor;
+        }
+        return this.sceneController && this.dataExtractor;
     }
 
     /**
@@ -52,36 +66,45 @@ class SimpleCommunication {
      */
     initializeMainToUI() {
         const eventBus = window.objectEventBus;
-        const stateSerializer = window.stateSerializer;
 
         if (!eventBus) {
             console.error('SimpleCommunication: ObjectEventBus not available');
             return;
         }
 
-        if (!stateSerializer) {
-            console.error('SimpleCommunication: StateSerializer not available');
-            return;
-        }
-
-        // Subscribe to object events (geometry, material, transform changes)
-        eventBus.subscribe('object:*', (event) => {
-            this.handleObjectEvent(event, stateSerializer);
+        // Subscribe to selection events (object:selection)
+        eventBus.subscribe(eventBus.EVENT_TYPES.SELECTION, (event) => {
+            this.handleSelectionEvent(event);
         });
 
-        // Subscribe to selection events
-        eventBus.subscribe('selection:*', (event) => {
-            this.handleSelectionEvent(event, stateSerializer);
+        // Subscribe to hierarchy events (object:hierarchy)
+        eventBus.subscribe(eventBus.EVENT_TYPES.HIERARCHY, (event) => {
+            this.handleHierarchyEvent(event);
         });
 
-        // Subscribe to hierarchy events
-        eventBus.subscribe('hierarchy:*', (event) => {
-            this.handleHierarchyEvent(event, stateSerializer);
+        // Subscribe to object events (geometry, material, transform, lifecycle)
+        eventBus.subscribe(eventBus.EVENT_TYPES.GEOMETRY, (event) => {
+            this.handleObjectEvent(event);
+        });
+        eventBus.subscribe(eventBus.EVENT_TYPES.MATERIAL, (event) => {
+            this.handleObjectEvent(event);
+        });
+        eventBus.subscribe(eventBus.EVENT_TYPES.TRANSFORM, (event) => {
+            this.handleObjectEvent(event);
+        });
+        eventBus.subscribe(eventBus.EVENT_TYPES.LIFECYCLE, (event) => {
+            this.handleObjectEvent(event);
         });
 
-        // Subscribe to tool events
-        eventBus.subscribe('tool:*', (event) => {
+        // Subscribe to tool events (tool:state)
+        eventBus.subscribe(eventBus.EVENT_TYPES.TOOL_STATE, (event) => {
             this.handleToolEvent(event);
+        });
+
+        // Listen for panels-ready event to send initial hierarchy sync
+        // NOTE: This event fires late (200ms) - individual panels send their own ready messages earlier
+        window.addEventListener('modler:panels-ready', () => {
+            this.sendInitialHierarchySync();
         });
 
         console.log('✅ SimpleCommunication: Main → UI initialized');
@@ -104,8 +127,13 @@ class SimpleCommunication {
                     return;
                 }
 
-                // Ignore special UI panel ready messages (handled elsewhere)
+                // Handle UI panel ready messages - send initial state to newly loaded panel
                 if (type === 'ui-panel-ready' || type === 'left-panel-ready') {
+                    // Delegate to CommandRouter which has stateSerializer access
+                    const commandRouter = window.commandRouter;
+                    if (commandRouter) {
+                        commandRouter.execute({ action: type, ...data });
+                    }
                     return;
                 }
 
@@ -117,7 +145,8 @@ class SimpleCommunication {
                     commandRouter.execute({
                         action: type,
                         ...data,
-                        source: event.origin
+                        source: event.source,      // Pass window object for postMessage responses
+                        origin: event.origin        // Keep origin string for validation
                     });
                 }
 
@@ -131,19 +160,97 @@ class SimpleCommunication {
     }
 
     // ═══════════════════════════════════════════════════════════════
+    // DATA EXTRACTION & COMPUTED PROPERTIES
+    // ═══════════════════════════════════════════════════════════════
+
+    /**
+     * Get complete object data with computed properties
+     * Direct extraction + inline computed properties (NO transformation layers)
+     */
+    getCompleteObjectData(objectId) {
+        if (!this.initializeComponents()) return null;
+
+        const sceneObject = this.sceneController.getObject(objectId);
+        if (!sceneObject) return null;
+
+        // Direct extraction (no transformation)
+        const data = this.dataExtractor.extractSerializableData(sceneObject);
+        if (!data) return null;
+
+        // Add computed properties inline (simple lookups)
+        data.canHaveFillButtons = this.computeCanHaveFillButtons(sceneObject);
+        data.fillButtonStates = this.computeFillButtonStates(sceneObject);
+        data.isInLayoutMode = this.computeIsInLayoutMode(sceneObject);
+
+        return data;
+    }
+
+    /**
+     * Compute whether object can have fill buttons
+     * DEFINITION: Fill buttons available when object has parent in layout mode
+     */
+    computeCanHaveFillButtons(sceneObject) {
+        if (!sceneObject || sceneObject.isContainer || sceneObject.locked) {
+            return false;
+        }
+
+        if (!sceneObject.parentContainer) {
+            return false;
+        }
+
+        const parent = this.sceneController.getObject(sceneObject.parentContainer);
+        return parent && parent.autoLayout && parent.autoLayout.enabled;
+    }
+
+    /**
+     * Compute fill button states for each axis
+     * DEFINITION: Fill button active when layoutProperties[axis] === 'fill'
+     */
+    computeFillButtonStates(sceneObject) {
+        if (!sceneObject || !sceneObject.layoutProperties) {
+            return { x: false, y: false, z: false };
+        }
+
+        return {
+            x: sceneObject.layoutProperties.sizeX === 'fill',
+            y: sceneObject.layoutProperties.sizeY === 'fill',
+            z: sceneObject.layoutProperties.sizeZ === 'fill'
+        };
+    }
+
+    /**
+     * Compute whether object is in layout mode
+     * DEFINITION: Layout mode active when container AND autoLayout.enabled
+     */
+    computeIsInLayoutMode(sceneObject) {
+        return sceneObject && sceneObject.isContainer &&
+               sceneObject.autoLayout && sceneObject.autoLayout.enabled;
+    }
+
+    // ═══════════════════════════════════════════════════════════════
     // EVENT HANDLERS (Main → UI)
     // ═══════════════════════════════════════════════════════════════
 
     /**
      * Handle object change events
      */
-    handleObjectEvent(event, stateSerializer) {
-        const { objectId, eventType } = event.data;
+    handleObjectEvent(event) {
+        const objectId = event.objectId;
+        const eventType = event.eventType;
+        const changeData = event.changeData || {};
 
         if (!objectId) return;
 
+        // Special handling for deletion events
+        if (changeData.operation === 'deleted' || changeData.operation === 'created') {
+            // For deletions and creations, send a full hierarchy update instead
+            // because the object list structure has changed
+            this.handleHierarchyEvent(event);
+            return;
+        }
+
         // Get COMPLETE object data
-        const completeData = stateSerializer.getCompleteObjectData(objectId);
+        const completeData = this.getCompleteObjectData(objectId);
 
         if (!completeData) return;
 
@@ -161,19 +268,19 @@ class SimpleCommunication {
     /**
      * Handle selection change events
      */
-    handleSelectionEvent(event, stateSerializer) {
-        const { selectedObjectIds } = event.data;
+    handleSelectionEvent(event) {
+        const { selectedObjectIds } = event.changeData || {};
 
         // Get COMPLETE data for all selected objects
-        const selectedObjects = selectedObjectIds
-            .map(id => stateSerializer.getCompleteObjectData(id))
+        const selectedObjects = (selectedObjectIds || [])
+            .map(id => this.getCompleteObjectData(id))
             .filter(Boolean);
 
         // Send to all UI iframes
         this.sendToAllIframes({
             type: 'selection-changed',
             data: {
-                selectedObjectIds,
+                selectedObjectIds: selectedObjectIds || [],
                 selectedObjects // COMPLETE data for each!
             }
         });
@@ -182,9 +289,11 @@ class SimpleCommunication {
     /**
      * Handle hierarchy change events
      */
-    handleHierarchyEvent(event, stateSerializer) {
+    handleHierarchyEvent(event) {
+        if (!this.initializeComponents()) return;
+
         // Get COMPLETE hierarchy tree
-        const hierarchyTree = stateSerializer.getCompleteHierarchy();
+        const hierarchyTree = this.getCompleteHierarchy();
 
         // Send to all UI iframes
         this.sendToAllIframes({
@@ -196,16 +305,53 @@ class SimpleCommunication {
     }
 
     /**
+     * Get complete hierarchy as FLAT array
+     *
+     * CRITICAL: ObjectTree builds the tree structure itself using parentContainer references.
+     * We send ALL objects as a flat array, not a nested tree.
+     */
+    getCompleteHierarchy() {
+        if (!this.initializeComponents()) return [];
+
+        // Get ALL objects as flat array
+        const allObjects = this.sceneController.getAllObjects();
+
+        // Map to basic object data (includes parentContainer for tree building)
+        const hierarchy = allObjects
+            .map(obj => this.dataExtractor.extractBasicData(obj))
+            .filter(Boolean);
+
+        return hierarchy;
+    }
+
+    /**
      * Handle tool change events
      */
     handleToolEvent(event) {
-        const { toolId, state } = event.data;
+        const { toolName, active, toolState } = event.changeData || {};
 
         this.sendToAllIframes({
             type: 'tool-changed',
             data: {
-                toolId,
-                state
+                toolName,
+                active,
+                toolState
+            }
+        });
+    }
+
+    /**
+     * Send initial hierarchy sync when panels are ready
+     */
+    sendInitialHierarchySync() {
+        if (!this.initializeComponents()) return;
+
+        const hierarchyTree = this.getCompleteHierarchy();
+
+        this.sendToAllIframes({
+            type: 'hierarchy-changed',
+            data: {
+                hierarchy: hierarchyTree
             }
         });
     }
@@ -219,12 +365,11 @@ class SimpleCommunication {
      */
     sendToAllIframes(message) {
         try {
-            // Cache iframe references
-            if (!this.iframes) {
-                this.iframes = document.querySelectorAll('iframe');
-            }
+            // CRITICAL: Query iframes dynamically each time, not cached!
+            // Iframes are created asynchronously after SimpleCommunication initialization
+            const iframes = document.querySelectorAll('iframe');
 
-            this.iframes.forEach(iframe => {
+            iframes.forEach(iframe => {
                 if (iframe.contentWindow) {
                     iframe.contentWindow.postMessage(message, '*');
                 }

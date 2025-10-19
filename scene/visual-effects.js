@@ -9,7 +9,9 @@ class VisualEffects {
         this.currentHighlight = null;
         this.highlightMesh = null;
         this.rectanglePreview = null;
-        this.axisHighlightMesh = null; // Reusable axis highlight mesh (create once)
+
+        // Button highlight coordination - prevents tool hover from clearing button-triggered highlights
+        this.isButtonHighlight = false;
 
         // Use injected factories (Phase 1 - Factory Consolidation)
         // Fallback to new instances for backward compatibility during transition
@@ -112,9 +114,13 @@ class VisualEffects {
 
         // CREATE ONCE ARCHITECTURE: Use pre-created support meshes if available
         const targetObject = this.getContainerTarget(hit.object);
-        if (!targetObject) return false;
+
+        if (!targetObject) {
+            return false;
+        }
 
         const supportMeshes = targetObject.userData?.supportMeshes;
+
         if (supportMeshes?.faceHighlight) {
             const supportMeshFactory = window.modlerComponents?.supportMeshFactory;
             if (supportMeshFactory) {
@@ -124,7 +130,6 @@ class VisualEffects {
             this.highlightMesh = supportMeshes.faceHighlight;
         } else {
             // ARCHITECTURE: Support mesh system required - no legacy fallback
-            console.warn('Object missing support meshes - cannot show face highlight:', targetObject.name);
             return false;
         }
 
@@ -138,64 +143,13 @@ class VisualEffects {
         return true;
     }
 
-    showAxisFaceHighlight(axis) {
-        const selectionController = window.modlerComponents?.selectionController;
-        if (!selectionController) return false;
-
-        const selectedObjects = selectionController.getSelectedObjects();
-        if (selectedObjects.length === 0) return false;
-
-        const selectedObject = selectedObjects[0];
-        if (!selectedObject?.geometry) return false;
-
-        this.clearHighlight();
-
-        const faceGeometry = this.createAxisFacesGeometry(selectedObject, axis);
-        if (!faceGeometry) return false;
-
-        // Use configuration for axis highlighting
-        const configManager = window.modlerComponents?.configurationManager;
-        const axisColor = configManager?.get('visual.effects.axisHighlight.color') || '#00ff88';
-        const axisOpacity = configManager?.get('visual.effects.axisHighlight.opacity') || 0.3;
-
-        // ARCHITECTURE: Create axis highlight mesh once, reuse it
-        if (!this.axisHighlightMesh) {
-            const axisMaterial = this.materialManager.createAxisHighlightMaterial({
-                color: axisColor,
-                opacity: axisOpacity
-            });
-            this.axisHighlightMesh = this.resourcePool.getMeshHighlight(faceGeometry, axisMaterial);
-
-            const scene = window.modlerComponents?.scene;
-            if (scene) {
-                scene.add(this.axisHighlightMesh);
-            }
-        } else {
-            // Reuse existing mesh, update geometry
-            if (this.axisHighlightMesh.geometry !== faceGeometry) {
-                // Return old geometry to pool
-                this.geometryFactory.returnGeometry(this.axisHighlightMesh.geometry, 'face');
-                this.axisHighlightMesh.geometry = faceGeometry;
-            }
+    clearHighlight() {
+        // BUTTON HIGHLIGHT COORDINATION: Don't clear if button highlight is active
+        // Button-triggered highlights (from properties panel) take priority over tool hover highlights
+        if (this.isButtonHighlight) {
+            return;
         }
 
-        // Update transform to match object
-        this.axisHighlightMesh.position.copy(selectedObject.position);
-        this.axisHighlightMesh.rotation.copy(selectedObject.rotation);
-        this.axisHighlightMesh.scale.copy(selectedObject.scale);
-        this.axisHighlightMesh.visible = true;
-
-        this.highlightMesh = this.axisHighlightMesh;
-        this.currentHighlight = {
-            object: selectedObject,
-            axis: axis,
-            type: 'axis'
-        };
-
-        return true;
-    }
-
-    clearHighlight() {
         if (this.highlightMesh) {
             // Check if this is a pre-created support mesh
             let isPreCreatedMesh = false;
@@ -206,12 +160,6 @@ class VisualEffects {
                     supportMeshes.faceHighlight.visible = false;
                     isPreCreatedMesh = true;
                 }
-            }
-
-            // Check if this is the reusable axis highlight mesh
-            if (this.highlightMesh === this.axisHighlightMesh) {
-                this.axisHighlightMesh.visible = false;
-                isPreCreatedMesh = true; // Don't dispose, keep for reuse
             }
 
             // Clean up legacy highlight if not pre-created
@@ -235,6 +183,15 @@ class VisualEffects {
 
         this.currentHighlight = null;
         this.clearRectanglePreview();
+    }
+
+    /**
+     * Set button highlight mode
+     * When enabled, prevents tool hover from clearing button-triggered highlights
+     * @param {boolean} enabled - True to enable button highlight mode, false to disable
+     */
+    setButtonHighlight(enabled) {
+        this.isButtonHighlight = enabled;
     }
 
     // ===== GEOMETRY CREATION =====

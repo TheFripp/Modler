@@ -154,6 +154,8 @@
                 if (panelCommunication) {
                     settingsHandler.initialize(panelCommunication);
                 }
+                // Register in modlerComponents for CommandRouter access
+                window.modlerComponents.settingsHandler = settingsHandler;
             } else {
                 console.warn('⚠️ SettingsHandler not loaded - settings management will be limited');
             }
@@ -495,47 +497,9 @@
             });
         });
 
-        objectStateManager.addEventListener('selection-changed', (event) => {
-            const { selection } = event.detail;
-
-            // Retrieve full object data for selected objects
-            const selectedObjectsData = selection.map(objectId => {
-                const objectData = objectStateManager.getObject(objectId);
-                if (!objectData) {
-                    console.warn(`⚠️ Object ${objectId} not found in ObjectStateManager`);
-                    return null;
-                }
-                return objectData;
-            }).filter(Boolean);
-
-            // Get current hierarchy from SceneController (single source of truth)
-            const sceneController = window.modlerComponents?.sceneController;
-            const hierarchy = sceneController ? sceneController.getAllObjects() : [];
-
-            // Serialize hierarchy for PostMessage (remove circular references)
-            const ObjectDataFormat = window.ObjectDataFormat;
-            const postMessageHierarchy = hierarchy.map(obj =>
-                ObjectDataFormat ? ObjectDataFormat.serializeForPostMessage(obj) : obj
-            ).filter(Boolean);
-
-            // Get PostMessage-ready data directly from ObjectStateManager
-            const postMessageSelectedObjects = selectedObjectsData.map(obj =>
-                objectStateManager.getObjectForPostMessage ?
-                objectStateManager.getObjectForPostMessage(obj.id) : obj
-            ).filter(Boolean);
-
-            // Notify UI systems with standard format data
-            notifyUISystems({
-                type: 'data-update',
-                data: {
-                    selectedObjects: postMessageSelectedObjects,
-                    objectHierarchy: postMessageHierarchy,
-                    updateType: 'selection-change'
-                }
-            });
-
-            // Selection update sent to UI (logging removed to reduce console noise)
-        });
+        // NOTE: Legacy selection-changed CustomEvent listener REMOVED
+        // SimpleCommunication now handles all selection events through ObjectEventBus
+        // This eliminates duplicate selection-changed messages
     }
 
     /**
@@ -565,14 +529,10 @@
         // NOTE: Phase 3 - Selection events are now handled by MainAdapter
         // MainAdapter subscribes to object:selection events and routes them to UIAdapter
         // This legacy listener is kept only for ObjectStateManager sync
-        window.objectEventBus.subscribe('object:selection', (event) => {
-            // Sync selection state to ObjectStateManager
-            // MainAdapter handles UI communication separately
-            if (event.changeData.selectedObjectIds) {
-                // Phase 3 format: consolidated selection event with all IDs
-                objectStateManager.setSelection(event.changeData.selectedObjectIds);
-            }
-        });
+        // SimpleCommunication: Selection events handled by SimpleCommunication
+        // DO NOT re-call setSelection() here - causes infinite loop!
+        // SelectionController → ObjectStateManager.setSelection() → ObjectEventBus.emit()
+        // → SimpleCommunication handles UI updates
 
         // Listen to property change events for comprehensive UI updates
         window.objectEventBus.subscribe('object:property-changed', (event) => {
@@ -693,197 +653,24 @@
                 return;
             }
 
-            const { type, data } = event.data;
+            const { type, ...data } = event.data;
 
-            // SCHEMA VALIDATION: Validate incoming message against protocol schema
-            if (window.messageProtocolValidator) {
-                const validation = window.messageProtocolValidator.validate(
-                    type,
-                    data,
-                    window.MESSAGE_DIRECTION.UI_TO_MAIN
-                );
-
-                if (!validation.isValid) {
-                    console.error('❌ PostMessage validation failed:', {
-                        type: type,
-                        errors: validation.errors,
-                        data: data
-                    });
-                    // Log to stats but continue processing (graceful degradation)
-                    // In production, you might want to reject invalid messages entirely
-                }
-            }
+            // NOTE: SimpleCommunication already handles UI → Main messages via CommandRouter
+            // This listener only handles legacy messages not yet migrated (settings, file manager)
 
             switch (type) {
                 case 'ui-panel-ready':
                 case 'left-panel-ready':
-                    // UI panel is ready - send initial state now
-                    const mainAdapter = window.modlerComponents?.communicationBridge?.mainAdapter;
-                    if (mainAdapter && mainAdapter.sendInitialState) {
-                        mainAdapter.sendInitialState();
-                    }
+                    // SimpleCommunication: Initial state sent automatically via ObjectEventBus subscriptions
+                    // No action needed - SimpleCommunication handles this
                     break;
-                case 'object-select':
-                    // Handle object selection from UI list
-                    const sceneController = window.modlerComponents?.sceneController;
-                    const selectionController = window.modlerComponents?.selectionController;
-                    const navigationController = window.modlerComponents?.navigationController;
-
-                    if (data.useNavigationController && navigationController) {
-                        // Use NavigationController for container-aware selection
-                        const objectData = sceneController.getObject(data.objectId);
-
-                        if (objectData) {
-                            if (objectData.isContainer) {
-                                // Container selected: select without stepping in
-                                if (selectionController && objectData.mesh) {
-                                    if (!data.isShiftClick) {
-                                        selectionController.clearSelection();
-                                    }
-                                    selectionController.select(objectData.mesh);
-                                }
-                            } else if (objectData.parentContainer) {
-                                // Child object: step into parent container and select child
-                                navigationController.navigateToObject(data.objectId, {
-                                    addToSelection: data.isShiftClick
-                                });
-                            } else {
-                                // Root-level object: navigate to object
-                                navigationController.navigateToObject(data.objectId, {
-                                    addToSelection: data.isShiftClick
-                                });
-                            }
-                        }
-                    } else if (sceneController && selectionController) {
-                        // Fallback to direct selection
-                        const objectData = sceneController.getObject(data.objectId);
-                        if (objectData && objectData.mesh) {
-                            // Clear current selection and select the object (unless shift-click)
-                            if (!data.isShiftClick) {
-                                selectionController.clearSelection();
-                            }
-                            selectionController.select(objectData.mesh);
-                        }
-                    }
-                    break;
-                case 'property-update':
-                    handlePropertyUpdate(data.objectId, data.property, data.value, data.source);
-                    break;
-                case 'tool-activation':
-                    activateTool(data.toolName);
-                    break;
-                case 'tool-switch':
-                    activateTool(data.toolName);
-                    break;
-                case 'clear-selection':
-                    window.modlerComponents?.selectionController?.clearSelection();
-                    break;
-                case 'create-layout-container':
-                    const toolController = window.modlerComponents?.toolController;
-                    if (toolController) {
-                        toolController.createLayoutContainer();
-                    }
-                    break;
-                case 'undo':
-                    const undoToolController = window.modlerComponents?.toolController;
-                    if (undoToolController) {
-                        undoToolController.undo();
-                    }
-                    break;
-                case 'redo':
-                    const redoToolController = window.modlerComponents?.toolController;
-                    if (redoToolController) {
-                        redoToolController.redo();
-                    }
-                    break;
-                case 'duplicate-object':
-                    handleDuplicateObject();
-                    break;
-                case 'delete-selected':
-                    const deleteToolController = window.modlerComponents?.toolController;
-                    if (deleteToolController) {
-                        deleteToolController.deleteSelectedObjects();
-                    }
-                    break;
-                case 'snap-toggle':
-                    handleSnapToggle();
-                    break;
-                case 'fill-button-check':
-                    handleFillButtonCheck(event.source, data.objectId);
-                    break;
-                case 'fill-button-toggle':
-                    handleFillButtonToggle(event.source, data.objectId, data.axis);
-                    break;
-                case 'fill-button-get-states':
-                    handleFillButtonGetStates(event.source, data.objectId);
-                    break;
-                case 'check-layout-mode':
-                    handleCheckLayoutMode(event.source, data.objectId);
-                    break;
-                case 'cad-wireframe-settings-changed':
-                    settingsHandler?.handleCadWireframeSettingsUpdate(data.settings);
-                    break;
-                case 'get-cad-wireframe-settings':
-                    settingsHandler?.handleGetCadWireframeSettings(event.source);
-                    break;
-                case 'visual-settings-changed':
-                    settingsHandler?.handleVisualSettingsUpdate(data.settings);
-                    break;
-                case 'get-visual-settings':
-                    settingsHandler?.handleGetVisualSettings(event.source);
-                    break;
-                case 'scene-settings-changed':
-                    settingsHandler?.handleSceneSettingsUpdate(data.settings);
-                    break;
-                case 'get-scene-settings':
-                    settingsHandler?.handleGetSceneSettings(event.source);
-                    break;
-                case 'interface-settings-changed':
-                    settingsHandler?.handleInterfaceSettingsUpdate(data.settings);
-                    break;
-                case 'get-interface-settings':
-                    settingsHandler?.handleGetInterfaceSettings(event.source);
-                    break;
-                case 'object-move-to-container':
-                case 'object-container-move-to-container':
-                    handleMoveToContainer(data.objectId, data.targetContainerId);
-                    break;
-                case 'object-move-to-root':
-                    handleMoveToRoot(data.objectId);
-                    break;
-                case 'request-hierarchy-refresh':
-                    // Phase 3: MainAdapter listens to ObjectEventBus and sends hierarchy updates automatically
-                    // No manual refresh needed
-                    break;
-                case 'object-reorder':
-                    handleObjectReorder(data.objectId, data.targetId, data.position, data.parentId);
-                    break;
-                case 'fill-button-hover':
-                    handleFillButtonHover(data.objectId, data.axis, data.isHovering);
-                    break;
-                case 'layout-button-hover':
-                    handleLayoutButtonHover(data.objectId, data.axis, data.isHovering);
-                    break;
-                case 'reverse-child-order':
-                    handleReverseChildOrder(data.objectId);
-                    break;
-                case 'create-tiled-container':
-                    handleCreateTiledContainer(data.objectId, data.axis, data.repeat, data.gap);
-                    break;
-                case 'request-file-manager-ready':
-                    // UI requesting FileManager ready state
-                    const fileManagerHandler = window.modlerComponents?.fileManagerHandler;
-                    if (fileManagerHandler) {
-                        fileManagerHandler.handleRequestFileManagerReady(event.source);
-                    }
-                    break;
-                case 'file-manager-request':
-                    // File operation request from UI
-                    const fmHandler = window.modlerComponents?.fileManagerHandler;
-                    if (fmHandler) {
-                        fmHandler.handleFileRequest(data, event.source);
-                    }
-                    break;
+                // NOTE: All settings handlers now routed through SimpleCommunication → CommandRouter
+                // Removed duplicate handlers to prevent race conditions:
+                // - cad-wireframe-settings-changed, get-cad-wireframe-settings
+                // - visual-settings-changed, get-visual-settings
+                // - scene-settings-changed, get-scene-settings
+                // - interface-settings-changed, get-interface-settings
+                // - file-manager-request, request-file-manager-ready
             }
         });
 
@@ -902,6 +689,13 @@
 
     /**
      * Notify UI systems of state changes (throttled)
+     *
+     * TODO (SimpleCommunication): This function is REDUNDANT in iframe mode.
+     * - SimpleCommunication already handles Main → UI via ObjectEventBus subscriptions
+     * - DirectComponentManager is only for direct-mounted components (non-iframe mode)
+     * - In production, all panels are iframes → SimpleCommunication handles everything
+     *
+     * NEXT STEP: Remove this function and all notifyUISystems() calls once verified
      */
     function notifyUISystems(message) {
         // Throttle rapid updates to prevent spam
@@ -1040,474 +834,17 @@
         historyManager.executeCommand(command);
     }
 
-    /**
-     * Handle fill button visibility check from PropertyPanel
-     */
-    function handleFillButtonCheck(source, objectId) {
-        const propertyManager = window.modlerComponents?.propertyManager;
-        if (!propertyManager) {
-            source.postMessage({ type: 'fill-button-check-response', data: { shouldShow: false } }, '*');
-            return;
-        }
+    // Phase 3 fill button handlers removed - now handled by CommandRouter → PropertyUpdateHandler
 
-        const shouldShow = propertyManager.isInLayoutContainer(objectId);
-        source.postMessage({ type: 'fill-button-check-response', data: { objectId, shouldShow } }, '*');
-    }
+    // handleCreateTiledContainer removed - now handled by CommandRouter
 
-    /**
-     * Handle fill button state request from PropertyPanel
-     */
-    function handleFillButtonGetStates(source, objectId) {
-        const propertyManager = window.modlerComponents?.propertyManager;
-        if (!propertyManager) {
-            source.postMessage({ type: 'fill-button-states-response', data: { states: {} } }, '*');
-            return;
-        }
+    // handleMoveToContainer and handleMoveToRoot removed - now handled by CommandRouter
 
-        const states = {
-            x: propertyManager.isAxisFilled(objectId, 'x'),
-            y: propertyManager.isAxisFilled(objectId, 'y'),
-            z: propertyManager.isAxisFilled(objectId, 'z')
-        };
-        source.postMessage({ type: 'fill-button-states-response', data: { objectId, states } }, '*');
-    }
+    // handleObjectReorder removed - now handled by CommandRouter
 
-    /**
-     * Handle fill button toggle from PropertyPanel
-     */
-    function handleFillButtonToggle(source, objectId, axis) {
-        const propertyManager = window.modlerComponents?.propertyManager;
-        if (!propertyManager) return;
+    // handleCheckLayoutMode removed - layout mode now provided automatically by StateSerializer
 
-        // Toggle the fill property
-        propertyManager.toggleFillProperty(axis);
-
-        // Send updated states back to UI after a brief delay to allow layout update to complete
-        setTimeout(() => {
-            const states = {
-                x: propertyManager.isAxisFilled(objectId, 'x'),
-                y: propertyManager.isAxisFilled(objectId, 'y'),
-                z: propertyManager.isAxisFilled(objectId, 'z')
-            };
-            source.postMessage({ type: 'fill-button-states-response', data: { objectId, states } }, '*');
-        }, 50);
-    }
-
-    /**
-     * Handle tile container creation from PropertyPanel
-     */
-    function handleCreateTiledContainer(objectId, axis, repeat, gap) {
-        const toolController = window.modlerComponents?.toolController;
-        if (!toolController) {
-            console.error('❌ ToolController not available for tile creation');
-            return;
-        }
-
-        const tileTool = toolController.tools.get('tile');
-        if (!tileTool) {
-            console.error('❌ TileTool not registered');
-            return;
-        }
-
-        // Create tiled container using tile tool
-        tileTool.createTiledContainer({ axis, repeat, gap });
-    }
-
-    /**
-     * Handle moving object to container (drag and drop)
-     */
-    function handleMoveToContainer(objectId, targetContainerId) {
-        const sceneController = window.modlerComponents?.sceneController;
-        if (!sceneController) {
-            console.warn('❌ SceneController not available for move operation');
-            return;
-        }
-
-        // Get the object and target container
-        const objectData = sceneController.getObject(objectId);
-        const targetContainer = sceneController.getObject(targetContainerId);
-
-        if (!objectData || !targetContainer) {
-            console.warn('❌ Object or target container not found:', { objectId, targetContainerId });
-            return;
-        }
-
-        if (!targetContainer.isContainer) {
-            console.warn('❌ Target is not a container:', targetContainerId);
-            return;
-        }
-
-        // Use ObjectStateManager to move the object (proper event flow)
-        // SceneController.setParentContainer handles layout updates automatically
-        const objectStateManager = window.modlerComponents?.objectStateManager;
-        if (objectStateManager) {
-            objectStateManager.updateObject(objectId, {
-                parentContainer: targetContainerId
-            });
-        } else {
-            // Fallback to direct scene controller (shouldn't happen)
-            sceneController.setParentContainer(objectId, targetContainerId, true);
-        }
-
-        // After moving to container, select the object and navigate into the container
-        const navigationController = window.modlerComponents?.navigationController;
-        const selectionController = window.modlerComponents?.selectionController;
-
-        if (navigationController && selectionController) {
-            // Navigate into the container
-            navigationController.navigateToContainer(targetContainerId);
-
-            // Select the moved object
-            const movedObjectMesh = sceneController.getObject(objectId)?.mesh;
-            if (movedObjectMesh) {
-                selectionController.clearSelection();
-                selectionController.select(movedObjectMesh);
-            }
-        }
-    }
-
-    /**
-     * Handle moving object to root level (drag and drop)
-     */
-    function handleMoveToRoot(objectId) {
-        const sceneController = window.modlerComponents?.sceneController;
-        if (!sceneController) {
-            console.warn('❌ SceneController not available for move operation');
-            return;
-        }
-
-        // Get the object
-        const objectData = sceneController.getObject(objectId);
-        if (!objectData) {
-            console.warn('❌ Object not found:', objectId);
-            return;
-        }
-
-        // Use ObjectStateManager to move the object to root (proper event flow)
-        // SceneController.setParentContainer handles layout updates automatically
-        const objectStateManager = window.modlerComponents?.objectStateManager;
-        if (objectStateManager) {
-            objectStateManager.updateObject(objectId, {
-                parentContainer: null
-            });
-        } else {
-            // Fallback to direct scene controller (shouldn't happen)
-            sceneController.setParentContainer(objectId, null, true);
-        }
-    }
-
-    /**
-     * Handle reordering objects within a container or at root
-     */
-    function handleObjectReorder(objectId, targetId, position, parentId) {
-        const sceneController = window.modlerComponents?.sceneController;
-        if (!sceneController) {
-            console.warn('❌ SceneController not available for reorder operation');
-            return;
-        }
-
-        const draggedObj = sceneController.getObject(objectId);
-
-        // Get the parent's children array
-        let childrenArray;
-        if (parentId) {
-            const parent = sceneController.getObject(parentId);
-            if (!parent || !parent.isContainer) {
-                console.warn('❌ Parent container not found or invalid:', parentId);
-                return;
-            }
-            // Get or initialize childrenOrder array
-            if (!parent.childrenOrder || !Array.isArray(parent.childrenOrder)) {
-                // Initialize from current children
-                const currentChildren = sceneController.getChildObjects(parentId);
-                parent.childrenOrder = currentChildren.map(child => child.id);
-            }
-            childrenArray = [...parent.childrenOrder];
-        } else {
-            // Root level - use rootChildrenOrder
-            // Always rebuild from current root objects to ensure consistency
-            const currentRootObjects = Array.from(sceneController.objects.values())
-                .filter(obj => !obj.parentContainer)
-                .map(obj => obj.id);
-
-            // Initialize rootChildrenOrder if needed, otherwise verify it's up-to-date
-            if (!sceneController.rootChildrenOrder || !Array.isArray(sceneController.rootChildrenOrder)) {
-                sceneController.rootChildrenOrder = currentRootObjects;
-            } else {
-                // Add any new root objects that aren't in the order array
-                currentRootObjects.forEach(id => {
-                    if (!sceneController.rootChildrenOrder.includes(id)) {
-                        sceneController.rootChildrenOrder.push(id);
-                    }
-                });
-            }
-
-            childrenArray = [...sceneController.rootChildrenOrder];
-        }
-
-        // Find current indices
-        const draggedIndex = childrenArray.indexOf(objectId);
-        const targetIndex = childrenArray.indexOf(targetId);
-
-        if (targetIndex === -1) {
-            console.warn('❌ Target object not found in children array');
-            console.warn('   Target ID:', targetId);
-            console.warn('   Children array:', childrenArray);
-            console.warn('   All root objects:', Array.from(sceneController.objects.values())
-                .filter(obj => !obj.parentContainer)
-                .map(obj => obj.id));
-            return;
-        }
-
-        // If dragged object is not in the array, it's being moved from another parent
-        // In this case, we need to update its parentContainer first
-        if (draggedIndex === -1 && draggedObj) {
-            // Object is being moved from a different parent
-            // First, update its parent
-            const objectStateManager = window.modlerComponents?.objectStateManager;
-            if (objectStateManager) {
-                objectStateManager.updateObject(objectId, {
-                    parentContainer: parentId
-                });
-            } else {
-                sceneController.setParentContainer(objectId, parentId, true);
-            }
-
-            // Add to the new parent's order array
-            childrenArray.push(objectId);
-        } else if (draggedIndex !== -1) {
-            // Object is already in this parent, just remove it for reordering
-            childrenArray.splice(draggedIndex, 1);
-        } else {
-            console.warn('❌ Dragged object not found');
-            return;
-        }
-
-        // Calculate new index
-        let newIndex = targetIndex;
-        if (draggedIndex !== -1 && draggedIndex < targetIndex) {
-            // Dragged from before target, adjust for removal
-            newIndex--;
-        }
-
-        if (position === 'after') {
-            newIndex++;
-        }
-
-        // Insert at new position
-        childrenArray.splice(newIndex, 0, objectId);
-
-        // Update stored order
-        if (parentId) {
-            const parent = sceneController.getObject(parentId);
-
-            // CRITICAL: Store the new order in the parent container
-            parent.childrenOrder = childrenArray;
-
-            if (parent && parent.mesh) {
-                // Reorder children in Three.js parent
-                const childMesh = sceneController.getObject(objectId)?.mesh;
-                if (childMesh) {
-                    // Remove and re-add at correct position
-                    parent.mesh.remove(childMesh);
-                    parent.mesh.children.splice(newIndex, 0, childMesh);
-                    parent.mesh.add(childMesh);
-                }
-            }
-
-            // Trigger layout update if parent has layout enabled
-            const parentObj = sceneController.getObject(parentId);
-            if (parentObj && parentObj.autoLayout && parentObj.autoLayout.enabled) {
-                sceneController.updateLayout(parentId);
-            }
-        } else {
-            // Root level - store the new order
-            sceneController.rootChildrenOrder = childrenArray;
-
-            // Reorder in Three.js scene
-            const objectMesh = sceneController.getObject(objectId)?.mesh;
-            if (objectMesh) {
-                // Remove and re-add at correct position in scene
-                sceneController.scene.remove(objectMesh);
-                sceneController.scene.children.splice(newIndex, 0, objectMesh);
-                sceneController.scene.add(objectMesh);
-            }
-        }
-
-        // Phase 3: UI refresh happens automatically via ObjectEventBus → MainAdapter
-    }
-
-    /**
-     * Check if object is in a layout-enabled container
-     */
-    function handleCheckLayoutMode(source, objectId) {
-        const sceneController = window.modlerComponents?.sceneController;
-        if (!sceneController) {
-            source.postMessage({
-                type: 'layout-mode-response',
-                data: { objectId, inLayoutMode: false }
-            }, '*');
-            return;
-        }
-
-        const objectData = sceneController.getObject(objectId);
-        let inLayoutMode = false;
-
-        if (objectData && objectData.parentContainer) {
-            const container = sceneController.getObject(objectData.parentContainer);
-            // EXPLICIT CHECK: Only true if enabled is exactly true
-            // This prevents falsy values or undefined from being treated as enabled
-            inLayoutMode = container?.autoLayout?.enabled === true;
-        }
-
-        source.postMessage({
-            type: 'layout-mode-response',
-            data: { objectId, inLayoutMode }
-        }, '*');
-    }
-
-    /**
-     * Handle fill button hover - show/hide face highlight
-     * Uses see-through rendering so highlights are visible even when occluded
-     */
-    function handleFillButtonHover(objectId, axis, isHovering) {
-        const sceneController = window.modlerComponents?.sceneController;
-        const visualizationManager = window.modlerComponents?.visualizationManager;
-
-        if (!sceneController || !visualizationManager) {
-            return;
-        }
-
-        const objectData = sceneController.getObject(objectId);
-        if (!objectData || !objectData.mesh) {
-            return;
-        }
-
-        const supportMeshes = objectData.mesh.userData?.supportMeshes;
-        if (!supportMeshes?.faceHighlight) {
-            return;
-        }
-
-        if (isHovering) {
-            // Create a synthetic face for the axis
-            // Face normal points along the axis (positive direction)
-            const normal = new THREE.Vector3();
-            if (axis === 'x') normal.set(1, 0, 0);
-            else if (axis === 'y') normal.set(0, 1, 0);
-            else if (axis === 'z') normal.set(0, 0, 1);
-
-            const face = { normal };
-
-            // Enable see-through rendering for fill button highlights
-            // This allows highlights to be visible even when occluded by other objects
-            if (supportMeshes.faceHighlight.material) {
-                supportMeshes.faceHighlight.material.depthTest = false;
-                supportMeshes.faceHighlight.material.renderOrder = 1001; // Render after other highlights
-            }
-
-            // Show face highlight using visualization manager
-            visualizationManager.getVisualizerFor(objectData.mesh)?.showFaceHighlight(objectData.mesh, face);
-        } else {
-            // Restore normal depth testing when hiding
-            if (supportMeshes.faceHighlight.material) {
-                supportMeshes.faceHighlight.material.depthTest = true;
-                supportMeshes.faceHighlight.material.renderOrder = 1000;
-            }
-
-            // Hide face highlight
-            const face = { normal: new THREE.Vector3() }; // Dummy face for hide
-            visualizationManager.getVisualizerFor(objectData.mesh)?.hideFaceHighlight(objectData.mesh, face);
-        }
-    }
-
-    function handleLayoutButtonHover(objectId, axis, isHovering) {
-        const sceneController = window.modlerComponents?.sceneController;
-        const visualizationManager = window.modlerComponents?.visualizationManager;
-
-        if (!sceneController || !visualizationManager) {
-            return;
-        }
-
-        const objectData = sceneController.getObject(objectId);
-        if (!objectData || !objectData.mesh) {
-            return;
-        }
-
-        const supportMeshes = objectData.mesh.userData?.supportMeshes;
-        if (!supportMeshes?.faceHighlight) {
-            return;
-        }
-
-        if (isHovering) {
-            // Create synthetic faces for both positive and negative directions of the axis
-            const normal = new THREE.Vector3();
-            if (axis === 'x') normal.set(1, 0, 0);
-            else if (axis === 'y') normal.set(0, 1, 0);
-            else if (axis === 'z') normal.set(0, 0, 1);
-
-            const face = { normal };
-
-            // Enable see-through rendering for layout button highlights
-            if (supportMeshes.faceHighlight.material) {
-                supportMeshes.faceHighlight.material.depthTest = false;
-                supportMeshes.faceHighlight.material.renderOrder = 1001;
-            }
-
-            // Show face highlight using visualization manager
-            visualizationManager.getVisualizerFor(objectData.mesh)?.showFaceHighlight(objectData.mesh, face);
-        } else {
-            // Restore normal depth testing when hiding
-            if (supportMeshes.faceHighlight.material) {
-                supportMeshes.faceHighlight.material.depthTest = true;
-                supportMeshes.faceHighlight.material.renderOrder = 1000;
-            }
-
-            // Hide face highlight
-            const face = { normal: new THREE.Vector3() };
-            visualizationManager.getVisualizerFor(objectData.mesh)?.hideFaceHighlight(objectData.mesh, face);
-        }
-    }
-
-    function handleReverseChildOrder(objectId) {
-        const sceneController = window.modlerComponents?.sceneController;
-        const objectStateManager = window.modlerComponents?.objectStateManager;
-
-        if (!sceneController || !objectStateManager) {
-            console.warn('⚠️ SceneController or ObjectStateManager not available');
-            return;
-        }
-
-        const containerData = sceneController.getObject(objectId);
-        if (!containerData || !containerData.isContainer) {
-            console.warn('⚠️ Object is not a container:', objectId);
-            return;
-        }
-
-        // Get current childrenOrder array
-        const childrenOrder = containerData.childrenOrder;
-        if (!childrenOrder || childrenOrder.length === 0) {
-            console.warn('⚠️ Container has no children to reverse');
-            return;
-        }
-
-        // Reverse the order
-        const reversedOrder = [...childrenOrder].reverse();
-
-        // Update the container data directly in SceneController
-        containerData.childrenOrder = reversedOrder;
-
-        // Notify ObjectStateManager of the change
-        objectStateManager.updateObject(objectId, {
-            childrenOrder: reversedOrder
-        });
-
-        // Update layout if enabled (this will use the updated childrenOrder)
-        if (containerData.autoLayout?.enabled) {
-            sceneController.updateLayout(objectId);
-        }
-
-        console.log('✅ Reversed child order for container:', objectId, reversedOrder);
-    }
+    // handleFillButtonHover, handleLayoutButtonHover, handleReverseChildOrder removed - now handled by CommandRouter
 
     /**
      * Send tool state update to all panels

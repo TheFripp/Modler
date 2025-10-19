@@ -12,8 +12,7 @@
 	import LayoutSection from '$lib/components/property-sections/LayoutSection.svelte';
 	import TileSection from '$lib/components/property-sections/TileSection.svelte';
 
-	// Phase 3: Initialize store bridge for direct mounting
-	import '$lib/bridge/store-bridge-init';
+	// SimpleCommunication: No bridge initialization needed
 
 	// Unit system state
 	let currentUnit = 'm';
@@ -73,18 +72,18 @@
 	function createTiledContainer() {
 		if (!tileAxis || tileRepeat < 2 || !$displayObject) return;
 
-		// Phase 3.6: Use UIAdapter for tile creation
-		import('$lib/services/ui-adapter').then(({ uiAdapter }) => {
-			const sent = uiAdapter.sendContainerCreateTiled(
-				$displayObject.id,
-				tileAxis,
-				tileRepeat,
-				tileGap
-			);
-			if (!sent) {
-				console.error('❌ Failed to send tile creation request');
-			}
-		});
+		// SimpleCommunication: Direct postMessage to Main
+		try {
+			window.parent.postMessage({
+				type: 'create-tiled-container',
+				objectId: $displayObject.id,
+				axis: tileAxis,
+				repeat: tileRepeat,
+				gap: tileGap
+			}, '*');
+		} catch (error) {
+			console.error('❌ Failed to send tile creation request:', error);
+		}
 	}
 
 	// Initialize unit system on mount

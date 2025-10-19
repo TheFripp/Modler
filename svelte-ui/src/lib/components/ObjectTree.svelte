@@ -1,6 +1,5 @@
 <script lang="ts">
 	import { selectedObjects, objectHierarchy, containerContext } from '$lib/stores/modler';
-	import { unifiedCommunication } from '$lib/services/unified-communication';
 	import { Box, BoxSelect, SquareStack } from 'lucide-svelte';
 	import { cn } from '$lib/utils';
 	import { onMount } from 'svelte';
@@ -29,14 +28,35 @@
 			isLoaded = true;
 		}, 100);
 
-		// Add keyboard listener for delete key
+		// Add keyboard listener for delete key and duplicate
 		const handleKeyDown = (event: KeyboardEvent) => {
+			// Skip if input field is focused
+			if (isInputFocused(event.target)) {
+				return;
+			}
+
+			// Check for Cmd+D (duplicate)
+			if ((event.metaKey || event.ctrlKey) && event.code === 'KeyD') {
+				// Only handle if we have selected objects
+				if ($selectedObjects.length > 0) {
+					event.preventDefault(); // Prevent browser bookmark dialog
+					window.parent.postMessage({
+						type: 'duplicate-object',
+						objectId: $selectedObjects[0].id
+					}, '*');
+				}
+				return;
+			}
+
 			// Check for Delete or Backspace key
 			if (event.code === 'Delete' || event.code === 'Backspace') {
-				// Only handle if we have selected objects and not in an input field
-				if ($selectedObjects.length > 0 && !isInputFocused(event.target)) {
+				// Only handle if we have selected objects
+				if ($selectedObjects.length > 0) {
 					event.preventDefault(); // Prevent browser back navigation on Backspace
-					unifiedCommunication.sendDeleteSelected().catch(console.error);
+					window.parent.postMessage({
+						type: 'delete-object',
+						objectIds: $selectedObjects.map(obj => obj.id)
+					}, '*');
 				}
 			}
 		};
@@ -69,6 +89,22 @@
 
 	// Build tree structure
 	$: treeStructure = buildTreeStructure(filteredHierarchy);
+
+	// Auto-expand all containers on initial load only
+	let hasInitiallyExpanded = false;
+	$: {
+		if (filteredHierarchy.length > 0 && !hasInitiallyExpanded) {
+			const newExpanded = new Set();
+			filteredHierarchy.forEach(obj => {
+				if (obj.isContainer) {
+					newExpanded.add(obj.id);
+				}
+			});
+			expandedContainers = newExpanded;
+			hasInitiallyExpanded = true;
+		}
+	}
+
 
 	function buildTreeStructure(objects) {
 		const objectMap = new Map();
@@ -130,14 +166,21 @@
 		expandedContainers = new Set(expandedContainers);
 	}
 
-	function isObjectHighlighted(object) {
-		const isSelected = $selectedObjects.some(sel => sel.id === object.id);
+	// Make this function reactive by accepting selectedObjects as parameter
+	// This forces Svelte to re-run when $selectedObjects changes
+	function isObjectHighlighted(object, selected) {
+		const isSelected = selected.some(sel => sel.id === object.id);
 		const isInContext = $containerContext && $containerContext.containerId === object.id;
 		return isSelected || isInContext;
 	}
 
 	function handleObjectClick(event, object) {
-		unifiedCommunication.sendSelectionChange(object.id, event.shiftKey).catch(console.error);
+		window.parent.postMessage({
+			type: 'object-select',
+			objectId: object.id,
+			isShiftClick: event.shiftKey,
+			directSelection: true  // Bypass container-first logic when selecting from list
+		}, '*');
 	}
 
 	function handleObjectDoubleClick(event, object) {
@@ -163,8 +206,11 @@
 	function finishRenaming() {
 		if (editingObjectId && editingObjectName.trim()) {
 			// Send rename command to 3D scene
-			unifiedCommunication.sendPropertyUpdate(editingObjectId, 'name', editingObjectName.trim())
-				.catch(console.error);
+			window.parent.postMessage({
+				type: 'rename-object',
+				objectId: editingObjectId,
+				name: editingObjectName.trim()
+			}, '*');
 		}
 		cancelRenaming();
 	}
@@ -269,12 +315,9 @@
 		dragOverTarget = null;
 		dropIndicatorPosition = null;
 
-		// Phase 3.6: Use UIAdapter for hierarchy refresh
-		setTimeout(() => {
-			import('$lib/services/ui-adapter').then(({ uiAdapter }) => {
-				uiAdapter.sendHierarchyRefreshRequest();
-			});
-		}, 50);
+		// SimpleCommunication: No need to request hierarchy refresh!
+		// Hierarchy updates come automatically via StateSerializer.getCompleteHierarchy()
+		// after any hierarchy change (move, reorder, delete, etc.)
 	}
 
 	function handleRootDrop(event) {
@@ -317,42 +360,38 @@
 	}
 
 	function moveObjectToContainer(objectToMove, targetContainer) {
-		const operation = objectToMove.isContainer ? 'container-move-to-container' : 'move-to-container';
-		unifiedCommunication.sendObjectMovement(operation, {
+		window.parent.postMessage({
+			type: 'move-to-container',
 			objectId: objectToMove.id,
 			targetContainerId: targetContainer.id
-		}).catch(console.error);
+		}, '*');
 	}
 
 	function moveObjectToRoot(objectToMove) {
-		unifiedCommunication.sendObjectMovement('move-to-root', {
+		window.parent.postMessage({
+			type: 'move-to-root',
 			objectId: objectToMove.id
-		}).catch(console.error);
+		}, '*');
 	}
 
 	function reorderObjectAtRoot(draggedObj, targetObj, position) {
-		console.log('🔄 reorderObjectAtRoot:', {
-			draggedId: draggedObj.id,
-			draggedParent: draggedObj.parentContainer,
-			targetId: targetObj.id,
-			position,
-			parentId: null
-		});
-		unifiedCommunication.sendObjectMovement('reorder', {
+		window.parent.postMessage({
+			type: 'reorder-children',
 			objectId: draggedObj.id,
 			targetId: targetObj.id,
 			position: position,
 			parentId: null
-		}).catch(console.error);
+		}, '*');
 	}
 
 	function reorderObjectInContainer(draggedObj, targetObj, position) {
-		unifiedCommunication.sendObjectMovement('reorder', {
+		window.parent.postMessage({
+			type: 'reorder-children',
 			objectId: draggedObj.id,
 			targetId: targetObj.id,
 			position: position,
 			parentId: targetObj.parentContainer
-		}).catch(console.error);
+		}, '*');
 	}
 
 	function isValidContainerNesting(childContainer, parentContainer) {
@@ -474,14 +513,14 @@
 						'flex items-center gap-2 px-2 py-2 rounded-md flex-1 min-w-0 transition-colors',
 						'text-foreground/70 hover:text-foreground hover:bg-white/5',
 						'focus:outline-none',
-						isObjectHighlighted(object) && 'bg-[#212121]/50'
+						isObjectHighlighted(object, $selectedObjects) && 'bg-[#212121]/50'
 					)}
 				>
 					{#if object.isContainer && object.autoLayout?.tileMode?.enabled}
 						<SquareStack
 							class={cn(
 								"w-4 h-4 shrink-0",
-								isObjectHighlighted(object) ? "text-blue-400" : "text-foreground/50"
+								isObjectHighlighted(object, $selectedObjects) ? "text-blue-400" : "text-foreground/50"
 							)}
 							strokeWidth={1.5}
 						/>
@@ -489,7 +528,7 @@
 						<BoxSelect
 							class={cn(
 								"w-4 h-4 shrink-0",
-								isObjectHighlighted(object) ? "text-blue-400" : "text-foreground/50"
+								isObjectHighlighted(object, $selectedObjects) ? "text-blue-400" : "text-foreground/50"
 							)}
 							strokeWidth={1.5}
 						/>
@@ -497,7 +536,7 @@
 						<Box
 							class={cn(
 								"w-4 h-4 shrink-0",
-								isObjectHighlighted(object) ? "text-blue-400" : "text-foreground/50"
+								isObjectHighlighted(object, $selectedObjects) ? "text-blue-400" : "text-foreground/50"
 							)}
 							strokeWidth={1.5}
 						/>
@@ -565,12 +604,7 @@
 					draggedObject = null;
 					dragOverTarget = null;
 					dropIndicatorPosition = null;
-					// Phase 3.6: Use UIAdapter for hierarchy refresh
-					setTimeout(() => {
-						import('$lib/services/ui-adapter').then(({ uiAdapter }) => {
-							uiAdapter.sendHierarchyRefreshRequest();
-						});
-					}, 50);
+					// SimpleCommunication: Hierarchy updates automatically
 				}
 			}}
 		>

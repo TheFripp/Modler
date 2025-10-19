@@ -21,17 +21,11 @@
 			return;
 		}
 
-		// For tiled containers, just change the direction (no toggle)
-		// Build complete autoLayout object
+		// SCHEMA-FIRST: Preserve ALL existing autoLayout properties
 		const autoLayout = {
-			enabled: true, // Always keep enabled for tiled containers
-			direction: axis, // Set new direction
-			gap: displayObject.autoLayout?.gap ?? 0,
-			padding: displayObject.autoLayout?.padding ?? {
-				width: 0, height: 0, depth: 0
-			},
-			alignment: displayObject.autoLayout?.alignment ?? { x: 'center', y: 'center', z: 'center' },
-			tileMode: displayObject.autoLayout?.tileMode
+			...displayObject.autoLayout,  // Spread existing (preserves reversed, etc.)
+			enabled: true,                 // Always keep enabled for tiled containers
+			direction: axis                // Set new direction
 		};
 
 		updateThreeJSProperty(objectId, 'autoLayout', autoLayout, 'property-panel');
@@ -42,15 +36,10 @@
 		const currentAlignment = displayObject.autoLayout?.alignment ?? { x: 'center', y: 'center', z: 'center' };
 		const newAlignment = { ...currentAlignment, [axis]: value };
 
+		// SCHEMA-FIRST: Preserve ALL existing autoLayout properties
 		const autoLayout = {
-			enabled: true,
-			direction: displayObject.autoLayout?.direction,
-			gap: displayObject.autoLayout?.gap ?? 0,
-			padding: displayObject.autoLayout?.padding ?? {
-				width: 0, height: 0, depth: 0
-			},
-			alignment: newAlignment,
-			tileMode: displayObject.autoLayout?.tileMode
+			...displayObject.autoLayout,  // Spread existing (preserves reversed, etc.)
+			alignment: newAlignment        // Update only alignment
 		};
 
 		updateThreeJSProperty(objectId, 'autoLayout', autoLayout, 'property-panel');

@@ -2,14 +2,12 @@
 	import { onMount } from 'svelte';
 	import PropertyPanel from '$lib/components/PropertyPanel.svelte';
 	import { initializeBridge } from '$lib/bridge/threejs-bridge';
-	import { initializeCommunication } from '$lib/services/communication-setup';
 
 	onMount(() => {
 		// Initialize the bridge with Three.js
 		initializeBridge();
 
-		// Initialize new communication system (Phase 3)
-		initializeCommunication();
+		// SimpleCommunication: No initialization needed - automatic postMessage handling
 
 		// Keyboard handlers REMOVED - now centralized in KeyboardRouter
 		// Main application's KeyboardRouter handles all shortcuts with priority-based delegation

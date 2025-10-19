@@ -44,6 +44,18 @@
 		const labels = { x: 'Width', y: 'Height', z: 'Depth' };
 		return labels[axisName] || axisName.toUpperCase();
 	}
+
+	// Handle axis button hover for face highlighting
+	function handleAxisHover(axisName: string, isHovering: boolean) {
+		if (!objectId) return;
+
+		window.parent.postMessage({
+			type: 'layout-button-hover',  // Reuse existing message type
+			objectId,
+			axis: axisName,
+			isHovering
+		}, '*');
+	}
 </script>
 
 <div class="space-y-4">
@@ -54,6 +66,8 @@
 			<button
 				type="button"
 				onclick={() => onAxisChange('x')}
+				onmouseenter={() => handleAxisHover('x', true)}
+				onmouseleave={() => handleAxisHover('x', false)}
 				class="flex items-center justify-center px-3 py-2 text-xs font-medium border-2 rounded-md transition-all {isXActive
 					? 'border-blue-500 text-foreground shadow-sm'
 					: 'border-[#2E2E2E] text-muted-foreground hover:border-[#404040] hover:text-foreground'}"
@@ -64,6 +78,8 @@
 			<button
 				type="button"
 				onclick={() => onAxisChange('y')}
+				onmouseenter={() => handleAxisHover('y', true)}
+				onmouseleave={() => handleAxisHover('y', false)}
 				class="flex items-center justify-center px-3 py-2 text-xs font-medium border-2 rounded-md transition-all {isYActive
 					? 'border-blue-500 text-foreground shadow-sm'
 					: 'border-[#2E2E2E] text-muted-foreground hover:border-[#404040] hover:text-foreground'}"
@@ -74,6 +90,8 @@
 			<button
 				type="button"
 				onclick={() => onAxisChange('z')}
+				onmouseenter={() => handleAxisHover('z', true)}
+				onmouseleave={() => handleAxisHover('z', false)}
 				class="flex items-center justify-center px-3 py-2 text-xs font-medium border-2 rounded-md transition-all {isZActive
 					? 'border-blue-500 text-foreground shadow-sm'
 					: 'border-[#2E2E2E] text-muted-foreground hover:border-[#404040] hover:text-foreground'}"

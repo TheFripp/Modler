@@ -144,19 +144,12 @@
     <script src="integration/svelte/property-format-converter.js"></script>
     <script src="application/serialization/object-serializer.js"></script>
 
-    <!-- NEW: Simple Communication System (Communication Simplification 2025) -->
-    <!-- Load BEFORE Phase 3 for shadow mode testing -->
+    <!-- SimpleCommunication System (Communication Simplification 2025) -->
+    <!-- Replaced Phase 3 (2,500 lines) with ~600 lines of simple, direct communication -->
     <script src="application/command-router.js"></script>
+    <script src="application/serialization/data-extractor.js"></script>
     <script src="application/state-serializer.js"></script>
     <script src="integration/communication/simple-postmessage.js"></script>
-
-    <!-- Phase 3 Communication (Will be removed after SimpleCommunication testing) -->
-    <script src="integration/communication/message-protocol.js"></script>
-    <script src="integration/communication/communication-bridge.js"></script>
-    <script src="integration/communication/main-adapter.js"></script>
-    <script src="integration/communication/direct-store-bridge.js"></script>
-
-    <!-- REMOVED Phase 3C: PropertyPanelSync - replaced by MainAdapter -->
 
     <!-- Svelte UI Integration Classes (Load BEFORE v2-main.js) -->
     <script src="integration/svelte/port-detection.js"></script>

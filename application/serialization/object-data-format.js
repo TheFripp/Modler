@@ -101,7 +101,8 @@ function standardizeObjectData(sourceData, options = {}) {
                 standardData = { ...sourceData }; // Already standard, just copy
                 break;
             default:
-                console.warn('ObjectDataFormat: Unknown source format, attempting best-effort conversion');
+                // SceneController data doesn't have explicit format markers - use best-effort conversion
+                // This is normal and expected for most object data
                 standardData = convertBestEffort(sourceData);
         }
 
@@ -282,13 +283,7 @@ function convertFromFlatProperties(sourceData) {
             transparent: sourceData['material.transparent'] || false
         },
 
-        autoLayout: {
-            enabled: sourceData['autoLayout.enabled'] || false,
-            direction: sourceData['autoLayout.direction'] || null,
-            gap: sourceData['autoLayout.gap'] || 0,
-            padding: sourceData['autoLayout.padding'] || { width: 0, height: 0, depth: 0 },
-            reversed: sourceData['autoLayout.reversed'] || false
-        },
+        autoLayout: sourceData.autoLayout || createDefaultAutoLayout(),
 
         calculatedGap: sourceData.calculatedGap, // Include dynamic gap value
 
@@ -338,7 +333,7 @@ function convertFromThreeJS(threeObject) {
             transparent: threeObject.material?.transparent || false
         },
 
-        autoLayout: userData.autoLayout || { enabled: false, direction: null, gap: 0, padding: { width: 0, height: 0, depth: 0 }, reversed: false },
+        autoLayout: userData.autoLayout || createDefaultAutoLayout(),
         calculatedGap: userData.calculatedGap, // Include dynamic gap value
         parentContainer: threeObject.parentContainer || userData.parentContainer || null
     };
@@ -377,9 +372,19 @@ function convertFromObjectStateManager(stateData) {
             transparent: stateData.material?.transparent || false
         },
 
-        autoLayout: stateData.autoLayout || { enabled: false, direction: null, gap: 0, padding: { width: 0, height: 0, depth: 0 }, reversed: false },
+        autoLayout: stateData.autoLayout || createDefaultAutoLayout(),
         calculatedGap: stateData.calculatedGap, // Include dynamic gap value
-        parentContainer: stateData.parentContainer || null
+        parentContainer: stateData.parentContainer || null,
+
+        // Additional container properties
+        isHug: stateData.isHug || false,
+        layoutMode: stateData.layoutMode || null,
+        childrenOrder: stateData.childrenOrder || [],
+        childIds: stateData.childIds || [],
+
+        // Additional object properties
+        selectable: stateData.selectable !== undefined ? stateData.selectable : true,
+        visible: stateData.visible !== undefined ? stateData.visible : true
     };
 
     return standardData;
@@ -402,7 +407,7 @@ function convertBestEffort(sourceData) {
         dimensions: sourceData.dimensions || { x: 1, y: 1, z: 1 },
 
         material: sourceData.material || { color: '#888888', opacity: 1, transparent: false },
-        autoLayout: sourceData.autoLayout || { enabled: false, direction: null, gap: 0, padding: { width: 0, height: 0, depth: 0 }, reversed: false },
+        autoLayout: sourceData.autoLayout || createDefaultAutoLayout(),
         parentContainer: sourceData.parentContainer || null
     };
 }
@@ -426,9 +431,9 @@ function detectSourceFormat(sourceData) {
         return 'three_js';
     }
 
-    // Check for SceneController/ObjectStateManager format (has mesh reference + id)
-    // This is the format from SceneController.getObject() - has mesh but position is on mesh, not directly on object
-    if (sourceData.mesh && sourceData.id && !sourceData.position) {
+    // Check for SceneController/ObjectStateManager format (has mesh reference)
+    // CRITICAL: Must detect this BEFORE checking for standard format to avoid copying mesh
+    if (sourceData.mesh && sourceData.id) {
         return 'object_state_manager';
     }
 
@@ -478,6 +483,9 @@ function ensureStandardFormat(objectData, options = {}) {
     if (!objectData.material || typeof objectData.material !== 'object') {
         objectData.material = { color: '#888888', opacity: 1, transparent: false };
     }
+
+    // CRITICAL FIX: Don't overwrite existing autoLayout with defaults
+    // Only create default if autoLayout is truly missing or invalid
     if (!objectData.autoLayout || typeof objectData.autoLayout !== 'object') {
         objectData.autoLayout = {
             enabled: false,
@@ -485,6 +493,26 @@ function ensureStandardFormat(objectData, options = {}) {
             gap: 0,
             padding: { width: 0, height: 0, depth: 0 }
         };
+    } else {
+        // Preserve existing autoLayout - ensure it has all required properties
+        if (!objectData.autoLayout.padding || typeof objectData.autoLayout.padding !== 'object') {
+            objectData.autoLayout.padding = { width: 0, height: 0, depth: 0 };
+        }
+        if (!objectData.autoLayout.alignment || typeof objectData.autoLayout.alignment !== 'object') {
+            objectData.autoLayout.alignment = { x: 'center', y: 'center', z: 'center' };
+        }
+        if (typeof objectData.autoLayout.enabled !== 'boolean') {
+            objectData.autoLayout.enabled = false;
+        }
+        if (objectData.autoLayout.direction === undefined) {
+            objectData.autoLayout.direction = null;
+        }
+        if (typeof objectData.autoLayout.gap !== 'number') {
+            objectData.autoLayout.gap = 0;
+        }
+        if (typeof objectData.autoLayout.reversed !== 'boolean') {
+            objectData.autoLayout.reversed = false;
+        }
     }
 
     // Apply defaults for missing properties
@@ -495,6 +523,23 @@ function ensureStandardFormat(objectData, options = {}) {
     });
 
     return objectData;
+}
+
+/**
+ * Create a default autoLayout object with all required properties
+ * SINGLE SOURCE OF TRUTH for autoLayout defaults
+ * @returns {Object} Complete autoLayout object based on STANDARD_OBJECT_DATA_SCHEMA
+ */
+function createDefaultAutoLayout() {
+    return {
+        enabled: false,
+        direction: null,
+        gap: 0,
+        padding: { width: 0, height: 0, depth: 0 },
+        alignment: { x: 'center', y: 'center', z: 'center' },
+        reversed: false,
+        tileMode: undefined
+    };
 }
 
 /**
@@ -520,13 +565,7 @@ function createEmptyObjectData(id = null) {
             transparent: false
         },
 
-        autoLayout: {
-            enabled: false,
-            direction: null,
-            gap: 0,
-            padding: { width: 0, height: 0, depth: 0 },
-            reversed: false
-        },
+        autoLayout: createDefaultAutoLayout(),
 
         parentContainer: null,
         childIds: [],
@@ -541,6 +580,74 @@ function createEmptyObjectData(id = null) {
     };
 }
 
+/**
+ * Create complete object metadata using schema defaults
+ * SINGLE SOURCE OF TRUTH for object creation
+ *
+ * @param {Object} options - Object creation options
+ * @returns {Object} Complete object metadata following STANDARD_OBJECT_DATA_SCHEMA
+ */
+function createObjectMetadata(options = {}) {
+    return {
+        // Core identification
+        id: options.id || 0,
+        name: options.name || 'Object',
+        type: options.type || 'mesh',
+
+        // Hierarchy
+        parentContainer: options.parentContainer || null,
+        childIds: options.childIds || [],
+        childrenOrder: options.childrenOrder || [],
+
+        // Transform
+        position: options.position || { x: 0, y: 0, z: 0 },
+        rotation: options.rotation || { x: 0, y: 0, z: 0 },
+        scale: options.scale || { x: 1, y: 1, z: 1 },
+
+        // Physical properties (dimensions handled by getter in SceneLifecycleManager)
+        dimensions: options.dimensions || { x: 1, y: 1, z: 1 },
+        material: options.material || {
+            color: '#888888',
+            opacity: 1,
+            transparent: false
+        },
+
+        // Container properties - ALWAYS use schema defaults
+        isContainer: options.isContainer || false,
+        isHug: options.sizingMode === 'hug' || options.isHug || false,
+        sizingMode: options.sizingMode || null,
+        autoLayout: options.autoLayout || createDefaultAutoLayout(), // SCHEMA DEFAULT - never null
+        layoutMode: options.layoutMode || null,
+        layoutProperties: options.layoutProperties || {
+            sizeX: options.sizeX || 'fixed',
+            sizeY: options.sizeY || 'fixed',
+            sizeZ: options.sizeZ || 'fixed',
+            fixedSize: options.fixedSize || null
+        },
+
+        // State flags
+        visible: options.visible !== false,
+        selectable: options.selectable !== false,
+        locked: options.locked || false,
+        selected: options.selected || false,
+
+        // Metadata
+        formatVersion: OBJECT_DATA_FORMAT_VERSION,
+        created: options.created || Date.now(),
+        lastModified: Date.now(),
+
+        // Three.js specific (not in schema but needed internally)
+        mesh: options.mesh || null,
+        category: options.category || 'permanent',
+        isTemporary: options.isTemporary || false,
+        isPreview: options.isPreview || false,
+        userData: options.userData || {},
+
+        // Additional options pass-through
+        originalBounds: options.originalBounds || undefined
+    };
+}
+
 // Export the central format module
 window.ObjectDataFormat = {
     // Core functions
@@ -549,8 +656,10 @@ window.ObjectDataFormat = {
     serializeForPostMessage,
     deserializeFromPostMessage,
 
-    // Utilities
+    // Factories
+    createObjectMetadata,
     createEmptyObjectData,
+    createDefaultAutoLayout,
 
     // Constants
     SCHEMA: STANDARD_OBJECT_DATA_SCHEMA,

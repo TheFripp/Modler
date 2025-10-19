@@ -8,6 +8,7 @@
 	let errorMessage = '';
 	let isFileManagerReady = false;
 	let currentFileId: string | null = null;
+	let hasInitiallyLoaded = false; // Track if we've loaded files at least once
 
 	// Unsaved changes dialog state
 	let showUnsavedDialog = false;
@@ -186,15 +187,22 @@
 		try {
 			const result = await sendFileRequest('listFiles');
 			files = result.files || [];
+			hasInitiallyLoaded = true; // Mark as loaded after first successful fetch
 		} catch (error) {
 			console.error('Failed to load files:', error);
 			errorMessage = 'Failed to load files';
+			hasInitiallyLoaded = true; // Still mark as loaded even on error
 		}
 	}
 
 
 	async function handleOpenFile(fileId: string) {
 		if (!isFileManagerReady) return;
+
+		// Don't reload if file is already open
+		if (fileId === currentFileId) {
+			return;
+		}
 
 		isLoading = true;
 		errorMessage = '';
@@ -317,7 +325,7 @@
 
 	<!-- File List -->
 	<div class="file-list flex-1 overflow-y-auto p-4">
-		{#if !isFileManagerReady}
+		{#if !isFileManagerReady || !hasInitiallyLoaded}
 			<div class="empty-state text-center text-foreground/60 py-8">
 				<p>Loading file system...</p>
 			</div>

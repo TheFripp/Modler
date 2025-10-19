@@ -277,8 +277,11 @@ class SceneDeserializer {
         // This preserves manually-positioned children in containers without layout
         const layoutContainers = sortedObjects.filter(obj =>
             obj.isContainer &&
-            obj.autoLayout?.enabled === true &&
+            obj.autoLayout &&
+            typeof obj.autoLayout === 'object' &&
+            obj.autoLayout.enabled === true &&
             obj.childrenOrder &&
+            Array.isArray(obj.childrenOrder) &&
             obj.childrenOrder.length > 0
         );
 
@@ -459,19 +462,34 @@ class SceneDeserializer {
                     y: objData.rotation?.y ?? 0,
                     z: objData.rotation?.z ?? 0,
                     order: 'XYZ' // THREE.js default rotation order
-                }
+                },
+                // Pass autoLayout in options so it's stored in objectData
+                autoLayout: objData.autoLayout,
+                // CRITICAL: Ensure isHug and autoLayout.enabled are mutually exclusive
+                // Priority: autoLayout.enabled takes precedence over isHug
+                isHug: objData.autoLayout?.enabled ? false : (objData.isHug || false),
+                layoutMode: objData.layoutMode,
+                childrenOrder: objData.childrenOrder,
+                layoutProperties: objData.layoutProperties
             });
 
             // Restore container properties
             if (objData.isContainer && createdObject) {
-                createdObject.isHug = objData.isHug || false;
+                // CRITICAL: Ensure isHug and autoLayout.enabled remain mutually exclusive
+                createdObject.isHug = objData.autoLayout?.enabled ? false : (objData.isHug || false);
                 createdObject.layoutMode = objData.layoutMode || null;
-                createdObject.autoLayout = objData.autoLayout || {
-                    enabled: false,
-                    direction: null,
-                    gap: 0,
-                    padding: { top: 0, bottom: 0, left: 0, right: 0, front: 0, back: 0 }
-                };
+
+                // SCHEMA-FIRST: Use centralized default factory
+                createdObject.autoLayout = objData.autoLayout || (
+                    window.ObjectDataFormat?.createDefaultAutoLayout?.() || {
+                        enabled: false,
+                        direction: null,
+                        gap: 0,
+                        padding: { width: 0, height: 0, depth: 0 },
+                        alignment: { x: 'center', y: 'center', z: 'center' },
+                        reversed: false
+                    }
+                );
                 createdObject.childrenOrder = objData.childrenOrder || [];
             }
 

@@ -2,7 +2,6 @@
 	import { onMount } from 'svelte';
 	import { Plus } from 'lucide-svelte';
 	import { initializeBridge } from '$lib/bridge/threejs-bridge';
-	import { initializeCommunication } from '$lib/services/communication-setup';
 	import ObjectTree from '$lib/components/ObjectTree.svelte';
 	import SettingsPanel from '$lib/components/SettingsPanel.svelte';
 	import FileBrowser from '$lib/components/FileBrowser.svelte';
@@ -126,8 +125,7 @@
 		// Initialize the bridge with Three.js for real-time synchronization
 		initializeBridge();
 
-		// Initialize new communication system (Phase 3)
-		initializeCommunication();
+		// SimpleCommunication: No initialization needed - automatic postMessage handling
 
 		// Setup message listener
 		window.addEventListener('message', handleMessage);

@@ -324,21 +324,68 @@ visualizationManager.showSupportMesh(objectId, 'measurements');
 visualizationManager.hideSupportMesh(objectId, 'edges');
 ```
 
-### 2. Highlight Object
+### 2. Face Highlighting (UNIFIED SYSTEM)
+
+**⚠️ CRITICAL: There is ONE face highlighting system - support mesh based**
+**NEVER create alternate implementations or bypass this architecture**
 
 ```javascript
-// Highlight face
-visualizationManager.highlightFace(objectId, faceIndex, color);
+// PATTERN 1: Tool Hover (raycast-based)
+// Used by: MoveTool, PushTool via BaseFaceToolBehavior
+const supportMeshes = targetObject.userData?.supportMeshes;
+if (supportMeshes?.faceHighlight) {
+    const supportMeshFactory = window.modlerComponents?.supportMeshFactory;
 
-// Highlight edge
-visualizationManager.highlightEdge(objectId, edgeIndex, color);
+    // Position for raycast hit
+    supportMeshFactory.positionFaceHighlightForHit(supportMeshes.faceHighlight, hit);
 
-// Clear highlight
-visualizationManager.clearHighlight(objectId);
+    // Show the highlight
+    supportMeshes.faceHighlight.visible = true;
+}
 
-// Highlight selected object
-visualizationManager.highlightObject(objectId);
+// Clear on hover end
+supportMeshes.faceHighlight.visible = false;
 ```
+
+```javascript
+// PATTERN 2: Button Hover (axis-based)
+// Used by: Layout buttons, fill buttons, tile tool axis buttons
+const selectedObject = selectionController.getSelectedObjects()[0];
+const supportMeshes = selectedObject.userData?.supportMeshes;
+if (supportMeshes?.faceHighlight) {
+    const supportMeshFactory = window.modlerComponents?.supportMeshFactory;
+    const visualEffects = window.modlerComponents?.visualEffects;
+
+    // Enable button highlight mode (prevents tool hover clearing)
+    visualEffects.setButtonHighlight(true);
+
+    // Position for camera-facing face on axis
+    supportMeshFactory.positionFaceHighlightForAxis(
+        supportMeshes.faceHighlight,
+        selectedObject,
+        axis,  // 'x', 'y', or 'z'
+        true   // camera-facing only
+    );
+
+    // Show the highlight
+    supportMeshes.faceHighlight.visible = true;
+}
+
+// Clear on button unhover
+visualEffects.setButtonHighlight(false);
+supportMeshes.faceHighlight.visible = false;
+```
+
+**Key Principles:**
+- ✅ ONE system - support mesh based (child of object)
+- ✅ Two entry points - `positionFaceHighlightForHit()` (raycast) or `positionFaceHighlightForAxis()` (axis)
+- ✅ Works identically for containers and regular objects
+- ✅ Pre-created mesh - show/hide only, never recreate
+- ✅ Automatic transform inheritance (no manual syncing)
+- ❌ NEVER create separate world-space highlight meshes
+- ❌ NEVER bypass support mesh system for "special cases"
+
+**Full Documentation:** `/documentation/architecture/FACE-HIGHLIGHTING-SYSTEM.md`
 
 ### 3. Face Highlight Materials & States
 

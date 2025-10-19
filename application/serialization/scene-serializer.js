@@ -116,6 +116,10 @@ class SceneSerializer {
 
     /**
      * Serialize scene content (objects and hierarchy)
+     *
+     * UPDATED: Now uses DataExtractor directly for simple, consistent serialization
+     * Single data format used for both file save and runtime communication
+     *
      * @returns {Object} Scene content data
      */
     serializeSceneContent() {
@@ -126,24 +130,22 @@ class SceneSerializer {
             return obj.category !== 'system' && obj.type !== 'grid';
         });
 
-        // Serialize each object using ObjectSerializer for consistency
-        const serializedObjects = sceneObjects.map(obj => {
-            let serialized;
-            if (this.objectSerializer) {
-                // Use existing ObjectSerializer for standardized format
-                serialized = this.objectSerializer.serializeObject(obj.mesh, {
-                    includeGeometry: true,
-                    includeHierarchy: true,
-                    useCache: false // Don't use cache for file save
-                });
-            } else {
-                console.warn('[SceneSerializer] ObjectSerializer not available, using fallback');
-                // Fallback: serialize essential properties directly
-                serialized = this.serializeObjectFallback(obj);
-            }
+        // Use DataExtractor for consistent, simple serialization
+        // This is the SAME format used for runtime communication (SimpleCommunication)
+        if (!window.DataExtractor) {
+            console.error('[SceneSerializer] DataExtractor not available - cannot serialize scene');
+            return {
+                objects: [],
+                rootChildrenOrder: [],
+                nextId: this.sceneController.nextId || 1,
+                nextBoxNumber: this.sceneController.nextBoxNumber || 1,
+                nextContainerNumber: this.sceneController.nextContainerNumber || 1
+            };
+        }
 
-            return serialized;
-        }).filter(Boolean); // Remove any null entries
+        const serializedObjects = sceneObjects
+            .map(obj => window.DataExtractor.extractSerializableData(obj))
+            .filter(Boolean); // Remove any null entries
 
         return {
             objects: serializedObjects,
@@ -151,49 +153,6 @@ class SceneSerializer {
             nextId: this.sceneController.nextId,
             nextBoxNumber: this.sceneController.nextBoxNumber,
             nextContainerNumber: this.sceneController.nextContainerNumber
-        };
-    }
-
-    /**
-     * Fallback object serialization (if ObjectSerializer unavailable)
-     * @param {Object} obj - Object data from SceneController
-     * @returns {Object} Serialized object data
-     */
-    serializeObjectFallback(obj) {
-        // ARCHITECTURE: Read dimensions from geometry via DimensionManager (single source of truth)
-        const dimensions = window.dimensionManager?.getDimensions(obj.mesh) || { x: 1, y: 1, z: 1 };
-
-        return {
-            id: obj.id,
-            name: obj.name,
-            type: obj.type,
-            parentContainer: obj.parentContainer || null,
-            childrenOrder: obj.childrenOrder || [],
-            position: obj.position ? { ...obj.position } : { x: 0, y: 0, z: 0 },
-            rotation: obj.rotation ? { ...obj.rotation } : { x: 0, y: 0, z: 0 },
-            dimensions: dimensions,
-            material: obj.material ? {
-                color: obj.material.color && obj.material.color.isColor
-                    ? '#' + obj.material.color.getHexString() // Convert THREE.Color to hex string
-                    : (obj.material.color || '#808080'),
-                opacity: obj.material.opacity ?? 1.0,
-                transparent: obj.material.transparent ?? false
-            } : {
-                color: '#808080',
-                opacity: 1.0,
-                transparent: false
-            },
-            isContainer: obj.isContainer || false,
-            isHug: obj.isHug || false,
-            layoutMode: obj.layoutMode || null,
-            autoLayout: obj.autoLayout || {
-                enabled: false,
-                direction: null,
-                gap: 0,
-                padding: { top: 0, bottom: 0, left: 0, right: 0, front: 0, back: 0 }
-            },
-            visible: obj.visible ?? true,
-            locked: obj.locked || false
         };
     }
 

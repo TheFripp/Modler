@@ -136,6 +136,12 @@ class DirectComponentManager {
 
             console.log('✅ Side panels loaded');
 
+            // Dispatch event for SimpleCommunication to send initial sync
+            // Small delay to ensure iframe postMessage listeners are ready
+            setTimeout(() => {
+                window.dispatchEvent(new CustomEvent('modler:panels-ready'));
+            }, 200);
+
             // Show resize gutters after all panels are loaded
             setTimeout(() => {
                 document.querySelectorAll('.gutter').forEach(gutter => {

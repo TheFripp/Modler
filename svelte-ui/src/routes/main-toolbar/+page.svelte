@@ -1,7 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { initializeBridge } from '$lib/bridge/threejs-bridge';
-	import { initializeCommunication } from '$lib/services/communication-setup';
 	import { toolState } from '$lib/stores/modler';
 	import { activateToolInScene, toggleSnapInScene } from '$lib/bridge/threejs-bridge';
 	import { MousePointer, Move, FoldHorizontal, Box, Magnet, SquareStack } from 'lucide-svelte';
@@ -38,8 +37,7 @@
 		// Initialize the bridge with Three.js for real-time synchronization
 		initializeBridge();
 
-		// Initialize new communication system (Phase 3)
-		initializeCommunication();
+		// SimpleCommunication: No initialization needed - automatic postMessage handling
 
 		// NOTE: Keyboard shortcuts are now handled by InputController in the main app
 		// This eliminates duplicate event handlers and consolidates keyboard handling

@@ -1,17 +1,18 @@
 /**
  * ObjectSerializer - Unified Object Serialization System
  *
- * UPDATED: Now uses central ObjectDataFormat for consistency
- * Single source of truth for converting Three.js objects to standardized data
- * for transmission to Svelte UI.
+ * UPDATED: Now uses DataExtractor for direct, simple serialization
+ * No transformation layers - just direct extraction of properties
  *
  * Features:
- * - Uses ObjectDataFormat.standardizeObjectData() for consistency
+ * - Direct data extraction (NO transformation layers)
  * - GeometryUtils integration for accurate dimensions
  * - Robust error handling and fallbacks
  * - Support for all object types (regular, containers)
- * - Performance optimization for batch operations
- * - Format validation and versioning
+ *
+ * Part of: Communication Architecture Simplification
+ * Version: 2.0.0
+ * Date: 2025-10-16
  */
 
 class ObjectSerializer {
@@ -19,8 +20,7 @@ class ObjectSerializer {
         // Component references (initialized lazily)
         this.geometryUtils = null;
         this.sceneController = null;
-        this.propertySchemaRegistry = null;
-        this.objectDataFormat = null;
+        this.dataExtractor = null;
 
         // Cache for performance
         this.serializationCache = new Map();
@@ -50,106 +50,82 @@ class ObjectSerializer {
      * Called automatically on first use
      */
     initializeComponents() {
-        if (!this.geometryUtils) {
-            this.geometryUtils = window.GeometryUtils;
-        }
         if (!this.sceneController) {
             this.sceneController = window.modlerComponents?.sceneController;
         }
-        if (!this.propertySchemaRegistry) {
-            this.propertySchemaRegistry = window.propertySchemaRegistry;
-        }
-        if (!this.objectDataFormat) {
-            this.objectDataFormat = window.ObjectDataFormat;
+        if (!this.dataExtractor) {
+            this.dataExtractor = window.DataExtractor;
         }
     }
 
     /**
-     * Serialize a single Three.js object
-     * @param {THREE.Object3D} obj - The Three.js object to serialize
+     * Serialize a single object
+     *
+     * UPDATED: Now accepts EITHER THREE.js mesh OR SceneController object
+     * Uses DataExtractor for consistent, simple serialization
+     *
+     * @param {THREE.Object3D|Object} input - THREE.js mesh OR SceneController object
      * @param {Object} options - Serialization options
      * @param {string} options.changeType - Type of change that triggered serialization
-     * @param {boolean} options.includeGeometry - Whether to include geometry data
-     * @param {boolean} options.includeHierarchy - Whether to include hierarchy data
      * @param {boolean} options.useCache - Whether to use caching (default: true)
      * @returns {Object|null} Serialized object data or null if failed
      */
-    serializeObject(obj, options = {}) {
+    serializeObject(input, options = {}) {
         const {
             changeType = 'general',
-            includeGeometry = true,
-            includeHierarchy = true,
             useCache = true
         } = options;
 
         try {
             this.initializeComponents();
 
-            // Validate input
-            if (!obj || !obj.userData) {
+            if (!input) {
                 return null;
             }
 
-            // Check cache first
-            if (useCache) {
-                const cached = this.getCachedSerialization(obj, changeType);
-                if (cached) {
-                    this.stats.cacheHits++;
-                    return cached;
+            // Determine if input is THREE.js mesh or SceneController object
+            let sceneObject;
+
+            if (input.isObject3D || input.userData) {
+                // Input is THREE.js mesh - get SceneController object
+                if (!this.sceneController) {
+                    console.warn('ObjectSerializer: SceneController not available');
+                    return null;
                 }
-            }
 
-            // Get object data from scene controller
-            if (!this.sceneController) {
-                console.warn('ObjectSerializer: SceneController not available');
-                return null;
-            }
+                sceneObject = this.sceneController.getObjectByMesh(input);
+                if (!sceneObject) {
+                    return null;
+                }
 
-            const objectData = this.sceneController.getObjectByMesh(obj);
-            if (!objectData) {
-                return null;
-            }
-
-            // Use central ObjectDataFormat for standardization
-            let serialized;
-            if (this.objectDataFormat) {
-                // Create source data for standardization
-                const sourceData = this.prepareSourceData(obj, objectData, {
-                    includeGeometry,
-                    includeHierarchy
-                });
-
-                // Standardize using central format module
-                serialized = this.objectDataFormat.standardizeObjectData(sourceData);
-
-                // Validate the result
-                const validation = this.objectDataFormat.validateObjectData(serialized);
-                if (!validation.isValid) {
-                    console.warn('ObjectSerializer: Generated invalid data:', validation.errors);
+                // Check cache first (only for mesh-based calls)
+                if (useCache) {
+                    const cached = this.getCachedSerialization(input, changeType);
+                    if (cached) {
+                        this.stats.cacheHits++;
+                        return cached;
+                    }
                 }
             } else {
-                // Fallback to legacy method if ObjectDataFormat not available
-                console.warn('ObjectSerializer: ObjectDataFormat not available, using legacy method');
-                serialized = this.buildCoreDataLegacy(obj, objectData);
-
-                // Add additional data using legacy methods
-                if (includeGeometry) {
-                    this.addGeometryData(serialized, obj);
-                }
-                this.addMaterialData(serialized, obj);
-                if (objectData.isContainer) {
-                    this.addContainerData(serialized, objectData);
-                }
-                if (includeHierarchy) {
-                    this.addHierarchyData(serialized, objectData);
-                }
-                this.addParametricData(serialized, objectData);
-                this.addInstanceData(serialized, objectData);
+                // Input is already SceneController object
+                sceneObject = input;
             }
 
-            // Cache the result
-            if (useCache) {
-                this.cacheSerializedObject(obj, changeType, serialized);
+            // Use DataExtractor for consistent serialization
+            if (!this.dataExtractor) {
+                console.error('ObjectSerializer: DataExtractor not available');
+                return null;
+            }
+
+            const serialized = this.dataExtractor.extractSerializableData(sceneObject);
+
+            if (!serialized) {
+                return null;
+            }
+
+            // Cache the result (only for mesh-based calls)
+            if (useCache && input.isObject3D) {
+                this.cacheSerializedObject(input, changeType, serialized);
             }
 
             this.stats.serializations++;
@@ -157,7 +133,7 @@ class ObjectSerializer {
 
         } catch (error) {
             console.error('ObjectSerializer.serializeObject error:', error, {
-                objectId: obj?.userData?.id,
+                objectId: input?.userData?.id || input?.id,
                 changeType
             });
             this.stats.errors++;
@@ -347,7 +323,18 @@ class ObjectSerializer {
     addContainerData(serialized, objectData) {
         serialized.children = objectData.children || [];
         serialized.layout = objectData.layout || null;
-        serialized.autoLayout = objectData.autoLayout || null;
+
+        // SCHEMA-FIRST: Always use schema defaults instead of null
+        serialized.autoLayout = objectData.autoLayout || (
+            window.ObjectDataFormat?.createDefaultAutoLayout?.() || {
+                enabled: false,
+                direction: null,
+                gap: 0,
+                padding: { width: 0, height: 0, depth: 0 },
+                alignment: { x: 'center', y: 'center', z: 'center' },
+                reversed: false
+            }
+        );
 
         // Add sizing mode for containers
         if (objectData.sizingMode) {

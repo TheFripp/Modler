@@ -29,6 +29,7 @@
 - **Data Flow Architecture**: [`/architecture/data-flow-architecture.md`](architecture/data-flow-architecture.md) - ⭐ **Complete integration map: Tool → State → Geometry → UI**
 - **Container Hierarchy**: [`/architecture/container-hierarchy.md`](architecture/container-hierarchy.md) - Parent-child relationships, coordinate spaces, and hierarchy management
 - **Auto-Layout System**: [`/architecture/auto-layout-system.md`](architecture/auto-layout-system.md) - Layout calculation, bidirectional propagation, and sizing behaviors
+- **Face Highlighting System**: [`/architecture/FACE-HIGHLIGHTING-SYSTEM.md`](architecture/FACE-HIGHLIGHTING-SYSTEM.md) - ⭐ **UNIFIED face highlighting - ONE system, multiple triggers. NEVER create alternates**
 
 ### Systems
 - **Selection System**: [`/systems/selection.md`](systems/selection.md) - Container-first selection patterns

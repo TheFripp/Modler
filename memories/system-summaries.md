@@ -45,9 +45,15 @@
 - **object-visualizer** (`/interaction/`) - Individual object visualization effects
 - **container-visualizer** (`/interaction/`) - Container-specific visualization (wireframes, bounds)
 - **support-mesh-factory** (`/interaction/`) - Creates support meshes for objects (edges, measurements, etc.)
+  - **Face highlight system** (UNIFIED - ONE implementation only):
+    - `positionFaceHighlightForHit(mesh, hit)` - Tool hover (raycast-based)
+    - `positionFaceHighlightForAxis(mesh, object, axis, cameraFacing)` - Button hover (axis-based)
+    - Pre-created child meshes, show/hide only, automatic transform inheritance
+    - Works identically for containers and regular objects
+    - **❌ NEVER create alternate implementations or world-space highlight meshes**
   - **Face highlight materials**: faceHighlight (objects), faceHighlightContainer (containers), faceHighlightDisabled (grey, blocked operations)
   - **Material swapping pattern**: Store original material in userData.originalMaterial, swap for visual states, restore on clear
-  - **Opacity syncing**: All face highlight materials subscribe to ConfigurationManager for opacity updates
+  - **Documentation**: `/documentation/architecture/FACE-HIGHLIGHTING-SYSTEM.md`
 
 ### Camera & Navigation
 - **camera-controller** (`/interaction/`) - Camera orbit, pan, zoom controls

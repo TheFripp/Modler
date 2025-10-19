@@ -126,7 +126,6 @@ class MaterialManager {
             FACE_HIGHLIGHT: 'face-highlight',
             FACE_HIGHLIGHT_CONTAINER: 'face-highlight-container',
             FACE_HIGHLIGHT_DISABLED: 'face-highlight-disabled',
-            AXIS_HIGHLIGHT: 'axis-highlight',
             PADDING_VISUALIZATION: 'padding-viz',
             PREVIEW_WIREFRAME: 'preview-wireframe',
             CAD_WIREFRAME: 'cad-wireframe',
@@ -441,9 +440,11 @@ class MaterialManager {
     createContainerFaceHighlightMaterial(options = {}) {
         const configManager = this.getConfigManager();
 
-        // Build configuration - uses container-specific settings
+        // Build configuration - use SAME color as regular face highlights for consistency
+        // Containers should have the same visual feedback as regular objects
+        // But use container-specific opacity setting for independent control
         const config = {
-            color: options.color || configManager?.get('visual.containers.wireframeColor') || '#00ff00',
+            color: options.color || configManager?.get('visual.selection.color') || '#ff6600',
             opacity: options.opacity || configManager?.get('visual.containers.faceHighlightOpacity') || 0.3,
             renderOrder: options.renderOrder || configManager?.get('visual.effects.materials.face.renderOrder') || 1000,
             side: THREE.DoubleSide,
@@ -554,54 +555,6 @@ class MaterialManager {
             color: highlightColor,
             ...options
         });
-    }
-
-    /**
-     * Create axis highlight material (for push tool)
-     * @param {Object} options - Material options
-     * @returns {THREE.MeshBasicMaterial} Axis highlight material
-     */
-    createAxisHighlightMaterial(options = {}) {
-        const configManager = this.getConfigManager();
-
-        // Build configuration
-        const config = {
-            color: options.color || configManager?.get('visual.effects.axisHighlight.color') || '#00ff88',
-            opacity: options.opacity || configManager?.get('visual.effects.axisHighlight.opacity') || 0.3,
-            side: THREE.DoubleSide,
-            transparent: true,
-            depthTest: false,
-            depthWrite: false,
-            ...options
-        };
-
-        // Generate cache key
-        const key = this.generateMaterialKey(this.materialTypes.AXIS_HIGHLIGHT, config);
-
-        // Check cache
-        const cached = this.getMaterialFromCache(key);
-        if (cached) return cached;
-
-        // Create new material
-        // Safe color parsing to handle various color input types
-        let colorHex;
-        if (typeof config.color === 'string') {
-            colorHex = parseInt(config.color.replace('#', ''), 16);
-        } else if (typeof config.color === 'number') {
-            colorHex = config.color;
-        } else {
-            colorHex = 0xffffff; // Default to white
-        }
-        const material = new THREE.MeshBasicMaterial({
-            color: colorHex,
-            opacity: config.opacity,
-            transparent: config.transparent,
-            side: config.side,
-            depthTest: config.depthTest,
-            depthWrite: config.depthWrite
-        });
-
-        return this.cacheMaterial(key, material, this.materialTypes.AXIS_HIGHLIGHT);
     }
 
     /**

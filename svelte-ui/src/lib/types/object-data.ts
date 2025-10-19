@@ -41,12 +41,15 @@ export interface Material {
 
 // Container layout interfaces
 export interface LayoutPadding {
-    top: number;
-    bottom: number;
-    left: number;
-    right: number;
-    front: number;
-    back: number;
+    width: number;   // SCHEMA-FIRST: Match ObjectDataFormat schema
+    height: number;  // Changed from top/bottom/left/right/front/back
+    depth: number;   // To align with 3D coordinate system
+}
+
+export interface LayoutAlignment {
+    x: 'left' | 'center' | 'right';
+    y: 'bottom' | 'center' | 'top';
+    z: 'back' | 'center' | 'front';
 }
 
 export interface TileMode {
@@ -60,6 +63,8 @@ export interface AutoLayout {
     direction: 'x' | 'y' | 'z' | null;
     gap: number;
     padding: LayoutPadding;
+    alignment: LayoutAlignment;  // SCHEMA-FIRST: Added to match schema
+    reversed: boolean;            // SCHEMA-FIRST: Added to match schema
     tileMode?: TileMode;
 }
 
