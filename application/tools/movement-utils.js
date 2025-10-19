@@ -145,7 +145,7 @@ class MovementUtils {
 
             // For the immediate parent, pass the new container size for fill calculations
             const containerSizeToUse = (updatedContainers === 0) ? newContainerSize : null;
-            const resizeSuccess = containerCrudManager.resizeContainerToFitChildren(containerData, containerSizeToUse, preservePosition, immediateVisuals);
+            const resizeSuccess = containerCrudManager.resizeContainerToFitChildren(containerData, containerSizeToUse, immediateVisuals, preservePosition);
 
             // Container visibility and padding are handled by selection visualizer - don't override here
 

@@ -204,9 +204,10 @@ class ContainerCrudManager {
             type: 'container',
             position: bounds.center.clone(),
             isContainer: true,
-            selectable: false,
+            selectable: true, // Container must be selectable for raycasting and face highlighting
             sizingMode: 'hug',
             originalBounds: bounds // Store original bounds for interactive mesh creation
+            // autoLayout provided by schema factory in SceneLifecycleManager
         });
 
 
@@ -312,8 +313,9 @@ class ContainerCrudManager {
             type: 'container',
             position,
             isContainer: true,
-            selectable: false, // WIREFRAME IS NOT SELECTABLE - only interactive mesh should be selectable
+            selectable: true, // Container must be selectable for raycasting and face highlighting
             sizingMode: 'hug' // Default container sizing mode - automatically resizes to fit children
+            // autoLayout provided by schema factory in SceneLifecycleManager
         });
 
         return containerObject;
@@ -369,8 +371,8 @@ class ContainerCrudManager {
         }
 
         sceneController.setParentContainer(objectData.id, containerData.id, false);
-        // When adding objects to container, preserve container position to avoid moving child objects
-        this.resizeContainerToFitChildren(containerData, null, true);
+        // When adding objects to container, re-center container around all children
+        this.resizeContainerToFitChildren(containerData, null, true, false);
 
         // Legacy meshSynchronizer removed - support meshes now self-contained children
 
@@ -430,14 +432,14 @@ class ContainerCrudManager {
         sceneController.setParentContainer(childContainerData.id, parentContainerData.id, false);
 
         // Resize parent container to fit the new child container
-        // Preserve parent position to avoid moving all child objects
-        this.resizeContainerToFitChildren(parentContainerData, null, true);
+        // Re-center parent around all children (child added)
+        this.resizeContainerToFitChildren(parentContainerData, null, true, false);
 
         // If the child container also has children, we may need cascading updates
         const childChildren = sceneController.getChildObjects(childContainerData.id);
         if (childChildren.length > 0) {
             // The child container may also need to resize after coordinate space changes
-            this.resizeContainerToFitChildren(childContainerData, null, true);
+            this.resizeContainerToFitChildren(childContainerData, null, true, false);
         }
 
         // Legacy meshSynchronizer removed - support meshes now self-contained children
@@ -502,8 +504,8 @@ class ContainerCrudManager {
         sceneController.setParentContainer(objectData.id, null);
 
         if (parentContainer) {
-            // When removing objects from container, preserve container position to avoid moving remaining child objects
-            this.resizeContainerToFitChildren(parentContainer, null, true);
+            // When removing objects from container, re-center around remaining children
+            this.resizeContainerToFitChildren(parentContainer, null, true, false);
         }
 
         // Hierarchy updates handled automatically by PropertyPanelSync listening to events
@@ -540,8 +542,13 @@ class ContainerCrudManager {
     
     /**
      * Resize container to fit its child objects with fill-aware layout support
+     *
+     * @param {Object} containerData - Container to resize
+     * @param {THREE.Vector3} newContainerSize - Optional target size for fill calculations
+     * @param {boolean} immediateUpdate - If true, bypass throttling
+     * @param {boolean} preservePosition - If true, resize WITHOUT repositioning (BOTTOM-UP)
      */
-    resizeContainerToFitChildren(containerData, newContainerSize = null, immediateUpdate = false) {
+    resizeContainerToFitChildren(containerData, newContainerSize = null, immediateUpdate = false, preservePosition = false) {
         const validation = this.validateContainer(containerData, 'resizeContainerToFitChildren');
         if (!validation.success) return false;
 
@@ -590,20 +597,34 @@ class ContainerCrudManager {
             return false;
         }
 
-        // Calculate the correct container position to center it around the child objects
+        // ARCHITECTURE FIX: Conditional repositioning based on workflow
         const currentContainerPosition = containerData.mesh.position.clone();
-        const targetWorldPosition = currentContainerPosition.clone().add(localBounds.center);
+        let targetPosition;
+        let shouldRepositionChildren;
+
+        if (preservePosition) {
+            // BOTTOM-UP WORKFLOW: Keep container where it is, only change size
+            // Use case: Child object moved/resized, container adapts
+            targetPosition = currentContainerPosition.clone();
+            shouldRepositionChildren = false;
+
+        } else {
+            // TOP-DOWN WORKFLOW: Reposition container to center around children
+            // Use case: Container creation, object added/removed
+            targetPosition = currentContainerPosition.clone().add(localBounds.center);
+            shouldRepositionChildren = true;
+        }
 
         const success = this.updateContainerGeometryWithFactories(
             containerData,
             localBounds.size,
-            targetWorldPosition,
-            true // Reposition container to center around child objects
+            targetPosition,
+            !preservePosition  // Only reposition geometry if NOT preserving position
         );
 
-        if (success) {
+        if (success && shouldRepositionChildren) {
             // Calculate the offset that the container moved
-            const containerMovement = targetWorldPosition.clone().sub(currentContainerPosition);
+            const containerMovement = targetPosition.clone().sub(currentContainerPosition);
 
             // Compensate child object positions so they don't move in world space
             // Since children are in container's local space, we need to subtract the container movement
@@ -618,11 +639,11 @@ class ContainerCrudManager {
                     });
                 }
             });
-
-            // Update container position to the calculated bounds center
-            sceneController.updateObject(containerData.id, { position: targetWorldPosition });
-            this.handleContainerVisibilityAfterResize(containerData, immediateUpdate);
         }
+
+        // Update container position
+        sceneController.updateObject(containerData.id, { position: targetPosition });
+        this.handleContainerVisibilityAfterResize(containerData, immediateUpdate);
 
         return success;
     }

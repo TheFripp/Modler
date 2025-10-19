@@ -162,10 +162,16 @@ class LayoutPropagationManager {
                 const isLayoutMode = container.autoLayout?.enabled;
 
                 if (!isLayoutMode) {
-                    // HUG MODE: Container wraps children
+                    // HUG MODE: Container wraps children WITHOUT repositioning
+                    // BOTTOM-UP: Child changed, container adapts in place
                     const containerCrudManager = this.getContainerCrudManager();
                     if (containerCrudManager) {
-                        containerCrudManager.resizeContainerToLayoutBounds(container, layoutResult.layoutBounds);
+                        containerCrudManager.resizeContainerToFitChildren(
+                            container,
+                            null,    // No new size (calculate from children)
+                            false,   // Not immediate (already in RAF)
+                            true     // preservePosition=true (BOTTOM-UP adaptation)
+                        );
                     }
                 }
                 // LAYOUT MODE: No auto-resize

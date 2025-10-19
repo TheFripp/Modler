@@ -51,21 +51,39 @@ class MoveTool {
      * Check if face highlighting should be shown for this object
      */
     shouldShowFaceHighlight(hit) {
-        if (!hit || !hit.object) return false;
+        if (!hit || !hit.object) {
+            console.log('❌ MoveTool.shouldShowFaceHighlight: No hit or object');
+            return false;
+        }
 
         const targetObject = this.faceToolBehavior.getTargetObject(hit);
-        if (!targetObject) return false;
+        if (!targetObject) {
+            console.log('❌ MoveTool.shouldShowFaceHighlight: No target object');
+            return false;
+        }
 
         // Check if object is a child in a layout-enabled container
+        // BUT: If the container itself is selected, allow highlights on the container
         const sceneController = window.modlerComponents?.sceneController;
         if (sceneController) {
             const objectData = sceneController.getObjectByMesh(targetObject);
+
+            // If this is a child inside a layout container
             if (objectData && objectData.parentContainer) {
                 const container = sceneController.getObject(objectData.parentContainer);
                 if (container && container.autoLayout && container.autoLayout.enabled) {
-                    // Don't show highlights for children in layout mode (including tiled containers)
-                    // User must double-click to enter container context to edit individual objects
-                    return false;
+                    // Check if the CONTAINER is selected (not the child)
+                    // If container is selected, we're trying to show highlights on the container, not the child
+                    const isContainerSelected = this.selectionController?.isSelected(container.mesh);
+
+                    if (isContainerSelected) {
+                        // Container is selected - allow highlights on container (face highlighting will redirect to container)
+                        return true;
+                    } else {
+                        // Child is selected but in layout mode - block highlights
+                        // User must double-click to enter container context to edit individual objects
+                        return false;
+                    }
                 }
             }
         }
@@ -110,7 +128,8 @@ class MoveTool {
     }
     
     /**
-     * Handle mouse down events using centralized event handler
+     * Handle mouse down events - validates selection before starting drag
+     * Trust SelectionController's previous selection decision
      */
     onMouseDown(hit, event) {
         // Only handle left mouse button
@@ -119,15 +138,18 @@ class MoveTool {
         // Don't start new drag if already dragging
         if (this.isDragging) return false;
 
-        // Check if clicking on a selected object
+        // VALIDATION APPROACH: Only drag if hitting a SELECTED object
+        // SelectionController already applied container-first logic during onClick
         if (hit && hit.object) {
-            const targetObject = this.faceToolBehavior.getTargetObject(hit);
-            const isSelected = targetObject && this.selectionController.isSelected(targetObject);
+            const hitObject = this.faceToolBehavior.getTargetObject(hit);
 
-            // For containers, allow drag without face highlight requirement
+            // Check if the hit object is currently selected
+            const isSelected = hitObject && this.selectionController.isSelected(hitObject);
+
             if (isSelected) {
+                // Selected object - start drag
                 const sceneController = window.modlerComponents?.sceneController;
-                const objectData = sceneController?.getObjectByMesh(targetObject);
+                const objectData = sceneController?.getObjectByMesh(hitObject);
                 const isContainer = objectData?.isContainer;
                 const hasValidFace = this.faceToolBehavior.hasValidFaceHover(hit);
 
@@ -136,6 +158,7 @@ class MoveTool {
                     return true;
                 }
             }
+            // Not selected - ignore drag attempt (onClick already handled selection)
         }
 
         return false;
@@ -154,13 +177,16 @@ class MoveTool {
 
     /**
      * Handle click events using centralized event handler
+     * SelectionController handles ALL selection logic including container-first redirection
      */
     onClick(hit, event) {
         if (this.isDragging) return;
 
-        // Handle selection immediately - SelectionController has proper container context logic
+        // Let SelectionController handle all selection logic (including container-first)
+        // No tool-specific overrides - single source of truth
         if (hit && hit.object) {
-            this.selectionController.handleObjectClick(hit.object, event, { toolType: 'MoveTool' });
+            const targetObject = this.faceToolBehavior.getTargetObject(hit);
+            this.selectionController.handleObjectClick(targetObject, event, { toolType: 'MoveTool' });
         } else {
             this.selectionController.handleEmptySpaceClick(event);
         }
@@ -297,27 +323,42 @@ class MoveTool {
 
     /**
      * Start face-based dragging operation
+     * DEFENSIVE: Last line of defense to ensure we're dragging the selected object
      */
     startFaceDrag(hit) {
 
         // Use shared behavior to get target object (handles both old and new container architectures)
-        const targetObject = this.faceToolBehavior.getTargetObject(hit);
+        let targetObject = this.faceToolBehavior.getTargetObject(hit);
 
-        // Check if object is a child in a layout-enabled container
         const sceneController = window.modlerComponents?.sceneController;
-        if (sceneController) {
+        const selectedObjects = this.selectionController.getSelectedObjects();
+
+        if (sceneController && selectedObjects.length > 0) {
             const objectData = sceneController.getObjectByMesh(targetObject);
+
+            // DEFENSIVE CHECK: If hit object has a parent container that's selected,
+            // use the container instead (safety net against child dragging)
             if (objectData && objectData.parentContainer) {
-                const container = sceneController.getObject(objectData.parentContainer);
-                if (container && container.autoLayout && container.autoLayout.enabled) {
-                    console.warn('MoveTool: Cannot move child objects in layout mode. Move the container instead.');
-                    return false; // Prevent drag operation
+                const parentContainer = sceneController.getObject(objectData.parentContainer);
+
+                // If parent container is selected, drag it instead
+                if (parentContainer && selectedObjects.includes(parentContainer.mesh)) {
+                    targetObject = parentContainer.mesh;
+                }
+
+                // Check if still trying to drag child in layout mode (shouldn't happen, but defensive)
+                if (parentContainer && parentContainer.autoLayout && parentContainer.autoLayout.enabled) {
+                    const isDraggingChild = targetObject === objectData.mesh;
+                    if (isDraggingChild) {
+                        console.warn('MoveTool: Cannot move child objects in layout mode. Move the container instead.');
+                        return false;
+                    }
                 }
             }
         }
 
         this.isDragging = true;
-        this.dragObject = targetObject; // Use the actual container, not the collision mesh
+        this.dragObject = targetObject; // Use the resolved target (container if selected)
         this.dragStartPosition = targetObject.position.clone();
 
         // Register operation with FileManager to prevent auto-save during drag
