@@ -76,8 +76,21 @@ class BaseFaceToolBehavior {
 
         // Face detection completed
 
+        // CONTAINER MESH REDIRECTION: For containers, always use interactive mesh for face detection
+        // Container main mesh is EdgesGeometry (wireframe), not suitable for face highlighting
+        // Interactive mesh is BoxGeometry with proper face data
+        let hitForFaceDetection = hit;
+        if (targetObject.userData?.isContainer && targetObject.userData?.supportMeshes?.interactiveMesh) {
+            const interactiveMesh = targetObject.userData.supportMeshes.interactiveMesh;
+
+            // If we hit the container's main mesh (not interactive), redirect to interactive mesh
+            if (hit.object !== interactiveMesh) {
+                hitForFaceDetection = this.createSyntheticHitForContainer(hit, targetObject, interactiveMesh);
+            }
+        }
+
         // CHILD OBJECT TRANSPARENCY: If we hit a child object inside a selected container,
-        // ignore the child hit but preserve existing container highlights
+        // redirect the hit to the container's interactive mesh for face highlighting
         // EXCEPTION: When stepped into container context, child objects should be directly selectable
         if (!this.selectionController.isSelected(targetObject)) {
             const sceneController = window.modlerComponents?.sceneController;
@@ -88,9 +101,15 @@ class BaseFaceToolBehavior {
             if (objectData && objectData.parentContainer && !isInContainerContext) {
                 const parentContainer = sceneController.getObject(objectData.parentContainer);
                 if (parentContainer && this.selectionController.isSelected(parentContainer.mesh)) {
-                    // Child object hit inside selected container - ignore it but preserve existing highlights
-                    // Return true to indicate "handled" but don't clear or set new highlights
-                    return true;
+                    // Child object hit inside selected container
+                    // Redirect to container's interactive mesh for face highlighting
+                    targetObject = parentContainer.mesh;
+                    const supportMeshes = targetObject.userData?.supportMeshes;
+
+                    if (supportMeshes?.interactiveMesh) {
+                        // Create synthetic hit using container's interactive mesh
+                        hitForFaceDetection = this.createSyntheticHitForContainer(hit, parentContainer.mesh, supportMeshes.interactiveMesh);
+                    }
                 }
             }
         }
@@ -99,7 +118,7 @@ class BaseFaceToolBehavior {
         // Note: targetObject may have been changed above to the container when hitting child objects
         if (this.selectionController.isSelected(targetObject)) {
             // CAMERA-FACING CHECK: Only highlight faces oriented toward the camera
-            if (!this.isFaceTowardCamera(hit)) {
+            if (!this.isFaceTowardCamera(hitForFaceDetection)) {
                 this.clearHover();
                 return false;
             }
@@ -110,21 +129,40 @@ class BaseFaceToolBehavior {
 
             // Store the actual target object for interaction
             this.hoveredObject = targetObject;
-            this.hoveredHit = hit;
+            this.hoveredHit = hitForFaceDetection;
 
             // Face highlighting activated - use support mesh if available
             const supportMeshes = targetObject.userData.supportMeshes;
             if (supportMeshes?.faceHighlight) {
                 // ARCHITECTURE COMPLIANCE: Position once per hover session, then show
                 // Only reposition if we're hovering a different face to prevent flicker
-                const currentFaceIndex = hit.face.a + '-' + hit.face.b + '-' + hit.face.c;
-                const faceChanged = this.hoveredFaceIndex !== currentFaceIndex || this.hoveredObject !== targetObject;
+
+                // For containers with synthetic hits, use face normal for change detection
+                // For regular objects, use face indices
+                let currentFaceKey;
+                if (targetObject.userData?.isContainer) {
+                    const normal = hitForFaceDetection.face.normal;
+                    currentFaceKey = `${normal.x.toFixed(2)}-${normal.y.toFixed(2)}-${normal.z.toFixed(2)}`;
+                } else {
+                    currentFaceKey = hitForFaceDetection.face.a + '-' + hitForFaceDetection.face.b + '-' + hitForFaceDetection.face.c;
+                }
+
+                const faceChanged = this.hoveredFaceIndex !== currentFaceKey || this.hoveredObject !== targetObject;
 
                 if (faceChanged) {
-                    this.hoveredFaceIndex = currentFaceIndex;
+                    this.hoveredFaceIndex = currentFaceKey;
                     const supportMeshFactory = window.modlerComponents?.supportMeshFactory;
                     if (supportMeshFactory) {
-                        supportMeshFactory.positionFaceHighlightForHit(supportMeshes.faceHighlight, hit);
+                        // For containers, we need to create a modified hit that references the container mesh
+                        // instead of the interactive mesh, so face normal calculation works correctly
+                        let hitForPositioning = hitForFaceDetection;
+                        if ((isContainerInteractive || isContainerCollision) && hitForFaceDetection.object !== targetObject) {
+                            hitForPositioning = {
+                                ...hitForFaceDetection,
+                                object: targetObject // Use container mesh instead of interactive mesh
+                            };
+                        }
+                        supportMeshFactory.positionFaceHighlightForHit(supportMeshes.faceHighlight, hitForPositioning);
                     }
                 }
 
@@ -157,7 +195,7 @@ class BaseFaceToolBehavior {
                 // Fallback to Visual Effects for objects without support meshes
                 const materialManager = window.modlerComponents?.materialManager;
                 const disabledColor = materialManager?.colors?.DISABLED_STATE || 0x888888;
-                this.visualEffects.showFaceHighlight(hit, isDisabledAction ? disabledColor : null);
+                this.visualEffects.showFaceHighlight(hitForFaceDetection, isDisabledAction ? disabledColor : null);
             }
             return !isDisabledAction; // Return false if disabled so hasValidFaceHover works correctly
         } else {
@@ -203,7 +241,25 @@ class BaseFaceToolBehavior {
             targetObject = hit.object;
         }
 
-        const isSelectedObject = targetObject && this.selectionController.isSelected(targetObject);
+        // Check if target object is selected
+        let isSelectedObject = targetObject && this.selectionController.isSelected(targetObject);
+
+        // CONTAINER FACE DRAGGING FIX: If target is not selected, check if its parent container is selected
+        // This allows face operations on containers even when child objects are coplanar and get hit first
+        if (!isSelectedObject && targetObject) {
+            const sceneController = window.modlerComponents?.sceneController;
+            const targetObjectData = sceneController?.getObjectByMesh(targetObject);
+            if (targetObjectData?.parentContainer) {
+                const parentContainer = sceneController.getObject(targetObjectData.parentContainer);
+                if (parentContainer && this.selectionController.isSelected(parentContainer.mesh)) {
+                    // Parent container is selected - allow face operation
+                    // Update targetObject to be the container for proper highlight checking
+                    targetObject = parentContainer.mesh;
+                    isSelectedObject = true;
+                }
+            }
+        }
+
         const hasHighlightedFace = this.hoveredObject === targetObject;
         const isNotHugMode = !this.isContainerInHugMode(targetObject);
 
@@ -402,6 +458,66 @@ class BaseFaceToolBehavior {
         // Face is toward camera if dot product is negative
         // (normal points opposite to camera direction)
         return worldNormal.dot(cameraDirection) < 0;
+    }
+
+    /**
+     * Create a synthetic hit for container when child object is hit
+     * Estimates which container face was hit based on hit point location
+     * @param {Object} childHit - Original hit on child object
+     * @param {THREE.Mesh} containerMesh - Container's main mesh
+     * @param {THREE.Mesh} interactiveMesh - Container's interactive mesh (BoxGeometry)
+     * @returns {Object} Synthetic hit with container interactive mesh and estimated face
+     */
+    createSyntheticHitForContainer(childHit, containerMesh, interactiveMesh) {
+        // Get hit point in world space
+        const hitPoint = childHit.point;
+
+        // Transform hit point to container local space
+        const localPoint = hitPoint.clone();
+        interactiveMesh.worldToLocal(localPoint);
+
+        // Get bounding box of interactive mesh to determine which face was hit
+        interactiveMesh.geometry.computeBoundingBox();
+        const bbox = interactiveMesh.geometry.boundingBox;
+
+        // Determine which face is closest to the hit point
+        const distances = {
+            left: Math.abs(localPoint.x - bbox.min.x),
+            right: Math.abs(localPoint.x - bbox.max.x),
+            bottom: Math.abs(localPoint.y - bbox.min.y),
+            top: Math.abs(localPoint.y - bbox.max.y),
+            back: Math.abs(localPoint.z - bbox.min.z),
+            front: Math.abs(localPoint.z - bbox.max.z)
+        };
+
+        // Find the closest face
+        const closestFace = Object.keys(distances).reduce((a, b) =>
+            distances[a] < distances[b] ? a : b
+        );
+
+        // Map face to normal vector
+        const faceNormals = {
+            left: new THREE.Vector3(-1, 0, 0),
+            right: new THREE.Vector3(1, 0, 0),
+            bottom: new THREE.Vector3(0, -1, 0),
+            top: new THREE.Vector3(0, 1, 0),
+            back: new THREE.Vector3(0, 0, -1),
+            front: new THREE.Vector3(0, 0, 1)
+        };
+
+        // Create synthetic face object
+        const syntheticFace = {
+            normal: faceNormals[closestFace],
+            a: 0, b: 1, c: 2  // Dummy indices for face tracking
+        };
+
+        // Return synthetic hit
+        return {
+            object: interactiveMesh,
+            face: syntheticFace,
+            point: hitPoint,
+            distance: childHit.distance
+        };
     }
 }
 
