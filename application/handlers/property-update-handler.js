@@ -185,9 +185,13 @@ class PropertyUpdateHandler {
                 const layoutResult = sceneController.updateLayout(containerId);
 
                 if (layoutResult && layoutResult.success) {
-                // Step 10: PropertyUpdateHandler → containerCrudManager.resizeContainerToLayoutBounds(layoutBounds)
+                // UNIFIED API: Layout properties changed via UI
                 if (layoutResult.layoutBounds) {
-                    this.containerCrudManager.resizeContainerToLayoutBounds(objectData, layoutResult.layoutBounds);
+                    this.containerCrudManager.resizeContainer(objectData, {
+                        reason: 'layout-updated',
+                        layoutBounds: layoutResult.layoutBounds,
+                        immediate: true
+                    });
                 }
 
                 // Step 13: PropertyUpdateHandler → containerCrudManager.showContainer(containerId, true)

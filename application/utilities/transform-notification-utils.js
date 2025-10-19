@@ -35,9 +35,13 @@ class TransformNotificationUtils {
 
         // Update parent containers if enabled and object has parent
         if (updateContainers && mesh.userData?.parentContainer) {
-            const MovementUtils = window.MovementUtils;
-            if (MovementUtils) {
-                MovementUtils.updateParentContainer(mesh, isRealTime, null, null, true);
+            const containerCrudManager = window.modlerComponents?.containerCrudManager;
+            if (containerCrudManager) {
+                // UNIFIED API: Generic transform notification
+                containerCrudManager.resizeContainer(mesh.userData.parentContainer, {
+                    reason: 'child-transformed',
+                    immediate: isRealTime
+                });
             }
         }
 
@@ -68,22 +72,8 @@ class TransformNotificationUtils {
         }
     }
 
-    /**
-     * Update parent containers for an object after modification
-     * @param {THREE.Mesh} mesh - Object mesh
-     * @param {boolean} isRealTime - Whether this is a real-time update
-     * @param {boolean} skipLayoutUpdate - Whether to skip layout updates
-     */
-    static updateParentContainers(mesh, isRealTime = true, skipLayoutUpdate = false) {
-        if (!mesh || !mesh.userData?.parentContainer) {
-            return;
-        }
-
-        const MovementUtils = window.MovementUtils;
-        if (MovementUtils) {
-            MovementUtils.updateParentContainer(mesh, isRealTime, null, null, true, skipLayoutUpdate);
-        }
-    }
+    // REMOVED: updateParentContainers() - use ContainerCrudManager.resizeContainer() directly
+    // All callers should now use the unified API with semantic reason parameters
 
     /**
      * Sync all related meshes (wireframes, highlights, etc.)

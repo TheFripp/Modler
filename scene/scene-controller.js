@@ -682,7 +682,12 @@ class SceneController {
             resizeToLayoutBounds: (container, layoutBounds) => {
                 const containerCrudManager = this.getContainerCrudManager();
                 if (containerCrudManager) {
-                    containerCrudManager.resizeContainerToLayoutBounds(container, layoutBounds);
+                    // UNIFIED API: Hierarchy change triggered layout update
+                    containerCrudManager.resizeContainer(container, {
+                        reason: 'layout-updated',
+                        layoutBounds: layoutBounds,
+                        immediate: true
+                    });
                 }
             }
         };

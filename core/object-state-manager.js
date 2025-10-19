@@ -132,6 +132,9 @@ class ObjectStateManager extends EventTarget {
         // Set up SelectionController integration if available
         this.setupSelectionControllerIntegration();
 
+        // Listen for lifecycle events to auto-register new objects
+        this.setupLifecycleListener();
+
         // Listen for hierarchy changes from SceneController
         this.setupHierarchyChangeListener();
 
@@ -141,6 +144,37 @@ class ObjectStateManager extends EventTarget {
         } else {
             console.warn('ObjectStateManager: window.modlerComponents not available');
         }
+    }
+
+    /**
+     * Set up lifecycle listener to auto-register new objects
+     *
+     * Listens to object:lifecycle events from SceneController and automatically
+     * registers new objects in ObjectStateManager's internal map.
+     */
+    setupLifecycleListener() {
+        if (!window.objectEventBus) return;
+
+        window.objectEventBus.subscribe(window.objectEventBus.EVENT_TYPES.LIFECYCLE, (event) => {
+            const { action, objectId } = event.changeData || {};
+
+            if (action === 'created' && objectId) {
+                // Auto-register newly created objects
+                const objectData = this.sceneController?.getObject?.(objectId);
+                if (objectData && !this.objects.has(objectId)) {
+                    // Use ObjectDataFormat for standardization if available
+                    const standardized = this.objectDataFormat
+                        ? this.objectDataFormat.standardizeObjectData(objectData)
+                        : objectData;
+
+                    this.objects.set(objectId, standardized);
+                }
+            } else if (action === 'deleted' && objectId) {
+                // Remove deleted objects
+                this.objects.delete(objectId);
+                this.selection.delete(objectId);
+            }
+        });
     }
 
     /**
@@ -283,7 +317,7 @@ class ObjectStateManager extends EventTarget {
             // Container properties
             isContainer: objectData.isContainer || false,
             parentContainer: objectData.parentContainer || null,
-            autoLayout: objectData.autoLayout || { enabled: false, direction: 'x' },
+            autoLayout: objectData.autoLayout || window.ObjectDataFormat.createDefaultAutoLayout(),
 
             // Material properties
             material: objectData.material || { color: '#888888', opacity: 1, transparent: false }
@@ -678,11 +712,22 @@ class ObjectStateManager extends EventTarget {
             const sceneObject = this.sceneController.getObject(object.id);
             if (sceneObject) {
                 sceneObject.name = object.name;
-                if (object.autoLayout) {
-                    sceneObject.autoLayout = object.autoLayout;
+
+                // SCHEMA-FIRST: Always sync autoLayout for containers, use schema defaults if needed
+                if (object.isContainer) {
+                    sceneObject.autoLayout = object.autoLayout || (
+                        window.ObjectDataFormat?.createDefaultAutoLayout?.() || {
+                            enabled: false,
+                            direction: null,
+                            gap: 0,
+                            padding: { width: 0, height: 0, depth: 0 },
+                            alignment: { x: 'center', y: 'center', z: 'center' },
+                            reversed: false
+                        }
+                    );
 
                     // CRITICAL: If user manually sets gap, clear calculatedGap to use fixed gap
-                    if (object._changedProperties?.has('autoLayout.gap')) {
+                    if (object._changedProperties?.has('autoLayout') || object._changedProperties?.has('autoLayout.gap')) {
                         sceneObject.calculatedGap = undefined;
                         object.calculatedGap = undefined;
                     }
@@ -713,7 +758,12 @@ class ObjectStateManager extends EventTarget {
                         if (autoLayoutChanged && layoutResult?.success && layoutResult.layoutBounds) {
                             const containerCrudManager = this.getContainerCrudManager();
                             if (containerCrudManager) {
-                                containerCrudManager.resizeContainerToLayoutBounds(sceneObject, layoutResult.layoutBounds);
+                                // UNIFIED API: Switching to layout mode
+                                containerCrudManager.resizeContainer(sceneObject, {
+                                    reason: 'layout-updated',
+                                    layoutBounds: layoutResult.layoutBounds,
+                                    immediate: true
+                                });
 
                                 // CRITICAL: Recalculate layout after resize to get correct gap for new size
                                 // This ensures space-between gap is calculated with the final container size
@@ -734,10 +784,15 @@ class ObjectStateManager extends EventTarget {
                     // Update layout and resize container to fit children
                     const layoutResult = this.sceneController.updateLayout(object.id);
 
-                    if (layoutResult && layoutResult.success && layoutResult.layoutBounds) {
+                    if (layoutResult && layoutResult.success) {
                         const containerCrudManager = this.getContainerCrudManager();
                         if (containerCrudManager) {
-                            containerCrudManager.resizeContainerToLayoutBounds(sceneObject, layoutResult.layoutBounds);
+                            // UNIFIED API: Hug mode layout property changed
+                            containerCrudManager.resizeContainer(sceneObject, {
+                                reason: 'layout-updated',
+                                layoutBounds: layoutResult.layoutBounds,
+                                immediate: true
+                            });
                         }
                     }
                 }
@@ -848,13 +903,17 @@ class ObjectStateManager extends EventTarget {
     /**
      * Selection management
      *
-     * Note: This is a state synchronization method called by SelectionController.
-     * SelectionController is responsible for emitting selection events through ObjectEventBus.
-     * We don't emit events here to avoid duplicate emissions.
+     * Called by SelectionController when selection changes.
+     * Updates internal selection state only - does NOT emit events.
+     * SelectionController.notifySelectionChange() handles ObjectEventBus emission.
      */
     setSelection(objectIds) {
         this.selection.clear();
         objectIds.forEach(id => this.selection.add(id));
+
+        // NOTE: Do NOT emit to ObjectEventBus here - SelectionController already emits
+        // This method is called BY SelectionController.notifySelectionChange() which handles emission
+        // Emitting here would create duplicate events and cause selection loops
 
         // Legacy CustomEvent (deprecated - will be removed in future)
         // Kept for backward compatibility with any code listening to this event

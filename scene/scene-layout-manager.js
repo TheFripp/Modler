@@ -98,11 +98,15 @@ class SceneLayoutManager {
         const layoutResult = this.updateLayout(containerId);
 
         // Resize container to fit the laid out objects
-        // SKIP for hug containers - they automatically resize based on children
-        if (layoutResult && layoutResult.success && layoutResult.layoutBounds && !container.isHug) {
+        if (layoutResult && layoutResult.success) {
             const containerCrudManager = this.getContainerCrudManager();
             if (containerCrudManager) {
-                containerCrudManager.resizeContainerToLayoutBounds(container, layoutResult.layoutBounds);
+                // UNIFIED API: Auto-layout enabled/changed
+                containerCrudManager.resizeContainer(container, {
+                    reason: 'layout-updated',
+                    layoutBounds: layoutResult.layoutBounds,
+                    immediate: true
+                });
             }
         }
 
@@ -320,11 +324,17 @@ class SceneLayoutManager {
             // Use bounds directly from LayoutEngine (architectural improvement)
             const layoutBounds = layoutResult.bounds;
 
-            // Resize container to match new layout bounds (for non-hug containers)
-            if (!container.isHug && layoutBounds && layoutBounds.size) {
+            // Resize container to match new layout bounds
+            if (layoutBounds && layoutBounds.size) {
                 const containerCrudManager = this.getContainerCrudManager();
                 if (containerCrudManager) {
-                    containerCrudManager.resizeContainerToLayoutBounds(container, layoutBounds, pushContext);
+                    // UNIFIED API: Layout recalculated (via updateLayout)
+                    containerCrudManager.resizeContainer(container, {
+                        reason: 'layout-updated',
+                        layoutBounds: layoutBounds,
+                        pushContext: pushContext,
+                        immediate: true
+                    });
                 }
             }
 

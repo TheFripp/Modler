@@ -252,7 +252,7 @@ class ContainerCrudManager {
             reason === 'child-transformed'      // BOTTOM-UP: child rotated/scaled
         );
 
-        return this.resizeContainerToFitChildren(
+        return this._resizeToFitChildren(
             container,
             null,           // newContainerSize - calculate from children
             immediate,      // immediateUpdate - bypass throttling if requested
@@ -279,7 +279,7 @@ class ContainerCrudManager {
             return false;
         }
 
-        return this.resizeContainerToLayoutBounds(container, layoutBounds, pushContext);
+        return this._resizeToLayoutBounds(container, layoutBounds, pushContext);
     }
 
     // ========================================================================
@@ -530,8 +530,11 @@ class ContainerCrudManager {
         }
 
         sceneController.setParentContainer(objectData.id, containerData.id, false);
-        // When adding objects to container, re-center container around all children
-        this.resizeContainerToFitChildren(containerData, null, true, false);
+        // UNIFIED API: Child added to container (re-center container around all children)
+        this.resizeContainer(containerData, {
+            reason: 'child-added',
+            immediate: true
+        });
 
         // Legacy meshSynchronizer removed - support meshes now self-contained children
 
@@ -590,15 +593,20 @@ class ContainerCrudManager {
         // Update the data structure
         sceneController.setParentContainer(childContainerData.id, parentContainerData.id, false);
 
-        // Resize parent container to fit the new child container
-        // Re-center parent around all children (child added)
-        this.resizeContainerToFitChildren(parentContainerData, null, true, false);
+        // UNIFIED API: Child container added to parent (re-center parent)
+        this.resizeContainer(parentContainerData, {
+            reason: 'child-added',
+            immediate: true
+        });
 
         // If the child container also has children, we may need cascading updates
         const childChildren = sceneController.getChildObjects(childContainerData.id);
         if (childChildren.length > 0) {
-            // The child container may also need to resize after coordinate space changes
-            this.resizeContainerToFitChildren(childContainerData, null, true, false);
+            // UNIFIED API: Child container may need resize after coordinate space changes
+            this.resizeContainer(childContainerData, {
+                reason: 'coordinate-space-changed',
+                immediate: true
+            });
         }
 
         // Legacy meshSynchronizer removed - support meshes now self-contained children
@@ -663,8 +671,11 @@ class ContainerCrudManager {
         sceneController.setParentContainer(objectData.id, null);
 
         if (parentContainer) {
-            // When removing objects from container, re-center around remaining children
-            this.resizeContainerToFitChildren(parentContainer, null, true, false);
+            // UNIFIED API: Child removed from container (re-center around remaining children)
+            this.resizeContainer(parentContainer, {
+                reason: 'child-removed',
+                immediate: true
+            });
         }
 
         // Hierarchy updates handled automatically by PropertyPanelSync listening to events
@@ -696,18 +707,19 @@ class ContainerCrudManager {
         }
         
         // Use the simplified resize method for real-time updates
-        return this.resizeContainerToFitChildren(containerData);
+        return this._resizeToFitChildren(containerData);
     }
     
     /**
-     * Resize container to fit its child objects with fill-aware layout support
+     * INTERNAL: Resize container to fit its child objects with fill-aware layout support
+     * DO NOT call directly - use resizeContainer() instead
      *
      * @param {Object} containerData - Container to resize
      * @param {THREE.Vector3} newContainerSize - Optional target size for fill calculations
      * @param {boolean} immediateUpdate - If true, bypass throttling
      * @param {boolean} preservePosition - If true, resize WITHOUT repositioning (BOTTOM-UP)
      */
-    resizeContainerToFitChildren(containerData, newContainerSize = null, immediateUpdate = false, preservePosition = false) {
+    _resizeToFitChildren(containerData, newContainerSize = null, immediateUpdate = false, preservePosition = false) {
         const validation = this.validateContainer(containerData, 'resizeContainerToFitChildren');
         if (!validation.success) return false;
 
@@ -808,9 +820,10 @@ class ContainerCrudManager {
     }
 
     /**
-     * Resize container to match layout-calculated bounds
+     * INTERNAL: Resize container to match layout-calculated bounds
+     * DO NOT call directly - use resizeContainer() instead
      */
-    resizeContainerToLayoutBounds(containerData, layoutBounds, pushContext = null) {
+    _resizeToLayoutBounds(containerData, layoutBounds, pushContext = null) {
         const validation = this.validateContainer(containerData, 'resizeContainerToLayoutBounds');
         if (!validation.success) return false;
 
