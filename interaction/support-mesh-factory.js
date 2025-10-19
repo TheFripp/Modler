@@ -152,7 +152,7 @@ class SupportMeshFactory {
         }
         if (supportMeshes.interactiveMesh) {
             mainMesh.add(supportMeshes.interactiveMesh);
-            supportMeshes.interactiveMesh.visible = false; // Hidden by default, used for raycasting
+            supportMeshes.interactiveMesh.visible = true; // Must be visible for raycasting - material is already transparent
         }
 
         // Store references for easy access
@@ -359,6 +359,16 @@ class SupportMeshFactory {
         interactiveMesh.position.set(0, 0, 0);
         interactiveMesh.renderOrder = 1000; // High render order for raycasting priority
         interactiveMesh.visible = true; // CRITICAL: Must be visible for raycaster (material is already transparent/invisible)
+
+        // RAYCASTING FIX: Resource pool sets raycast = () => {} (non-raycastable)
+        // Delete the override to restore default THREE.js raycasting behavior
+        delete interactiveMesh.raycast;
+
+        // RAYCASTING LAYERS: Enable Layer 1 in addition to Layer 0 for container interactive meshes
+        // This allows raycaster to selectively target them when switching to Layer 1
+        // NOTE: Keep Layer 0 enabled for visibility, add Layer 1 for selective raycasting
+        interactiveMesh.layers.enable(1); // Add Layer 1 (Layer 0 remains enabled by default)
+
         interactiveMesh.userData.isContainerInteractive = true;
         interactiveMesh.userData.isContainerCollision = true;
         interactiveMesh.userData.containerMesh = mainMesh; // Direct reference to parent
@@ -586,9 +596,17 @@ class SupportMeshFactory {
                 return;
             }
 
+            // CRITICAL FIX: For containers, use interactive mesh for bounding box calculations
+            // Interactive mesh has BoxGeometry with proper face dimensions
+            // Main mesh (EdgesGeometry) only has edge lines, resulting in tiny bounding box
+            let geometryForBounds = mainObject.geometry;
+            if (mainObject.userData?.isContainer && mainObject.userData?.supportMeshes?.interactiveMesh) {
+                geometryForBounds = mainObject.userData.supportMeshes.interactiveMesh.geometry;
+            }
+
             // Work in local space since face highlight is a child
-            mainObject.geometry.computeBoundingBox();
-            const bbox = mainObject.geometry.boundingBox;
+            geometryForBounds.computeBoundingBox();
+            const bbox = geometryForBounds.boundingBox;
             const size = bbox.getSize(new THREE.Vector3());
 
             // Get face normal in local space

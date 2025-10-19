@@ -50,14 +50,13 @@ async function initializeModlerV2(canvas) {
         // Auto-load last scene (replaces demo objects if scene exists)
         await autoLoadLastScene();
 
-        // CRITICAL: Trigger explicit hierarchy sync after all initialization complete
-        // This ensures Svelte UI receives initial object data (from loaded scene or demo objects)
-        setTimeout(() => {
-            if (window.notifyObjectHierarchyChanged) {
-                window.notifyObjectHierarchyChanged();
-                logger.info('✅ Initial hierarchy sync triggered for UI');
-            }
-        }, 100); // Small delay to ensure UI listeners are registered
+        // MIGRATION: Update existing container interactive meshes to Layer 1
+        // This fixes containers created before layer system was implemented
+        migrateContainerInteractiveMeshesToLayer1();
+
+        // NOTE: Initial hierarchy sync now handled by panel-ready messages
+        // Each UI panel sends ready message → handleUIPanelReady → sends hierarchy
+        // This is more reliable than a timed emit and prevents Event Bus Violation warnings
 
         return true;
 
@@ -706,43 +705,7 @@ function getModlerV2Status() {
  * Initialize Communication Bridge (Phase 3 Refactoring)
  * Sets up unified bidirectional communication between Main and UI
  */
-function initializeCommunicationBridge() {
-    try {
-        // Check if classes are available
-        if (!window.CommunicationBridge || !window.MainAdapter) {
-            console.warn('⚠️ CommunicationBridge not available - skipping initialization');
-            return false;
-        }
-
-        // Create instances
-        const bridge = new window.CommunicationBridge();
-        const mainAdapter = new window.MainAdapter();
-
-        // Initialize bridge with adapters
-        bridge.initialize(mainAdapter, null); // UIAdapter will connect from Svelte
-
-        // Initialize main adapter
-        const success = mainAdapter.initialize();
-
-        if (success) {
-            // Store in global components
-            window.modlerComponents.communicationBridge = bridge;
-            window.modlerComponents.mainAdapter = mainAdapter;
-
-            console.log('✅ CommunicationBridge initialized (Main side)');
-            console.log('📊 Bridge stats:', bridge.getStats());
-
-            return true;
-        } else {
-            console.error('❌ MainAdapter initialization failed');
-            return false;
-        }
-
-    } catch (error) {
-        console.error('❌ Communication Bridge initialization error:', error);
-        return false;
-    }
-}
+// initializeCommunicationBridge removed - Phase 3 replaced by SimpleCommunication
 
 /**
  * Auto-load the last opened scene if it exists
@@ -793,25 +756,52 @@ async function autoLoadLastScene() {
     }
 }
 
+/**
+ * MIGRATION: Update existing container interactive meshes to Layer 1
+ * Fixes containers created before layer-based raycasting was implemented
+ */
+function migrateContainerInteractiveMeshesToLayer1() {
+    const sceneController = modlerV2Components.sceneController;
+    if (!sceneController) return;
+
+    let migratedCount = 0;
+    const allObjects = sceneController.getAllObjects();
+
+    allObjects.forEach(objData => {
+        if (objData.isContainer && objData.mesh) {
+            const supportMeshes = objData.mesh.userData.supportMeshes;
+            if (supportMeshes && supportMeshes.interactiveMesh) {
+                // Check if already on Layer 1
+                if (!supportMeshes.interactiveMesh.layers.test(1)) {
+                    supportMeshes.interactiveMesh.layers.enable(1); // Add Layer 1, keep Layer 0
+                    migratedCount++;
+                }
+            }
+        }
+    });
+
+    if (migratedCount > 0) {
+        console.log(`✅ Migrated ${migratedCount} container interactive meshes to Layer 1`);
+    }
+}
+
 // Auto-initialize when DOM is ready
 document.addEventListener('DOMContentLoaded', () => {
     const canvas = document.getElementById('canvas');
     if (canvas) {
+        // CRITICAL: Initialize SimpleCommunication BEFORE initializeModlerV2
+        // This ensures SimpleCommunication is subscribed to events BEFORE they're emitted
+        // (Communication Simplification 2025 - Replaced Phase 3)
+        if (window.commandRouter && window.stateSerializer && window.simpleCommunication) {
+            window.commandRouter.initialize();
+            window.simpleCommunication.initialize();
+            console.log('✅ SimpleCommunication initialized (ready to receive events)');
+        }
+
         // Starting Modler V2 auto-initialization...
         initializeModlerV2(canvas).then((success) => {
             if (!success) {
                 console.error('❌ Auto-initialization completed with errors');
-            }
-
-            // Initialize Communication Bridge (Phase 3 Refactoring)
-            initializeCommunicationBridge();
-
-            // Initialize SimpleCommunication (Communication Simplification 2025)
-            // Shadow mode: Both systems run side-by-side for testing
-            if (window.commandRouter && window.stateSerializer && window.simpleCommunication) {
-                window.commandRouter.initialize();
-                window.simpleCommunication.initialize();
-                console.log('✅ SimpleCommunication (shadow mode) initialized alongside Phase 3');
             }
         }).catch(error => {
             console.error('❌ Modler V2 auto-initialization failed:', error);

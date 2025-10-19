@@ -450,13 +450,71 @@ class SceneLayoutManager {
      * @param {string} containerId - ID of the container to update
      */
     updateHugContainerSize(containerId) {
-        const containerCrudManager = window.modlerComponents?.containerCrudManager;
-        if (containerCrudManager) {
-            // UNIFIED API: Use semantic reason-based resize
-            containerCrudManager.resizeContainer(containerId, {
-                reason: 'child-changed',
-                immediate: true
-            });
+        if (!this.sceneController) return;
+
+        const containerData = this.sceneController.getObject(containerId);
+        if (!containerData || !containerData.isContainer || !containerData.mesh) {
+            return;
+        }
+
+        // Get all children
+        const children = this.sceneController.getChildObjects(containerId);
+        if (children.length === 0) {
+            return;
+        }
+
+        // Calculate bounding box that contains all children in LOCAL space (relative to container)
+        const bbox = new THREE.Box3();
+        children.forEach(child => {
+            if (child.mesh && child.mesh.geometry) {
+                // Get child's bounding box in its local space
+                child.mesh.geometry.computeBoundingBox();
+                const childBox = child.mesh.geometry.boundingBox.clone();
+
+                // Transform to child's world space
+                childBox.applyMatrix4(child.mesh.matrixWorld);
+
+                // Then transform to container's local space
+                const containerWorldMatrixInverse = containerData.mesh.matrixWorld.clone().invert();
+                childBox.applyMatrix4(containerWorldMatrixInverse);
+
+                bbox.union(childBox);
+            }
+        });
+
+        // Get the center of the bounding box in container's local space
+        const bboxCenter = bbox.getCenter(new THREE.Vector3());
+
+        // Calculate new dimensions
+        const newSize = bbox.getSize(new THREE.Vector3());
+
+        // CRITICAL: The container needs to move so that its center aligns with the bbox center
+        // This keeps the children in the same position relative to world space
+        containerData.mesh.position.add(bboxCenter);
+        containerData.mesh.updateMatrixWorld(true);
+
+        // Now update all children positions to compensate for the container movement
+        children.forEach(child => {
+            if (child.mesh) {
+                child.mesh.position.sub(bboxCenter);
+                child.mesh.updateMatrixWorld(true);
+            }
+        });
+
+        // Update container geometry (now centered at origin in its local space)
+        const geometryUtils = window.GeometryUtils;
+        if (geometryUtils && containerData.mesh.geometry) {
+            geometryUtils.resizeGeometry(containerData.mesh.geometry, 'x', newSize.x, 'center');
+            geometryUtils.resizeGeometry(containerData.mesh.geometry, 'y', newSize.y, 'center');
+            geometryUtils.resizeGeometry(containerData.mesh.geometry, 'z', newSize.z, 'center');
+
+            // Dimensions automatically updated via DimensionManager getter from geometry
+
+            // Update support meshes (selection box, wireframe)
+            const supportMeshFactory = window.modlerComponents?.supportMeshFactory;
+            if (supportMeshFactory) {
+                supportMeshFactory.updateSupportMeshGeometries(containerData.mesh, false);
+            }
         }
     }
 }

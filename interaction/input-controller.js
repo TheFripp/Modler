@@ -220,65 +220,75 @@ class InputController {
     // Unified raycasting with smart object prioritization
     raycast() {
         this.raycaster.setFromCamera(this.mouse, this.camera);
+
+        // Get support mesh factory and selection controller
+        const supportMeshFactory = window.modlerComponents?.supportMeshFactory;
+        const selectionController = window.modlerComponents?.selectionController;
+
+        // RAYCASTING LAYERS: Check if parent container is selected
+        // If yes, raycast against Layer 1 (container interactive meshes) to avoid child blocking
+        let isContainerSelected = false;
+        if (selectionController) {
+            const selected = selectionController.getSelectedObjects();
+            if (selected.length > 0) {
+                const selectedObj = this.sceneController.getObjectByMesh(selected[0]);
+                if (selectedObj && selectedObj.isContainer) {
+                    isContainerSelected = true;
+                }
+            }
+        }
+
+        // Configure raycaster layers based on selection state
+        if (isContainerSelected) {
+            // Container selected: Raycast ONLY Layer 1 (interactive meshes) to avoid child blocking
+            this.raycaster.layers.set(1);
+        } else {
+            // No container selected: Raycast Layer 0 (normal objects)
+            this.raycaster.layers.set(0);
+        }
+
         const intersects = this.raycaster.intersectObjects(this.scene.children, true);
 
         if (intersects.length === 0) return null;
 
-        // Get support mesh factory for resolving support meshes to main objects
-        const supportMeshFactory = window.modlerComponents?.supportMeshFactory;
+        // RAYCASTING LAYERS ARCHITECTURE:
+        // - Layer 0 (default): Regular objects and children
+        // - Layer 1: Container interactive meshes
+        // When container selected, we're on Layer 1 and will ONLY hit interactive meshes
 
-        // Prioritize child objects over container interactive meshes
-        // EXCEPT when parent container is selected - then skip children to allow container interaction
-        // First pass: Look for non-container objects (children)
-        for (let hit of intersects) {
-            // Check if this is a container interactive mesh (raycasting proxy)
-            if (hit.object.userData.isContainerInteractive) {
-                continue; // Skip container interactive meshes in first pass
-            }
+        if (isContainerSelected) {
+            // Layer 1: Only interactive meshes are hit
+            for (let hit of intersects) {
+                if (hit.object.userData.isContainerInteractive) {
+                    // Resolve to container but keep hit.object as interactive mesh (for face data)
+                    const mainObject = supportMeshFactory ? supportMeshFactory.resolveMainObjectFromHit(hit) : hit.object;
+                    const objectData = this.sceneController.getObjectByMesh(mainObject);
 
-            // Resolve support meshes to main objects for selectability check
-            const mainObject = supportMeshFactory ? supportMeshFactory.resolveMainObjectFromHit(hit) : hit.object;
-            const objectData = this.sceneController.getObjectByMesh(mainObject);
-
-            if (objectData && objectData.selectable === true) {
-                // CONTAINER INTERACTION FIX: Skip child if parent container is selected
-                // This allows container face interaction to work when container is selected
-                if (objectData.parentContainer) {
-                    const selectionController = window.modlerComponents?.selectionController;
-                    const parentContainer = this.sceneController.getObject(objectData.parentContainer);
-                    if (parentContainer && selectionController?.isSelected(parentContainer.mesh)) {
-                        // Parent container is selected - skip this child
-                        // Continue to next hit (likely the container's interactive mesh)
-                        continue;
+                    // SELECTION FIX: When container is selected, it has selectable=false to prevent re-selection
+                    // But we still want to detect hits for face highlighting/interaction
+                    // So skip the selectable check - if container is selected and we hit its interactive mesh, return the hit
+                    if (objectData) {
+                        return {
+                            ...this.createHitResult(hit),
+                            // Keep hit.object as interactive mesh for face detection
+                        };
                     }
                 }
-
-                // Return child hit only if parent container is NOT selected
-                return this.createHitResult(hit);
             }
-        }
-
-        // Second pass: If no children found, check container interactive meshes
-        for (let hit of intersects) {
-            if (hit.object.userData.isContainerInteractive) {
-                // Resolve to container but keep the original hit object (interactive mesh)
-                // This preserves face information from BoxGeometry for face highlighting
+        } else {
+            // Layer 0: Normal raycasting against regular objects
+            for (let hit of intersects) {
+                // Skip support meshes, resolve to main object
                 const mainObject = supportMeshFactory ? supportMeshFactory.resolveMainObjectFromHit(hit) : hit.object;
                 const objectData = this.sceneController.getObjectByMesh(mainObject);
 
                 if (objectData && objectData.selectable === true) {
-                    // Return hit with interactive mesh as hit.object (for face data)
-                    // But include resolved container as target reference
-                    return {
-                        ...this.createHitResult(hit),
-                        // Keep hit.object as interactive mesh (don't override with mainObject)
-                        // Face detection logic will resolve to container via userData.containerMesh
-                    };
+                    return this.createHitResult(hit);
                 }
             }
         }
 
-        // No selectable objects found - treat as empty space
+        // No selectable objects found
         return null;
     }
 

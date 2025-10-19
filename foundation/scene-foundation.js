@@ -59,6 +59,11 @@ class SceneFoundation {
     setupCamera() {
         this.camera.position.set(5, 5, 5);
         this.camera.lookAt(0, 0, 0);
+
+        // RAYCASTING LAYERS: Enable both Layer 0 (regular objects) and Layer 1 (container interactive meshes)
+        // This allows camera to see both layers for rendering and raycasting
+        this.camera.layers.enable(0); // Layer 0 is enabled by default, but be explicit
+        this.camera.layers.enable(1); // Layer 1 for container interactive meshes
     }
     
     setupRenderLoop() {
