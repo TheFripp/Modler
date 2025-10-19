@@ -152,14 +152,14 @@ ObjectStateManager.updateObject(containerId, {
 const LayoutEngine = window.LayoutEngine;
 
 // Calculate bounds for all children
-const bounds = LayoutEngine.calculateUnifiedBounds(
-    childObjects,
-    containerData.gap || 0,
-    containerData.padding || 0
-);
+const layoutResult = sceneController.updateLayout(containerId);
 
-// Update container to fit
-containerManager.resizeContainerToLayoutBounds(containerId, bounds);
+// UNIFIED API: Resize container to layout bounds
+containerCrudManager.resizeContainer(containerId, {
+    reason: 'layout-updated',
+    layoutBounds: layoutResult.layoutBounds,
+    immediate: true
+});
 ```
 
 ---

@@ -45,8 +45,19 @@ Dual geometry containers (visual wireframes + collision meshes) with Three.js hi
 - **Command**: Cmd+F triggers creation via ToolController
 
 ### Container Resizing (ContainerCrudManager)
-- **Fit to children**: `resizeContainerToFitChildren(containerData, preservePosition)`
-- **Layout bounds**: `resizeContainerToLayoutBounds(containerData, layoutBounds)`
+**UNIFIED API** (January 2025): Single entry point with semantic reason parameters
+```javascript
+containerCrudManager.resizeContainer(containerOrId, {
+    reason: 'child-changed' | 'child-added' | 'child-removed' |
+            'mode-changed' | 'layout-updated' | 'creation',
+    layoutBounds: {...},      // Optional: Pre-calculated layout bounds
+    immediate: true/false,    // Optional: Bypass throttling
+    pushContext: {...}        // Optional: Push tool context
+});
+```
+- Automatically detects container mode (hug/layout/fixed)
+- Smart defaults for `preservePosition` based on reason
+- Single source of truth for all container resize operations
 
 ### Centralized Helper Methods (September 2025)
 **Purpose**: Eliminate direct LayoutGeometry access from external systems
@@ -97,14 +108,20 @@ autoLayout: {
 
 ## Container Expansion (Wrapping Objects)
 
-### Algorithm: `resizeContainerToFitChildren`
-When dragging objects into containers, the container must expand to wrap around child objects without moving them:
+### Algorithm: Unified Container Resize
+When containers need to adapt to children (hug mode) or layout bounds (layout mode):
 
-1. **Calculate Local Bounds**: Compute bounds of all child objects in container's local coordinate space
-2. **Reposition Container**: Move container so its center aligns with the center of child bounds
-3. **Compensate Children**: Adjust child positions to maintain their world positions when container moves
+**BOTTOM-UP workflow** (preservePosition=true):
+- Child changes (moved/resized/transformed) → container adapts in place
+- Container grows/shrinks without repositioning
+- Used for: child-changed, child-transformed reasons
 
-**Implementation**: `ContainerCrudManager.resizeContainerToFitChildren()` in `application/tools/container-crud-manager.js:507`
+**TOP-DOWN workflow** (preservePosition=false):
+- Structural changes (child added/removed, mode changed) → container repositions
+- Container recenters around all children
+- Used for: child-added, child-removed, creation, mode-changed reasons
+
+**Implementation**: `ContainerCrudManager.resizeContainer()` in `application/tools/container-crud-manager.js`
 
 ### Key Files
 - **ContainerCrudManager**: `application/tools/container-crud-manager.js` - Container CRUD operations and expansion logic
