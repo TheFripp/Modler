@@ -242,24 +242,8 @@ class BaseFaceToolBehavior {
         }
 
         // Check if target object is selected
-        let isSelectedObject = targetObject && this.selectionController.isSelected(targetObject);
-
-        // CONTAINER FACE DRAGGING FIX: If target is not selected, check if its parent container is selected
-        // This allows face operations on containers even when child objects are coplanar and get hit first
-        if (!isSelectedObject && targetObject) {
-            const sceneController = window.modlerComponents?.sceneController;
-            const targetObjectData = sceneController?.getObjectByMesh(targetObject);
-            if (targetObjectData?.parentContainer) {
-                const parentContainer = sceneController.getObject(targetObjectData.parentContainer);
-                if (parentContainer && this.selectionController.isSelected(parentContainer.mesh)) {
-                    // Parent container is selected - allow face operation
-                    // Update targetObject to be the container for proper highlight checking
-                    targetObject = parentContainer.mesh;
-                    isSelectedObject = true;
-                }
-            }
-        }
-
+        // InputController raycast already filters out children when parent container is selected
+        const isSelectedObject = targetObject && this.selectionController.isSelected(targetObject);
         const hasHighlightedFace = this.hoveredObject === targetObject;
         const isNotHugMode = !this.isContainerInHugMode(targetObject);
 

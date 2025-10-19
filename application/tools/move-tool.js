@@ -130,7 +130,6 @@ class MoveTool {
     /**
      * Handle mouse down events - validates selection before starting drag
      * Trust SelectionController's previous selection decision
-     * CONTAINER FACE DRAGGING: When container is selected, ignore child hits to allow container face dragging
      */
     onMouseDown(hit, event) {
         // Only handle left mouse button
@@ -139,51 +138,23 @@ class MoveTool {
         // Don't start new drag if already dragging
         if (this.isDragging) return false;
 
-        // VALIDATION APPROACH: Only drag if hitting a SELECTED object (or its selected parent container)
+        // VALIDATION APPROACH: Only drag if hitting a SELECTED object
         // SelectionController already applied container-first logic during onClick
+        // InputController raycast already filters out children when parent container is selected
         if (hit && hit.object) {
             const hitObject = this.faceToolBehavior.getTargetObject(hit);
-            const sceneController = window.modlerComponents?.sceneController;
-            const hitObjectData = sceneController?.getObjectByMesh(hitObject);
 
-            // Check if the hit object itself is selected
-            let isSelected = hitObject && this.selectionController.isSelected(hitObject);
-            let dragTarget = hitObject;
-            let dragTargetData = hitObjectData;
-
-            // CONTAINER FACE DRAGGING FIX: If hit object is NOT selected, check if its parent container IS selected
-            // This allows dragging container faces even when child objects are coplanar and get hit first
-            if (!isSelected && hitObjectData?.parentContainer) {
-                const parentContainer = sceneController.getObject(hitObjectData.parentContainer);
-                if (parentContainer && this.selectionController.isSelected(parentContainer.mesh)) {
-                    // Parent container is selected - use container as drag target instead of child
-                    isSelected = true;
-                    dragTarget = parentContainer.mesh;
-                    dragTargetData = parentContainer;
-                }
-            }
+            // Check if the hit object is currently selected
+            const isSelected = hitObject && this.selectionController.isSelected(hitObject);
 
             if (isSelected) {
-                // Selected object (or selected parent container) - start drag
-                const isContainer = dragTargetData?.isContainer;
+                // Selected object - start drag
+                const sceneController = window.modlerComponents?.sceneController;
+                const objectData = sceneController?.getObjectByMesh(hitObject);
+                const isContainer = objectData?.isContainer;
                 const hasValidFace = this.faceToolBehavior.hasValidFaceHover(hit);
 
                 if (isContainer || hasValidFace) {
-                    // For container drags triggered by child hits, redirect the hit to the container
-                    if (dragTarget !== hitObject) {
-                        // Create a new hit targeting the container's interactive mesh
-                        const containerInteractiveMesh = dragTarget.children.find(
-                            child => child.userData?.isContainerInteractive
-                        );
-                        if (containerInteractiveMesh) {
-                            hit = {
-                                ...hit,
-                                object: containerInteractiveMesh,
-                                // Preserve face data for direction detection
-                            };
-                        }
-                    }
-
                     this.startFaceDrag(hit);
                     return true;
                 }

@@ -124,8 +124,8 @@ class InputController {
         this.mouseButtons.add(event.button);
         this.updateMousePosition(event);
 
-        // Store for potential click processing
-        const hit = this.raycast();
+        // Store for potential click processing - enable logging on mouse down
+        const hit = this.raycast(true); // Enable logging on click
         this.lastMouseDownEvent = {
             event: event,
             hit: hit,
@@ -228,6 +228,7 @@ class InputController {
         const supportMeshFactory = window.modlerComponents?.supportMeshFactory;
 
         // Prioritize child objects over container interactive meshes
+        // EXCEPT when parent container is selected - then skip children to allow container interaction
         // First pass: Look for non-container objects (children)
         for (let hit of intersects) {
             // Check if this is a container interactive mesh (raycasting proxy)
@@ -235,29 +236,43 @@ class InputController {
                 continue; // Skip container interactive meshes in first pass
             }
 
-            // Resolve support meshes to main objects
+            // Resolve support meshes to main objects for selectability check
             const mainObject = supportMeshFactory ? supportMeshFactory.resolveMainObjectFromHit(hit) : hit.object;
             const objectData = this.sceneController.getObjectByMesh(mainObject);
 
             if (objectData && objectData.selectable === true) {
-                return {
-                    ...this.createHitResult(hit),
-                    object: mainObject
-                };
+                // CONTAINER INTERACTION FIX: Skip child if parent container is selected
+                // This allows container face interaction to work when container is selected
+                if (objectData.parentContainer) {
+                    const selectionController = window.modlerComponents?.selectionController;
+                    const parentContainer = this.sceneController.getObject(objectData.parentContainer);
+                    if (parentContainer && selectionController?.isSelected(parentContainer.mesh)) {
+                        // Parent container is selected - skip this child
+                        // Continue to next hit (likely the container's interactive mesh)
+                        continue;
+                    }
+                }
+
+                // Return child hit only if parent container is NOT selected
+                return this.createHitResult(hit);
             }
         }
 
         // Second pass: If no children found, check container interactive meshes
         for (let hit of intersects) {
             if (hit.object.userData.isContainerInteractive) {
-                // Resolve to container
+                // Resolve to container but keep the original hit object (interactive mesh)
+                // This preserves face information from BoxGeometry for face highlighting
                 const mainObject = supportMeshFactory ? supportMeshFactory.resolveMainObjectFromHit(hit) : hit.object;
                 const objectData = this.sceneController.getObjectByMesh(mainObject);
 
                 if (objectData && objectData.selectable === true) {
+                    // Return hit with interactive mesh as hit.object (for face data)
+                    // But include resolved container as target reference
                     return {
                         ...this.createHitResult(hit),
-                        object: mainObject
+                        // Keep hit.object as interactive mesh (don't override with mainObject)
+                        // Face detection logic will resolve to container via userData.containerMesh
                     };
                 }
             }
