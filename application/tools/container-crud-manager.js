@@ -8,6 +8,12 @@ class ContainerCrudManager {
         // Simple throttle tracking for resize operations
         this.lastResizeTime = new Map(); // containerId -> timestamp
         this.throttleDelay = 16; // milliseconds - 60 FPS
+
+        // Centralized state management
+        this.objectStateManager = null;
+        setTimeout(() => {
+            this.objectStateManager = window.modlerComponents?.objectStateManager;
+        }, 50);
     }
 
     /**
@@ -227,12 +233,14 @@ class ContainerCrudManager {
      * @private
      */
     detectContainerMode(container) {
-        // Layout mode: auto-layout enabled
-        if (container.autoLayout?.enabled) {
-            return 'layout';
+        // Use centralized state machine
+        const mode = this.objectStateManager?.getContainerMode(container.id);
+
+        if (mode) {
+            return mode; // 'layout', 'hug', or 'manual'
         }
 
-        // Fixed mode: explicitly set
+        // Fallback: check fixed mode explicitly
         if (container.sizingMode === 'fixed') {
             return 'fixed';
         }

@@ -148,7 +148,8 @@ function initializeScene() {
     modlerV2Components.layoutPropagationManager = new LayoutPropagationManager();
     modlerV2Components.layoutPropagationManager.initialize(
         modlerV2Components.sceneController,
-        null // containerCrudManager will be set later in initializeInteraction
+        null, // containerCrudManager will be set later in initializeInteraction
+        modlerV2Components.objectStateManager // Pass objectStateManager for centralized state machine
     );
 }
 
@@ -621,10 +622,20 @@ function createFloorGrid() {
     floorPlane.rotation.x = -Math.PI / 2;
     floorPlane.position.y = -1.0;
     floorPlane.name = 'Floor Plane';
+    floorPlane.raycast = () => {}; // Make floor plane non-raycastable (prevent click stealing)
+
+    // Make grid helper and all its children non-raycastable recursively
+    gridHelper.raycast = () => {};
+    gridHelper.traverse(child => {
+        child.raycast = () => {};
+    });
 
     const floorGroup = new THREE.Group();
     floorGroup.add(gridHelper);
     floorGroup.add(floorPlane);
+
+    // Make the group itself non-raycastable too
+    floorGroup.raycast = () => {};
     
     modlerV2Components.sceneController.addObject(floorGroup, null, {
         name: 'Floor Grid',

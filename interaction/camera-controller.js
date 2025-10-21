@@ -14,8 +14,8 @@ class CameraController {
         // Camera settings (essential only)
         this.orbitTarget = new THREE.Vector3(0, 0, 0);
         this.orbitSpeed = 1.0;
-        this.panSpeed = 0.5;
-        this.zoomSpeed = 0.5;
+        this.panSpeed = 0.8; // Adjusted for comfortable panning
+        this.zoomSpeed = 0.8; // Increased from 0.5 for better zoom control
 
         // Mouse tracking (simplified)
         this.lastMousePosition = new THREE.Vector2();
@@ -217,8 +217,8 @@ class CameraController {
      * Reset camera to default position and target
      */
     resetCamera() {
-        // Default camera position (similar to initialization)
-        this.camera.position.set(10, 10, 10);
+        // Default camera position (matching SceneFoundation initialization)
+        this.camera.position.set(5, 5, 5);
 
         // Reset orbit target to origin
         this.setOrbitTarget(new THREE.Vector3(0, 0, 0));
@@ -229,7 +229,7 @@ class CameraController {
         // Update spherical coordinates to match reset position
         this.updateSphericalFromCamera();
 
-        console.log('Camera reset to default position');
+        console.log('Camera reset to default position (5, 5, 5)');
     }
 
     destroy() {

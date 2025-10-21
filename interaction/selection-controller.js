@@ -383,14 +383,19 @@ class SelectionController {
         const objectData = this.getObjectData(object);
         if (!objectData) return false;
 
-        // Prevent direct container clicks (except when already inside that container)
+        // Prevent direct container clicks (except when already inside that container OR already selected)
         if (objectData.isContainer) {
             const isInContext = this.isInContainerContext();
             const currentContext = this.getContainerContext();
+            const isAlreadySelected = this.selectedObjects.has(objectData.mesh);
 
+            // Only treat as empty space if NOT in context, NOT in current context, AND NOT already selected
             if (!isInContext || currentContext !== objectData.mesh) {
-                this.handleEmptySpaceClick(event);
-                return false;
+                if (!isAlreadySelected) {
+                    this.handleEmptySpaceClick(event);
+                    return false;
+                }
+                // If already selected, continue to handle the click normally (keeps selection)
             }
         }
 

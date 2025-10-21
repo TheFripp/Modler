@@ -387,9 +387,14 @@ class LayoutEngine {
      * @param {string} axis - Layout axis
      * @returns {boolean} True if object has fill behavior
      */
-    static objectHasFillBehavior(obj, axis) {
-        if (!obj.layoutProperties) return false;
+    static objectHasFillBehavior(obj, axis, objectStateManager = null) {
+        // Prefer centralized state machine when available
+        if (objectStateManager && obj.id) {
+            return objectStateManager.hasFillEnabled(obj.id, axis);
+        }
 
+        // Fallback to direct access for performance (when called without state manager)
+        if (!obj.layoutProperties) return false;
         const sizeProperty = axis === 'x' ? 'sizeX' : axis === 'y' ? 'sizeY' : 'sizeZ';
         return obj.layoutProperties[sizeProperty] === 'fill';
     }
@@ -475,8 +480,9 @@ class LayoutEngine {
         // When no container size: center the layout (container will resize to hug)
         const isPushing = pushContext && pushContext.axis === axis;
 
-        if (containerSize && isPushing) {
-            // PUSHING: Align objects to container edges based on anchor mode
+        if (containerSize && isPushing && pushContext.anchorMode) {
+            // PUSHING WITH ANCHOR: Align objects to container edges based on anchor mode
+            // Only reposition if anchorMode is explicitly provided
             const containerAxisSize = axis === 'x' ? containerSize.x : axis === 'y' ? containerSize.y : containerSize.z;
             const containerMin = -containerAxisSize / 2;
             const containerMax = containerAxisSize / 2;

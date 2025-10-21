@@ -116,7 +116,7 @@
 					labels={{ x: 'W', y: 'H', z: 'D' }}
 					idPrefix="dim"
 					{showFillButtons}
-					fillStates={fillButtonStates}
+					{fillStates}
 					onFillToggle={handleFillToggle}
 					onFillHover={handleFillHover}
 					disableAll={isDisabled}

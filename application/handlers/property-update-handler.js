@@ -307,20 +307,16 @@ class PropertyUpdateHandler {
 
     /**
      * Check if object has fill enabled for specific axis
+     * DEPRECATED: Use objectStateManager.hasFillEnabled() instead
      */
     isAxisFilled(objectId, axis) {
-        const sceneController = window.modlerComponents?.sceneController;
-        if (!sceneController) return false;
-
-        const objectData = sceneController.getObject(objectId);
-        if (!objectData || !objectData.layoutProperties) return false;
-
-        const sizeProperty = `size${axis.toUpperCase()}`;
-        return objectData.layoutProperties[sizeProperty] === 'fill';
+        // Use centralized state machine
+        return this.objectStateManager?.hasFillEnabled(objectId, axis) || false;
     }
 
     /**
      * Check if object is in a layout-enabled container
+     * DEPRECATED: Use objectStateManager.isLayoutMode() instead
      */
     isInLayoutContainer(objectId) {
         const sceneController = window.modlerComponents?.sceneController;
@@ -329,8 +325,8 @@ class PropertyUpdateHandler {
         const objectData = sceneController.getObject(objectId);
         if (!objectData || !objectData.parentContainer) return false;
 
-        const container = sceneController.getObject(objectData.parentContainer);
-        return container && container.autoLayout && container.autoLayout.enabled;
+        // Use centralized state machine
+        return this.objectStateManager?.isLayoutMode(objectData.parentContainer) || false;
     }
 
     /**
@@ -357,11 +353,13 @@ class PropertyUpdateHandler {
             return;
         }
 
-        const container = sceneController.getObject(objectData.parentContainer);
-        if (!container || !container.autoLayout || !container.autoLayout.enabled) {
+        // Use centralized state machine
+        if (!this.objectStateManager?.isLayoutMode(objectData.parentContainer)) {
             console.warn('PropertyUpdateHandler: Parent container does not have layout enabled');
             return;
         }
+
+        const container = sceneController.getObject(objectData.parentContainer);
 
         // Initialize layoutProperties if needed
         if (!objectData.layoutProperties) {
@@ -377,9 +375,8 @@ class PropertyUpdateHandler {
             objectData.savedDimensions = { x: null, y: null, z: null };
         }
 
-        // Toggle fill state for the axis
-        const sizeProperty = `size${axis.toUpperCase()}`;
-        const currentState = objectData.layoutProperties[sizeProperty];
+        // Toggle fill state for the axis (using centralized state machine)
+        const currentState = this.objectStateManager?.getChildSizeMode(objectData.id, axis) || 'fixed';
         const newState = currentState === 'fill' ? 'fixed' : 'fill';
 
         if (newState === 'fill') {
@@ -660,8 +657,8 @@ class PropertyUpdateHandler {
         // Determine property name based on axis
         const propertyName = `size${axis.toUpperCase()}`;
 
-        // Toggle between 'fixed' and 'fill'
-        const currentValue = obj.layoutProperties[propertyName] || 'fixed';
+        // Toggle between 'fixed' and 'fill' (using centralized state machine)
+        const currentValue = this.objectStateManager.getChildSizeMode(objectId, axis);
         const newValue = currentValue === 'fill' ? 'fixed' : 'fill';
 
         // Update via ObjectStateManager for proper event emission
@@ -677,6 +674,12 @@ class PropertyUpdateHandler {
                 source: 'fill-button-toggle',
                 immediate: true
             });
+
+            // Trigger layout update on parent container to apply the fill change
+            if (obj.parentContainer) {
+                this.sceneController.updateLayout(obj.parentContainer);
+            }
+
             return true;
         } catch (error) {
             console.error('PropertyUpdateHandler: Failed to toggle fill mode', error);

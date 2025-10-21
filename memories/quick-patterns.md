@@ -37,7 +37,56 @@ ObjectStateManager.updateObject(objectId, {
 });
 ```
 
-### 2. Get Object State
+### 2. Check Container/Layout Modes (State Machine)
+
+```javascript
+// CENTRALIZED STATE MACHINE: Use these methods instead of direct property checks
+const objectStateManager = window.modlerComponents.objectStateManager;
+
+// Get container mode (returns 'layout', 'hug', 'manual', or null)
+const mode = objectStateManager.getContainerMode(containerId);
+if (mode === 'layout') {
+    // Container is in layout mode
+}
+
+// Boolean checks (convenience methods)
+if (objectStateManager.isLayoutMode(containerId)) {
+    // Layout mode is active
+}
+
+if (objectStateManager.isHugMode(containerId)) {
+    // Hug mode is active
+}
+
+// Check child size mode on specific axis
+const sizeMode = objectStateManager.getChildSizeMode(objectId, 'x'); // 'fill' or 'fixed'
+
+// Check if child has fill enabled
+if (objectStateManager.hasFillEnabled(objectId, 'x')) {
+    // Object will fill parent on X axis
+}
+
+// Check if fill enabled on any axis
+if (objectStateManager.hasFillEnabled(objectId)) {
+    // Object has fill on at least one axis
+}
+```
+
+**Why Use State Machine?**
+- Single source of truth (eliminates `autoLayout.enabled` vs `layoutMode` confusion)
+- Consistent checks across codebase
+- Backwards compatible
+- Easy to extend with new modes
+
+**DON'T DO THIS** (old pattern):
+```javascript
+// ❌ Scattered property checks (inconsistent, hard to maintain)
+if (obj.autoLayout?.enabled) { }
+if (obj.layoutMode !== null) { }
+if (obj.layoutProperties?.sizeX === 'fill') { }
+```
+
+### 3. Get Object State
 
 ```javascript
 // Get single object
@@ -831,6 +880,160 @@ UnifiedCommunication.on('objectUpdated', (data) => {
     // Update UI components
 });
 ```
+
+---
+
+## Raycasting & Selection Patterns
+
+### 1. Making Objects Non-Raycastable
+
+```javascript
+// Disable raycasting on a single mesh (prevents mouse interaction)
+mesh.raycast = () => {};
+
+// Disable raycasting recursively on entire hierarchy
+group.raycast = () => {};
+group.traverse(child => {
+    child.raycast = () => {};
+});
+
+// Example: Floor grid should never be selectable
+const floorPlane = new THREE.Mesh(geometry, material);
+floorPlane.raycast = () => {}; // Invisible collision plane
+
+const gridHelper = createGridHelper();
+gridHelper.raycast = () => {}; // Grid lines
+gridHelper.traverse(child => child.raycast = () => {});
+
+const floorGroup = new THREE.Group();
+floorGroup.add(gridHelper, floorPlane);
+floorGroup.raycast = () => {}; // Group itself
+```
+
+**Key Points**:
+- `selectable: false` in userData does NOT prevent raycasting
+- Raycaster hits EVERYTHING by default - must explicitly disable
+- Setting `raycast = () => {}` makes object completely invisible to raycaster
+- Always traverse children for groups/hierarchies
+
+### 2. Handling Raycast Results
+
+```javascript
+// In tool's onClick handler
+onClick(hit, event) {
+    if (hit && hit.object) {
+        // Object was hit - validate it's selectable
+        this.selectionController.handleObjectClick(hit.object, event);
+    } else {
+        // No hit - treat as empty space
+        this.selectionController.handleEmptySpaceClick(event);
+    }
+}
+```
+
+### 3. Resolving Support Meshes to Main Objects
+
+```javascript
+// Support meshes (wireframes, highlights) must be resolved to parent
+const resolveMainObjectFromHit = (hit) => {
+    if (!hit || !hit.object) return null;
+
+    // Walk up parent hierarchy to find object with userData.id
+    let current = hit.object;
+    while (current) {
+        if (current.userData && current.userData.id !== undefined) {
+            return current;  // Found main object
+        }
+        current = current.parent;
+    }
+
+    return hit.object;  // Fallback to original hit
+};
+
+// Then validate the resolved object
+const mainObject = resolveMainObjectFromHit(hit);
+if (!mainObject) {
+    console.warn('Could not resolve main object');
+    return null;
+}
+
+const objectData = sceneController.getObjectByMesh(mainObject);
+if (!objectData) {
+    console.warn('Object has no objectData:', mainObject.uuid);
+    return null;
+}
+
+if (objectData.selectable === true) {
+    // Safe to select
+    return mainObject;
+}
+```
+
+### 4. Layer-Based Raycasting
+
+```javascript
+// Configure raycaster layers based on selection state
+if (isContainerSelected) {
+    // Layer 1: Only container interactive meshes
+    this.raycaster.layers.set(1);
+} else {
+    // Layer 0: Regular objects
+    this.raycaster.layers.set(0);
+}
+
+const intersects = this.raycaster.intersectObjects(this.scene.children, true);
+
+// Process hits with proper fallback coverage
+for (let hit of intersects) {
+    const mainObject = resolveMainObjectFromHit(hit);
+    if (!mainObject) continue;
+
+    const objectData = sceneController.getObjectByMesh(mainObject);
+    if (!objectData) continue;
+
+    // Check different cases:
+    // 1. Child of selected container
+    // 2. Selected container itself
+    // 3. Standalone selectable object (IMPORTANT: don't forget this!)
+
+    if (objectData.parentContainer) {
+        // Return parent container
+    } else if (objectData.isContainer && isSelected) {
+        // Return selected container
+    } else if (objectData.selectable === true && !objectData.isContainer) {
+        // Return standalone object (fallback case)
+        return mainObject;
+    }
+}
+```
+
+### 5. Selection Visualization
+
+```javascript
+// Update selection wireframe (handled by VisualizationManager)
+if (visualizationManager) {
+    visualizationManager.setState(object, 'selected');  // Show wireframe
+}
+
+// Clear selection wireframe
+if (visualizationManager) {
+    visualizationManager.setState(object, 'normal');  // Hide wireframe
+}
+
+// Batch clear all selections
+const objectsToDeselect = Array.from(selectedObjects);
+objectsToDeselect.forEach(object => {
+    visualizationManager.setState(object, 'normal');
+});
+selectedObjects.clear();
+```
+
+**Best Practices**:
+- Always validate resolved object has objectData before using
+- Add null checks at every step of resolution chain
+- Log warnings for debugging, not errors (orphaned meshes are expected)
+- Handle all cases in layer-based raycasting (children, containers, standalone)
+- Use `traverse()` to disable raycasting on entire hierarchies
 
 ---
 

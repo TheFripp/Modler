@@ -20,6 +20,7 @@ class LayoutPropagationManager {
         // Dependencies (lazy-loaded)
         this.sceneController = null;
         this.containerCrudManager = null;
+        this.objectStateManager = null;
 
         // Scheduled layout updates (Set of container IDs)
         this.scheduledLayoutUpdates = new Set();
@@ -45,9 +46,10 @@ class LayoutPropagationManager {
     /**
      * Initialize with dependencies
      */
-    initialize(sceneController, containerCrudManager) {
+    initialize(sceneController, containerCrudManager, objectStateManager = null) {
         this.sceneController = sceneController;
         this.containerCrudManager = containerCrudManager;
+        this.objectStateManager = objectStateManager || window.modlerComponents?.objectStateManager;
 
         console.log('✅ LayoutPropagationManager initialized');
     }
@@ -90,10 +92,12 @@ class LayoutPropagationManager {
             return; // No parent or not in a container
         }
 
-        const parentContainer = sceneController.getObject(childObject.parentContainer);
-        if (!parentContainer?.autoLayout?.enabled) {
+        // Use centralized state machine to check if parent has layout enabled
+        if (!this.objectStateManager?.isLayoutMode(childObject.parentContainer)) {
             return; // Parent doesn't have layout enabled
         }
+
+        const parentContainer = sceneController.getObject(childObject.parentContainer);
 
         // Add parent to scheduled updates
         this.scheduledLayoutUpdates.add(childObject.parentContainer);
@@ -147,10 +151,12 @@ class LayoutPropagationManager {
 
         // Update each container's layout
         sorted.forEach(containerId => {
-            const container = sceneController.getObject(containerId);
-            if (!container?.autoLayout?.enabled) {
+            // Use centralized state machine to check layout mode
+            if (!this.objectStateManager?.isLayoutMode(containerId)) {
                 return; // Container no longer has layout enabled
             }
+
+            const container = sceneController.getObject(containerId);
 
             // Trigger layout recalculation
             const layoutResult = sceneController.updateLayout(containerId);
@@ -172,8 +178,8 @@ class LayoutPropagationManager {
 
             // OPTIMIZATION: Defer grandparent propagations to next frame
             if (container.parentContainer) {
-                const grandparent = sceneController.getObject(container.parentContainer);
-                if (grandparent?.autoLayout?.enabled) {
+                // Use centralized state machine to check if grandparent has layout
+                if (this.objectStateManager?.isLayoutMode(container.parentContainer)) {
                     deferredPropagations.add(container.parentContainer);
                     this.stats.propagationsDeferred++;
                 }

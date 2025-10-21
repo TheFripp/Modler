@@ -228,10 +228,11 @@ class InputController {
         // RAYCASTING LAYERS: Check if parent container is selected
         // If yes, raycast against Layer 1 (container interactive meshes) to avoid child blocking
         let isContainerSelected = false;
+        let selectedObjects = [];
         if (selectionController) {
-            const selected = selectionController.getSelectedObjects();
-            if (selected.length > 0) {
-                const selectedObj = this.sceneController.getObjectByMesh(selected[0]);
+            selectedObjects = selectionController.getSelectedObjects();
+            if (selectedObjects.length > 0) {
+                const selectedObj = this.sceneController.getObjectByMesh(selectedObjects[0]);
                 if (selectedObj && selectedObj.isContainer) {
                     isContainerSelected = true;
                 }
@@ -249,8 +250,6 @@ class InputController {
 
         const intersects = this.raycaster.intersectObjects(this.scene.children, true);
 
-        if (intersects.length === 0) return null;
-
         // RAYCASTING LAYERS ARCHITECTURE:
         // - Layer 0 (default): Regular objects and children
         // - Layer 1: Container interactive meshes
@@ -260,19 +259,80 @@ class InputController {
             // Layer 1: Only interactive meshes are hit
             for (let hit of intersects) {
                 if (hit.object.userData.isContainerInteractive) {
-                    // Resolve to container but keep hit.object as interactive mesh (for face data)
+                    // Resolve to container and return it as the object
                     const mainObject = supportMeshFactory ? supportMeshFactory.resolveMainObjectFromHit(hit) : hit.object;
+
+                    // Skip if mainObject is null or invalid
+                    if (!mainObject) continue;
+
                     const objectData = this.sceneController.getObjectByMesh(mainObject);
 
                     // SELECTION FIX: When container is selected, it has selectable=false to prevent re-selection
                     // But we still want to detect hits for face highlighting/interaction
-                    // So skip the selectable check - if container is selected and we hit its interactive mesh, return the hit
+                    // So skip the selectable check - if container is selected and we hit its interactive mesh, return the main object
                     if (objectData) {
                         return {
                             ...this.createHitResult(hit),
-                            // Keep hit.object as interactive mesh for face detection
+                            object: mainObject  // Return main object, not interactive mesh
                         };
                     }
+                }
+            }
+
+            // FALLBACK: If no Layer 1 hit, check Layer 0 for child/wireframe hits
+            // Resolve children to their parent container if that container is selected
+            this.raycaster.layers.set(0);
+            const layer0Intersects = this.raycaster.intersectObjects(this.scene.children, true);
+
+            for (let hit of layer0Intersects) {
+                const mainObject = supportMeshFactory ? supportMeshFactory.resolveMainObjectFromHit(hit) : hit.object;
+
+                // Skip if mainObject is null or invalid
+                if (!mainObject) continue;
+
+                const objectData = this.sceneController.getObjectByMesh(mainObject);
+
+                if (!objectData) continue;
+
+                // Check if this object's parent container is the selected container
+                if (objectData.parentContainer) {
+                    const parentData = this.sceneController.getObject(objectData.parentContainer);
+                    if (parentData && selectedObjects.includes(parentData.mesh)) {
+                        // Clicking on child of selected container - return the container
+                        return {
+                            ...this.createHitResult(hit),
+                            object: parentData.mesh
+                        };
+                    }
+
+                    // Debug: log why parent check failed
+                    if (parentData) {
+                        console.log('🔍 Parent found but not in selected:', {
+                            childId: objectData.id,
+                            parentId: parentData.id,
+                            selectedIds: selectedObjects.map(obj => obj.userData?.id),
+                            parentMeshInSelected: selectedObjects.includes(parentData.mesh)
+                        });
+                    } else {
+                        console.log('⚠️ Parent data not found for container ID:', objectData.parentContainer);
+                    }
+                }
+
+                // Check if this is the selected container itself (wireframe hit)
+                if (objectData.isContainer && selectedObjects.includes(mainObject)) {
+                    return {
+                        ...this.createHitResult(hit),
+                        object: mainObject
+                    };
+                }
+
+                // FALLBACK: Regular selectable objects (not containers, no parent container)
+                // Allow selecting other objects even when a container is selected
+                if (objectData.selectable === true && !objectData.parentContainer && !objectData.isContainer) {
+                    return {
+                        ...this.createHitResult(hit),
+                        object: mainObject
+                    };
                 }
             }
         } else {
@@ -280,10 +340,30 @@ class InputController {
             for (let hit of intersects) {
                 // Skip support meshes, resolve to main object
                 const mainObject = supportMeshFactory ? supportMeshFactory.resolveMainObjectFromHit(hit) : hit.object;
+
+                // Skip if mainObject is null or invalid
+                if (!mainObject) continue;
+
                 const objectData = this.sceneController.getObjectByMesh(mainObject);
 
-                if (objectData && objectData.selectable === true) {
-                    return this.createHitResult(hit);
+                // DEFENSIVE: Skip if we can't find object data (orphaned mesh)
+                if (!objectData) {
+                    console.warn('⚠️ Raycaster hit object with no objectData:', {
+                        name: mainObject.name,
+                        uuid: mainObject.uuid,
+                        type: mainObject.type,
+                        userData: mainObject.userData,
+                        parent: mainObject.parent?.name,
+                        hasGeometry: !!mainObject.geometry
+                    });
+                    continue;
+                }
+
+                if (objectData.selectable === true) {
+                    return {
+                        ...this.createHitResult(hit),
+                        object: mainObject  // Return resolved main object, not support mesh
+                    };
                 }
             }
         }

@@ -137,8 +137,9 @@ class PushTool {
         if (sceneController && targetObject.userData?.id) {
             const objectData = sceneController.getObjectByMesh(targetObject);
             if (objectData?.isContainer) {
-                const isLayoutEnabled = objectData.autoLayout?.enabled;
-                if (!isLayoutEnabled) {
+                // Use centralized state machine
+                const containerMode = this.objectStateManager?.getContainerMode(objectData.id);
+                if (containerMode === 'hug') {
                     // Container is in hug mode - cannot push
                     console.log('⚠️ Push blocked: Container is in hug mode');
                     return;
@@ -311,7 +312,8 @@ class PushTool {
         const sceneController = window.modlerComponents?.sceneController;
         if (sceneController && this.pushedObject.userData?.id) {
             const objectData = sceneController.getObjectByMesh(this.pushedObject);
-            if (objectData?.isContainer && objectData.autoLayout?.enabled) {
+            // Use centralized state machine
+            if (objectData?.isContainer && this.objectStateManager?.isLayoutMode(objectData.id)) {
                 // Get minimum size needed to contain all children
                 const children = sceneController.getChildObjects(objectData.id);
 
@@ -339,7 +341,8 @@ class PushTool {
         // Check if this object is inside a layout-enabled container with alignment
         if (!isContainer && objectData2?.parentContainer && sceneController) {
             const parent = sceneController.getObject(objectData2.parentContainer);
-            if (parent?.autoLayout?.enabled && parent.autoLayout.alignment) {
+            // Use centralized state machine
+            if (this.objectStateManager?.isLayoutMode(parent?.id) && parent.autoLayout.alignment) {
                 const alignment = parent.autoLayout.alignment[this.pushAxis];
 
                 // If center-aligned on this axis: use 'center' mode for symmetric expansion
@@ -360,9 +363,6 @@ class PushTool {
                 return;
             }
 
-            // Check if this container has layout enabled
-            const hasLayoutEnabled = objectData2?.autoLayout?.enabled;
-
             // Calculate position shift based on anchor mode
             let positionShift = 0;
             if (anchorMode === 'center') {
@@ -371,14 +371,7 @@ class PushTool {
             } else {
                 // Edge-anchored: shift to keep anchor face fixed
                 const shiftAmount = (newDimension - currentDims[this.pushAxis]) / 2;
-
-                // CRITICAL FIX: Don't shift position for layout-enabled containers
-                // Layout engine will reposition children based on new size + anchor
-                if (hasLayoutEnabled) {
-                    positionShift = 0;  // Let layout engine handle positioning
-                } else {
-                    positionShift = this.pushDirection > 0 ? shiftAmount : -shiftAmount;
-                }
+                positionShift = this.pushDirection > 0 ? shiftAmount : -shiftAmount;
             }
 
             // Create new centered geometry
@@ -393,13 +386,11 @@ class PushTool {
             this.pushedObject.geometry = newGeometry;
             geometryFactory.returnGeometry(oldGeometry, 'box');
 
-            // Shift object position if needed (but NOT if inside a layout container)
-            const parentContainer = objectData2?.parentContainer ? sceneController.getObject(objectData2.parentContainer) : null;
-            const isInLayoutContainer = parentContainer?.autoLayout?.enabled;
+            // Check if this container has layout enabled (using centralized state machine)
+            const hasLayoutEnabled = this.objectStateManager?.isLayoutMode(objectData2?.id);
 
-            if (positionShift !== 0 && !isInLayoutContainer) {
-                // Only shift position if NOT inside a layout container
-                // Layout containers will handle positioning via their layout engine
+            // Shift object position to keep anchor face fixed
+            if (positionShift !== 0) {
                 this.pushedObject.position[this.pushAxis] += positionShift;
             }
 
@@ -417,7 +408,7 @@ class PushTool {
                 }
             }
             // LAYOUT CONTAINERS: Don't counter-shift children
-            // The layout engine will recalculate child positions based on new container size
+            // The layout engine will recalculate child positions based on new container size + pushContext
 
             success = true;
         } else {
@@ -490,7 +481,8 @@ class PushTool {
         if (!sceneController || !this.pushedObject?.userData?.id) return;
 
         const objectData = sceneController.getObjectByMesh(this.pushedObject);
-        if (!objectData?.isContainer || !objectData.autoLayout?.enabled) return;
+        // Use centralized state machine
+        if (!objectData?.isContainer || !this.objectStateManager?.isLayoutMode(objectData.id)) return;
 
         // Get layout direction
         const layoutDirection = objectData.autoLayout.direction || 'x';
@@ -499,25 +491,21 @@ class PushTool {
         // Check if there are fill objects on the PUSH AXIS (not layout axis)
         // Fill objects should resize when container size changes on their fill axis,
         // regardless of whether that's the layout direction or perpendicular to it
-        const sizeProperty = `size${this.pushAxis.toUpperCase()}`;
         const hasFillObjects = children.some(child => {
-            return child.layoutProperties?.[sizeProperty] === 'fill';
+            // Use centralized state machine
+            return this.objectStateManager?.hasFillEnabled(child.id, this.pushAxis);
         });
 
         if (hasFillObjects) {
-            // WITH FILL OBJECTS: Call layout engine with push context
-            // This resizes fill objects AND repositions all children based on anchor
-            const pushContext = {
-                axis: this.pushAxis,
-                anchorMode: this.pushDirection > 0 ? 'min' : 'max'
-            };
+            // WITH FILL OBJECTS: Call layout engine with minimal pushContext
+            // Pass axis to trigger fill object resizing, but NO anchorMode to avoid repositioning
+            // Children are already in correct position relative to container's local space
+            const pushContext = { axis: this.pushAxis };
             sceneController.updateLayout(objectData.id, pushContext);
         } else if (this.pushAxis === layoutDirection) {
             // NO FILL OBJECTS, pushing on layout axis: Use space-between distribution
-            const pushContext = {
-                axis: this.pushAxis,
-                anchorMode: this.cumulativeAmount > 0 ? 'min' : 'max'
-            };
+            // Pass axis to trigger space-between gap distribution, but NO anchorMode to avoid repositioning
+            const pushContext = { axis: this.pushAxis };
             sceneController.updateLayout(objectData.id, pushContext);
         }
         // If pushing perpendicular to layout direction with no fill objects, do nothing
@@ -609,27 +597,17 @@ class PushTool {
             if (sceneController && pushedObject.userData?.id) {
                 const objectData = sceneController.getObjectByMesh(pushedObject);
 
-                // If this is a hug container, update its size
-                if (objectData?.isHug && objectData?.isContainer) {
+                // If this is a hug container, update its size (using centralized state machine)
+                if (this.objectStateManager?.isHugMode(objectData?.id)) {
                     sceneController.updateHugContainerSize(objectData.id);
                 }
 
-                // If object is inside a layout container, trigger layout update with push context
-                // This preserves the anchor point so container grows from pushed edge, not recenter
+                // If object is inside a layout container, trigger final layout update
+                // No pushContext needed - children are already correctly positioned
                 if (objectData?.parentContainer) {
-                    const parentContainer = sceneController.getObject(objectData.parentContainer);
-                    if (parentContainer?.autoLayout?.enabled) {
-                        // Pass push context to preserve anchor during layout
-                        // anchorMode determines which edge stays fixed:
-                        // - direction 1 (pushing +X/+Y/+Z face): use 'min' anchor (left/bottom/front edge fixed)
-                        // - direction -1 (pushing -X/-Y/-Z face): use 'max' anchor (right/top/back edge fixed)
-                        const pushContext = {
-                            axis: this.pushAxis,
-                            direction: this.pushDirection,
-                            anchorMode: this.pushDirection === 1 ? 'min' : 'max',
-                            isPush: true
-                        };
-                        sceneController.updateLayout(objectData.parentContainer, pushContext);
+                    // Use centralized state machine
+                    if (this.objectStateManager?.isLayoutMode(objectData.parentContainer)) {
+                        sceneController.updateLayout(objectData.parentContainer);
                     }
                 }
             }
@@ -763,12 +741,12 @@ class PushTool {
         const totalPadding = paddingStart + paddingEnd;
         let minSize = totalPadding; // Start with padding on both sides
 
-        // Filter children into fill and non-fill groups
+        // Filter children into fill and non-fill groups using centralized state machine
         const nonFillChildren = children.filter(child => {
-            return !child.layoutProperties || child.layoutProperties[sizeProperty] !== 'fill';
+            return this.objectStateManager?.getChildSizeMode(child.id, axis) !== 'fill';
         });
         const fillChildren = children.filter(child => {
-            return child.layoutProperties?.[sizeProperty] === 'fill';
+            return this.objectStateManager?.getChildSizeMode(child.id, axis) === 'fill';
         });
 
         if (direction === axis) {
@@ -800,10 +778,19 @@ class PushTool {
                 maxChildSize = Math.max(maxChildSize, childDims[axis]);
             });
 
-            // CRITICAL FIX: Also check fill objects - they might have minimum perpendicular size
+            // Check fill objects ONLY if they're NOT filled on the push axis
+            // If they're filled on push axis, they'll shrink with container
             fillChildren.forEach(child => {
-                const childDims = child.dimensions || { x: 1, y: 1, z: 1 };
-                maxChildSize = Math.max(maxChildSize, childDims[axis]);
+                // Use centralized state machine to check if filled on push axis
+                const isFillOnPushAxis = this.objectStateManager?.hasFillEnabled(child.id, axis);
+                if (!isFillOnPushAxis) {
+                    const childDims = child.dimensions || { x: 1, y: 1, z: 1 };
+                    maxChildSize = Math.max(maxChildSize, childDims[axis]);
+                }
+                // If filled on push axis, use minimum (0.1)
+                else {
+                    maxChildSize = Math.max(maxChildSize, 0.1);
+                }
             });
 
             minSize += maxChildSize;

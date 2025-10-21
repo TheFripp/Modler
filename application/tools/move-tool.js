@@ -70,11 +70,12 @@ class MoveTool {
 
             // If this is a child inside a layout container
             if (objectData && objectData.parentContainer) {
-                const container = sceneController.getObject(objectData.parentContainer);
-                if (container && container.autoLayout && container.autoLayout.enabled) {
+                // Use centralized state machine
+                if (this.objectStateManager?.isLayoutMode(objectData.parentContainer)) {
+                    const container = sceneController.getObject(objectData.parentContainer);
                     // Check if the CONTAINER is selected (not the child)
                     // If container is selected, we're trying to show highlights on the container, not the child
-                    const isContainerSelected = this.selectionController?.isSelected(container.mesh);
+                    const isContainerSelected = this.selectionController?.isSelected(container?.mesh);
 
                     if (isContainerSelected) {
                         // Container is selected - allow highlights on container (face highlighting will redirect to container)
@@ -348,7 +349,8 @@ class MoveTool {
                 }
 
                 // Check if still trying to drag child in layout mode (shouldn't happen, but defensive)
-                if (parentContainer && parentContainer.autoLayout && parentContainer.autoLayout.enabled) {
+                // Use centralized state machine
+                if (this.objectStateManager?.isLayoutMode(objectData?.parentContainer)) {
                     const isDraggingChild = targetObject === objectData.mesh;
                     if (isDraggingChild) {
                         console.warn('MoveTool: Cannot move child objects in layout mode. Move the container instead.');

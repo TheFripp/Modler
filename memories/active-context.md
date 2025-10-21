@@ -1,7 +1,7 @@
 # Modler V2 - Active Context
 
 **Session continuity and work-in-progress tracking**
-**Last updated**: 2025-10-13
+**Last updated**: 2025-01-20
 
 ---
 
@@ -11,6 +11,17 @@
 - None (clean slate for next session)
 
 ### Recently Completed
+- **Layout State Machine Refactor (MAJOR MILESTONE ✅)** - 2025-01-20
+  - Eliminated redundant state properties (autoLayout.enabled + layoutMode)
+  - Centralized mode checking in ObjectStateManager
+  - Migrated 25+ locations across 8 files
+  - Added getContainerMode(), isLayoutMode(), hasFillEnabled() methods
+- **Raycasting & Selection Bug Fixes (MAJOR MILESTONE ✅)** - 2025-01-20
+  - Fixed floor grid click stealing
+  - Fixed inconsistent object selection
+  - Added defensive null checks in raycaster
+  - Fixed container-selected raycast fallback
+  - Added source parameter type validation
 - **Phase 3 Communication Layer Complete (MAJOR MILESTONE ✅)** - 2025-10-13
 - **PropertyPanelSync fully removed** - Zero legacy communication code remaining
 - Material initialization bug fix (COMPLETED ✅)
@@ -33,11 +44,12 @@
 ## Known Issues
 
 ### Active Bugs
-- None currently tracked
+- None currently tracked ✅
 
 ### Technical Debt
 - Documentation metadata needs to be added to 50+ files
 - Some legacy files may not follow latest patterns
+- Warning logs in raycaster can be cleaned up once stability confirmed
 
 ---
 
@@ -99,6 +111,50 @@
 ---
 
 ## Session Notes
+
+### Session 2025-01-20: Layout State Machine Refactor + Bug Fixes
+
+**Part 1: Layout State Machine Refactor**
+- **Problem**: Redundant state properties causing inconsistent mode checks
+  - Both `autoLayout.enabled` AND `layoutMode` tracked layout mode
+  - 14+ locations with scattered, inconsistent property checks
+  - Potential for properties to fall out of sync
+- **Solution**: Centralized state machine in ObjectStateManager
+  - Added 5 new methods: `getContainerMode()`, `isLayoutMode()`, `isHugMode()`, `getChildSizeMode()`, `hasFillEnabled()`
+  - Migrated 25+ locations across 8 files to use state machine
+  - Single source of truth with backwards compatibility
+- **Files Migrated**:
+  1. `application/state-serializer.js` (4 locations)
+  2. `application/tools/push-tool.js` (8 locations)
+  3. `application/handlers/property-update-handler.js` (4 locations)
+  4. `application/tools/container-crud-manager.js` (2 locations)
+  5. `layout/layout-propagation-manager.js` (3 locations)
+  6. `application/commands/move-object-command.js` (3 locations)
+  7. `application/tools/move-tool.js` (2 locations)
+  8. `scene/scene-layout-manager.js` (2 locations)
+- **Benefits**: Eliminated redundancy, consistent behavior, easier maintenance, future-proof
+- **Documentation**: Created `/documentation/architecture/layout-state-machine-refactor.md`
+
+**Part 2: Raycasting & Selection Bug Fixes**
+- **Issues**: Floor grid stealing clicks, inconsistent object selection, camera angle affecting selection
+- **Root Cause Discovery**:
+  1. Floor grid (50x50 invisible plane + grid lines) was fully raycastable
+  2. Support meshes not properly resolved to parent objects
+  3. Container-selected raycast path missing fallback for standalone objects
+  4. Source parameter receiving Window object instead of string
+- **Fixes Applied**:
+  - Made entire floor grid non-raycastable (plane, grid helper, all children, group)
+  - Added defensive null checks in InputController raycaster (3 locations)
+  - Added warning logging for orphaned meshes to aid debugging
+  - Added fallback case for selectable objects in container-selected path
+  - Added type validation for source parameter in ObjectStateManager
+- **Key Learnings**:
+  - Raycaster hits everything by default - must explicitly disable with `raycast = () => {}`
+  - `selectable: false` doesn't prevent raycasting, only selection after hit
+  - Support mesh resolution must walk parent hierarchy and validate result
+  - Layer-based raycasting needs complete fallback coverage for all object types
+- **Testing**: All 7 test cases passing (empty space, floor, objects from all angles, containers)
+- **Documentation**: Created `/documentation/bug-fixes/2025-01-raycasting-selection-fixes.md`
 
 ### Session 2025-10-10: Material Initialization Bug Fix
 - **Issue**: Face highlights showing incorrect opacity (30% instead of 18%/15%) and color (green instead of purple) on page load

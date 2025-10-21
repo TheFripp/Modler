@@ -374,8 +374,8 @@ class SceneLayoutManager {
             if (layoutSize && obj.layoutProperties) {
                 // Check each axis for fill behavior
                 ['x', 'y', 'z'].forEach(axis => {
-                    const sizeProperty = `size${axis.toUpperCase()}`;
-                    if (obj.layoutProperties[sizeProperty] === 'fill') {
+                    // Use centralized state machine
+                    if (this.getObjectStateManager()?.hasFillEnabled(obj.id, axis)) {
                         // Only update if size has actually changed to avoid unnecessary geometry updates
                         const currentDim = obj.dimensions?.[axis] || 1;
                         const newDim = layoutSize[axis];
@@ -406,8 +406,9 @@ class SceneLayoutManager {
 
             if (isDuringPush) {
                 // Check if ANY object in container has fill on push axis
+                // Use centralized state machine
                 const hasFillObjects = objects.some(o =>
-                    o.layoutProperties?.[`size${pushContext.axis.toUpperCase()}`] === 'fill'
+                    this.getObjectStateManager()?.hasFillEnabled(o.id, pushContext.axis)
                 );
 
                 // Only update positions if using space-between (no fill objects)

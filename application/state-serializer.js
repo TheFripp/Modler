@@ -180,8 +180,8 @@ class StateSerializer {
             return false;
         }
 
-        const parent = this.objectStateManager.getObject(obj.parentContainer);
-        return parent && parent.layoutMode !== null && parent.layoutMode !== undefined;
+        // Use centralized state machine
+        return this.objectStateManager.isLayoutMode(obj.parentContainer);
     }
 
     /**
@@ -193,15 +193,11 @@ class StateSerializer {
      * @returns {Object} {x: boolean, y: boolean, z: boolean}
      */
     computeFillButtonStates(objectId) {
-        const obj = this.objectStateManager.getObject(objectId);
-        if (!obj || !obj.layoutProperties) {
-            return { x: false, y: false, z: false };
-        }
-
+        // Use centralized state machine
         return {
-            x: obj.layoutProperties.sizeX === 'fill',
-            y: obj.layoutProperties.sizeY === 'fill',
-            z: obj.layoutProperties.sizeZ === 'fill'
+            x: this.objectStateManager.getChildSizeMode(objectId, 'x') === 'fill',
+            y: this.objectStateManager.getChildSizeMode(objectId, 'y') === 'fill',
+            z: this.objectStateManager.getChildSizeMode(objectId, 'z') === 'fill'
         };
     }
 
@@ -214,8 +210,8 @@ class StateSerializer {
      * @returns {boolean}
      */
     computeIsInLayoutMode(objectId) {
-        const obj = this.objectStateManager.getObject(objectId);
-        return obj && obj.isContainer && obj.layoutMode !== null && obj.layoutMode !== undefined;
+        // Use centralized state machine
+        return this.objectStateManager.isLayoutMode(objectId);
     }
 
     /**
@@ -227,8 +223,8 @@ class StateSerializer {
      * @returns {boolean}
      */
     computeIsHugMode(objectId) {
-        const obj = this.objectStateManager.getObject(objectId);
-        return obj && obj.isHug === true;
+        // Use centralized state machine
+        return this.objectStateManager.isHugMode(objectId);
     }
 
     /**

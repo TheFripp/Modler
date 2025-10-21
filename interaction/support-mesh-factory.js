@@ -487,7 +487,19 @@ class SupportMeshFactory {
                 return hit.object.parent || hit.object;
             }
         } else {
-            // Regular objects
+            // Regular objects - walk up parent hierarchy to find object with userData.id
+            // This handles wireframes, support meshes, and other child meshes
+            let current = hit.object;
+            while (current) {
+                // Check if this object has a userData.id (main object)
+                if (current.userData && current.userData.id !== undefined) {
+                    return current;
+                }
+                // Move up to parent
+                current = current.parent;
+            }
+
+            // Fallback: return original hit object if no parent with id found
             return hit.object;
         }
     }

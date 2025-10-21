@@ -427,6 +427,12 @@ class ObjectStateManager extends EventTarget {
             source = options.source || 'input';
         }
 
+        // Validate that source is a string (defensive programming)
+        if (typeof source !== 'string') {
+            console.warn('⚠️ ObjectStateManager.updateObject: source must be a string, got:', typeof source, source);
+            source = 'input';
+        }
+
         let object = this.objects.get(objectId);
 
         // Auto-create object if it doesn't exist (handles timing issues)
@@ -503,6 +509,12 @@ class ObjectStateManager extends EventTarget {
                     // Expand nested object into flat paths
                     Object.entries(value).forEach(([axis, axisValue]) => {
                         expandedUpdates[`${path}.${axis}`] = axisValue;
+                    });
+                    return; // Skip adding the nested object itself
+                } else if (path === 'layoutProperties') {
+                    // Expand layoutProperties nested object (sizeX, sizeY, sizeZ, fixedSize)
+                    Object.entries(value).forEach(([key, val]) => {
+                        expandedUpdates[`${path}.${key}`] = val;
                     });
                     return; // Skip adding the nested object itself
                 } else if (path === 'autoLayout') {
@@ -732,6 +744,11 @@ class ObjectStateManager extends EventTarget {
                         object.calculatedGap = undefined;
                     }
                 }
+
+                // LAYOUT PROPERTIES: Sync layoutProperties for all objects (layout engine reads from SceneController)
+                if (object.layoutProperties) {
+                    sceneObject.layoutProperties = object.layoutProperties;
+                }
             }
 
             // Update container layout if needed (TOP-DOWN PROPAGATION)
@@ -807,6 +824,36 @@ class ObjectStateManager extends EventTarget {
 
                 // BOTTOM-UP PROPAGATION: Container size changed → schedule grandparent layout update
                 this.scheduleParentLayoutUpdate(object.id);
+            }
+
+            // CHILD LAYOUT PROPERTIES CHANGED: Trigger parent container layout update
+            // This handles fill/hug/fixed mode changes on child objects
+            const layoutPropertiesChanged = object._changedProperties?.has('layoutProperties') ||
+                Array.from(object._changedProperties || []).some(prop => prop.startsWith('layoutProperties.'));
+
+            if (layoutPropertiesChanged && object.parentContainer && !object.isContainer) {
+                console.log('🎨 layoutPropertiesChanged detected:', {
+                    objectId: object.id,
+                    parentContainer: object.parentContainer,
+                    layoutProperties: object.layoutProperties,
+                    changedProperties: Array.from(object._changedProperties || [])
+                });
+
+                // Child's layoutProperties changed (e.g., sizeX changed from 'fixed' to 'fill')
+                // Need to recalculate parent container's layout to resize child accordingly
+                const parentObject = this.sceneController.getObject(object.parentContainer);
+                console.log('🎨 Parent object:', {
+                    found: !!parentObject,
+                    parentId: parentObject?.id,
+                    hasAutoLayout: !!parentObject?.autoLayout,
+                    layoutEnabled: parentObject?.autoLayout?.enabled
+                });
+
+                if (parentObject && parentObject?.autoLayout?.enabled) {
+                    console.log('🎨 Triggering parent layout update for container:', object.parentContainer);
+                    // Parent is in layout mode - trigger layout recalculation
+                    this.sceneController.updateLayout(object.parentContainer);
+                }
             }
         });
     }
@@ -941,6 +988,103 @@ class ObjectStateManager extends EventTarget {
      */
     getSelection() {
         return Array.from(this.selection);
+    }
+
+    // ====== STATE MACHINE: CENTRALIZED MODE CHECKING ======
+    // Single source of truth for object mode/state queries
+    // All code should use these methods instead of direct property checks
+
+    /**
+     * Get container sizing mode
+     *
+     * @param {string|number} objectId - Object ID
+     * @returns {'layout'|'hug'|'manual'|null} Container mode, or null if not a container
+     *
+     * @example
+     * const mode = objectStateManager.getContainerMode(containerId);
+     * if (mode === 'layout') {
+     *   // Container has fixed size with auto-layout
+     * } else if (mode === 'hug') {
+     *   // Container auto-resizes to fit children
+     * }
+     */
+    getContainerMode(objectId) {
+        const obj = this.getObject(objectId);
+        if (!obj?.isContainer) return null;
+
+        // Check autoLayout.enabled first (modern approach)
+        if (obj.autoLayout?.enabled) return 'layout';
+
+        // Check legacy layoutMode property (for backward compatibility)
+        if (obj.layoutMode !== null && obj.layoutMode !== undefined) return 'layout';
+
+        // Check hug mode
+        if (obj.isHug === true) return 'hug';
+
+        // Manual mode (no automatic sizing)
+        return 'manual';
+    }
+
+    /**
+     * Check if container is in layout mode
+     *
+     * @param {string|number} objectId - Object ID
+     * @returns {boolean} True if container has layout enabled
+     */
+    isLayoutMode(objectId) {
+        return this.getContainerMode(objectId) === 'layout';
+    }
+
+    /**
+     * Check if container is in hug mode
+     *
+     * @param {string|number} objectId - Object ID
+     * @returns {boolean} True if container is in hug mode
+     */
+    isHugMode(objectId) {
+        return this.getContainerMode(objectId) === 'hug';
+    }
+
+    /**
+     * Get child object's size mode for a specific axis
+     *
+     * @param {string|number} objectId - Object ID
+     * @param {string} axis - Axis ('x', 'y', or 'z')
+     * @returns {'fill'|'fixed'} Size mode for the axis
+     *
+     * @example
+     * const sizeMode = objectStateManager.getChildSizeMode(childId, 'x');
+     * if (sizeMode === 'fill') {
+     *   // Child fills container on X axis
+     * }
+     */
+    getChildSizeMode(objectId, axis) {
+        const obj = this.getObject(objectId);
+        if (!obj) return 'fixed';
+
+        const property = `size${axis.toUpperCase()}`;
+        return obj.layoutProperties?.[property] || 'fixed';
+    }
+
+    /**
+     * Check if child object has fill enabled on any axis
+     *
+     * @param {string|number} objectId - Object ID
+     * @param {string} [axis] - Optional specific axis to check ('x', 'y', 'z')
+     * @returns {boolean} True if fill is enabled (on specified axis or any axis)
+     */
+    hasFillEnabled(objectId, axis = null) {
+        const obj = this.getObject(objectId);
+        if (!obj?.layoutProperties) return false;
+
+        if (axis) {
+            return this.getChildSizeMode(objectId, axis) === 'fill';
+        }
+
+        // Check any axis
+        return obj.layoutProperties.sizeX === 'fill' ||
+               obj.layoutProperties.sizeY === 'fill' ||
+               obj.layoutProperties.sizeZ === 'fill';
     }
 
 

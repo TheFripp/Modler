@@ -461,6 +461,12 @@ class FileManager extends EventTarget {
             // Update statistics
             this.stats.loads++;
 
+            // Reset camera to default position for consistent viewing
+            const cameraController = window.modlerComponents?.cameraController;
+            if (cameraController?.resetCamera) {
+                cameraController.resetCamera();
+            }
+
             // Emit event
             this.emit('file-loaded', {
                 fileId: fileId,

@@ -16,15 +16,16 @@ class MoveObjectCommand extends BaseCommand {
 
         // Capture coordinate space context
         const sceneController = window.modlerComponents?.sceneController;
+        const objectStateManager = window.modlerComponents?.objectStateManager;
+
         if (sceneController) {
             const objectData = sceneController.getObject(objectId);
             if (objectData) {
                 this.parentContainer = objectData.parentContainer || null;
 
-                // Check if object is in a container with active layout
+                // Check if object is in a container with active layout (using centralized state machine)
                 if (this.parentContainer) {
-                    const parent = sceneController.getObject(this.parentContainer);
-                    this.wasInLayoutMode = parent?.autoLayout?.enabled || false;
+                    this.wasInLayoutMode = objectStateManager?.isLayoutMode(this.parentContainer) || false;
                 } else {
                     this.wasInLayoutMode = false;
                 }
@@ -57,12 +58,10 @@ class MoveObjectCommand extends BaseCommand {
             const currentParent = objectData.parentContainer || null;
             const parentChanged = currentParent !== this.parentContainer;
 
-            // Check if layout mode changed
-            let currentlyInLayoutMode = false;
-            if (currentParent) {
-                const parent = sceneController.getObject(currentParent);
-                currentlyInLayoutMode = parent?.autoLayout?.enabled || false;
-            }
+            // Check if layout mode changed (using centralized state machine)
+            const currentlyInLayoutMode = currentParent
+                ? (objectStateManager?.isLayoutMode(currentParent) || false)
+                : false;
 
             // If object is now in layout mode but wasn't before, skip position restore
             // Let layout system handle positioning
@@ -106,12 +105,10 @@ class MoveObjectCommand extends BaseCommand {
                 return false;
             }
 
-            // Check if layout mode is active
-            let currentlyInLayoutMode = false;
-            if (objectData.parentContainer) {
-                const parent = sceneController.getObject(objectData.parentContainer);
-                currentlyInLayoutMode = parent?.autoLayout?.enabled || false;
-            }
+            // Check if layout mode is active (using centralized state machine)
+            const currentlyInLayoutMode = objectData.parentContainer
+                ? (objectStateManager?.isLayoutMode(objectData.parentContainer) || false)
+                : false;
 
             // If object is now in layout mode, skip position restore
             if (currentlyInLayoutMode) {
