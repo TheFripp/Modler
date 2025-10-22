@@ -54,6 +54,12 @@ async function initializeModlerV2(canvas) {
         // This fixes containers created before layer system was implemented
         migrateContainerInteractiveMeshesToLayer1();
 
+        // MIGRATION: Apply raycast override to existing containers
+        // This fixes container-first selection for containers created before raycast override was implemented
+        if (window.LayoutGeometry && typeof window.LayoutGeometry.updateAllContainersWithRaycastOverride === 'function') {
+            window.LayoutGeometry.updateAllContainersWithRaycastOverride();
+        }
+
         // NOTE: Initial hierarchy sync now handled by panel-ready messages
         // Each UI panel sends ready message → handleUIPanelReady → sends hierarchy
         // This is more reliable than a timed emit and prevents Event Bus Violation warnings
@@ -163,7 +169,6 @@ function initializeInteraction() {
     // CONTAINER CRUD MANAGER: Container creation, configuration, and lifecycle operations
     modlerV2Components.containerCrudManager = new ContainerCrudManager();
     modlerV2Components.transformationManager = new TransformationManager();
-    modlerV2Components.fieldNavigationManager = new FieldNavigationManager();
 
     // Wire up component references (Phase 4 & 5 Refactoring)
     if (modlerV2Components.layoutPropagationManager) {

@@ -76,6 +76,9 @@ class LayoutGeometry {
             // Otherwise, raycast is blocked (select via children)
         };
 
+        // Mark that this container has the raycast override
+        mainMesh.userData.hasRaycastOverride = true;
+
         // ARCHITECTURE SIMPLIFICATION: Wireframe creation moved to SupportMeshFactory
         // This ensures containers and objects follow identical wireframe management patterns
         // SupportMeshFactory.createObjectSupportMeshes() will create the wireframe child
@@ -86,6 +89,65 @@ class LayoutGeometry {
             material: mainMaterial,
             isInteractiveMeshSceneLevel: false // No longer needed - support meshes will be children
         };
+    }
+
+    /**
+     * Apply raycast override to existing container meshes
+     * Used to update containers that were created before the raycast override was implemented
+     */
+    static applyRaycastOverrideToContainer(containerMesh) {
+        if (!containerMesh || !containerMesh.userData.isContainer) {
+            console.warn('applyRaycastOverrideToContainer: Invalid container mesh');
+            return false;
+        }
+
+        // Check if override is already applied
+        if (containerMesh.userData.hasRaycastOverride) {
+            return false; // Already applied
+        }
+
+        // Store original raycast function
+        const originalRaycast = containerMesh.raycast.bind(containerMesh);
+
+        // Apply conditional raycast override
+        containerMesh.raycast = function(raycaster, intersects) {
+            const selectionController = window.modlerComponents?.selectionController;
+            const isSelected = selectionController && selectionController.isSelected(containerMesh);
+
+            if (isSelected) {
+                // Container is selected - enable raycasting for face-based tools
+                originalRaycast(raycaster, intersects);
+            }
+            // Otherwise, raycast is blocked (select via children)
+        };
+
+        // Mark as having override applied
+        containerMesh.userData.hasRaycastOverride = true;
+        return true;
+    }
+
+    /**
+     * Apply raycast override to all existing containers in the scene
+     * Call this once on app initialization to update old containers
+     */
+    static updateAllContainersWithRaycastOverride() {
+        const sceneController = window.modlerComponents?.sceneController;
+        if (!sceneController) {
+            console.warn('updateAllContainersWithRaycastOverride: SceneController not available');
+            return 0;
+        }
+
+        let updatedCount = 0;
+        for (const [id, objectData] of sceneController.objects) {
+            if (objectData.isContainer && objectData.mesh) {
+                if (this.applyRaycastOverrideToContainer(objectData.mesh)) {
+                    updatedCount++;
+                }
+            }
+        }
+
+        console.log(`✅ Applied raycast override to ${updatedCount} existing containers`);
+        return updatedCount;
     }
 
     // REMOVED: Old complex createContainerGeometry method with scene-level interactive mesh

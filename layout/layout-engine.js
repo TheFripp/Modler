@@ -243,33 +243,35 @@ class LayoutEngine {
      * @returns {THREE.Vector3} Object size
      */
     static getObjectSize(obj) {
-        // Try to get size from fixed size property first
-        if (obj.layoutProperties && obj.layoutProperties.fixedSize) {
-            const fixed = obj.layoutProperties.fixedSize;
-            return new THREE.Vector3(
-                typeof fixed === 'number' ? fixed : fixed.x || 1,
-                typeof fixed === 'number' ? fixed : fixed.y || 1,
-                typeof fixed === 'number' ? fixed : fixed.z || 1
-            );
-        }
-        
-        // Calculate from geometry bounding box
+        // Get geometry size first (most reliable)
+        let geometrySize = null;
         if (obj.mesh && obj.mesh.geometry) {
             obj.mesh.geometry.computeBoundingBox();
             const box = obj.mesh.geometry.boundingBox;
 
             if (box) {
-                const size = new THREE.Vector3(
+                geometrySize = new THREE.Vector3(
                     box.max.x - box.min.x,
                     box.max.y - box.min.y,
                     box.max.z - box.min.z
                 );
-                return size;
             }
         }
-        
-        // Default size fallback
-        return new THREE.Vector3(1, 1, 1);
+
+        // Use geometry size as fallback, or default to 1
+        const fallback = geometrySize || new THREE.Vector3(1, 1, 1);
+
+        // Override with fixedSize values where they exist (not null)
+        if (obj.layoutProperties && obj.layoutProperties.fixedSize) {
+            const fixed = obj.layoutProperties.fixedSize;
+            return new THREE.Vector3(
+                (typeof fixed === 'number' ? fixed : (fixed.x ?? fallback.x)),
+                (typeof fixed === 'number' ? fixed : (fixed.y ?? fallback.y)),
+                (typeof fixed === 'number' ? fixed : (fixed.z ?? fallback.z))
+            );
+        }
+
+        return fallback;
     }
     
     /**
@@ -473,37 +475,28 @@ class LayoutEngine {
             max = Math.max(max, objMax);
         });
 
-        // Determine target alignment
+        // Determine target position for layout axis
         let targetPosition = 0;
 
-        // When container size exists: align first object to min edge (left/top/front)
-        // When no container size: center the layout (container will resize to hug)
+        // When using space-between (pushing with no fill objects):
+        // Anchor first object to container start edge (min)
         const isPushing = pushContext && pushContext.axis === axis;
+        const usingSpaceBetween = containerSize && isPushing && fillCount === 0;
 
-        if (containerSize && isPushing && pushContext.anchorMode) {
-            // PUSHING WITH ANCHOR: Align objects to container edges based on anchor mode
-            // Only reposition if anchorMode is explicitly provided
+        if (usingSpaceBetween) {
+            // Space-between: align first object to min edge (accounting for padding)
             const containerAxisSize = axis === 'x' ? containerSize.x : axis === 'y' ? containerSize.y : containerSize.z;
             const containerMin = -containerAxisSize / 2;
-            const containerMax = containerAxisSize / 2;
-
-            // Get padding offset for this axis
             const paddingOffset = padding ? this.getPaddingOffset(axis, padding) : 0;
 
-            if (pushContext.anchorMode === 'max') {
-                // PUSHING from min face: align last object to max edge
-                targetPosition = (containerMax - paddingOffset) - max;
-            } else {
-                // DEFAULT or PUSHING from max face: align first object to min edge
-                targetPosition = (containerMin + paddingOffset) - min;
-            }
-
+            // Position so first object's min edge aligns with container min + padding
+            targetPosition = (containerMin + paddingOffset) - min;
         } else {
-            // NOT PUSHING or NO CONTAINER SIZE: Center the layout
-            // This prevents container from "jumping" when layout direction changes
+            // Normal centering (or use layoutAnchor if provided)
             const boundsCenter = (min + max) / 2;
             let targetCenter = 0;
             if (layoutAnchor) {
+                // Use layout anchor if provided (preserves position when switching layout modes)
                 if (axis === 'x') targetCenter = layoutAnchor.x;
                 else if (axis === 'y') targetCenter = layoutAnchor.y;
                 else if (axis === 'z') targetCenter = layoutAnchor.z;
@@ -522,7 +515,7 @@ class LayoutEngine {
 
         // Apply perpendicular alignment (if containerSize and alignment config exist)
         if (containerSize && layoutConfig?.alignment) {
-            return this.applyPerpendicularAlignment(axisAlignedPositions, sizes, axis, containerSize, layoutConfig.alignment, padding);
+            return this.applyPerpendicularAlignment(axisAlignedPositions, sizes, axis, containerSize, layoutConfig.alignment, padding, pushContext);
         }
 
         return axisAlignedPositions;
@@ -536,9 +529,14 @@ class LayoutEngine {
      * @param {THREE.Vector3} containerSize - Container size
      * @param {Object} alignment - Alignment config {x: 'left'|'center'|'right', y: 'bottom'|'center'|'top', z: 'back'|'center'|'front'}
      * @param {Object} padding - Padding configuration
+     * @param {Object} pushContext - Optional push context for push operations
      * @returns {Array} Aligned positions
      */
-    static applyPerpendicularAlignment(positions, sizes, layoutAxis, containerSize, alignment, padding) {
+    static applyPerpendicularAlignment(positions, sizes, layoutAxis, containerSize, alignment, padding, pushContext = null) {
+        // Apply alignment on all axes perpendicular to layout direction
+        // This ensures children maintain position relative to their aligned edge
+        // even during push operations (as container size changes)
+
         // Determine which axes are perpendicular to the layout axis
         const perpendicularAxes = [];
         if (layoutAxis !== 'x') perpendicularAxes.push('x');

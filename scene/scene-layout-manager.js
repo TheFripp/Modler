@@ -306,7 +306,8 @@ class SceneLayoutManager {
                 }
 
                 // Notify UI directly via event bus (triggers PostMessage with updated calculatedGap)
-                if (window.objectEventBus && container.id) {
+                // CRITICAL: Skip event emission during push operations to prevent property panel flickering
+                if (window.objectEventBus && container.id && !pushContext) {
                     window.objectEventBus.emit(
                         window.objectEventBus.EVENT_TYPES.HIERARCHY,
                         container.id,
@@ -325,7 +326,17 @@ class SceneLayoutManager {
             const layoutBounds = layoutResult.bounds;
 
             // Resize container to match new layout bounds
-            if (layoutBounds && layoutBounds.size) {
+            // CRITICAL: Don't resize if any child has fill mode - container size is fixed when children fill
+            const hasChildWithFill = children.some(child => {
+                const layoutProps = child.layoutProperties;
+                return layoutProps && (
+                    layoutProps.sizeX === 'fill' ||
+                    layoutProps.sizeY === 'fill' ||
+                    layoutProps.sizeZ === 'fill'
+                );
+            });
+
+            if (layoutBounds && layoutBounds.size && !hasChildWithFill) {
                 const containerCrudManager = this.getContainerCrudManager();
                 if (containerCrudManager) {
                     // UNIFIED API: Layout recalculated (via updateLayout)
@@ -345,8 +356,21 @@ class SceneLayoutManager {
             this.hugUpdatesEnabled = wasHugEnabled;
 
             // If this is a hug container, trigger a single update now that layout is complete
+            // CRITICAL: Don't hug if any child has fill mode - this creates circular dependency
             if (container.isHug) {
-                this.updateHugContainerSize(containerId);
+                // Check if any child has fill mode on any axis
+                const hasChildWithFill = children.some(child => {
+                    const layoutProps = child.layoutProperties;
+                    return layoutProps && (
+                        layoutProps.sizeX === 'fill' ||
+                        layoutProps.sizeY === 'fill' ||
+                        layoutProps.sizeZ === 'fill'
+                    );
+                });
+
+                if (!hasChildWithFill) {
+                    this.updateHugContainerSize(containerId);
+                }
             }
         }
     }
@@ -375,7 +399,9 @@ class SceneLayoutManager {
                 // Check each axis for fill behavior
                 ['x', 'y', 'z'].forEach(axis => {
                     // Use centralized state machine
-                    if (this.getObjectStateManager()?.hasFillEnabled(obj.id, axis)) {
+                    const fillEnabled = this.getObjectStateManager()?.hasFillEnabled(obj.id, axis);
+
+                    if (fillEnabled) {
                         // Only update if size has actually changed to avoid unnecessary geometry updates
                         const currentDim = obj.dimensions?.[axis] || 1;
                         const newDim = layoutSize[axis];
@@ -383,39 +409,24 @@ class SceneLayoutManager {
                         // Validate dimension is a valid number
                         if (typeof newDim === 'number' && !isNaN(newDim) && newDim > 0) {
                             if (Math.abs(currentDim - newDim) > 0.001) {
-                                // CRITICAL: Determine anchor mode based on push context
-                                // If pushing on this axis, use push anchor mode
-                                // Otherwise, use center to maintain symmetric resize
-                                let anchorMode = 'center';
-                                if (pushContext && pushContext.axis === axis) {
-                                    anchorMode = pushContext.anchorMode;
-                                }
+                                // Fill objects always resize symmetrically from center
+                                // Layout engine handles repositioning based on alignment
+                                const anchorMode = 'center';
 
-                                this.sceneController.updateObjectDimensions(obj.id, axis, newDim, anchorMode);
+                                // Suppress events during push to prevent property panel flickering
+                                const suppressEvents = pushContext !== null;
+                                this.sceneController.updateObjectDimensions(obj.id, axis, newDim, anchorMode, suppressEvents);
                             }
                         }
                     }
                 });
             }
 
-            // CRITICAL: During push operations, decide whether to update positions
-            // - With fill objects: Skip positions (objects stay fixed, fill resizes via anchor)
-            // - Without fill objects: Update positions (space-between redistribution)
-            const isDuringPush = pushContext !== null;
-            let shouldUpdatePosition = !isDuringPush; // Default: update unless pushing
-
-            if (isDuringPush) {
-                // Check if ANY object in container has fill on push axis
-                // Use centralized state machine
-                const hasFillObjects = objects.some(o =>
-                    this.getObjectStateManager()?.hasFillEnabled(o.id, pushContext.axis)
-                );
-
-                // Only update positions if using space-between (no fill objects)
-                shouldUpdatePosition = !hasFillObjects;
-            }
-
-            if (shouldUpdatePosition) {
+            // Apply layout positions - layout engine calculates positions based on:
+            // - Alignment (perpendicular to layout axis)
+            // - Fill/fixed sizing (layout axis)
+            // - Gap distribution
+            {
                 // Normal layout update - apply positions
                 // CRITICAL FIX: Use local positions when objects are children of container
                 // Layout positions are already relative to container coordinate space

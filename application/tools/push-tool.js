@@ -99,11 +99,24 @@ class PushTool {
     }
 
     onMouseUp(hit, event) {
+        // Check if we're pushing and if there was significant movement
+        const wasPushing = this.isPushing;
+        const hadSignificantMovement = wasPushing && Math.abs(this.cumulativeAmount) > 0.001;
+
         const operationCallbacks = BaseFaceToolEventHandler.createOperationCallbacks({
             isActiveCheck: () => this.isPushing,
             endCallback: () => this.stopPush()
         });
-        return this.eventHandler.handleMouseUp(hit, event, operationCallbacks);
+
+        const handled = this.eventHandler.handleMouseUp(hit, event, operationCallbacks);
+
+        // If we ended a push but didn't move significantly, allow click/double-click processing
+        // This enables double-click navigation even when face highlighting started a push
+        if (handled && !hadSignificantMovement) {
+            return false; // Allow InputController to process as click/double-click
+        }
+
+        return handled;
     }
 
     onClick(hit, event) {
@@ -353,73 +366,14 @@ class PushTool {
             }
         }
 
-        let success;
-        if (isContainer) {
-            // CONTAINERS: Replace geometry instead of modifying vertices
-            // This keeps geometry centered and avoids accumulating offsets
-            const geometryFactory = window.modlerComponents?.geometryFactory;
-            if (!geometryFactory) {
-                console.warn('PushTool: GeometryFactory not available');
-                return;
-            }
-
-            // Calculate position shift based on anchor mode
-            let positionShift = 0;
-            if (anchorMode === 'center') {
-                // Center mode: no position shift (symmetric expansion)
-                positionShift = 0;
-            } else {
-                // Edge-anchored: shift to keep anchor face fixed
-                const shiftAmount = (newDimension - currentDims[this.pushAxis]) / 2;
-                positionShift = this.pushDirection > 0 ? shiftAmount : -shiftAmount;
-            }
-
-            // Create new centered geometry
-            const oldGeometry = this.pushedObject.geometry;
-            const newGeometry = geometryFactory.createBoxGeometry(
-                this.pushAxis === 'x' ? newDimension : currentDims.x,
-                this.pushAxis === 'y' ? newDimension : currentDims.y,
-                this.pushAxis === 'z' ? newDimension : currentDims.z
-            );
-
-            // Replace geometry
-            this.pushedObject.geometry = newGeometry;
-            geometryFactory.returnGeometry(oldGeometry, 'box');
-
-            // Check if this container has layout enabled (using centralized state machine)
-            const hasLayoutEnabled = this.objectStateManager?.isLayoutMode(objectData2?.id);
-
-            // Shift object position to keep anchor face fixed
-            if (positionShift !== 0) {
-                this.pushedObject.position[this.pushAxis] += positionShift;
-            }
-
-            if (!hasLayoutEnabled) {
-                // NON-LAYOUT CONTAINERS (hug mode): Counter-shift children to keep them visually in place
-                // CRITICAL: When container moves, children (in local coords) move with it in world space
-                // To keep children visually in place, shift their local positions by opposite amount
-                if (sceneController && this.pushedObject.userData?.id) {
-                    const children = sceneController.getChildObjects(this.pushedObject.userData.id);
-                    children.forEach(child => {
-                        if (child.mesh) {
-                            child.mesh.position[this.pushAxis] -= positionShift;
-                        }
-                    });
-                }
-            }
-            // LAYOUT CONTAINERS: Don't counter-shift children
-            // The layout engine will recalculate child positions based on new container size + pushContext
-
-            success = true;
-        } else {
-            // REGULAR OBJECTS: Use vertex manipulation (existing behavior)
-            success = geometryUtils.resizeGeometry(
-                this.pushedObject.geometry,
-                this.pushAxis,
-                newDimension,
-                anchorMode
-            );
-        }
+        // UNIFIED APPROACH: Use vertex manipulation for both containers and objects
+        // Layout engine handles all child positioning/sizing based on container size
+        const success = geometryUtils.resizeGeometry(
+            this.pushedObject.geometry,
+            this.pushAxis,
+            newDimension,
+            anchorMode
+        );
 
         if (success) {
 
@@ -474,7 +428,7 @@ class PushTool {
 
     /**
      * Update container layout for containers in layout mode
-     * Called during push to provide real-time visual feedback for fill objects
+     * Called during push to recalculate child positions/sizes based on new container size
      */
     updateContainerLayout() {
         const sceneController = window.modlerComponents?.sceneController;
@@ -484,32 +438,14 @@ class PushTool {
         // Use centralized state machine
         if (!objectData?.isContainer || !this.objectStateManager?.isLayoutMode(objectData.id)) return;
 
-        // Get layout direction
-        const layoutDirection = objectData.autoLayout.direction || 'x';
-        const children = sceneController.getChildObjects(objectData.id);
-
-        // Check if there are fill objects on the PUSH AXIS (not layout axis)
-        // Fill objects should resize when container size changes on their fill axis,
-        // regardless of whether that's the layout direction or perpendicular to it
-        const hasFillObjects = children.some(child => {
-            // Use centralized state machine
-            return this.objectStateManager?.hasFillEnabled(child.id, this.pushAxis);
-        });
-
-        if (hasFillObjects) {
-            // WITH FILL OBJECTS: Call layout engine with minimal pushContext
-            // Pass axis to trigger fill object resizing, but NO anchorMode to avoid repositioning
-            // Children are already in correct position relative to container's local space
-            const pushContext = { axis: this.pushAxis };
-            sceneController.updateLayout(objectData.id, pushContext);
-        } else if (this.pushAxis === layoutDirection) {
-            // NO FILL OBJECTS, pushing on layout axis: Use space-between distribution
-            // Pass axis to trigger space-between gap distribution, but NO anchorMode to avoid repositioning
-            const pushContext = { axis: this.pushAxis };
-            sceneController.updateLayout(objectData.id, pushContext);
-        }
-        // If pushing perpendicular to layout direction with no fill objects, do nothing
-        // (children positions along layout axis don't change)
+        // Let layout engine handle all positioning and sizing
+        // It will recalculate based on new container size:
+        // - Fill objects resize on their fill axes
+        // - Fixed objects maintain size
+        // - All objects reposition based on alignment
+        // - Gaps adjust if no fill objects
+        const pushContext = { axis: this.pushAxis };
+        sceneController.updateLayout(objectData.id, pushContext);
     }
 
     /**
@@ -574,6 +510,18 @@ class PushTool {
                     new THREE.Matrix4().extractRotation(pushedObject.matrixWorld)
                 );
                 pushedObject.position.add(worldOffset);
+
+                // CRITICAL: Adjust children positions to compensate for container movement
+                // Children already have correct alignment from real-time adjustments during push
+                // We just need standard compensation for the geometry recentering
+                if (sceneController && pushedObject.userData?.id) {
+                    const children = sceneController.getChildObjects(pushedObject.userData.id);
+                    children.forEach(child => {
+                        if (child.mesh) {
+                            child.mesh.position.sub(geometryCenter);
+                        }
+                    });
+                }
 
                 // Update matrices
                 pushedObject.updateMatrix();
