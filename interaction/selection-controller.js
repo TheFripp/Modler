@@ -58,11 +58,30 @@ class SelectionController {
     }
 
     /**
-     * Resolve target object for selection based on container-first logic
+     * Resolve target object for selection based on source and container-first logic.
+     * Single source of truth for "given an object, what should actually get selected?"
+     * @param {Object} object - The clicked/targeted mesh
+     * @param {Object} options - Resolution options
+     * @param {boolean} options.skipResolution - Target already resolved, return as-is
+     * @param {boolean} options.direct - UI tree selection: select as-is, navigate to parent
+     * @returns {{ target: Object, navigateTo: string|null }}
      */
-    resolveSelectionTarget(object) {
+    resolveSelectionTarget(object, options = {}) {
+        // Already resolved by caller
+        if (options.skipResolution) {
+            return { target: object, navigateTo: null };
+        }
+
+        // Direct selection from UI tree — select the exact object, navigate to parent container
+        if (options.direct) {
+            const objectData = this.getObjectData(object);
+            const navigateTo = objectData?.parentContainer || null;
+            return { target: object, navigateTo };
+        }
+
+        // 3D click — container-first resolution
         const objectData = this.getObjectData(object);
-        if (!objectData) return object;
+        if (!objectData) return { target: object, navigateTo: null };
 
         const isInContainerContext = this.isInContainerContext();
         const currentContainerContext = this.getContainerContext();
@@ -79,7 +98,7 @@ class SelectionController {
                 }
             }
             // Direct selection within (or after navigating out of) container
-            return object;
+            return { target: object, navigateTo: null };
         }
 
         // Not in container context - resolve up to root-level container
@@ -97,11 +116,11 @@ class SelectionController {
                 }
             }
             if (rootContainer?.mesh) {
-                return rootContainer.mesh;
+                return { target: rootContainer.mesh, navigateTo: null };
             }
         }
 
-        return object;
+        return { target: object, navigateTo: null };
     }
 
     // Core selection methods
@@ -114,34 +133,21 @@ class SelectionController {
             return false;
         }
 
-        // Resolve which object to actually select (container-first logic)
-        // options.resolved: target already resolved by caller (e.g. handleObjectClick)
-        // options.direct: UI-initiated selection, bypass container-first and navigate to parent
-        let targetObject;
+        // Single resolution path for all selection sources
+        const { target, navigateTo } = this.resolveSelectionTarget(object, options);
 
-        if (options.resolved) {
-            targetObject = object;
-        } else if (options.direct) {
-            targetObject = object;
-
-            // If directly selecting a child object from UI, step into parent container
-            const objectData = this.getObjectData(object);
-            if (objectData && objectData.parentContainer) {
-                const navigationController = this.getNavigationController();
-                if (navigationController) {
-                    navigationController.navigateToContainer(objectData.parentContainer);
-                }
-            }
-        } else {
-            targetObject = this.resolveSelectionTarget(object);
+        // Navigate to parent container if needed (e.g., UI tree selecting a child)
+        if (navigateTo) {
+            const navigationController = this.getNavigationController();
+            navigationController?.navigateToContainer(navigateTo);
         }
 
         // Add to selection
-        this.selectedObjects.add(targetObject);
+        this.selectedObjects.add(target);
 
         // Update visualization
         if (this.visualizationManager) {
-            this.visualizationManager.setState(targetObject, 'selected');
+            this.visualizationManager.setState(target, 'selected');
         }
 
         // Notify about selection change
@@ -356,26 +362,13 @@ class SelectionController {
             }
         }
 
-        // Determine selection target and update click tracking
-        let targetObject = object;
+        // Resolve selection target using centralized logic
+        const { target } = this.resolveSelectionTarget(object);
 
-        if (objectData.parentContainer) {
-            const parentContainer = this.getParentContainer(objectData);
-            const isInContext = this.isInContainerContext();
-            const currentContext = this.getContainerContext();
-
-            if (parentContainer?.mesh) {
-                if (isInContext && currentContext === parentContainer.mesh) {
-                    // In container - select child directly
-                    this.lastClickedChildObject = object;
-                    this.lastClickTime = Date.now();
-                } else {
-                    // Not in container - container-first logic
-                    this.lastClickedChildObject = object;
-                    this.lastClickTime = Date.now();
-                    targetObject = parentContainer.mesh;
-                }
-            }
+        // Track child click for double-click detection
+        if (target !== object) {
+            this.lastClickedChildObject = object;
+            this.lastClickTime = Date.now();
         } else if (objectData.isContainer) {
             this.lastClickTime = Date.now();
         } else {
@@ -386,16 +379,16 @@ class SelectionController {
         const isMultiSelect = event.ctrlKey || event.metaKey || event.shiftKey;
 
         if (isMultiSelect) {
-            this.toggle(targetObject);
+            this.toggle(target);
         } else {
             // Skip if clicking the same already-selected object (prevents UI flicker)
             const isSameObjectAlreadySelected =
                 this.selectedObjects.size === 1 &&
-                this.selectedObjects.has(targetObject);
+                this.selectedObjects.has(target);
 
             if (!isSameObjectAlreadySelected) {
                 this.clearSelection();
-                this.select(targetObject, { resolved: true });
+                this.select(target, { skipResolution: true });
             }
         }
 

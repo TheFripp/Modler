@@ -6,6 +6,7 @@ import type { ObjectData, ToolState, ContainerContext } from '$lib/types/object-
 
 // Core Svelte stores
 export const selectedObjects: Writable<ObjectData[]> = writable([]);
+export const hoveredObjectId: Writable<number | null> = writable(null);
 
 export const objectHierarchy: Writable<ObjectData[]> = writable([]);
 
@@ -397,6 +398,11 @@ export function removeObjectFromHierarchy(objectId: any) {
 // Sync container context from Three.js
 export function syncContainerContextFromThreeJS(context: ContainerContext | null) {
 	containerContext.set(context);
+}
+
+// Sync hover state from Three.js (bidirectional: 3D hover highlights tree item)
+export function syncHoverFromThreeJS(objectId: number | null) {
+	hoveredObjectId.set(objectId);
 }
 
 // Make syncSelectionFromThreeJS globally available for ObjectStateManager

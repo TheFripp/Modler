@@ -27,6 +27,10 @@ class SelectTool extends BaseTool {
                     this.visualizationManager?.setState(hit.object, 'hovered');
                 }
 
+                // Emit hover change only when hovered object changes
+                if (this.hoveredObject !== hit.object) {
+                    this.emitHoverChange(objectData?.id || null);
+                }
                 this.hoveredObject = hit.object;
                 return;
             }

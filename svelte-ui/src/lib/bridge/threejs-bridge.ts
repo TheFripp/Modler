@@ -3,6 +3,8 @@ import {
 	initializeModlerBridge,
 	syncSelectionFromThreeJS,
 	syncHierarchyFromThreeJS,
+	syncContainerContextFromThreeJS,
+	syncHoverFromThreeJS,
 	addObjectToHierarchy,
 	removeObjectFromHierarchy,
 	toolState,
@@ -99,9 +101,14 @@ function setupPostMessageFallback() {
 					if (data && data.selectedObjects) {
 						syncSelectionFromThreeJS(data.selectedObjects);
 					}
+					syncContainerContextFromThreeJS(data?.containerContext || null);
 				} catch (error) {
 					console.error('PostMessage: Error syncing selection:', error);
 				}
+				break;
+
+			case 'hover-changed':
+				syncHoverFromThreeJS(data?.hoveredObjectId || null);
 				break;
 
 			case 'hierarchy-changed':

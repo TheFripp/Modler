@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { selectedObjects, objectHierarchy, containerContext } from '$lib/stores/modler';
+	import { selectedObjects, objectHierarchy, containerContext, hoveredObjectId } from '$lib/stores/modler';
 	import { Box, BoxSelect, SquareStack } from 'lucide-svelte';
 	import { cn } from '$lib/utils';
 	import { onMount } from 'svelte';
@@ -213,11 +213,9 @@
 		}, '*');
 	}
 
-	// Hover state for tree-to-3D highlighting
-	let hoveredTreeObjectId = null;
-
+	// Hover state — unified store shared between tree and 3D
 	function handleObjectMouseEnter(object) {
-		hoveredTreeObjectId = object.id;
+		hoveredObjectId.set(object.id);
 		window.parent.postMessage({
 			type: 'object-hover',
 			objectId: object.id,
@@ -226,7 +224,7 @@
 	}
 
 	function handleObjectMouseLeave(object) {
-		hoveredTreeObjectId = null;
+		hoveredObjectId.set(null);
 		window.parent.postMessage({
 			type: 'object-hover',
 			objectId: object.id,
@@ -397,7 +395,7 @@
 					'flex items-center gap-1.5 h-8 pr-2 transition-colors cursor-default',
 					'text-foreground/70 hover:text-foreground hover:bg-white/5',
 					isObjectHighlighted(object, $selectedObjects) && 'bg-white/[0.06]',
-					hoveredTreeObjectId === object.id && !isObjectHighlighted(object, $selectedObjects) && 'bg-white/[0.04]'
+					$hoveredObjectId === object.id && !isObjectHighlighted(object, $selectedObjects) && 'bg-white/[0.04]'
 				)}
 				style="padding-left: {depth * 16 + 8}px"
 				onclick={(e) => handleObjectClick(e, object)}

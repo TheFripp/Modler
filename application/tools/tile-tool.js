@@ -36,6 +36,9 @@ class TileTool extends BaseTool {
 
             // Only track non-container objects
             if (objectData && !objectData.isContainer && objectData.selectable) {
+                if (this.hoveredObject !== hit.object) {
+                    this.emitHoverChange(objectData?.id || null);
+                }
                 this.hoveredObject = hit.object;
                 return;
             }

@@ -1,6 +1,6 @@
 # Selection System
 
-Container-first selection with direct object access through double-click.
+Container-first selection with direct object access through double-click. Centralized resolution, bidirectional hover, and consistent highlighting between 3D scene and UI tree.
 
 ## Core Pattern
 
@@ -13,22 +13,37 @@ Container-first selection with direct object access through double-click.
 - **Selection priority**: Context-aware container logic > Individual object
 
 ### Selection Operations
+All paths go through `resolveSelectionTarget(object, options)` — the single source of truth for "what should get selected":
 - `selectionController.select(object)` — context-aware selection with container-first logic
-- `selectionController.select(object, { direct: true })` — UI-initiated, bypasses container-first and navigates to parent
-- `selectionController.select(object, { resolved: true })` — target already resolved, skips container-first resolution
+- `selectionController.select(object, { direct: true })` — UI-initiated, selects exact object and navigates to parent container
+- `selectionController.select(object, { skipResolution: true })` — target already resolved, skips resolution
 - `selectionController.deselect(object)`
 - `selectionController.toggle(object)`
 - `selectionController.clearSelection()`
+
+### Hover (Bidirectional)
+- **3D → Tree**: Tools emit `interaction:hover` via ObjectEventBus → SimpleCommunication → `hover-changed` postMessage → `hoveredObjectId` Svelte store → ObjectTree highlights
+- **Tree → 3D**: ObjectTree sends `object-hover` postMessage → CommandRouter → `VisualizationManager.setState('hovered')`
+- Hover store (`hoveredObjectId` in modler.ts) is shared — both paths update it
+
+### Container Context Communication
+- `notifySelectionChange()` piggybacks `containerContext` on the `object:selection` event
+- SimpleCommunication forwards it in `selection-changed` → threejs-bridge → `syncContainerContextFromThreeJS()` → `containerContext` Svelte store
+- ObjectTree uses `$containerContext` for context-aware highlighting
 
 ## Architecture
 
 ### SelectionController
 **File**: `interaction/selection-controller.js`
 - Core selection state (Set of meshes)
-- Container-first resolution via `resolveSelectionTarget()`
-- Click handling: `handleObjectClick()` → resolves target → `select({ resolved: true })`
+- `resolveSelectionTarget(object, options)` — **single source of truth** for selection resolution
+  - Returns `{ target: mesh, navigateTo: containerId|null }`
+  - `options.direct` → UI tree: select as-is, navigate to parent
+  - `options.skipResolution` → already resolved, return as-is
+  - Default → 3D click: container-first walk to root container
+- Click handling: `handleObjectClick()` → `resolveSelectionTarget()` → `select({ skipResolution: true })`
 - Double-click delegates to NavigationController
-- Emits selection events via ObjectEventBus → SimpleCommunication → UI
+- `notifySelectionChange()` emits selection + containerContext via ObjectEventBus
 
 ### NavigationController
 **File**: `application/managers/navigation-controller.js`
@@ -56,9 +71,9 @@ Container-first selection with direct object access through double-click.
 ### Click → Selection
 1. InputController raycasts, resolves support meshes to main objects
 2. SelectTool delegates to `SelectionController.handleObjectClick()`
-3. SelectionController applies container-first logic (child → parent container)
-4. `select({ resolved: true })` updates state, visualization, emits events
-5. ObjectEventBus → SimpleCommunication → UI panels update
+3. `resolveSelectionTarget()` applies container-first logic (child → parent container)
+4. `select({ skipResolution: true })` updates state, visualization, emits events
+5. ObjectEventBus → SimpleCommunication → UI panels update (includes containerContext)
 
 ### Double-Click → Step In
 1. InputController detects double-click, uses `raycastForDoubleClick()` (returns actual child, not parent)
@@ -70,7 +85,19 @@ Container-first selection with direct object access through double-click.
 ### UI → Scene Selection
 1. ObjectTree click → postMessage `object-select` with `directSelection: true`
 2. CommandRouter → `SelectionController.select(mesh, { direct: true })`
-3. NavigationController automatically navigates to parent container
+3. `resolveSelectionTarget({ direct: true })` returns `{ target: mesh, navigateTo: parentId }`
+4. NavigationController automatically navigates to parent container
+
+### Hover (Bidirectional)
+**3D hover → Tree highlight:**
+1. Tool `onHover()` → `VisualizationManager.setState('hovered')` + `BaseTool.emitHoverChange(objectId)`
+2. ObjectEventBus `interaction:hover` → SimpleCommunication → `hover-changed` postMessage
+3. threejs-bridge → `syncHoverFromThreeJS()` → `hoveredObjectId` store
+4. ObjectTree reactively highlights `$hoveredObjectId === object.id`
+
+**Tree hover → 3D highlight:**
+1. ObjectTree `handleObjectMouseEnter()` → `hoveredObjectId.set(id)` + postMessage `object-hover`
+2. CommandRouter.handleObjectHover() → `VisualizationManager.setState('hovered')`
 
 ### Object Deletion → Selection Cleanup
 Both deletion paths clear selection before removing objects:
@@ -90,8 +117,12 @@ Both deletion paths clear selection before removing objects:
 - `handleObjectClick(object, event)` — main click entry point
 - `handleDoubleClick(hit, event)` — delegates to NavigationController
 - `handleEmptySpaceClick(event)` — delegates to NavigationController
-- `resolveSelectionTarget(object)` — container-first resolution
+- `resolveSelectionTarget(object, options)` — unified resolution returning `{ target, navigateTo }`
 - `isObjectPartOfContainer(objectData, containerMesh)` — context validation
+
+### BaseTool
+- `emitHoverChange(objectId)` — emits `interaction:hover` via ObjectEventBus
+- `clearHover()` — clears visual state and emits hover change
 
 ### NavigationController
 - `navigateToContainer(containerId, options)` — step into container

@@ -72,11 +72,6 @@ class NavigationController {
             this.selectionController.clearSelection('navigate-to-container');
         }
 
-        // EXPLICIT UI NOTIFICATION: Ensure UI gets updated with new container context
-        if (window.notifyObjectHierarchyChanged) {
-            window.notifyObjectHierarchyChanged();
-        }
-
         return true;
     }
 
@@ -159,11 +154,6 @@ class NavigationController {
             this.containerVisualizer.stepIntoContainer(this.currentContainer.mesh);
             this.visualizationManager.setState(this.currentContainer.mesh, 'selected-in-context');
 
-            // EXPLICIT UI NOTIFICATION: Ensure UI gets updated when navigating up
-            if (window.notifyObjectHierarchyChanged) {
-                window.notifyObjectHierarchyChanged();
-            }
-
         } else if (this.currentContainer) {
             // Exit to root level (this will trigger its own UI notification)
             this.navigateToRoot();
@@ -201,11 +191,6 @@ class NavigationController {
         // Clear selection only if not adding to selection (shift-click)
         if (!options.addToSelection) {
             this.selectionController.clearSelection('navigate-to-root');
-        }
-
-        // EXPLICIT UI NOTIFICATION: Ensure UI gets updated when exiting all containers
-        if (window.notifyObjectHierarchyChanged) {
-            window.notifyObjectHierarchyChanged();
         }
 
         return true;

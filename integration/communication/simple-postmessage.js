@@ -87,6 +87,14 @@ class SimpleCommunication {
             this.handleSelectionEvent(event);
         });
 
+        // Subscribe to hover events (interaction:hover) for bidirectional tree↔3D highlighting
+        eventBus.subscribe('interaction:hover', (event) => {
+            this.sendToAllIframes({
+                type: 'hover-changed',
+                data: { hoveredObjectId: event.changeData?.hoveredObjectId || null }
+            });
+        });
+
         // Subscribe to hierarchy events (object:hierarchy)
         eventBus.subscribe(eventBus.EVENT_TYPES.HIERARCHY, (event) => {
             this.handleHierarchyEvent(event);

@@ -61,6 +61,16 @@ class BaseTool {
                 this.visualizationManager?.setState(this.hoveredObject, 'normal');
             }
             this.hoveredObject = null;
+            this.emitHoverChange(null);
+        }
+    }
+
+    emitHoverChange(objectId) {
+        if (window.objectEventBus) {
+            window.objectEventBus.emit('interaction:hover', objectId,
+                { hoveredObjectId: objectId },
+                { immediate: true }
+            );
         }
     }
 
