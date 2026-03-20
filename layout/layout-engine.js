@@ -811,7 +811,7 @@ class LayoutEngine {
      * @returns {Object} Bounds object {min: Vector3, max: Vector3, size: Vector3, center: Vector3}
      */
     static calculateUnifiedBounds(items, options = {}) {
-        const { type = 'layout', useWorldSpace = false } = options;
+        const { type = 'layout', useWorldSpace = false, useLocalTransform = false } = options;
 
         if (!items || items.length === 0) {
             return this._getEmptyBounds();
@@ -822,9 +822,9 @@ class LayoutEngine {
 
         if (isMeshArray) {
             // Items are mesh objects, use selection bounds calculation
-            return this._calculateSelectionBounds(items, useWorldSpace);
+            return this._calculateSelectionBounds(items, useWorldSpace, useLocalTransform);
         } else if (type === 'selection') {
-            return this._calculateSelectionBounds(items, useWorldSpace);
+            return this._calculateSelectionBounds(items, useWorldSpace, useLocalTransform);
         } else {
             // Items are position/size objects, use position bounds calculation
             return this._calculatePositionBounds(items);
@@ -837,7 +837,7 @@ class LayoutEngine {
      * @param {boolean} useWorldSpace - Whether to use world space transforms
      * @returns {Object} Bounds object
      */
-    static _calculateSelectionBounds(meshObjects, useWorldSpace = true) {
+    static _calculateSelectionBounds(meshObjects, useWorldSpace = true, useLocalTransform = false) {
         // Filter to only objects with valid geometry
         const validObjects = meshObjects.filter(obj => {
             if (!obj || !obj.geometry) return false;
@@ -871,7 +871,10 @@ class LayoutEngine {
                     ];
 
                     corners.forEach(corner => {
-                        if (useWorldSpace && obj.matrixWorld) {
+                        if (useLocalTransform) {
+                            obj.updateMatrix();
+                            corner.applyMatrix4(obj.matrix);
+                        } else if (useWorldSpace && obj.matrixWorld) {
                             corner.applyMatrix4(obj.matrixWorld);
                         }
 

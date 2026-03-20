@@ -198,8 +198,9 @@ class ContainerCrudManager {
             case 'hug':
                 return this.resizeForHugMode(container, { reason, immediate });
 
+            case 'manual':
             case 'fixed':
-                // Fixed containers don't auto-resize
+                // Manual/fixed containers don't auto-resize
                 return false;
 
             default:
@@ -774,7 +775,7 @@ class ContainerCrudManager {
         const childMeshes = childObjects.map(child => child.mesh);
         const localBounds = window.LayoutEngine.calculateUnifiedBounds(childMeshes, {
             type: 'layout',
-            useWorldSpace: false  // Local space calculation
+            useLocalTransform: true  // Apply child's local transform (position in container space)
         });
 
         if (!localBounds) {
