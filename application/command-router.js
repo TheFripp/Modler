@@ -170,6 +170,20 @@ class CommandRouter {
         // ═══════════════════════════════════════════════════════════
         this.handlers.set('ui-panel-ready', this.handleUIPanelReady.bind(this));
         this.handlers.set('left-panel-ready', this.handleUIPanelReady.bind(this)); // Alias
+
+        // File manager operations — delegate to FileManagerHandler
+        this.handlers.set('request-file-manager-ready', (data) => {
+            const fileManagerHandler = window.modlerComponents?.fileManagerHandler;
+            if (fileManagerHandler) {
+                fileManagerHandler.handleRequestFileManagerReady(data.sourceWindow);
+            }
+        });
+        this.handlers.set('file-manager-request', (data) => {
+            const fileManagerHandler = window.modlerComponents?.fileManagerHandler;
+            if (fileManagerHandler) {
+                fileManagerHandler.handleFileRequest(data, data.sourceWindow);
+            }
+        });
         // Settings operations — update and get handlers follow identical patterns
         const settingsRoutes = {
             'cad-wireframe': 'CadWireframe',

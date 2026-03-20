@@ -522,7 +522,13 @@ class DevelopmentValidator {
         ValidatedConstructor.prototype.isCallFromCentralizedSystems = this.isCallFromCentralizedSystems.bind(this);
 
         // Replace the original constructor
-        namespace[className] = ValidatedConstructor;
+        // ES module namespace objects are frozen — assignment will fail for `import * as` modules
+        try {
+            namespace[className] = ValidatedConstructor;
+        } catch (e) {
+            // Cannot intercept frozen module exports — skip validation for this constructor
+            return;
+        }
     }
 
     /**

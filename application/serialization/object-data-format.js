@@ -581,7 +581,8 @@ function createEmptyObjectData(id = null) {
 function createObjectMetadata(options = {}) {
     const validTypes = Object.values(OBJECT_TYPES);
     const type = options.type || OBJECT_TYPES.BOX;
-    if (options.type && !validTypes.includes(options.type) && options.type !== 'mesh') {
+    const systemTypes = ['mesh', 'grid', 'cube'];
+    if (options.type && !validTypes.includes(options.type) && !systemTypes.includes(options.type)) {
         console.warn(`ObjectDataFormat: Unknown object type '${options.type}', valid types: ${validTypes.join(', ')}`);
     }
 

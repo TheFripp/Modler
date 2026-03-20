@@ -308,8 +308,8 @@ function initializeApplication() {
         ['move', MoveTool],
         ['push', PushTool],
         ['box-creation', BoxCreationTool],
-        ['tile', TileTool]
-        // REMOVED: LayoutTool - Layout functionality moved to property-panel driven approach
+        ['tile', TileTool],
+        ['measure', MeasureToolAdapter]
     ];
     tools.forEach(([name, tool]) => modlerV2Components.toolController.registerTool(name, tool));
     modlerV2Components.toolController.switchToTool('select');
@@ -671,7 +671,7 @@ function createDemoObjects() {
     // This ensures selectable: true by default and triggers all necessary events
     const objectData = sc.addObject(geometry, material, {
         name: 'Demo Cube',
-        type: 'cube',
+        type: 'box',
         position: new THREE.Vector3(0, 1, 0)
     });
 
@@ -684,7 +684,7 @@ function createDemoObjects() {
     const material2 = materialManager ? materialManager.createMeshLambertMaterial({ color: 0xcccccc }) : new THREE.MeshLambertMaterial({ color: 0xcccccc });
     const objectData2 = sc.addObject(geometry2, material2, {
         name: 'Test Cube',
-        type: 'cube',
+        type: 'box',
         position: new THREE.Vector3(2, 1, 0)
     });
 
