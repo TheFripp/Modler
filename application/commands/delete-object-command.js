@@ -68,15 +68,10 @@ class DeleteObjectCommand extends BaseCommand {
                 return false;
             }
 
-            // Clear selection of objects being deleted
+            // Clear selection before deletion to prevent phantom objects in UI
+            // clearSelection() calls notifySelectionChange() which emits selection-changed to UI
             if (this.selectionController) {
-                const selectedObjects = this.selectionController.getSelectedObjects();
-                selectedObjects.forEach(selectedMesh => {
-                    const objectData = this.sceneController.getObjectByMesh(selectedMesh);
-                    if (objectData && this.objectIds.includes(objectData.id)) {
-                        this.selectionController.deselect(selectedMesh);
-                    }
-                });
+                this.selectionController.clearSelection();
             }
 
             // Delete objects from scene

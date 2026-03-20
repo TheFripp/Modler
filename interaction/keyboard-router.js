@@ -403,7 +403,8 @@ class KeyboardRouter {
             'KeyW': 'move',
             'KeyE': 'push',
             'KeyR': 'box-creation',
-            'KeyT': 'tile'
+            'KeyT': 'tile',
+            'KeyM': 'measure'
         };
 
         const toolName = toolMap[code];

@@ -20,6 +20,10 @@ class MoveTool {
         this.dragFaceNormal = null;
         this.lastMousePos = null;
 
+        // Parent coordinate space tracking (for children in containers)
+        this.dragParentMesh = null;
+        this.dragStartWorldPos = null;
+
         // Duplication mode (visual state managed by DuplicationMode)
         this.duplicationMode = new DuplicationMode();
 
@@ -360,6 +364,17 @@ class MoveTool {
         this.dragObject = targetObject; // Use the resolved target (container if selected)
         this.dragStartPosition = targetObject.position.clone();
 
+        // Cache parent mesh for local/world coordinate conversion during drag
+        // Scene-root objects have local === world, so no conversion needed
+        const scene = window.modlerComponents?.sceneFoundation?.scene;
+        this.dragParentMesh = targetObject.parent && targetObject.parent !== scene
+            ? targetObject.parent : null;
+
+        // Store world-space start position for snap calculations
+        this.dragStartWorldPos = this.dragParentMesh
+            ? targetObject.getWorldPosition(new THREE.Vector3())
+            : this.dragStartPosition.clone();
+
         MovementUtils.registerFileOperation('move-tool-drag');
 
         // Reset direction tracking for new drag operation
@@ -449,19 +464,32 @@ class MoveTool {
         // Only move if there's actual mouse movement
         if (mouseDelta.length() < 0.001) return;
         
+        // Use world position for drag plane projection (local position is wrong for children in containers)
+        const objectWorldPos = this.dragParentMesh
+            ? this.dragObject.getWorldPosition(new THREE.Vector3())
+            : this.dragObject.position;
+
         // Use global dragging system for axis-constrained movement along face normal
         const worldMovement = window.CameraMathUtils.screenDeltaToAxisMovement(
-            mouseDelta, 
-            this.dragObject.position, 
-            this.dragFaceNormal, 
+            mouseDelta,
+            objectWorldPos,
+            this.dragFaceNormal,
             camera
         );
-        
+
+        // Convert world movement delta to local space for children in containers
+        // Root objects: local === world, no conversion needed
+        let localMovement = worldMovement;
+        if (this.dragParentMesh) {
+            const parentInverse = new THREE.Matrix4().copy(this.dragParentMesh.matrixWorld).invert();
+            localMovement = worldMovement.clone().transformDirection(parentInverse);
+        }
+
         // Detect direction changes and reset throttle state for immediate response
         if (this.lastMovementDelta !== undefined) {
             // Check if movement direction changed significantly
-            const directionChanged = this.lastMovementDelta.dot(worldMovement) < 0;
-            if (directionChanged && worldMovement.length() > 0.001) {
+            const directionChanged = this.lastMovementDelta.dot(localMovement) < 0;
+            if (directionChanged && localMovement.length() > 0.001) {
                 // Reset throttle states to ensure immediate response on direction change
                 this.containerThrottleState.lastUpdateTime = 0;
                 this.containerThrottleState.immediateUpdateTime = 0;
@@ -472,15 +500,15 @@ class MoveTool {
                 }
             }
         }
-        this.lastMovementDelta = worldMovement.clone();
+        this.lastMovementDelta = localMovement.clone();
 
         // Track cumulative movement for determining dominant axis
-        this.cumulativeMovement.x += Math.abs(worldMovement.x);
-        this.cumulativeMovement.y += Math.abs(worldMovement.y);
-        this.cumulativeMovement.z += Math.abs(worldMovement.z);
+        this.cumulativeMovement.x += Math.abs(localMovement.x);
+        this.cumulativeMovement.y += Math.abs(localMovement.y);
+        this.cumulativeMovement.z += Math.abs(localMovement.z);
 
-        // Calculate potential new position
-        const potentialPosition = this.dragObject.position.clone().add(worldMovement);
+        // Calculate potential new position (in local space)
+        const potentialPosition = this.dragObject.position.clone().add(localMovement);
 
         // Update snap detection with travel axis information for edge filtering
         const snapController = window.modlerComponents?.snapController;
@@ -489,17 +517,27 @@ class MoveTool {
             snapController.updateSnapDetection('move', [this.dragObject], this.dragFaceNormal);
             const currentSnapPoint = snapController.getCurrentSnapPoint();
             if (currentSnapPoint) {
-                // Apply axis-constrained snapping with face offset using CameraMathUtils
-                const axisConstrainedPosition = window.CameraMathUtils.applyAxisConstrainedSnapWithFaceOffset(
-                    potentialPosition,
+                // Snap works in world space — compute world position for snap calculation
+                const snapWorldPos = this.dragParentMesh
+                    ? objectWorldPos.clone().add(worldMovement)
+                    : potentialPosition.clone();
+
+                const snappedWorldPos = window.CameraMathUtils.applyAxisConstrainedSnapWithFaceOffset(
+                    snapWorldPos,
                     currentSnapPoint.worldPos,
                     this.dragFaceNormal,
                     this.dragHitPoint,
-                    this.dragStartPosition
+                    this.dragStartWorldPos
                 );
 
-                // Use unified state management for snapped position
-                this.updateObjectPosition(axisConstrainedPosition);
+                if (this.dragParentMesh) {
+                    // Convert snapped world position back to local space
+                    const parentInverse = new THREE.Matrix4().copy(this.dragParentMesh.matrixWorld).invert();
+                    const snappedLocalPos = snappedWorldPos.applyMatrix4(parentInverse);
+                    this.updateObjectPosition(snappedLocalPos);
+                } else {
+                    this.updateObjectPosition(snappedWorldPos);
+                }
             } else {
                 // No snap point, use regular movement
                 this.updateObjectPosition(potentialPosition);
@@ -512,18 +550,13 @@ class MoveTool {
         // ObjectStateManager handles all notifications automatically
         // No manual ObjectEventBus emissions needed - unified state propagation
         
-        // Update container context highlight if we're in container mode and moving a container
-        // Skip real-time updates when moving child objects - container will resize at end of drag
-        const navigationController = window.modlerComponents?.navigationController;
-        if (navigationController?.isInContainerContext()) {
-            const sceneController = window.modlerComponents?.sceneController;
-            if (sceneController) {
-                const objectData = sceneController.getObjectByMesh(this.dragObject);
-                // Only update container during drag if we're moving a container itself
-                // Child object movements will trigger container resize via endFaceDrag() -> notifyObjectTransformChanged()
-                if (objectData && objectData.isContainer) {
-                    this.updateContainerDuringDrag();
-                }
+        // Real-time parent container resize when dragging any child object
+        // Applies to all child types (boxes, nested containers) regardless of navigation context
+        const sceneController = window.modlerComponents?.sceneController;
+        if (sceneController) {
+            const objectData = sceneController.getObjectByMesh(this.dragObject);
+            if (objectData && objectData.parentContainer) {
+                this.updateContainerDuringDrag();
             }
         }
         
@@ -689,6 +722,8 @@ class MoveTool {
         this.lastMousePos = null;
         this.snapAttachmentPoint = null;
         this.dragHitPoint = null;
+        this.dragParentMesh = null;
+        this.dragStartWorldPos = null;
 
         MovementUtils.unregisterFileOperation('move-tool-drag');
 

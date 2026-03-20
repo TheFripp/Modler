@@ -568,6 +568,11 @@ class CommandRouter {
             return;
         }
 
+        // Clear selection before deletion to prevent phantom objects in UI
+        if (this.selectionController) {
+            this.selectionController.clearSelection();
+        }
+
         if (objectIds && Array.isArray(objectIds)) {
             // Delete multiple objects
             objectIds.forEach(id => this.sceneController.removeObject(id));

@@ -347,6 +347,9 @@ function selectionChanged(current: ObjectData[], incoming: ObjectData[]): boolea
 		if (JSON.stringify(curr.dimensions) !== JSON.stringify(inc.dimensions)) return true;
 		if (JSON.stringify(curr.material) !== JSON.stringify(inc.material)) return true;
 		if (JSON.stringify(curr.autoLayout) !== JSON.stringify(inc.autoLayout)) return true;
+		if (curr.containerMode !== inc.containerMode) return true;
+		if (curr.locked !== inc.locked) return true;
+		if (curr.visible !== inc.visible) return true;
 	}
 
 	// No changes detected

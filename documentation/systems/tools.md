@@ -24,9 +24,9 @@ Tools receive pre-coordinated events from InputController rather than direct DOM
 
 ## Toolbar Layout
 
-`[Select Q] [Move W] [Push E] [Box R] [Tile T] | [Container ⌘F] | [Snap]`
+`[Select Q] [Move W] [Push E] [Box R] [Tile T] [Measure M] | [Container ⌘F] | [Snap]`
 
-- **Tool buttons** (Select through Tile): Mode toggles — clicking activates the tool
+- **Tool buttons** (Select through Measure): Mode toggles — clicking activates the tool
 - **Container button**: Action — wraps current selection in a container (same as ⌘F)
 - **Snap toggle**: Toggles snapping on/off
 
@@ -97,7 +97,7 @@ Tools receive pre-coordinated events from InputController rather than direct DOM
 
 ### ToolController
 **File**: `application/tool-controller.js`
-- **Keyboard shortcuts** (Q=Select, W=Move, E=Push, R=Box, T=Tile)
+- **Keyboard shortcuts** (Q=Select, W=Move, E=Push, R=Box, T=Tile, M=Measure)
 - **Tool state management**
 - **Container creation** via Cmd+F keyboard shortcut or toolbar Container button → `createLayoutContainer()`
 
@@ -120,10 +120,14 @@ Tools use centralized factory systems for all resource creation and manipulation
 - **ALWAYS use factory systems** for resource management and performance optimization
 - **Automatic cleanup** through factory resource pooling and tracking
 
-### MeasurementTool
-**File**: `application/tools/measurement-tool.js`
-- **Edge measurement** on Alt+hover
-- **Face normal distance** measurement between objects
+### MeasureTool (Toolbar) + MeasurementTool (Alt-modifier)
+**Files**: `application/tools/measure-tool-adapter.js`, `application/tools/measurement-tool.js`
+- **Toolbar tool** (M key): When active, measurements show on hover without needing Alt. Clicking still selects objects.
+- **Alt-modifier** on all tools: Hold Alt/Option on Select/Move/Push to show measurements temporarily
+- **MeasureToolAdapter**: Thin wrapper registering MeasurementTool as a toolbar tool via ToolController
+- **Edge measurement**: Shows dimension of closest edge on hover
+- **Distance measurement**: Shows gap between selected and hovered objects
+- **Camera-facing positioning**: Measurement lines and labels appear on the camera-facing side of objects
 - **Thick-line rendering** via `_addThickLines()` helper (screen-space perpendicular offset)
 
 ## Key Patterns

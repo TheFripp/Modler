@@ -189,6 +189,57 @@ this.visualEffects.clearHighlight();
 - **If approaching limit**: Activate Architecture Guardian for review
 - **Consider**: Splitting into multiple focused tools
 
+## Coordinate Space: Dragging Children in Containers
+
+When a mesh is a Three.js child of a container, `mesh.position` is in the **parent's local space**, not world space. This matters for any tool that converts screen mouse movement to 3D movement.
+
+### CameraMathUtils expects WORLD positions
+
+`CameraMathUtils.screenDeltaToAxisMovement(mouseDelta, objectPosition, axis, camera)` creates a drag plane at `objectPosition` in **world space**. If you pass `mesh.position` for a child object, the plane will be at the wrong depth and movement will be incorrectly scaled.
+
+```javascript
+// WRONG: passes local position for children in containers
+const movement = CameraMathUtils.screenDeltaToAxisMovement(
+    mouseDelta, this.dragObject.position, normal, camera
+);
+
+// CORRECT: use world position for drag plane
+const worldPos = this.dragParentMesh
+    ? this.dragObject.getWorldPosition(new THREE.Vector3())
+    : this.dragObject.position;
+const movement = CameraMathUtils.screenDeltaToAxisMovement(
+    mouseDelta, worldPos, normal, camera
+);
+```
+
+### Convert world movement to local space
+
+The movement delta from CameraMathUtils is in world space. For children, convert to local before applying:
+
+```javascript
+let localMovement = worldMovement;
+if (this.dragParentMesh) {
+    const parentInverse = new THREE.Matrix4()
+        .copy(this.dragParentMesh.matrixWorld).invert();
+    localMovement = worldMovement.clone().transformDirection(parentInverse);
+}
+// transformDirection applies only rotation — correct for direction/delta vectors
+```
+
+### Pattern: Cache parent at drag start
+
+Avoid repeated lookups in the drag loop by caching the parent mesh reference:
+
+```javascript
+startDrag(target) {
+    const scene = window.modlerComponents?.sceneFoundation?.scene;
+    this.dragParentMesh = target.parent && target.parent !== scene
+        ? target.parent : null;
+}
+```
+
+When `dragParentMesh` is null (root objects), all conversion code is skipped — zero overhead for the common case.
+
 ## Common Issues
 
 ### Tool Not Receiving Events

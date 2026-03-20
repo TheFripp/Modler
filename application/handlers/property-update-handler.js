@@ -621,26 +621,23 @@ class PropertyUpdateHandler {
                 // Trigger container update with new sizing mode
                 if (objectData.mesh) {
                     // UNIFIED API: User changed sizing mode from UI
-                    const success = this.containerCrudManager.resizeContainer(objectData, {
+                    // resizeContainer returns false for manual/fixed mode (no resize needed) — that's expected
+                    this.containerCrudManager.resizeContainer(objectData, {
                         reason: 'mode-changed',
                         immediate: true
                     });
 
-                    if (success) {
-                        // Register with history manager for undo/redo support
-                        if (oldValue !== value) {
-                            const historyManager = window.modlerComponents?.historyManager;
-                            if (historyManager) {
-                                const command = new UpdatePropertyCommand(objectId, property, oldValue, value);
-                                historyManager.executeCommand(command);
-                                logger.debug(`📝 Registered sizing mode change in history: ${property}`);
-                            }
+                    // Register with history manager for undo/redo support
+                    // Mode was already applied via Object.assign above
+                    if (oldValue !== value) {
+                        const historyManager = window.modlerComponents?.historyManager;
+                        if (historyManager) {
+                            const command = new UpdatePropertyCommand(objectId, property, oldValue, value);
+                            historyManager.executeCommand(command);
+                            logger.debug(`📝 Registered sizing mode change in history: ${property}`);
                         }
-                        return true;
-                    } else {
-                        console.error('Failed to update container sizing:', { objectId, property, value });
-                        return false;
                     }
+                    return true;
                 }
             }
 

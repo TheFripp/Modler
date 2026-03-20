@@ -54,7 +54,7 @@ Events are processed in strict priority order:
 
 5. **Escape** (clear selection)
 
-6. **Tool Switching** (Q/W/E/R/T)
+6. **Tool Switching** (Q/W/E/R/T/M)
    - Only when no modifier keys pressed
 
 ## Tool Keyboard Patterns

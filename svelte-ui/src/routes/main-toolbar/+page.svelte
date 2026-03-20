@@ -3,7 +3,7 @@
 	import { initializeBridge } from '$lib/bridge/threejs-bridge';
 	import { toolState } from '$lib/stores/modler';
 	import { activateToolInScene, toggleSnapInScene, wrapSelectionInContainer } from '$lib/bridge/threejs-bridge';
-	import { MousePointer, Move, FoldHorizontal, Box, Magnet, SquareStack, Group } from 'lucide-svelte';
+	import { MousePointer, Move, FoldHorizontal, Box, Magnet, SquareStack, Group, Ruler } from 'lucide-svelte';
 
 	// Main tool configuration with Lucide icons
 	const tools = [
@@ -11,7 +11,8 @@
 		{ id: 'move', label: 'Move', shortcut: 'W', icon: Move },
 		{ id: 'push', label: 'Push', shortcut: 'E', icon: FoldHorizontal },
 		{ id: 'box-creation', label: 'Create Box', shortcut: 'R', icon: Box },
-		{ id: 'tile', label: 'Tile', shortcut: 'T', icon: SquareStack }
+		{ id: 'tile', label: 'Tile', shortcut: 'T', icon: SquareStack },
+		{ id: 'measure', label: 'Measure', shortcut: 'M', icon: Ruler }
 	];
 
 	function handleToolClick(toolName: string) {

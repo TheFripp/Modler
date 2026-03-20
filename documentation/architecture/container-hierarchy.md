@@ -121,6 +121,15 @@ const localPosition = worldPosition.applyMatrix4(containerWorldMatrixInverse);
 mesh.position.copy(localPosition);
 ```
 
+**Direction/Delta Conversion** (for movement vectors, not points):
+```javascript
+// Use transformDirection for deltas — applies only rotation, not translation
+const parentInverse = new THREE.Matrix4().copy(parentMesh.matrixWorld).invert();
+const localDelta = worldDelta.clone().transformDirection(parentInverse);
+```
+
+> **WARNING**: `CameraMathUtils.screenDeltaToAxisMovement()` and `createDragPlane()` expect WORLD positions. Never pass `mesh.position` for children — use `mesh.getWorldPosition()`. The resulting movement vector is in world space and must be converted to local space before applying to `mesh.position`. See Tool Guide > "Coordinate Space: Dragging Children in Containers" for the full pattern.
+
 ---
 
 ## Hierarchy Operations

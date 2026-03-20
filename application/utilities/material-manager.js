@@ -847,6 +847,10 @@ class MaterialManager {
      * @param {*} value - New value
      */
     updateMaterialsOfType(type, property, value) {
+        // Guard: skip null/undefined values to prevent corrupting material properties
+        // Config callbacks may fire with null when a config key doesn't exist
+        if (value == null) return;
+
         let updatedCount = 0;
         let needsGeometryUpdate = false;
 

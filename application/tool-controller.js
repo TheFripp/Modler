@@ -43,7 +43,7 @@ class ToolController {
         
         // Register tool behaviors with InputController
         this.inputController.toolBehaviors[name] = {
-            onHover: (hit) => tool.onHover ? tool.onHover(hit) : undefined,
+            onHover: (hit, isAltPressed) => tool.onHover ? tool.onHover(hit, isAltPressed) : undefined,
             onClick: (hit, event) => tool.onClick ? tool.onClick(hit, event) : undefined,
             onDoubleClick: (hit, event) => tool.onDoubleClick ? tool.onDoubleClick(hit, event) : undefined,
             onMouseDown: (hit, event) => tool.onMouseDown ? tool.onMouseDown(hit, event) : undefined,

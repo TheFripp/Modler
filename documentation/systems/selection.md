@@ -72,6 +72,12 @@ Container-first selection with direct object access through double-click.
 2. CommandRouter → `SelectionController.select(mesh, { direct: true })`
 3. NavigationController automatically navigates to parent container
 
+### Object Deletion → Selection Cleanup
+Both deletion paths clear selection before removing objects:
+1. **UI-initiated** (CommandRouter.handleDeleteObject): `clearSelection()` → `removeObject()`
+2. **Keyboard** (DeleteObjectCommand.execute): `clearSelection()` → `removeObject()`
+`clearSelection()` calls `notifySelectionChange()` which emits `selection-changed` through ObjectEventBus → SimpleCommunication → UI stores, preventing phantom objects in the property panel.
+
 ## Raycasting Layers
 - **Layer 0**: Regular objects (default)
 - **Layer 1**: Container interactive meshes

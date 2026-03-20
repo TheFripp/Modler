@@ -152,7 +152,7 @@ export interface ObjectData {
 
 // Tool state interface
 export interface ToolState {
-    activeTool: 'select' | 'move' | 'rotate' | 'scale' | 'push' | 'box-creation';
+    activeTool: 'select' | 'move' | 'rotate' | 'scale' | 'push' | 'box-creation' | 'tile' | 'measure';
     snapEnabled: boolean;
 }
 

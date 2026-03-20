@@ -239,6 +239,11 @@ class SimpleCommunication {
 
         // Special handling for deletion events
         if (changeData.operation === 'deleted' || changeData.operation === 'created') {
+            // Clear pending changes for deleted object to prevent stale updates
+            // (batched microtask may flush AFTER hierarchy broadcast)
+            if (changeData.operation === 'deleted') {
+                this.pendingObjectChanges.delete(objectId);
+            }
             // For deletions and creations, send a full hierarchy update instead
             // because the object list structure has changed
             this.handleHierarchyEvent(event);
