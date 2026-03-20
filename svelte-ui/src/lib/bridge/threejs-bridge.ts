@@ -3,6 +3,8 @@ import {
 	initializeModlerBridge,
 	syncSelectionFromThreeJS,
 	syncHierarchyFromThreeJS,
+	addObjectToHierarchy,
+	removeObjectFromHierarchy,
 	toolState,
 	selectedObjects
 } from '$lib/stores/modler';
@@ -110,6 +112,26 @@ function setupPostMessageFallback() {
 					}
 				} catch (error) {
 					console.error('PostMessage: Error syncing hierarchy:', error);
+				}
+				break;
+
+			case 'hierarchy-object-added':
+				try {
+					if (data && data.object) {
+						addObjectToHierarchy(data.object, data.rootChildrenOrder);
+					}
+				} catch (error) {
+					console.error('PostMessage: Error adding object to hierarchy:', error);
+				}
+				break;
+
+			case 'hierarchy-object-removed':
+				try {
+					if (data && data.objectId) {
+						removeObjectFromHierarchy(data.objectId);
+					}
+				} catch (error) {
+					console.error('PostMessage: Error removing object from hierarchy:', error);
 				}
 				break;
 

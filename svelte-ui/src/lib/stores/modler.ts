@@ -363,6 +363,37 @@ export function syncHierarchyFromThreeJS(hierarchyData: ObjectData[] | { objects
 	objectHierarchy.set(hierarchyData);
 }
 
+// Incremental hierarchy updates — add/remove single objects without full rebuild
+export function addObjectToHierarchy(objectData: any, rootChildrenOrder?: any[]) {
+	const current = get(objectHierarchy) as any;
+	const isNewFormat = current && !Array.isArray(current) && current.objects;
+	if (isNewFormat) {
+		(objectHierarchy as any).set({
+			objects: [...current.objects, objectData],
+			rootChildrenOrder: rootChildrenOrder || current.rootChildrenOrder || []
+		});
+	} else {
+		const arr = Array.isArray(current) ? current : [];
+		(objectHierarchy as any).set([...arr, objectData]);
+	}
+}
+
+export function removeObjectFromHierarchy(objectId: any) {
+	const current = get(objectHierarchy) as any;
+	const isNewFormat = current && !Array.isArray(current) && current.objects;
+	// Filter out the object (children are removed via their own events)
+	const filterById = (obj: any) => obj.id !== objectId;
+	if (isNewFormat) {
+		(objectHierarchy as any).set({
+			objects: current.objects.filter(filterById),
+			rootChildrenOrder: (current.rootChildrenOrder || []).filter((id: any) => id !== objectId)
+		});
+	} else {
+		const arr = Array.isArray(current) ? current : [];
+		(objectHierarchy as any).set(arr.filter(filterById));
+	}
+}
+
 // Sync container context from Three.js
 export function syncContainerContextFromThreeJS(context: ContainerContext | null) {
 	containerContext.set(context);

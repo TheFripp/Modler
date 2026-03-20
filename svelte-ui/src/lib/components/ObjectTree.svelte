@@ -3,13 +3,21 @@
 	import { Box, BoxSelect, SquareStack } from 'lucide-svelte';
 	import { cn } from '$lib/utils';
 	import { onMount } from 'svelte';
+	import {
+		findObjectInTree,
+		resolveDrop,
+		createInvisibleDragImage,
+		calcDropZone,
+		type TreeObject,
+		type DropZone
+	} from './object-tree/drag-drop';
 
 	// Tree expansion state
 	let expandedContainers = new Set();
 
 	// Drag and drop state
-	let draggedObject = null;
-	let activeDropZone = null; // { parentId: null | number, index: number }
+	let draggedObject: TreeObject | null = null;
+	let activeDropZone: DropZone | null = null;
 
 	// Animation state
 	let isLoaded = false;
@@ -99,18 +107,6 @@
 	}
 
 
-	// Helper to find object in tree structure (includes children arrays)
-	function findObjectInTree(objectId, tree = treeStructure) {
-		for (const obj of tree) {
-			if (obj.id === objectId) return obj;
-			if (obj.children && obj.children.length > 0) {
-				const found = findObjectInTree(objectId, obj.children);
-				if (found) return found;
-			}
-		}
-		return null;
-	}
-
 	function buildTreeStructure(objects, rootChildrenOrder) {
 		const objectMap = new Map();
 		objects.forEach(obj => {
@@ -185,15 +181,40 @@
 		expandedContainers = new Set(expandedContainers);
 	}
 
+	// Optimistic selection — instant visual feedback before round-trip confirms
+	let pendingSelectionId: number | null = null;
+	let pendingSelectionTimer: ReturnType<typeof setTimeout> | null = null;
+
+	// Clear optimistic state when authoritative selection arrives
+	$: if ($selectedObjects) {
+		pendingSelectionId = null;
+		if (pendingSelectionTimer) {
+			clearTimeout(pendingSelectionTimer);
+			pendingSelectionTimer = null;
+		}
+	}
+
 	// Make this function reactive by accepting selectedObjects as parameter
 	// This forces Svelte to re-run when $selectedObjects changes
 	function isObjectHighlighted(object, selected) {
+		if (pendingSelectionId === object.id) return true;
 		const isSelected = selected.some(sel => sel.id === object.id);
 		const isInContext = $containerContext && $containerContext.containerId === object.id;
 		return isSelected || isInContext;
 	}
 
 	function handleObjectClick(event, object) {
+		// Optimistic highlight — immediate visual feedback
+		if (!event.shiftKey) {
+			pendingSelectionId = object.id;
+			// Safety timeout: clear if round-trip takes too long
+			if (pendingSelectionTimer) clearTimeout(pendingSelectionTimer);
+			pendingSelectionTimer = setTimeout(() => {
+				pendingSelectionId = null;
+				pendingSelectionTimer = null;
+			}, 500);
+		}
+
 		window.parent.postMessage({
 			type: 'object-select',
 			objectId: object.id,
@@ -270,29 +291,13 @@
 		}
 	}
 
-	// Drag and drop handlers
+	// Drag and drop handlers (logic in ./object-tree/drag-drop.ts)
 	function handleDragStart(event, object) {
 		draggedObject = object;
 		event.dataTransfer.effectAllowed = 'move';
 		event.dataTransfer.setData('text/plain', object.id);
 		event.currentTarget.style.opacity = '0.4';
-
-		try {
-			const transparentDiv = document.createElement('div');
-			transparentDiv.style.width = '1px';
-			transparentDiv.style.height = '1px';
-			transparentDiv.style.background = 'transparent';
-			transparentDiv.style.opacity = '0';
-			document.body.appendChild(transparentDiv);
-			event.dataTransfer.setDragImage(transparentDiv, 0, 0);
-			setTimeout(() => document.body.contains(transparentDiv) && document.body.removeChild(transparentDiv), 100);
-		} catch (e) {
-			const canvas = document.createElement('canvas');
-			canvas.width = 1;
-			canvas.height = 1;
-			canvas.style.opacity = '0';
-			event.dataTransfer.setDragImage(canvas, 0, 0);
-		}
+		createInvisibleDragImage(event);
 	}
 
 	function handleDragEnd(event) {
@@ -303,141 +308,22 @@
 
 	function handleDragOver(event, objectIndex, parentId = null) {
 		if (!draggedObject) return;
-
 		event.preventDefault();
 		event.dataTransfer.dropEffect = 'move';
-
-		const rect = event.currentTarget.getBoundingClientRect();
-		const y = event.clientY - rect.top;
-		const height = rect.height;
-
-		// Top half = drop zone BEFORE this item (index)
-		// Bottom half = drop zone AFTER this item (index + 1)
-		if (y < height * 0.5) {
-			activeDropZone = { parentId, index: objectIndex };
-		} else {
-			activeDropZone = { parentId, index: objectIndex + 1 };
-		}
+		activeDropZone = calcDropZone(event, objectIndex, parentId);
 	}
 
 	function handleDrop(event, dropZoneIndex, parentId = null) {
 		if (!draggedObject || !activeDropZone) return;
-
 		event.preventDefault();
 
-		// Get the correct list based on parentId
-		let objectList;
-		if (parentId === null) {
-			// Root level
-			objectList = treeStructure;
-		} else {
-			// Container level - find the container in tree structure
-			const container = findObjectInTree(parentId);
-			if (!container || !container.children) return;
-			objectList = container.children;
-		}
-
-		// dropZoneIndex represents the position in the list:
-		// 0 = before first item
-		// 1 = before second item (after first)
-		// etc.
-
-		let targetObject, position;
-		if (dropZoneIndex === 0) {
-			// Dropping before first item
-			targetObject = objectList[0];
-			position = 'before';
-		} else {
-			// Dropping after item at index (dropZoneIndex - 1)
-			targetObject = objectList[dropZoneIndex - 1];
-			position = 'after';
-		}
-
-		if (!targetObject) return;
-
-		// Handle cross-level moves (root ↔ container)
-		if (draggedObject.parentContainer !== targetObject.parentContainer) {
-			// Moving between different parents - atomic move + reorder in one message
-			if (targetObject.parentContainer) {
-				// Moving into a container
-				const targetContainer = findObjectInTree(targetObject.parentContainer);
-				if (targetContainer) {
-					// Validate container nesting if dragging a container
-					if (draggedObject.isContainer && !isValidContainerNesting(draggedObject, targetContainer)) {
-						console.warn('Invalid container nesting: Maximum depth exceeded or circular reference detected');
-						draggedObject = null;
-						activeDropZone = null;
-						return;
-					}
-				}
-			}
-
-			// Single atomic message — no setTimeout race condition
-			window.parent.postMessage({
-				type: 'move-and-reorder',
-				objectId: draggedObject.id,
-				targetParentId: targetObject.parentContainer || null,
-				targetId: targetObject.id,
-				position: position
-			}, '*');
-		} else {
-			// Same parent - just reorder
-			reorderObject(draggedObject, targetObject, position, parentId);
+		const action = resolveDrop(draggedObject, dropZoneIndex, parentId, treeStructure, filteredHierarchy);
+		if (action) {
+			window.parent.postMessage(action, '*');
 		}
 
 		draggedObject = null;
 		activeDropZone = null;
-	}
-
-	function reorderObject(draggedObj, targetObj, position, parentId) {
-		window.parent.postMessage({
-			type: 'reorder-children',
-			objectId: draggedObj.id,
-			targetId: targetObj.id,
-			position: position,
-			parentId: parentId
-		}, '*');
-	}
-
-	function isValidContainerNesting(childContainer, parentContainer) {
-		if (childContainer.id === parentContainer.id) return false;
-		if (isDescendantContainer(parentContainer.id, childContainer.id)) return false;
-
-		const MAX_NESTING_DEPTH = 2; // Matches ObjectDataFormat.MAX_NESTING_DEPTH
-		const currentDepth = getContainerNestingDepth(parentContainer.id);
-		return currentDepth < MAX_NESTING_DEPTH;
-	}
-
-	function isDescendantContainer(potentialDescendantId, ancestorId) {
-		let current = filteredHierarchy.find(obj => obj.id === potentialDescendantId);
-		const visited = new Set();
-
-		while (current && current.parentContainer) {
-			if (visited.has(current.id)) return false;
-			visited.add(current.id);
-
-			if (current.parentContainer === ancestorId) return true;
-			current = filteredHierarchy.find(obj => obj.id === current.parentContainer);
-		}
-
-		return false;
-	}
-
-	function getContainerNestingDepth(containerId) {
-		let depth = 0;
-		let current = filteredHierarchy.find(obj => obj.id === containerId);
-		const visited = new Set();
-
-		while (current && current.parentContainer) {
-			if (visited.has(current.id)) break;
-			visited.add(current.id);
-
-			const parent = filteredHierarchy.find(obj => obj.id === current.parentContainer);
-			if (parent && parent.isContainer) depth++;
-			current = parent;
-		}
-
-		return depth;
 	}
 </script>
 

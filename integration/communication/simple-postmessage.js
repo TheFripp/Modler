@@ -245,16 +245,31 @@ class SimpleCommunication {
 
         if (!objectId) return;
 
-        // Special handling for deletion events
-        if (changeData.operation === 'deleted' || changeData.operation === 'created') {
-            // Clear pending changes for deleted object to prevent stale updates
-            // (batched microtask may flush AFTER hierarchy broadcast)
-            if (changeData.operation === 'deleted') {
-                this.pendingObjectChanges.delete(objectId);
+        // Special handling for creation/deletion — send incremental updates
+        if (changeData.operation === 'deleted') {
+            this.pendingObjectChanges.delete(objectId);
+            this._cachedHierarchy = null;
+            this.sendToAllIframes({
+                type: 'hierarchy-object-removed',
+                data: { objectId }
+            });
+            return;
+        }
+
+        if (changeData.operation === 'created') {
+            this._cachedHierarchy = null;
+            const basicData = this.dataExtractor.extractBasicData(
+                this.sceneController.getObject(objectId)
+            );
+            if (basicData) {
+                // Get current root ordering for the UI to place this correctly
+                const hierarchyManager = this.sceneController.getHierarchyManager();
+                const rootChildrenOrder = hierarchyManager?.rootChildrenOrder || [];
+                this.sendToAllIframes({
+                    type: 'hierarchy-object-added',
+                    data: { object: basicData, rootChildrenOrder }
+                });
             }
-            // For deletions and creations, send a full hierarchy update instead
-            // because the object list structure has changed
-            this.handleHierarchyEvent(event);
             return;
         }
 

@@ -116,9 +116,19 @@ px-3 py-2 text-xs font-medium border rounded-md transition-all
 - **Smart Navigation**: Integrates with NavigationController for container context switching
 
 ### Core Communication Patterns
-- **Three.js → Svelte**: `syncSelectionFromThreeJS()`, `syncHierarchyFromThreeJS()`
+- **Three.js → Svelte**: `syncSelectionFromThreeJS()`, `syncHierarchyFromThreeJS()`, `addObjectToHierarchy()`, `removeObjectFromHierarchy()`
 - **Svelte → Three.js**: `selectObjectInScene()`, `updateObjectProperty()`, `activateToolInScene()`
 - **Architecture**: iframe + PostMessage with port detection for secure communication
+
+### Hierarchy Update Messages
+- **`hierarchy-changed`** — Full rebuild (reparent, reorder). Sends complete flat array + rootChildrenOrder.
+- **`hierarchy-object-added`** — Incremental: single new object + rootChildrenOrder. Avoids full rebuild on create.
+- **`hierarchy-object-removed`** — Incremental: objectId only. Avoids full rebuild on delete.
+
+### ObjectTree Architecture
+- **Component**: `svelte-ui/src/lib/components/ObjectTree.svelte`
+- **Drag-drop logic**: `svelte-ui/src/lib/components/object-tree/drag-drop.ts` — validation, drop resolution, utilities
+- **Optimistic selection**: Tree clicks show instant highlight via `pendingSelectionId`, confirmed by round-trip
 
 ### Object Selection Flow
 ```typescript
