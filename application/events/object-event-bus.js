@@ -143,6 +143,10 @@ class ObjectEventBus {
 
             this.stats.totalEvents++;
 
+            // Dirty-flag: any event means the scene needs re-rendering
+            const sf = window.modlerComponents?.sceneFoundation;
+            if (sf) sf.requestRender();
+
             // Handle immediate emission
             if (immediate) {
                 return this._emitImmediate(event);

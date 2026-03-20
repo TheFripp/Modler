@@ -94,6 +94,7 @@ class CameraController {
         // Update camera position
         this.camera.position.setFromSpherical(this.spherical).add(this.orbitTarget);
         this.camera.lookAt(this.orbitTarget);
+        this._requestRender();
     }
 
     performPan(deltaX, deltaY) {
@@ -117,6 +118,7 @@ class CameraController {
         // Apply to both camera and target
         this.camera.position.add(panVector);
         this.orbitTarget.add(panVector);
+        this._requestRender();
     }
 
     onWheel(event) {
@@ -139,6 +141,7 @@ class CameraController {
 
         // Set camera position at new distance
         this.camera.position.copy(this.orbitTarget).addScaledVector(direction, newDistance);
+        this._requestRender();
     }
 
     // Called by InputController to stop operations
@@ -210,8 +213,7 @@ class CameraController {
 
         // Update spherical coordinates to match new camera position
         this.updateSphericalFromCamera();
-
-        console.log('Framed object at center:', center, 'distance:', distance);
+        this._requestRender();
     }
 
     /**
@@ -229,8 +231,12 @@ class CameraController {
 
         // Update spherical coordinates to match reset position
         this.updateSphericalFromCamera();
+        this._requestRender();
+    }
 
-        console.log('Camera reset to default position (5, 5, 5)');
+    _requestRender() {
+        const sf = window.modlerComponents?.sceneFoundation;
+        if (sf) sf.requestRender();
     }
 
     destroy() {

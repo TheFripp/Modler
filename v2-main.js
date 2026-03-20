@@ -423,6 +423,8 @@ function connectComponents() {
 
     if (sceneFoundation && snapController && snapVisualizer && toolController && selectionController) {
         sceneFoundation.addAnimationCallback(() => {
+            // Skip snap detection when snapping is disabled — avoids unnecessary raycasts
+            if (!snapController.isEnabled) return;
             const activeToolName = toolController.getActiveToolName();
             const selectedObjects = selectionController.getSelectedObjects();
             snapController.updateSnapDetection(activeToolName, selectedObjects);

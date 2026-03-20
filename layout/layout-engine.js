@@ -854,8 +854,7 @@ class LayoutEngine {
 
         validObjects.forEach(obj => {
             if (obj.geometry) {
-                obj.geometry.computeBoundingBox();
-                const box = obj.geometry.boundingBox;
+                const box = obj.geometry.boundingBox; // Already computed in filter above
 
                 if (box) {
                     // Transform bounding box points

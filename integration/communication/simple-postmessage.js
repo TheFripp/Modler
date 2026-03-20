@@ -31,6 +31,9 @@ class SimpleCommunication {
         // Batching: accumulate object-changed messages within a microtask
         this.pendingObjectChanges = new Map(); // objectId -> { objectId, eventType, object }
         this.batchScheduled = false;
+
+        // Cached iframe references (invalidated on panel create/destroy)
+        this._cachedIframes = null;
     }
 
     /**
@@ -101,6 +104,7 @@ class SimpleCommunication {
         // Listen for panels-ready event to send initial hierarchy sync
         // NOTE: This event fires late (200ms) - individual panels send their own ready messages earlier
         window.addEventListener('modler:panels-ready', () => {
+            this.invalidateIframeCache();
             this.sendInitialHierarchySync();
         });
 
@@ -125,6 +129,7 @@ class SimpleCommunication {
 
                 // Handle UI panel ready messages - send initial state to newly loaded panel
                 if (type === 'ui-panel-ready' || type === 'left-panel-ready') {
+                    this.invalidateIframeCache();
                     // Delegate to CommandRouter which has stateSerializer access
                     const commandRouter = window.commandRouter;
                     if (commandRouter) {
@@ -400,15 +405,24 @@ class SimpleCommunication {
     // ═══════════════════════════════════════════════════════════════
 
     /**
-     * Send message to all UI iframes
+     * Invalidate cached iframe references.
+     * Call when panels are created or destroyed.
+     */
+    invalidateIframeCache() {
+        this._cachedIframes = null;
+    }
+
+    /**
+     * Send message to all UI iframes (uses cached references)
      */
     sendToAllIframes(message) {
         try {
-            // CRITICAL: Query iframes dynamically each time, not cached!
-            // Iframes are created asynchronously after SimpleCommunication initialization
-            const iframes = document.querySelectorAll('iframe');
+            // Cache iframe references — invalidated by invalidateIframeCache()
+            if (!this._cachedIframes) {
+                this._cachedIframes = Array.from(document.querySelectorAll('iframe'));
+            }
 
-            iframes.forEach(iframe => {
+            this._cachedIframes.forEach(iframe => {
                 if (iframe.contentWindow) {
                     iframe.contentWindow.postMessage(message, '*');
                 }

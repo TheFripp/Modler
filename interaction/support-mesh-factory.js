@@ -261,11 +261,13 @@ class SupportMeshFactory {
 
         // Clone base material and adjust opacity for nested containers
         let material;
+        let isClonedMaterial = false;
         if (isNested) {
             // Clone the material and reduce opacity to 50%
             material = this.materials.containerWireframe.clone();
             material.opacity = this.materials.containerWireframe.opacity * 0.5;
             material.needsUpdate = true;
+            isClonedMaterial = true;
         } else {
             material = this.materials.containerWireframe;
         }
@@ -283,6 +285,7 @@ class SupportMeshFactory {
         wireframe.renderOrder = 9999; // Same as selection wireframe - always on top
         wireframe.raycast = () => {}; // Non-raycastable
         wireframe.userData.supportMeshType = 'wireframe'; // ContainerVisualizer looks for 'wireframe'
+        wireframe.userData.isClonedMaterial = isClonedMaterial; // Track for disposal
 
         // Material configured by MaterialManager with depthTest: true + LessEqualDepth
         // Shows wireframe on camera-visible faces only, hides back-face edges
@@ -906,8 +909,12 @@ class SupportMeshFactory {
                 if (mesh.geometry) {
                     this.geometryFactory.returnGeometry(mesh.geometry, 'edge');
                 }
-                // Return material to pool if it's not shared
-                if (mesh.material &&
+                // Dispose cloned materials (nested container wireframes)
+                if (mesh.userData?.isClonedMaterial && mesh.material) {
+                    mesh.material.dispose();
+                }
+                // Return non-shared, non-cloned materials to pool
+                else if (mesh.material &&
                     mesh.material !== this.materials.faceHighlight &&
                     mesh.material !== this.materials.faceHighlightContainer) {
                     this.materialManager.disposeMaterial(mesh.material);

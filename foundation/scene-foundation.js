@@ -37,7 +37,10 @@ class SceneFoundation {
         
         // Animation callback system
         this.animationCallbacks = [];
-        
+
+        // Dirty-flag rendering: only call renderer.render() when something changed
+        this.needsRender = true;
+
         // Start rendering
         this.isRunning = true;
         this.render();
@@ -51,6 +54,7 @@ class SceneFoundation {
         
         // Set renderer size - let it handle canvas sizing
         this.renderer.setSize(width, height);
+        this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
         this.renderer.setClearColor(0x1a1a1a);
         // Shadows disabled for modeling app simplicity
     }
@@ -80,14 +84,17 @@ class SceneFoundation {
             this.camera.aspect = width / height;
             this.camera.updateProjectionMatrix();
             this.renderer.setSize(width, height);
-            
+            this.requestRender();
         };
-        
+
         window.addEventListener('resize', this.resizeHandler);
     }
     
     render() {
         if (!this.isRunning) return;
+        requestAnimationFrame(this.renderLoop);
+
+        if (!this.needsRender) return;
 
         // Update grid opacity based on camera position
         this.updateGridOpacity();
@@ -98,7 +105,15 @@ class SceneFoundation {
         }
 
         this.renderer.render(this.scene, this.camera);
-        requestAnimationFrame(this.renderLoop);
+        this.needsRender = false;
+    }
+
+    /**
+     * Mark scene as needing a render on next frame.
+     * Called by camera controller, event bus, resize handler, etc.
+     */
+    requestRender() {
+        this.needsRender = true;
     }
 
     /**
@@ -134,6 +149,7 @@ class SceneFoundation {
                                 0.1
                             );
                             child.material.needsUpdate = true;
+                            this.needsRender = true; // Keep rendering while animating
                         }
                     }
                 });

@@ -15,14 +15,14 @@ class VisualizationResourcePool {
             matrices: [] // THREE.Matrix4 for transforms
         };
 
-        // Pool configuration
+        // Pool configuration (sized for scenes with 100+ objects)
         this.config = {
-            lineMeshes: { maxSize: 50, initialSize: 10 },
-            meshHighlights: { maxSize: 100, initialSize: 20 },
-            groups: { maxSize: 30, initialSize: 5 },
-            vectors: { maxSize: 200, initialSize: 50 },
-            colors: { maxSize: 100, initialSize: 25 },
-            matrices: { maxSize: 50, initialSize: 10 }
+            lineMeshes: { maxSize: 150, initialSize: 20 },
+            meshHighlights: { maxSize: 200, initialSize: 30 },
+            groups: { maxSize: 60, initialSize: 10 },
+            vectors: { maxSize: 400, initialSize: 80 },
+            colors: { maxSize: 200, initialSize: 40 },
+            matrices: { maxSize: 100, initialSize: 20 }
         };
 
         // Active resource tracking

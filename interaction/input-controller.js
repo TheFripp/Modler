@@ -73,6 +73,10 @@ class InputController {
         // Update mouse position
         this.updateMousePosition(event);
 
+        // Any mouse movement may change hover visuals — request render
+        const sf = window.modlerComponents?.sceneFoundation;
+        if (sf) sf.requestRender();
+
         // Track movement delta for camera
         const deltaX = event.clientX - this.lastMousePosition.x;
         const deltaY = event.clientY - this.lastMousePosition.y;
