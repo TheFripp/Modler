@@ -22,9 +22,8 @@ import * as THREE from 'three';
  * - No duplicate storage of geometry properties
  */
 
-class ObjectStateManager extends EventTarget {
+class ObjectStateManager {
     constructor() {
-        super();
 
         // SINGLE SOURCE OF TRUTH: All object state lives here
         this.objects = new Map(); // objectId -> complete object state
@@ -153,9 +152,10 @@ class ObjectStateManager extends EventTarget {
         if (!window.objectEventBus) return;
 
         window.objectEventBus.subscribe(window.objectEventBus.EVENT_TYPES.LIFECYCLE, (event) => {
-            const { action, objectId } = event.changeData || {};
+            const operation = event.changeData?.operation;
+            const objectId = event.objectId;
 
-            if (action === 'created' && objectId) {
+            if (operation === 'created' && objectId) {
                 // Auto-register newly created objects
                 const objectData = this.sceneController?.getObject?.(objectId);
                 if (objectData && !this.objects.has(objectId)) {
@@ -166,7 +166,7 @@ class ObjectStateManager extends EventTarget {
 
                     this.objects.set(objectId, standardized);
                 }
-            } else if (action === 'deleted' && objectId) {
+            } else if (operation === 'deleted' && objectId) {
                 // Remove deleted objects
                 this.objects.delete(objectId);
                 this.selection.delete(objectId);
@@ -175,33 +175,11 @@ class ObjectStateManager extends EventTarget {
     }
 
     /**
-     * Set up bidirectional integration with SelectionController
+     * Set up initial selection sync with SelectionController
      */
     setupSelectionControllerIntegration() {
         const selectionController = this.getSelectionController();
         if (!selectionController) return;
-
-        // Listen to SelectionController changes and sync to ObjectStateManager
-        if (selectionController.addEventListener) {
-            selectionController.addEventListener('selectionChanged', (event) => {
-                const selectedMeshes = event.detail.selectedObjects || event.detail || [];
-                const selectedIds = selectedMeshes.map(mesh => {
-                    const objectData = this.sceneController?.getObjectByMesh?.(mesh);
-                    return objectData?.id || mesh.userData?.id || mesh.uuid;
-                }).filter(Boolean);
-
-                // Update our selection without triggering circular events
-                if (JSON.stringify(Array.from(this.selection)) !== JSON.stringify(selectedIds)) {
-                    this.selection.clear();
-                    selectedIds.forEach(id => this.selection.add(id));
-
-                    // Emit our selection change event
-                    this.dispatchEvent(new CustomEvent('selection-changed', {
-                        detail: { selection: Array.from(this.selection) }
-                    }));
-                }
-            });
-        }
 
         // Set initial selection from SelectionController
         const initialSelection = selectionController.getSelectedObjects?.() || [];
@@ -628,14 +606,8 @@ class ObjectStateManager extends EventTarget {
             };
         });
 
-        // Extract objects for methods that don't need source
-        const changedObjects = changedItems.map(item => item.object);
-
         // Update 3D scene (with source and options information)
         this.updateSceneController(changedItems);
-
-        // Update UI systems
-        this.updateUISystems(changedObjects);
 
         // Emit unified events with source information
         this.emitChangeEvents(changedItems);
@@ -835,19 +807,6 @@ class ObjectStateManager extends EventTarget {
         });
     }
 
-    /**
-     * Update UI systems (Svelte stores, property panel)
-     */
-    updateUISystems(changedObjects) {
-        // Emit update events for UI systems
-        // Note: main-integration will get hierarchy from SceneController and serialize it
-        this.dispatchEvent(new CustomEvent('objects-changed', {
-            detail: {
-                objects: changedObjects,
-                selection: Array.from(this.selection)
-            }
-        }));
-    }
 
     /**
      * Emit ObjectEventBus events for backward compatibility
@@ -946,12 +905,6 @@ class ObjectStateManager extends EventTarget {
         // NOTE: Do NOT emit to ObjectEventBus here - SelectionController already emits
         // This method is called BY SelectionController.notifySelectionChange() which handles emission
         // Emitting here would create duplicate events and cause selection loops
-
-        // Legacy CustomEvent (deprecated - will be removed in future)
-        // Kept for backward compatibility with any code listening to this event
-        this.dispatchEvent(new CustomEvent('selection-changed', {
-            detail: { selection: Array.from(this.selection) }
-        }));
     }
 
     /**

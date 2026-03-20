@@ -71,7 +71,7 @@ class ObjectEventBus {
         this.cleanupThrottles = this.cleanupThrottles.bind(this);
 
         // Periodic cleanup to prevent memory leaks
-        setInterval(this.cleanupThrottles, 60000); // Every minute
+        this.cleanupIntervalId = setInterval(this.cleanupThrottles, 60000);
     }
 
     /**
@@ -424,8 +424,10 @@ class ObjectEventBus {
      */
     dispose() {
         this.reset();
-        // Note: setInterval cleanup would need a reference to the interval ID
-        // For now, we'll let it continue running (minimal impact)
+        if (this.cleanupIntervalId) {
+            clearInterval(this.cleanupIntervalId);
+            this.cleanupIntervalId = null;
+        }
     }
 }
 
