@@ -67,7 +67,7 @@ class BaseTool {
 
     emitHoverChange(objectId) {
         if (window.objectEventBus) {
-            window.objectEventBus.emit('interaction:hover', objectId,
+            window.objectEventBus.emit(window.objectEventBus.EVENT_TYPES.INTERACTION_HOVER, objectId,
                 { hoveredObjectId: objectId },
                 { immediate: true }
             );

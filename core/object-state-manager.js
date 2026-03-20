@@ -773,7 +773,14 @@ class ObjectStateManager extends EventTarget {
                             this.sceneController.updateLayout(object.id);
                         }
                     }
-                    // Push operations: Skip layout update entirely - geometry already updated
+
+                    // Container dimensions changed → recalculate own layout
+                    // Fill children need resizing, gap calculations need updating
+                    // (mirrors push-tool.js behavior for container dimension changes)
+                    const dimensionChanged = object._changedProperties?.has('dimensions');
+                    if (!skipLayoutUpdate && dimensionChanged && !autoLayoutChanged) {
+                        this.sceneController.updateLayout(object.id);
+                    }
 
                 } else if (autoLayoutChanged || autoLayoutPropertyChanged) {
                     // HUG MODE (or switching FROM layout mode to hug)

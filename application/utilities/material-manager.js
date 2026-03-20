@@ -181,6 +181,22 @@ class MaterialManager {
         const configManager = this.getConfigManager();
         if (!configManager) return;
 
+        // Global wireframe line width — updates ALL wireframe material types
+        this.registerConfigCallback('visual.wireframe.lineWidth', (newValue) => {
+            this.updateMaterialsOfType(this.materialTypes.SELECTION_EDGE, 'linewidth', newValue);
+            this.updateMaterialsOfType(this.materialTypes.SELECTION_EDGE_FAT, 'linewidth', newValue);
+            this.updateMaterialsOfType(this.materialTypes.CONTAINER_WIREFRAME, 'linewidth', newValue);
+            this.updateMaterialsOfType(this.materialTypes.CONTAINER_WIREFRAME_FAT, 'linewidth', newValue);
+            this.updateMaterialsOfType(this.materialTypes.CAD_WIREFRAME, 'linewidth', newValue);
+            this.updateMaterialsOfType(this.materialTypes.HOVER_EFFECT, 'linewidth', newValue);
+            this.invalidateCacheForType(this.materialTypes.SELECTION_EDGE);
+            this.invalidateCacheForType(this.materialTypes.SELECTION_EDGE_FAT);
+            this.invalidateCacheForType(this.materialTypes.CONTAINER_WIREFRAME);
+            this.invalidateCacheForType(this.materialTypes.CONTAINER_WIREFRAME_FAT);
+            this.invalidateCacheForType(this.materialTypes.CAD_WIREFRAME);
+            this.invalidateCacheForType(this.materialTypes.HOVER_EFFECT);
+        });
+
         // Selection materials (both standard and fat LineMaterial)
         this.registerConfigCallback('visual.selection.color', (newValue) => {
             this.updateMaterialsOfType(this.materialTypes.SELECTION_EDGE, 'color', newValue);
@@ -189,13 +205,6 @@ class MaterialManager {
             this.invalidateCacheForType(this.materialTypes.SELECTION_EDGE);
             this.invalidateCacheForType(this.materialTypes.SELECTION_EDGE_FAT);
             this.invalidateCacheForType(this.materialTypes.FACE_HIGHLIGHT);
-        });
-
-        this.registerConfigCallback('visual.selection.lineWidth', (newValue) => {
-            this.updateMaterialsOfType(this.materialTypes.SELECTION_EDGE, 'linewidth', newValue);
-            this.updateMaterialsOfType(this.materialTypes.SELECTION_EDGE_FAT, 'linewidth', newValue);
-            this.invalidateCacheForType(this.materialTypes.SELECTION_EDGE);
-            this.invalidateCacheForType(this.materialTypes.SELECTION_EDGE_FAT);
         });
 
         this.registerConfigCallback('visual.selection.opacity', (newValue) => {
@@ -216,13 +225,6 @@ class MaterialManager {
             this.updateMaterialsOfType(this.materialTypes.CONTAINER_WIREFRAME, 'color', newValue);
             this.updateMaterialsOfType(this.materialTypes.CONTAINER_WIREFRAME_FAT, 'color', newValue);
             this.updateMaterialsOfType(this.materialTypes.FACE_HIGHLIGHT_CONTAINER, 'color', newValue);
-            this.invalidateCacheForType(this.materialTypes.CONTAINER_WIREFRAME);
-            this.invalidateCacheForType(this.materialTypes.CONTAINER_WIREFRAME_FAT);
-        });
-
-        this.registerConfigCallback('visual.containers.lineWidth', (newValue) => {
-            this.updateMaterialsOfType(this.materialTypes.CONTAINER_WIREFRAME, 'linewidth', newValue);
-            this.updateMaterialsOfType(this.materialTypes.CONTAINER_WIREFRAME_FAT, 'linewidth', newValue);
             this.invalidateCacheForType(this.materialTypes.CONTAINER_WIREFRAME);
             this.invalidateCacheForType(this.materialTypes.CONTAINER_WIREFRAME_FAT);
         });
@@ -255,11 +257,6 @@ class MaterialManager {
         // CAD wireframe materials
         this.registerConfigCallback('visual.cad.wireframe.color', (newValue) => {
             this.updateMaterialsOfType(this.materialTypes.CAD_WIREFRAME, 'color', newValue);
-            this.invalidateCacheForType(this.materialTypes.CAD_WIREFRAME);
-        });
-
-        this.registerConfigCallback('visual.cad.wireframe.lineWidth', (newValue) => {
-            this.updateMaterialsOfType(this.materialTypes.CAD_WIREFRAME, 'linewidth', newValue);
             this.invalidateCacheForType(this.materialTypes.CAD_WIREFRAME);
         });
 
@@ -300,7 +297,7 @@ class MaterialManager {
         // Build configuration
         const config = {
             color: options.color || configManager?.get('visual.selection.color') || '#ff6600',
-            lineWidth: options.lineWidth || configManager?.get('visual.selection.lineWidth') || 2,
+            lineWidth: options.lineWidth || configManager?.get('visual.wireframe.lineWidth') || 2,
             opacity: options.opacity || configManager?.get('visual.selection.opacity') || 0.8,
             renderOrder: options.renderOrder || configManager?.get('visual.selection.renderOrder') || 999,
             transparent: true,
@@ -356,7 +353,7 @@ class MaterialManager {
 
         const config = {
             color: options.color || '#ffaa44',
-            lineWidth: options.lineWidth || configManager?.get('visual.selection.lineWidth') || 2,
+            lineWidth: options.lineWidth || configManager?.get('visual.wireframe.lineWidth') || 2,
             opacity: options.opacity || 0.4,
             renderOrder: options.renderOrder || 9998,
             transparent: true,
@@ -408,7 +405,7 @@ class MaterialManager {
         // Build configuration
         const config = {
             color: options.color || configManager?.get('visual.containers.wireframeColor') || '#00ff00',
-            lineWidth: options.lineWidth || configManager?.get('visual.containers.lineWidth') || 1,
+            lineWidth: options.lineWidth || configManager?.get('visual.wireframe.lineWidth') || 2,
             opacity: options.opacity || configManager?.get('visual.containers.opacity') || 0.8,
             renderOrder: options.renderOrder || configManager?.get('visual.containers.renderOrder') || 998,
             transparent: true,
@@ -464,7 +461,7 @@ class MaterialManager {
 
         const config = {
             color: options.color || configManager?.get('visual.selection.color') || '#ff6600',
-            lineWidth: options.lineWidth || configManager?.get('visual.selection.lineWidth') || 2,
+            lineWidth: options.lineWidth || configManager?.get('visual.wireframe.lineWidth') || 2,
             opacity: options.opacity || configManager?.get('visual.selection.opacity') || 0.8,
             ...options
         };
@@ -487,10 +484,13 @@ class MaterialManager {
             linewidth: config.lineWidth,
             transparent: true,
             opacity: config.opacity,
-            depthTest: false,
+            depthTest: true,
             depthWrite: false,
             worldUnits: false // Screen pixels, not world units
         });
+
+        // LessEqualDepth: wireframe edges are coplanar with geometry faces
+        material.depthFunc = THREE.LessEqualDepth;
 
         // Set resolution from current canvas
         const renderer = window.modlerComponents?.sceneFoundation?.renderer;
@@ -515,7 +515,7 @@ class MaterialManager {
 
         const config = {
             color: options.color || configManager?.get('visual.containers.wireframeColor') || '#00ff00',
-            lineWidth: options.lineWidth || configManager?.get('visual.containers.lineWidth') || 1,
+            lineWidth: options.lineWidth || configManager?.get('visual.wireframe.lineWidth') || 2,
             opacity: options.opacity || configManager?.get('visual.containers.opacity') || 0.8,
             ...options
         };
@@ -538,10 +538,13 @@ class MaterialManager {
             linewidth: config.lineWidth,
             transparent: true,
             opacity: config.opacity,
-            depthTest: false,
+            depthTest: true,
             depthWrite: false,
             worldUnits: false
         });
+
+        // LessEqualDepth: wireframe edges are coplanar with geometry faces
+        material.depthFunc = THREE.LessEqualDepth;
 
         const renderer = window.modlerComponents?.sceneFoundation?.renderer;
         if (renderer) {
@@ -803,7 +806,7 @@ class MaterialManager {
         // Build configuration for CAD wireframe
         const config = {
             color: options.color || configManager?.get('visual.cad.wireframe.color') || '#888888',
-            lineWidth: options.lineWidth || configManager?.get('visual.cad.wireframe.lineWidth') || 1,
+            lineWidth: options.lineWidth || configManager?.get('visual.wireframe.lineWidth') || 2,
             opacity: options.opacity !== undefined ? options.opacity : (configManager?.get('visual.cad.wireframe.opacity') !== undefined ? configManager.get('visual.cad.wireframe.opacity') : 0.8),
             transparent: true,
             depthTest: true,   // Enable depth test - hide back edges

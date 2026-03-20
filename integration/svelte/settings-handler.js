@@ -97,15 +97,16 @@ class SettingsHandler {
         }
 
         const currentSettings = {
+            wireframe: {
+                lineWidth: configurationManager.get('visual.wireframe.lineWidth') || 2
+            },
             selection: {
                 color: configurationManager.get('visual.selection.color') || '#ff6600',
-                lineWidth: configurationManager.get('visual.selection.lineWidth') || 2,
                 opacity: configurationManager.get('visual.selection.opacity') || 0.8,
                 faceHighlightOpacity: configurationManager.get('visual.selection.faceHighlightOpacity') || 0.3
             },
             containers: {
                 wireframeColor: configurationManager.get('visual.containers.wireframeColor') || '#00ff00',
-                lineWidth: configurationManager.get('visual.containers.lineWidth') || 1,
                 opacity: configurationManager.get('visual.containers.opacity') || 0.8,
                 faceHighlightOpacity: configurationManager.get('visual.containers.faceHighlightOpacity') || 0.3
             },

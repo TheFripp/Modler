@@ -88,7 +88,7 @@ class SimpleCommunication {
         });
 
         // Subscribe to hover events (interaction:hover) for bidirectional tree↔3D highlighting
-        eventBus.subscribe('interaction:hover', (event) => {
+        eventBus.subscribe(eventBus.EVENT_TYPES.INTERACTION_HOVER, (event) => {
             this.sendToAllIframes({
                 type: 'hover-changed',
                 data: { hoveredObjectId: event.changeData?.hoveredObjectId || null }

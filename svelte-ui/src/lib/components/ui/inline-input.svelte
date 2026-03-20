@@ -273,7 +273,7 @@
 
 		<!-- Suffix -->
 		{#if suffix}
-			<span class="text-xs text-muted-foreground pr-1 flex-shrink-0">{suffix}</span>
+			<span class="text-xs text-muted-foreground pl-1 pr-1.5 flex-shrink-0">{suffix}</span>
 		{/if}
 
 		<!-- Fill Button -->
@@ -306,7 +306,12 @@
 		@apply mb-2;
 	}
 
+	input {
+		cursor: inherit;
+	}
+
 	input:focus {
+		cursor: text;
 		outline: none !important;
 	}
 </style>

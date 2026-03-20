@@ -226,9 +226,10 @@ class DevelopmentValidator {
                     (eventType.includes('geometry') || eventType.includes('transform'));
                 const isFromUnitConverter = stack.includes('UnitConverter') && eventType.includes('unit-preference');
                 const isFromToolController = stack.includes('ToolController') && eventType.includes('tool:state');
+                const isFromBaseTool = stack.includes('BaseTool') && eventType.includes('interaction:hover');
                 const isLegitimate = isFromStateManager || isFromPropertySchema || isFromSelectionController ||
                     isFromSceneController || isFromBoxCreation || isFromTransformationManager ||
-                    isFromMovementUtils || isFromUnitConverter || isFromToolController;
+                    isFromMovementUtils || isFromUnitConverter || isFromToolController || isFromBaseTool;
 
                 if (!isLegitimate) {
                     developmentValidator.recordViolation({

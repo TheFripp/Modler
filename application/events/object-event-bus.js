@@ -44,6 +44,7 @@ class ObjectEventBus {
             LIFECYCLE: 'object:lifecycle',     // Create, delete operations
             SELECTION: 'object:selection',     // Selection state changes
             TOOL_STATE: 'tool:state',         // Tool activation/deactivation
+            INTERACTION_HOVER: 'interaction:hover',  // Transient hover state (not persisted)
 
             // Parametric design events
             PARAMETRIC_UPDATE: 'parametric:update',       // Parameter value changes

@@ -6,17 +6,17 @@
 	import ColorInput from '$lib/components/ui/color-input.svelte';
 
 	// Settings state
+	let wireframeLineWidth = 2;
+
 	let visualSettings = {
 		object: {
 			outlineColor: '#888888',
 			selectionColor: '#ff6600',
-			lineWidth: 2,
 			opacity: 80,
 			faceHighlightOpacity: 30
 		},
 		container: {
 			selectionColor: '#00ff00',
-			lineWidth: 1,
 			opacity: 80,
 			faceHighlightOpacity: 30
 		}
@@ -70,6 +70,13 @@
 		}
 	}
 
+	function updateWireframeLineWidth(value: number) {
+		wireframeLineWidth = value;
+		if (window.parent && window.parent !== window) {
+			window.parent.postMessage({ type: 'visual-settings-changed', settings: { 'visual.wireframe.lineWidth': value } }, '*');
+		}
+	}
+
 	function selectUnit(unit: string) {
 		currentUnit = unit;
 
@@ -99,17 +106,16 @@
 	function handleSettingsResponse(event: MessageEvent) {
 		if (event.data.type === 'visual-settings-response') {
 			const settings = event.data.settings;
+			wireframeLineWidth = settings.wireframe?.lineWidth || 2;
 			visualSettings = {
 				object: {
 					outlineColor: settings.cad?.wireframe?.color || '#888888',
 					selectionColor: settings.selection?.color || '#ff6600',
-					lineWidth: settings.selection?.lineWidth || 2,
 					opacity: (settings.selection?.opacity || 0.8) * 100,
 					faceHighlightOpacity: (settings.selection?.faceHighlightOpacity || 0.3) * 100
 				},
 				container: {
 					selectionColor: settings.containers?.wireframeColor || '#00ff00',
-					lineWidth: settings.containers?.lineWidth || 1,
 					opacity: (settings.containers?.opacity || 0.8) * 100,
 					faceHighlightOpacity: (settings.containers?.faceHighlightOpacity || 0.3) * 100
 				}
@@ -151,6 +157,25 @@
 <div class="h-full overflow-y-auto px-4 py-4 space-y-4">
 	<!-- Visuals -->
 	<PropertyGroup title="Visuals" align="left">
+		<!-- Global Line Width -->
+		<div class="mb-4">
+			<InlineInput
+				label="Line Width"
+				type="number"
+				value={wireframeLineWidth}
+				objectId={null}
+				property="visual.wireframe.lineWidth"
+				min={1}
+				max={10}
+				step={0.5}
+				suffix="px"
+				onchange={(event) => {
+					const numValue = parseFloat((event.target as HTMLInputElement).value);
+					updateWireframeLineWidth(numValue);
+				}}
+			/>
+		</div>
+
 		<!-- Object -->
 		<div class="space-y-2 mb-8">
 			<SectionHeader label="Object" align="left" />
@@ -185,22 +210,7 @@
 					/>
 				</div>
 			</div>
-			<InlineInput
-				label="Line Width"
-				type="number"
-				value={visualSettings.object.lineWidth}
-				objectId={null}
-				property="visual.selection.lineWidth"
-				min={1}
-				max={10}
-				step={0.5}
-				suffix="px"
-				onchange={(event) => {
-					const numValue = parseFloat((event.target as HTMLInputElement).value);
-					updateVisualSettings('object', 'lineWidth', numValue);
-				}}
-			/>
-		</div>
+			</div>
 
 		<!-- Container -->
 		<div class="space-y-2">
@@ -231,22 +241,7 @@
 					/>
 				</div>
 			</div>
-			<InlineInput
-				label="Line Width"
-				type="number"
-				value={visualSettings.container.lineWidth}
-				objectId={null}
-				property="visual.containers.lineWidth"
-				min={1}
-				max={10}
-				step={0.5}
-				suffix="px"
-				onchange={(event) => {
-					const numValue = parseFloat((event.target as HTMLInputElement).value);
-					updateVisualSettings('container', 'lineWidth', numValue);
-				}}
-			/>
-		</div>
+			</div>
 
 		<!-- Measurement Tool -->
 		<div class="space-y-2 mt-8">

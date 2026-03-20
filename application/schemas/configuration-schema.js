@@ -63,6 +63,16 @@ const CONFIGURATION_SCHEMA = {
     // VISUAL SETTINGS
     // ===========================
 
+    // Global wireframe line width
+    'visual.wireframe.lineWidth': {
+        type: 'number',
+        default: 2,
+        constraint: CONSTRAINT_TYPES.MIN_MAX,
+        min: 1,
+        max: 10,
+        description: 'Global wireframe line width for all wireframe types'
+    },
+
     // Selection visualization
     'visual.selection.color': {
         type: 'string',

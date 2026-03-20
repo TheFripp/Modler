@@ -100,6 +100,25 @@ class SupportMeshFactory {
     }
 
     /**
+     * Get nesting depth of an object in the container hierarchy.
+     * Root-level objects = 0, children of root containers = 1, etc.
+     */
+    _getNestingDepth(mainMesh) {
+        const sceneController = window.modlerComponents?.sceneController;
+        if (!sceneController) return 0;
+        const objectData = sceneController.getObjectByMesh(mainMesh);
+        if (!objectData) return 0;
+        let depth = 0;
+        let current = objectData;
+        while (current.parentContainer) {
+            depth++;
+            current = sceneController.getObject(current.parentContainer);
+            if (!current) break;
+        }
+        return depth;
+    }
+
+    /**
      * Create all support meshes for any object (unified for regular objects and containers)
      */
     createObjectSupportMeshes(mainMesh) {
@@ -170,6 +189,19 @@ class SupportMeshFactory {
 
         // Store references for easy access
         mainMesh.userData.supportMeshes = supportMeshes;
+
+        // Hierarchy-based render order: parents render on top of children
+        // Deeper objects get lower renderOrder so parent wireframes draw last (on top)
+        const depth = this._getNestingDepth(mainMesh);
+        if (depth > 0) {
+            const depthOffset = depth * 10;
+            const wireframeKeys = ['selectionWireframe', 'hoverWireframe', 'cadWireframe', 'containerSelectionWireframe'];
+            for (const key of wireframeKeys) {
+                if (supportMeshes[key]) {
+                    supportMeshes[key].renderOrder -= depthOffset;
+                }
+            }
+        }
 
         return supportMeshes;
     }
