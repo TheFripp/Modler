@@ -97,6 +97,33 @@ layoutProperties: {
 
 ---
 
+## Layout Activation
+
+### Push Tool Hug→Layout Transition
+
+Pushing a face on a hug-mode container automatically transitions it to layout mode:
+
+1. Push axis becomes `autoLayout.direction`
+2. Container mode switches from `hug` → `layout` (via `buildContainerModeUpdate`)
+3. All children get `fill` enabled on the push axis (dimensions stored in `fixedSize` for restore)
+4. Push proceeds normally — existing layout container logic handles fill sizing, min size enforcement
+
+This allows the push tool to "break out" of hug mode naturally. Full undo/redo restores container to hug mode with original children sizes.
+
+**Files**: `push-tool.js` (`transitionHugToLayout`), `push-face-command.js` (`restoreHugState`/`reapplyLayoutState`)
+
+### Ctrl+F Auto-Orientation Detection
+
+When wrapping objects in a container via Ctrl+F, `ContainerCrudManager.detectAndSetOrientation()` analyzes child positions to pre-set `autoLayout.direction`:
+
+- Calculates spread (max - min) of child centers along each axis
+- Axis with greatest spread becomes the direction (default: `x`)
+- Direction is pre-set but `autoLayout.enabled` stays `false` (container stays in hug mode)
+
+This direction becomes active when layout mode is later enabled (via property panel or push tool transition).
+
+---
+
 ## Layout Calculation Flow
 
 ### Overview

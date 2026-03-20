@@ -2,6 +2,7 @@ const logger = window.logger;
 /**
  * Push Face Command
  * Undoable command for face push operations (dimension and position changes)
+ * Supports hug→layout transition undo/redo when push triggers mode change
  */
 class PushFaceCommand extends BaseCommand {
     /**
@@ -12,8 +13,9 @@ class PushFaceCommand extends BaseCommand {
      * @param {Object} newDimensions - New dimensions {x, y, z}
      * @param {Object} oldPosition - Original position {x, y, z}
      * @param {Object} newPosition - New position {x, y, z}
+     * @param {Object} [hugTransitionState] - State for hug→layout transition undo/redo
      */
-    constructor(objectId, faceNormal, pushDistance, oldDimensions, newDimensions, oldPosition, newPosition) {
+    constructor(objectId, faceNormal, pushDistance, oldDimensions, newDimensions, oldPosition, newPosition, hugTransitionState = null) {
         super('push-face', 'Push face operation');
         // Ensure objectId is string for schema validation
         this.objectId = String(objectId);
@@ -23,6 +25,7 @@ class PushFaceCommand extends BaseCommand {
         this.newDimensions = { ...newDimensions };
         this.oldPosition = oldPosition ? { ...oldPosition } : null;
         this.newPosition = newPosition ? { ...newPosition } : null;
+        this.hugTransitionState = hugTransitionState;
     }
 
     execute() {
@@ -45,8 +48,18 @@ class PushFaceCommand extends BaseCommand {
                 return false;
             }
 
+            // Reverse hug→layout transition before restoring geometry
+            if (this.hugTransitionState) {
+                this.restoreHugState();
+            }
+
             // Restore geometry to old dimensions and position
             this.restoreGeometryState(objectData.mesh, this.oldDimensions, this.oldPosition);
+
+            // Recalculate hug size after geometry is restored
+            if (this.hugTransitionState) {
+                sceneController.updateHugContainerSize(this.hugTransitionState.containerId);
+            }
 
             logger.info(`↩️ Undid push: ${this.objectId}`);
             return true;
@@ -72,8 +85,18 @@ class PushFaceCommand extends BaseCommand {
                 return false;
             }
 
+            // Re-apply hug→layout transition before restoring geometry
+            if (this.hugTransitionState) {
+                this.reapplyLayoutState();
+            }
+
             // Restore geometry to new dimensions and position
             this.restoreGeometryState(objectData.mesh, this.newDimensions, this.newPosition);
+
+            // Recalculate layout after geometry is restored
+            if (this.hugTransitionState) {
+                sceneController.updateLayout(this.hugTransitionState.containerId);
+            }
 
             logger.info(`↪️ Redid push: ${this.objectId}`);
             return true;
@@ -81,6 +104,56 @@ class PushFaceCommand extends BaseCommand {
         } catch (error) {
             logger.error('PushFaceCommand: Redo failed:', error);
             return false;
+        }
+    }
+
+    /**
+     * Restore container and children to pre-transition hug state
+     */
+    restoreHugState() {
+        const objectStateManager = window.modlerComponents?.objectStateManager;
+        if (!objectStateManager) return;
+
+        const state = this.hugTransitionState;
+
+        // Restore children's original layoutProperties
+        for (const [childId, childState] of Object.entries(state.childStates)) {
+            if (childState.originalLayoutProperties) {
+                objectStateManager.updateObject(childId, {
+                    layoutProperties: JSON.parse(JSON.stringify(childState.originalLayoutProperties))
+                }, 'undo');
+            }
+        }
+
+        // Restore container to hug mode
+        objectStateManager.updateObject(state.containerId, {
+            ...ObjectStateManager.buildContainerModeUpdate('hug'),
+            autoLayout: JSON.parse(JSON.stringify(state.originalAutoLayout))
+        }, 'undo');
+    }
+
+    /**
+     * Re-apply layout mode and children fill state for redo
+     */
+    reapplyLayoutState() {
+        const objectStateManager = window.modlerComponents?.objectStateManager;
+        if (!objectStateManager) return;
+
+        const state = this.hugTransitionState;
+
+        // Re-apply layout mode on container
+        objectStateManager.updateObject(state.containerId, {
+            ...ObjectStateManager.buildContainerModeUpdate('layout'),
+            autoLayout: JSON.parse(JSON.stringify(state.targetAutoLayout))
+        }, 'redo');
+
+        // Re-apply children's fill layoutProperties
+        for (const [childId, childState] of Object.entries(state.childStates)) {
+            if (childState.targetLayoutProperties) {
+                objectStateManager.updateObject(childId, {
+                    layoutProperties: JSON.parse(JSON.stringify(childState.targetLayoutProperties))
+                }, 'redo');
+            }
         }
     }
 

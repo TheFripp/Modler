@@ -9,8 +9,8 @@ import * as THREE from 'three';
  * Face Highlight Rules (per-tool via this.rules):
  * | Rule                    | Move  | Push  | Default |
  * |-------------------------|-------|-------|---------|
- * | blockHugModeContainers  | false | true  | false   |
- * | showDisabledState       | false | true  | false   |
+ * | blockHugModeContainers  | false | false | false   |
+ * | showDisabledState       | false | false | false   |
  * | allowLayoutChildren     | false | false | false   |
  *
  * Common rules (always applied):
@@ -36,8 +36,8 @@ class BaseFaceToolBehavior {
 
         // Declarative highlight rules (configured per tool, see table in class doc)
         this.rules = {
-            blockHugModeContainers: toolType === 'push',
-            showDisabledState: toolType === 'push',
+            blockHugModeContainers: false,
+            showDisabledState: false,
             allowLayoutChildren: false,
             ...options.rules
         };

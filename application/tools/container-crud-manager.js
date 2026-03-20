@@ -349,6 +349,9 @@ class ContainerCrudManager {
         const success = this.moveObjectsIntoContainer(selectedObjects, containerObject, sceneController);
         if (!success) return false;
 
+        // Auto-detect layout orientation from child arrangement
+        this.detectAndSetOrientation(selectedObjects, containerObject);
+
         // Finalize container
         this.finalizeContainerCreation(containerObject, bounds);
 
@@ -461,7 +464,48 @@ class ContainerCrudManager {
         // Hierarchy updates handled automatically by PropertyPanelSync listening to HIERARCHY events
         // Manual calls removed to avoid race conditions with event-driven updates
     }
-    
+
+    /**
+     * Detect the most plausible layout orientation from child spatial arrangement.
+     * The axis with the greatest spread among child positions becomes the direction.
+     */
+    detectAndSetOrientation(selectedObjects, containerObject) {
+        if (!selectedObjects || selectedObjects.length < 2) {
+            // Single object or empty — default to x
+            if (containerObject.autoLayout) {
+                containerObject.autoLayout.direction = 'x';
+            }
+            return;
+        }
+
+        let minX = Infinity, maxX = -Infinity;
+        let minY = Infinity, maxY = -Infinity;
+        let minZ = Infinity, maxZ = -Infinity;
+
+        selectedObjects.forEach(obj => {
+            const pos = obj.position;
+            if (!pos) return;
+            minX = Math.min(minX, pos.x); maxX = Math.max(maxX, pos.x);
+            minY = Math.min(minY, pos.y); maxY = Math.max(maxY, pos.y);
+            minZ = Math.min(minZ, pos.z); maxZ = Math.max(maxZ, pos.z);
+        });
+
+        const spreadX = maxX - minX;
+        const spreadY = maxY - minY;
+        const spreadZ = maxZ - minZ;
+
+        let direction = 'x';
+        if (spreadY > spreadX && spreadY > spreadZ) {
+            direction = 'y';
+        } else if (spreadZ > spreadX && spreadZ > spreadY) {
+            direction = 'z';
+        }
+
+        if (containerObject.autoLayout) {
+            containerObject.autoLayout.direction = direction;
+        }
+    }
+
     /**
      * Create new empty container at specific position
      * @param {THREE.Vector3} position - Container position

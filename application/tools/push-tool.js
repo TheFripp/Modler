@@ -28,6 +28,7 @@ class PushTool {
         // Undo state
         this.initialDimensions = null;
         this.initialPosition = null;
+        this.hugTransitionState = null;
 
         // State management
         this.objectStateManager = null;
@@ -129,15 +130,20 @@ class PushTool {
         const targetObject = this.faceToolBehavior.getTargetObject(hit);
         if (!targetObject) return;
 
-        // Block push operation on containers in hug mode
         const sceneController = window.modlerComponents?.sceneController;
+
+        // Determine push axis early (needed for hug→layout transition)
+        const worldNormal = this.faceToolBehavior.getWorldFaceNormal(hit);
+        this.faceNormal = worldNormal;
+        this.determinePushAxis(worldNormal);
+
+        // If container is in hug mode, transition to layout mode
         if (sceneController && targetObject.userData?.id) {
             const objectData = sceneController.getObjectByMesh(targetObject);
             if (objectData?.isContainer) {
-                // Use centralized state machine
                 const containerMode = this.objectStateManager?.getContainerMode(objectData.id);
                 if (containerMode === 'hug') {
-                    return;
+                    this.transitionHugToLayout(objectData, this.pushAxis);
                 }
             }
         }
@@ -153,18 +159,6 @@ class PushTool {
         if (sceneController && typeof sceneController.disableHugUpdates === 'function') {
             sceneController.disableHugUpdates();
         }
-
-        // Face highlight stays visible during push
-        // Note: It may visually lag slightly during fast drags as it's positioned at face center
-        // which changes as vertices move. Wireframe provides accurate feedback.
-        // Face highlight repositions correctly when push completes.
-
-        // Get face normal in world space
-        const worldNormal = this.faceToolBehavior.getWorldFaceNormal(hit);
-        this.faceNormal = worldNormal;
-
-        // Determine push axis and direction
-        this.determinePushAxis(worldNormal);
 
         // Store initial state for undo
         const objectData = sceneController?.getObjectByMesh(targetObject);
@@ -215,6 +209,65 @@ class PushTool {
             this.pushAxis = 'z';
             this.pushDirection = normal.z > 0 ? 1 : -1;
         }
+    }
+
+    /**
+     * Transition a hug-mode container to layout mode when push begins.
+     * Sets layout direction to push axis and enables fill on all children.
+     */
+    transitionHugToLayout(objectData, pushAxis) {
+        const sceneController = window.modlerComponents?.sceneController;
+        if (!sceneController || !this.objectStateManager) return;
+
+        // Snapshot pre-transition state for undo
+        const children = sceneController.getChildObjects(objectData.id);
+        const childStates = {};
+        children.forEach(child => {
+            childStates[child.id] = {
+                originalLayoutProperties: child.layoutProperties
+                    ? JSON.parse(JSON.stringify(child.layoutProperties))
+                    : null
+            };
+        });
+
+        this.hugTransitionState = {
+            containerId: objectData.id,
+            originalAutoLayout: JSON.parse(JSON.stringify(objectData.autoLayout || {})),
+            childStates: childStates
+        };
+
+        // Transition container: hug → layout
+        const baseAutoLayout = objectData.autoLayout || window.ObjectDataFormat.createDefaultAutoLayout();
+        this.objectStateManager.updateObject(objectData.id, {
+            ...ObjectStateManager.buildContainerModeUpdate('layout'),
+            autoLayout: {
+                ...baseAutoLayout,
+                enabled: true,
+                direction: pushAxis
+            }
+        }, 'push-tool');
+
+        // Set all children to fill on the push axis
+        const fillProperty = `size${pushAxis.toUpperCase()}`;
+        children.forEach(child => {
+            const currentLP = child.layoutProperties || {
+                sizeX: 'fixed', sizeY: 'fixed', sizeZ: 'fixed',
+                fixedSize: { x: null, y: null, z: null }
+            };
+            const fixedSize = { ...(currentLP.fixedSize || { x: null, y: null, z: null }) };
+            fixedSize[pushAxis] = child.dimensions?.[pushAxis] || null;
+
+            this.objectStateManager.updateObject(child.id, {
+                layoutProperties: {
+                    ...currentLP,
+                    [fillProperty]: 'fill',
+                    fixedSize: fixedSize
+                }
+            }, 'push-tool');
+        });
+
+        // Run initial layout to position children in new layout mode
+        sceneController.updateLayout(objectData.id);
     }
 
     /**
@@ -604,7 +657,7 @@ class PushTool {
                 Math.abs(finalPosition.y - this.initialPosition.y) > 0.001 ||
                 Math.abs(finalPosition.z - this.initialPosition.z) > 0.001;
 
-            if (dimensionsChanged || positionChanged) {
+            if (dimensionsChanged || positionChanged || this.hugTransitionState) {
                 // Calculate push distance based on dimension change along push axis
                 let pushDistance = 0;
                 if (this.pushAxis) {
@@ -612,7 +665,24 @@ class PushTool {
                     pushDistance = (finalDimensions[axis] - this.initialDimensions[axis]) * this.pushDirection;
                 }
 
-                // ARCHITECTURAL FIX: Use PushFaceCommand for proper undo/redo with all required parameters
+                // Capture post-transition state for redo
+                if (this.hugTransitionState) {
+                    const sceneController = window.modlerComponents?.sceneController;
+                    const objectData = sceneController?.getObject(this.hugTransitionState.containerId);
+                    if (objectData) {
+                        this.hugTransitionState.targetAutoLayout = JSON.parse(JSON.stringify(objectData.autoLayout));
+                        const children = sceneController.getChildObjects(objectData.id);
+                        children.forEach(child => {
+                            const entry = this.hugTransitionState.childStates[child.id];
+                            if (entry) {
+                                entry.targetLayoutProperties = child.layoutProperties
+                                    ? JSON.parse(JSON.stringify(child.layoutProperties))
+                                    : null;
+                            }
+                        });
+                    }
+                }
+
                 const command = new PushFaceCommand(
                     pushedObject.userData.id,
                     this.faceNormal,
@@ -620,7 +690,8 @@ class PushTool {
                     this.initialDimensions,
                     finalDimensions,
                     this.initialPosition,
-                    finalPosition
+                    finalPosition,
+                    this.hugTransitionState
                 );
                 historyManager.executeCommand(command);
             }
@@ -748,6 +819,7 @@ class PushTool {
         this.cumulativeAmount = 0;
         this.initialDimensions = null;
         this.initialPosition = null;
+        this.hugTransitionState = null;
     }
 
     /**
