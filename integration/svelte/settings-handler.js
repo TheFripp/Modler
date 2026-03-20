@@ -148,9 +148,9 @@ class SettingsHandler {
         }
 
         const currentSettings = {
-            backgroundColor: configurationManager.get('scene.background.color') || '#1a1a1a',
-            gridMainColor: configurationManager.get('scene.grid.mainColor') || '#444444',
-            gridSubColor: configurationManager.get('scene.grid.subColor') || '#222222'
+            backgroundColor: configurationManager.get('scene.backgroundColor') || '#1a1a1a',
+            gridMainColor: configurationManager.get('scene.gridMainColor') || '#444444',
+            gridSubColor: configurationManager.get('scene.gridSubColor') || '#222222'
         };
 
         // Send settings response via centralized panel communication
@@ -171,6 +171,36 @@ class SettingsHandler {
 
         for (const [key, value] of Object.entries(settings)) {
             configurationManager.set(key, value);
+        }
+    }
+
+    /**
+     * Handle unit settings update
+     */
+    handleUnitSettingsUpdate(settings) {
+        const unitConverter = window.unitConverter;
+        if (!unitConverter) {
+            console.warn('❌ UnitConverter not available for unit settings');
+            return;
+        }
+
+        const unit = settings['unit.current'];
+        if (unit) {
+            unitConverter.setUserUnit(unit);
+        }
+    }
+
+    /**
+     * Handle request for current unit settings
+     */
+    handleGetUnitSettings(source) {
+        const unitConverter = window.unitConverter;
+        const currentSettings = {
+            currentUnit: unitConverter ? unitConverter.userUnit : 'm'
+        };
+
+        if (this.panelCommunication) {
+            this.panelCommunication.sendSettingsResponse('unit-settings', currentSettings);
         }
     }
 

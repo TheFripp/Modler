@@ -253,17 +253,23 @@ class SelectionController {
             .map(mesh => this.getObjectData(mesh)?.id)
             .filter(Boolean);
 
+        // Build container context from NavigationController
+        const navigationController = this.getNavigationController();
+        const currentContainer = navigationController?.getCurrentContainer();
+        const containerContext = currentContainer
+            ? { containerId: currentContainer.id, containerName: currentContainer.name }
+            : null;
 
-        // Phase 3: Emit consolidated selection event for UI panels (MainAdapter → UIAdapter)
-        // This is the PRIMARY event for Phase 3 communication architecture
+        // Emit consolidated selection event for UI panels
         if (window.objectEventBus) {
             window.objectEventBus.emit(
                 window.objectEventBus.EVENT_TYPES?.SELECTION || 'object:selection',
-                null, // No single objectId - this is a multi-object selection event
+                null,
                 {
-                    selected: selectedObjectIds.length > 0, // Overall selection state
-                    selectedObjectIds: selectedObjectIds,   // All selected IDs for UI
+                    selected: selectedObjectIds.length > 0,
+                    selectedObjectIds: selectedObjectIds,
                     selectionCount: selectedObjectIds.length,
+                    containerContext,
                     source: 'SelectionController.notifySelectionChange'
                 },
                 { immediate: true, source: 'SelectionController.notifySelectionChange' }

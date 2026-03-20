@@ -1,7 +1,7 @@
 # Message Protocol Reference
 
-**Version**: 1.0.0
-**Date**: 2025-10-22
+**Version**: 1.2.0
+**Date**: 2026-03-20
 **Status**: Living Document
 
 ## Overview
@@ -202,6 +202,24 @@ window.parent.postMessage({
   type: 'object-select',
   objectId: 42,
   directSelection: true  // Select from ObjectTree bypasses container-first
+}, '*');
+```
+
+#### `object-hover`
+Highlight object in 3D scene from UI tree hover.
+
+**Parameters:**
+- `objectId: number` - Object to highlight
+- `isHovering: boolean` - True when hovering, false when leaving
+
+**Note:** Visual-only feedback. Does not change state of selected objects.
+
+**Example:**
+```javascript
+window.parent.postMessage({
+  type: 'object-hover',
+  objectId: 42,
+  isHovering: true
 }, '*');
 ```
 
@@ -424,54 +442,80 @@ File management request (save, load, export).
 
 ### Settings Operations
 
-#### `get-cad-wireframe-settings`
-Request CAD wireframe settings.
+Settings follow a consistent request-response pattern. Each settings category has a paired `get-{prefix}-settings` request and `{prefix}-settings-changed` update message. Responses come back as `{prefix}-settings-response`.
+
+**Pattern:**
+```
+UI sends:  get-{prefix}-settings         → Main responds: {prefix}-settings-response
+UI sends:  {prefix}-settings-changed     → Main applies via ConfigurationManager
+```
+
+**Three-file contract for each settings category:**
+1. **CommandRouter** (`settingsRoutes` object) — maps `{prefix}` to SettingsHandler method suffix
+2. **SettingsHandler** — implements `handle{Suffix}SettingsUpdate(settings)` and `handleGet{Suffix}Settings(source)`
+3. **SettingsPanel.svelte** — sends messages and handles `{prefix}-settings-response`
+
+**Config key consistency:** The keys sent by SettingsPanel must match the keys in `CONFIGURATION_SCHEMA` (`configuration-schema.js`). SettingsHandler must read using the same keys.
+
+#### Settings Categories
+
+| Prefix | CommandRouter Suffix | Config Keys | Handler |
+|--------|---------------------|-------------|---------|
+| `cad-wireframe` | `CadWireframe` | `visual.cad.wireframe.*` | SettingsHandler |
+| `visual` | `Visual` | `visual.selection.*`, `visual.containers.*` | SettingsHandler |
+| `scene` | `Scene` | `scene.backgroundColor`, `scene.gridMainColor`, `scene.gridSubColor` | SettingsHandler |
+| `interface` | `Interface` | `interface.*` | SettingsHandler |
+| `unit` | `Unit` | Uses `UnitConverter.setUserUnit()` | SettingsHandler |
+
+#### `get-{prefix}-settings`
+Request current settings for a category.
 
 **Parameters:** None
 
-**Response:** Main sends settings via postMessage back to UI
+**Response:** Main sends `{prefix}-settings-response` with `{ settings: object }` back to requesting panel via PanelCommunication.
 
-#### `cad-wireframe-settings-changed`
-Update CAD wireframe settings.
+#### `{prefix}-settings-changed`
+Update settings for a category.
 
 **Parameters:**
-- `settings: object` - New wireframe settings
+- `settings: object` - Key-value pairs of config paths and values
 
 **Alternative format:**
 - `data: { settings: object }` - Nested format
 
-#### `get-visual-settings`
-Request visual settings.
+**Example (scene settings):**
+```javascript
+// Request current scene settings
+window.parent.postMessage({ type: 'get-scene-settings' }, '*');
 
-**Parameters:** None
+// Update a scene setting
+window.parent.postMessage({
+  type: 'scene-settings-changed',
+  settings: { 'scene.backgroundColor': '#2a2a2a' }
+}, '*');
 
-#### `visual-settings-changed`
-Update visual settings.
+// Handle response
+window.addEventListener('message', (event) => {
+  if (event.data.type === 'scene-settings-response') {
+    const { backgroundColor, gridMainColor, gridSubColor } = event.data.settings;
+  }
+});
+```
 
-**Parameters:**
-- `settings: object` - New visual settings
+**Example (unit settings):**
+```javascript
+// Request current unit
+window.parent.postMessage({ type: 'get-unit-settings' }, '*');
 
-#### `get-scene-settings`
-Request scene settings.
+// Change unit
+window.parent.postMessage({
+  type: 'unit-settings-changed',
+  settings: { 'unit.current': 'cm' }
+}, '*');
 
-**Parameters:** None
-
-#### `scene-settings-changed`
-Update scene settings.
-
-**Parameters:**
-- `settings: object` - New scene settings
-
-#### `get-interface-settings`
-Request interface settings.
-
-**Parameters:** None
-
-#### `interface-settings-changed`
-Update interface settings.
-
-**Parameters:**
-- `settings: object` - New interface settings
+// Handle response
+// event.data = { type: 'unit-settings-response', settings: { currentUnit: 'cm' } }
+```
 
 ---
 
@@ -561,6 +605,12 @@ All UI → Main messages must go through `CommandRouter.execute()` via postMessa
 ---
 
 ## Changelog
+
+### v1.2.0 (2026-03-20)
+- Added `object-hover` message type documentation (was missing)
+- Added `unit-settings-changed` / `get-unit-settings` — unit settings now route through SettingsHandler like all other settings
+- Documented settings handler pattern: three-file contract (CommandRouter settingsRoutes, SettingsHandler methods, SettingsPanel messages)
+- Fixed scene settings config path mismatch (`scene.background.color` → `scene.backgroundColor` to match CONFIGURATION_SCHEMA)
 
 ### v1.1.0 (2025-10-22)
 - **Breaking Change (with backward compatibility)**: Consolidated `fill-button-hover` and `layout-button-hover` into single `button-hover` message type

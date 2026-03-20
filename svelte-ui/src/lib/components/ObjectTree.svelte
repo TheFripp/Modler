@@ -133,31 +133,24 @@
 
 		// Apply server-side ordering using childrenOrder from Main
 		function applyOrderingToLevel(objects, parentObj, rootOrder) {
-			// Get ordering from server data:
-			// - For root level: use rootChildrenOrder from hierarchyData
-			// - For containers: use childrenOrder from parent object
 			let order;
 			if (parentObj === null) {
-				// Root level - use rootChildrenOrder passed from hierarchyData
 				order = rootOrder || [];
 			} else if (parentObj.childrenOrder && parentObj.childrenOrder.length > 0) {
-				// Container level - use childrenOrder from parent object
 				order = parentObj.childrenOrder;
 			}
 
-			// Apply server ordering
 			if (order && order.length > 0) {
 				objects.sort((a, b) => {
 					const aIndex = order.indexOf(a.id);
 					const bIndex = order.indexOf(b.id);
 					if (aIndex === -1 && bIndex === -1) return 0;
-					if (aIndex === -1) return 1;  // Unknown items go to end
+					if (aIndex === -1) return 1;
 					if (bIndex === -1) return -1;
 					return aIndex - bIndex;
 				});
 			}
 
-			// Recursively apply to children
 			objects.forEach(obj => {
 				if (obj.isContainer && obj.children && obj.children.length > 0) {
 					expandedContainers.add(obj.id);
@@ -194,8 +187,6 @@
 		}
 	}
 
-	// Make this function reactive by accepting selectedObjects as parameter
-	// This forces Svelte to re-run when $selectedObjects changes
 	function isObjectHighlighted(object, selected) {
 		if (pendingSelectionId === object.id) return true;
 		const isSelected = selected.some(sel => sel.id === object.id);
@@ -207,7 +198,6 @@
 		// Optimistic highlight — immediate visual feedback
 		if (!event.shiftKey) {
 			pendingSelectionId = object.id;
-			// Safety timeout: clear if round-trip takes too long
 			if (pendingSelectionTimer) clearTimeout(pendingSelectionTimer);
 			pendingSelectionTimer = setTimeout(() => {
 				pendingSelectionId = null;
@@ -219,7 +209,7 @@
 			type: 'object-select',
 			objectId: object.id,
 			isShiftClick: event.shiftKey,
-			directSelection: true  // Bypass container-first logic when selecting from list
+			directSelection: true
 		}, '*');
 	}
 
@@ -254,7 +244,6 @@
 		editingObjectId = object.id;
 		editingObjectName = object.name;
 
-		// Focus input after it's rendered
 		setTimeout(() => {
 			const input = document.querySelector(`#rename-input-${object.id}`);
 			if (input) {
@@ -266,7 +255,6 @@
 
 	function finishRenaming() {
 		if (editingObjectId && editingObjectName.trim()) {
-			// Send rename command to 3D scene
 			window.parent.postMessage({
 				type: 'rename-object',
 				objectId: editingObjectId,
@@ -291,7 +279,7 @@
 		}
 	}
 
-	// Drag and drop handlers (logic in ./object-tree/drag-drop.ts)
+	// Drag and drop handlers
 	function handleDragStart(event, object) {
 		draggedObject = object;
 		event.dataTransfer.effectAllowed = 'move';
@@ -313,11 +301,11 @@
 		activeDropZone = calcDropZone(event, objectIndex, parentId);
 	}
 
-	function handleDrop(event, dropZoneIndex, parentId = null) {
+	function handleDrop(event) {
 		if (!draggedObject || !activeDropZone) return;
 		event.preventDefault();
 
-		const action = resolveDrop(draggedObject, dropZoneIndex, parentId, treeStructure, filteredHierarchy);
+		const action = resolveDrop(draggedObject, activeDropZone.index, activeDropZone.parentId, treeStructure, filteredHierarchy);
 		if (action) {
 			window.parent.postMessage(action, '*');
 		}
@@ -325,9 +313,20 @@
 		draggedObject = null;
 		activeDropZone = null;
 	}
+
+	// Drop indicator helpers
+	function showDropBefore(index: number, parentId: number | null): boolean {
+		return !!activeDropZone && !!draggedObject &&
+			activeDropZone.parentId === parentId && activeDropZone.index === index;
+	}
+
+	function showDropAfter(index: number, parentId: number | null, siblingCount: number): boolean {
+		return index === siblingCount - 1 && !!activeDropZone && !!draggedObject &&
+			activeDropZone.parentId === parentId && activeDropZone.index === index + 1;
+	}
 </script>
 
-{#snippet TreeItem(object, depth = 0, index = 0, parentId = null)}
+{#snippet TreeItem(object, depth = 0, index = 0, parentId = null, siblingCount = 0)}
 	<div
 		class="relative"
 		class:opacity-0={!isLoaded}
@@ -337,46 +336,46 @@
 		ondragstart={(e) => handleDragStart(e, object)}
 		ondragend={handleDragEnd}
 		ondragover={(e) => handleDragOver(e, index, parentId)}
+		ondrop={handleDrop}
 	>
-		<div class="flex items-center gap-1 py-0.5">
-			{#if object.isContainer && !object.autoLayout?.tileMode?.enabled}
-				<button
-					type="button"
-					onclick={() => toggleContainer(object.id)}
-					class="w-4 h-4 flex items-center justify-center hover:bg-white/10 rounded shrink-0"
-				>
-					{#if expandedContainers.has(object.id)}
-						<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
-						</svg>
-					{:else}
-						<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
-						</svg>
-					{/if}
-				</button>
-			{:else}
-				<div class="w-4"></div>
-			{/if}
+		<!-- Drop indicator: before this item -->
+		{#if showDropBefore(index, parentId)}
+			<div class="absolute top-0 right-2 h-0.5 bg-blue-500 z-10" style="left: {depth * 16 + 24}px"></div>
+		{/if}
 
-			{#if editingObjectId === object.id}
-				<!-- Rename input mode -->
-				<div class="flex items-center gap-2 px-2 py-2 rounded-md flex-1 min-w-0 bg-[#212121]/50 border border-blue-400">
+		{#if editingObjectId === object.id}
+			<!-- Rename input mode -->
+			<div
+				class="flex items-center gap-1.5 h-8 pr-2"
+				style="padding-left: {depth * 16 + 8}px"
+			>
+				{#if object.isContainer && !object.autoLayout?.tileMode?.enabled}
+					<button
+						type="button"
+						onclick={(e) => { e.stopPropagation(); toggleContainer(object.id); }}
+						class="w-5 h-5 flex items-center justify-center hover:bg-white/10 rounded shrink-0"
+					>
+						{#if expandedContainers.has(object.id)}
+							<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+							</svg>
+						{:else}
+							<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+							</svg>
+						{/if}
+					</button>
+				{:else}
+					<div class="w-5 shrink-0"></div>
+				{/if}
+
+				<div class="flex items-center gap-2 px-2 h-full rounded-md flex-1 min-w-0 bg-[#212121]/50 border border-blue-400">
 					{#if object.isContainer && object.autoLayout?.tileMode?.enabled}
-						<SquareStack
-							class="w-4 h-4 shrink-0 text-blue-400"
-							strokeWidth={1.5}
-						/>
+						<SquareStack class="w-4 h-4 shrink-0 text-blue-400" strokeWidth={1.5} />
 					{:else if object.isContainer}
-						<BoxSelect
-							class="w-4 h-4 shrink-0 text-blue-400"
-							strokeWidth={1.5}
-						/>
+						<BoxSelect class="w-4 h-4 shrink-0 text-blue-400" strokeWidth={1.5} />
 					{:else}
-						<Box
-							class="w-4 h-4 shrink-0 text-blue-400"
-							strokeWidth={1.5}
-						/>
+						<Box class="w-4 h-4 shrink-0 text-blue-400" strokeWidth={1.5} />
 					{/if}
 
 					<input
@@ -389,147 +388,102 @@
 						placeholder="Object name"
 					/>
 				</div>
-			{:else}
-				<!-- Normal display mode -->
-				<button
-					type="button"
-					onclick={(e) => handleObjectClick(e, object)}
-					ondblclick={(e) => handleObjectDoubleClick(e, object)}
-					onmouseenter={() => handleObjectMouseEnter(object)}
-					onmouseleave={() => handleObjectMouseLeave(object)}
-					class={cn(
-						'flex items-center gap-2 px-2 py-2 rounded-md flex-1 min-w-0 transition-colors',
-						'text-foreground/70 hover:text-foreground hover:bg-white/5',
-						'focus:outline-none',
-						isObjectHighlighted(object, $selectedObjects) && 'bg-[#212121]/50',
-						hoveredTreeObjectId === object.id && !isObjectHighlighted(object, $selectedObjects) && 'bg-white/[0.08]'
-					)}
-				>
-					{#if object.isContainer && object.autoLayout?.tileMode?.enabled}
-						<SquareStack
-							class={cn(
-								"w-4 h-4 shrink-0",
-								isObjectHighlighted(object, $selectedObjects) ? "text-blue-400" : "text-foreground/50"
-							)}
-							strokeWidth={1.5}
-						/>
-					{:else if object.isContainer}
-						<BoxSelect
-							class={cn(
-								"w-4 h-4 shrink-0",
-								isObjectHighlighted(object, $selectedObjects) ? "text-blue-400" : "text-foreground/50"
-							)}
-							strokeWidth={1.5}
-						/>
-					{:else}
-						<Box
-							class={cn(
-								"w-4 h-4 shrink-0",
-								isObjectHighlighted(object, $selectedObjects) ? "text-blue-400" : "text-foreground/50"
-							)}
-							strokeWidth={1.5}
-						/>
-					{/if}
+			</div>
+		{:else}
+			<!-- Normal display mode — full-width row -->
+			<!-- svelte-ignore a11y_click_events_have_key_events -->
+			<div
+				class={cn(
+					'flex items-center gap-1.5 h-8 pr-2 transition-colors cursor-default',
+					'text-foreground/70 hover:text-foreground hover:bg-white/5',
+					isObjectHighlighted(object, $selectedObjects) && 'bg-white/[0.06]',
+					hoveredTreeObjectId === object.id && !isObjectHighlighted(object, $selectedObjects) && 'bg-white/[0.04]'
+				)}
+				style="padding-left: {depth * 16 + 8}px"
+				onclick={(e) => handleObjectClick(e, object)}
+				ondblclick={(e) => handleObjectDoubleClick(e, object)}
+				onmouseenter={() => handleObjectMouseEnter(object)}
+				onmouseleave={() => handleObjectMouseLeave(object)}
+				role="treeitem"
+				tabindex="-1"
+			>
+				{#if object.isContainer && !object.autoLayout?.tileMode?.enabled}
+					<button
+						type="button"
+						onclick={(e) => { e.stopPropagation(); toggleContainer(object.id); }}
+						class="w-5 h-5 flex items-center justify-center hover:bg-white/10 rounded shrink-0"
+					>
+						{#if expandedContainers.has(object.id)}
+							<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+							</svg>
+						{:else}
+							<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+							</svg>
+						{/if}
+					</button>
+				{:else}
+					<div class="w-5 shrink-0"></div>
+				{/if}
 
-					<span class="truncate text-sm">{object.name}</span>
+				{#if object.isContainer && object.autoLayout?.tileMode?.enabled}
+					<SquareStack
+						class={cn(
+							"w-4 h-4 shrink-0",
+							isObjectHighlighted(object, $selectedObjects) ? "text-blue-400" : "text-foreground/50"
+						)}
+						strokeWidth={1.5}
+					/>
+				{:else if object.isContainer}
+					<BoxSelect
+						class={cn(
+							"w-4 h-4 shrink-0",
+							isObjectHighlighted(object, $selectedObjects) ? "text-blue-400" : "text-foreground/50"
+						)}
+						strokeWidth={1.5}
+					/>
+				{:else}
+					<Box
+						class={cn(
+							"w-4 h-4 shrink-0",
+							isObjectHighlighted(object, $selectedObjects) ? "text-blue-400" : "text-foreground/50"
+						)}
+						strokeWidth={1.5}
+					/>
+				{/if}
 
-					{#if object.isContainer && object.autoLayout?.tileMode?.enabled}
-						<span class="text-sm text-[#10B981] font-mono shrink-0">×{object.autoLayout.tileMode.repeat}</span>
-					{/if}
-				</button>
-			{/if}
-		</div>
+				<span class="truncate text-sm">{object.name}</span>
+
+				{#if object.isContainer && object.autoLayout?.tileMode?.enabled}
+					<span class="text-sm text-[#10B981] font-mono shrink-0">×{object.autoLayout.tileMode.repeat}</span>
+				{/if}
+			</div>
+		{/if}
+
+		<!-- Drop indicator: after last item in this group -->
+		{#if showDropAfter(index, parentId, siblingCount)}
+			<div class="absolute bottom-0 right-2 h-0.5 bg-blue-500 z-10" style="left: {depth * 16 + 24}px"></div>
+		{/if}
 	</div>
 
 	{#if object.isContainer && expandedContainers.has(object.id) && object.children && object.children.length > 0 && !object.autoLayout?.tileMode?.enabled}
-		<div class="ml-4 space-y-0.5">
-			{#each object.children as child, childIndex}
-				<!-- Drop zone line BEFORE this child -->
-				<div
-					class="relative h-3 -my-1.5"
-					ondragover={(e) => {
-						if (!draggedObject) return;
-						e.preventDefault();
-						e.dataTransfer.dropEffect = 'move';
-						activeDropZone = { parentId: object.id, index: childIndex };
-					}}
-					ondrop={(e) => handleDrop(e, childIndex, object.id)}
-				>
-					{#if activeDropZone?.parentId === object.id && activeDropZone?.index === childIndex && draggedObject}
-						<div class="absolute left-0 right-0 h-0.5 bg-blue-500 z-10 top-1/2 -translate-y-1/2"></div>
-					{/if}
-				</div>
-
-				{@render TreeItem(child, depth + 1, childIndex, object.id)}
-
-				<!-- Drop zone line AFTER the last child -->
-				{#if childIndex === object.children.length - 1}
-					<div
-						class="relative h-3 -my-1.5"
-						ondragover={(e) => {
-							if (!draggedObject) return;
-							e.preventDefault();
-							e.dataTransfer.dropEffect = 'move';
-							activeDropZone = { parentId: object.id, index: childIndex + 1 };
-						}}
-						ondrop={(e) => handleDrop(e, childIndex + 1, object.id)}
-					>
-						{#if activeDropZone?.parentId === object.id && activeDropZone?.index === childIndex + 1 && draggedObject}
-							<div class="absolute left-0 right-0 h-0.5 bg-blue-500 z-10 top-1/2 -translate-y-1/2"></div>
-						{/if}
-					</div>
-				{/if}
-			{/each}
-		</div>
+		{#each object.children as child, childIndex}
+			{@render TreeItem(child, depth + 1, childIndex, object.id, object.children.length)}
+		{/each}
 	{/if}
 {/snippet}
 
 <div
-	class="h-full overflow-y-auto px-4 py-4"
+	class="h-full overflow-y-auto px-2 py-2"
+	role="tree"
 	ondragleave={(e) => {
-		// Clear drop zone when leaving the entire list area
 		if (!e.currentTarget.contains(e.relatedTarget)) {
 			activeDropZone = null;
 		}
 	}}
 >
-	<div class="space-y-0.5">
-		{#each treeStructure as object, index}
-			<!-- Drop zone line BEFORE this item -->
-			<div
-				class="relative h-3 -my-1.5"
-				ondragover={(e) => {
-					if (!draggedObject) return;
-					e.preventDefault();
-					e.dataTransfer.dropEffect = 'move';
-					activeDropZone = { parentId: null, index };
-				}}
-				ondrop={(e) => handleDrop(e, index, null)}
-			>
-				{#if activeDropZone?.parentId === null && activeDropZone?.index === index && draggedObject}
-					<div class="absolute left-0 right-0 h-0.5 bg-blue-500 z-10 top-1/2 -translate-y-1/2"></div>
-				{/if}
-			</div>
-
-			{@render TreeItem(object, 0, index, null)}
-
-			<!-- Drop zone line AFTER the last item -->
-			{#if index === treeStructure.length - 1}
-				<div
-					class="relative h-3 -my-1.5"
-					ondragover={(e) => {
-						if (!draggedObject) return;
-						e.preventDefault();
-						e.dataTransfer.dropEffect = 'move';
-						activeDropZone = { parentId: null, index: index + 1 };
-					}}
-					ondrop={(e) => handleDrop(e, index + 1, null)}
-				>
-					{#if activeDropZone?.parentId === null && activeDropZone?.index === index + 1 && draggedObject}
-						<div class="absolute left-0 right-0 h-0.5 bg-blue-500 z-10 top-1/2 -translate-y-1/2"></div>
-					{/if}
-				</div>
-			{/if}
-		{/each}
-	</div>
+	{#each treeStructure as object, index}
+		{@render TreeItem(object, 0, index, null, treeStructure.length)}
+	{/each}
 </div>

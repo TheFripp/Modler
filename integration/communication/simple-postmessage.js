@@ -334,7 +334,8 @@ class SimpleCommunication {
             type: 'selection-changed',
             data: {
                 selectedObjectIds: selectedObjectIds || [],
-                selectedObjects // COMPLETE data for each!
+                selectedObjects,
+                containerContext: event.changeData?.containerContext || null
             }
         });
     }

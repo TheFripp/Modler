@@ -61,18 +61,6 @@
 		}
 	}
 
-	function handleIncrease(axis: 'x' | 'y' | 'z') {
-		if (onUpdate) {
-			onUpdate(axis, values[axis] + step);
-		}
-	}
-
-	function handleDecrease(axis: 'x' | 'y' | 'z') {
-		if (onUpdate) {
-			onUpdate(axis, values[axis] - step);
-		}
-	}
-
 	// Fill button handlers
 	function handleFillToggle(axis: 'x' | 'y' | 'z') {
 		if (onFillToggle) {
@@ -183,8 +171,6 @@
 						{objectId}
 						property={property}
 						oninput={onUpdate ? (e) => handleInput(axis, e) : undefined}
-						onIncrease={onUpdate ? () => handleIncrease(axis) : undefined}
-						onDecrease={onUpdate ? () => handleDecrease(axis) : undefined}
 						showFillButton={showFillButtons}
 						fillActive={isFilled}
 						fillTitle={`Toggle fill for ${axis.toUpperCase()}-axis`}

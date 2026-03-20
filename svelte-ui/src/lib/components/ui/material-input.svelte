@@ -45,23 +45,6 @@
 		}
 	}
 
-	function handleOpacityIncrease() {
-		const newOpacity = Math.min(1, opacity + 0.1);
-		if (objectId && propertyController) {
-			propertyController?.updateProperty(objectId, 'material.opacity', newOpacity, 'arrow');
-		} else if (onOpacityChange) {
-			onOpacityChange(newOpacity);
-		}
-	}
-
-	function handleOpacityDecrease() {
-		const newOpacity = Math.max(0, opacity - 0.1);
-		if (objectId && propertyController) {
-			propertyController?.updateProperty(objectId, 'material.opacity', newOpacity, 'arrow');
-		} else if (onOpacityChange) {
-			onOpacityChange(newOpacity);
-		}
-	}
 </script>
 
 <div class={cn('material-input space-y-2', className)} {...restProps}>
@@ -80,7 +63,5 @@
 		{objectId}
 		property={objectId ? 'material.opacity' : undefined}
 		oninput={onOpacityChange ? handleOpacityChange : undefined}
-		onIncrease={onOpacityChange ? handleOpacityIncrease : undefined}
-		onDecrease={onOpacityChange ? handleOpacityDecrease : undefined}
 	/>
 </div>

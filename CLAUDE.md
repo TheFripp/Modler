@@ -128,8 +128,12 @@ CAD software for creative hobbyists. Rule-based parametric design with intellige
 - Undo/redo? → `HistoryManager.executeCommand()`
 - New object type UI? → `PropertySectionRegistry.register()`
 - New tool? → Extend `BaseTool`, override only needed event handlers, register in `v2-main.js`
+- New settings category? → Three-file contract: (1) add prefix to CommandRouter `settingsRoutes`, (2) add `handle*Update` + `handleGet*` to SettingsHandler, (3) send/handle messages in SettingsPanel. Config keys must match `CONFIGURATION_SCHEMA`. See [`MESSAGE-PROTOCOL.md`](integration/communication/MESSAGE-PROTOCOL.md) Settings Operations.
+- New UI→Main message type? → Register handler in CommandRouter `registerHandlers()`, document in [`MESSAGE-PROTOCOL.md`](integration/communication/MESSAGE-PROTOCOL.md)
 
 **NEVER**: Call specialized managers (SceneHierarchyManager, SceneLayoutManager, SceneLifecycleManager, LayoutPropagationManager) directly - always use coordinators (ObjectStateManager or SceneController)
+
+**NEVER**: Access main window globals from iframe UI (UnitConverter, ConfigurationManager, etc.) — all data must flow through postMessage round-trips
 
 ---
 

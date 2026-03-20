@@ -191,6 +191,7 @@ class CommandRouter {
             'visual': 'Visual',
             'scene': 'Scene',
             'interface': 'Interface',
+            'unit': 'Unit',
         };
         for (const [prefix, methodSuffix] of Object.entries(settingsRoutes)) {
             this.handlers.set(`${prefix}-settings-changed`, (data) => {

@@ -33,7 +33,6 @@
 	};
 
 	let currentUnit = 'm';
-	let unitConverter: any = null;
 
 	const units = [
 		{ value: 'm', label: 'Meters (m)' },
@@ -118,24 +117,23 @@
 		} else if (event.data.type === 'scene-settings-response') {
 			const settings = event.data.settings;
 			sceneSettings = {
-				backgroundColor: settings.backgroundColor,
-				gridMainColor: settings.gridMainColor,
-				gridSubColor: settings.gridSubColor
+				backgroundColor: settings.backgroundColor || '#1a1a1a',
+				gridMainColor: settings.gridMainColor || '#444444',
+				gridSubColor: settings.gridSubColor || '#2a2a2a'
 			};
+		} else if (event.data.type === 'unit-settings-response') {
+			const settings = event.data.settings;
+			currentUnit = settings.currentUnit || 'm';
 		}
 	}
 
 	function loadSettings() {
 		window.parent.postMessage({ type: 'get-visual-settings' }, '*');
 		window.parent.postMessage({ type: 'get-scene-settings' }, '*');
+		window.parent.postMessage({ type: 'get-unit-settings' }, '*');
 	}
 
 	onMount(() => {
-		unitConverter = (window as any).UnitConverter ? new (window as any).UnitConverter() : null;
-		if (unitConverter) {
-			currentUnit = unitConverter.userUnit;
-		}
-
 		window.addEventListener('message', handleSettingsResponse);
 		loadSettings();
 
