@@ -9,8 +9,6 @@ import {
 	objectHierarchy,
 	containerContext
 } from '$lib/stores/modler';
-import { unifiedCommunication } from '$lib/services/unified-communication';
-
 /**
  * Bridge class to connect Three.js Modler components with Svelte UI
  * Simplified version focusing only on essential functionality
@@ -326,40 +324,27 @@ function setupUIToSceneActions(components: any) {
  * Send tool activation command to main application
  */
 export function activateToolInScene(toolName: string) {
-	// Use unified communication system instead of direct PostMessage
-	unifiedCommunication.sendToolActivation(toolName).catch(error => {
-		console.error('❌ Tool activation failed:', error);
-
-		// Fallback to direct access if unified communication fails
-		try {
-			if ((window as any)?.activateTool) {
-				(window as any).activateTool(toolName);
-				return;
-			}
-		} catch (fallbackError) {
-			console.error('❌ Direct tool activation fallback failed:', fallbackError);
-		}
-	});
+	if (window.parent && window.parent !== window) {
+		window.parent.postMessage({ type: 'activate-tool', toolId: toolName }, '*');
+	}
 }
 
 /**
  * Send snap toggle command to main application
  */
 export function toggleSnapInScene() {
-	// Use unified communication system instead of direct PostMessage
-	unifiedCommunication.sendSnapToggle().catch(error => {
-		console.error('❌ Snap toggle failed:', error);
+	if (window.parent && window.parent !== window) {
+		window.parent.postMessage({ type: 'snap-toggle' }, '*');
+	}
+}
 
-		// Fallback to direct access if unified communication fails
-		try {
-			if ((window as any)?.toggleSnapping) {
-				(window as any).toggleSnapping();
-				return;
-			}
-		} catch (fallbackError) {
-			console.error('❌ Direct snap toggle fallback failed:', fallbackError);
-		}
-	});
+/**
+ * Send wrap-selection-in-container command to main application
+ */
+export function wrapSelectionInContainer() {
+	if (window.parent && window.parent !== window) {
+		window.parent.postMessage({ type: 'wrap-selection-in-container' }, '*');
+	}
 }
 
 

@@ -1,6 +1,5 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { unifiedCommunication } from '$lib/services/unified-communication';
 	import PropertyGroup from '$lib/components/ui/property-group.svelte';
 	import InlineInput from '$lib/components/ui/inline-input.svelte';
 	import ColorInput from '$lib/components/ui/color-input.svelte';
@@ -66,36 +65,35 @@
 
 		const actualValue = (property === 'opacity' || property === 'faceHighlightOpacity') ? value / 100 : value;
 
-		unifiedCommunication.sendVisualSettings('visual', {
-			[configPath]: actualValue
-		}).catch(console.error);
+		if (window.parent && window.parent !== window) {
+			window.parent.postMessage({ type: 'visual-settings-changed', settings: { [configPath]: actualValue } }, '*');
+		}
 	}
 
 	function selectUnit(unit: string) {
 		currentUnit = unit;
 
-		// Send to main app using the same pattern as other settings
-		unifiedCommunication.sendVisualSettings('unit', {
-			'unit.current': unit
-		}).catch(console.error);
+		if (window.parent && window.parent !== window) {
+			window.parent.postMessage({ type: 'unit-settings-changed', settings: { 'unit.current': unit } }, '*');
+		}
 	}
 
 	function updateSceneSettings(property: string, value: any) {
 		sceneSettings[property] = value;
 		const configPath = `scene.${property}`;
 
-		unifiedCommunication.sendVisualSettings('scene', {
-			[configPath]: value
-		}).catch(console.error);
+		if (window.parent && window.parent !== window) {
+			window.parent.postMessage({ type: 'scene-settings-changed', settings: { [configPath]: value } }, '*');
+		}
 	}
 
 	function updateToolSettings(property: string, value: any) {
 		toolSettings[property] = value;
 		const configPath = `visual.measurement.${property === 'measurementColor' ? 'color' : property}`;
 
-		unifiedCommunication.sendVisualSettings('visual', {
-			[configPath]: value
-		}).catch(console.error);
+		if (window.parent && window.parent !== window) {
+			window.parent.postMessage({ type: 'visual-settings-changed', settings: { [configPath]: value } }, '*');
+		}
 	}
 
 	function handleSettingsResponse(event: MessageEvent) {

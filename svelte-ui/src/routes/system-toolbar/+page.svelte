@@ -3,7 +3,6 @@
 	import { initializeBridge } from '$lib/bridge/threejs-bridge';
 	import { toolState } from '$lib/stores/modler';
 	import { toggleSnapInScene } from '$lib/bridge/threejs-bridge';
-	import { unifiedCommunication } from '$lib/services/unified-communication';
 	import PropertyGroup from '$lib/components/ui/property-group.svelte';
 	import InlineInput from '$lib/components/ui/inline-input.svelte';
 	import { cn } from '$lib/utils';
@@ -60,10 +59,9 @@
 			[configPath]: value
 		};
 
-		// Use unified communication system (handles both PostMessage and CustomEvents)
-		unifiedCommunication.sendVisualSettings('cad-wireframe', settings).catch(error => {
-			console.error('Failed to send CAD wireframe settings update:', error);
-		});
+		if (window.parent && window.parent !== window) {
+			window.parent.postMessage({ type: 'cad-wireframe-settings-changed', settings }, '*');
+		}
 	}
 
 	function handleClickOutside(event: MouseEvent) {
@@ -89,10 +87,7 @@
 
 		// Initialize CAD wireframe settings from ConfigurationManager
 		if (window !== window.parent) {
-			// Request current CAD wireframe settings through unified communication system
-			unifiedCommunication.sendSettingsRequest('get-cad-wireframe-settings').catch(error => {
-				console.error('Failed to request CAD wireframe settings:', error);
-			});
+			window.parent.postMessage({ type: 'get-cad-wireframe-settings' }, '*');
 
 			// Listen for settings response
 			const handleMessage = (event) => {

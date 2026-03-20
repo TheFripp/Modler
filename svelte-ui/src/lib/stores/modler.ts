@@ -2,8 +2,6 @@ import { writable, derived, get, type Writable } from 'svelte/store';
 
 // UPDATED: Use centralized type definitions
 import type { ObjectData, ToolState, ContainerContext } from '$lib/types/object-data';
-// Dynamic import for unifiedCommunication to avoid SSR issues
-
 // All type definitions are now imported from centralized types
 
 // Core Svelte stores

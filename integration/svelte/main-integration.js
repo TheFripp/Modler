@@ -96,9 +96,6 @@ const logger = window.logger;
             // Detect iframe mode
             iframeMode = window !== window.parent;
 
-            // Setup unified message handling for both modes
-            setupUnifiedMessageHandling();
-
             if (!iframeMode) {
                 // Running in direct mode (logging removed to reduce console noise)
                 // Initialize UI system with automatic fallback
@@ -143,7 +140,6 @@ const logger = window.logger;
                 console.warn('⚠️ FileManagerHandler not loaded - file operations will be limited');
             }
 
-            setupUnifiedEventHandlers();
             isInitialized = true;
 
             // Unified Main Integration ready
@@ -414,88 +410,6 @@ const logger = window.logger;
     }
 
     // ==================================================================================
-    // UNIFIED EVENT HANDLING
-    // ==================================================================================
-
-    /**
-     * Setup event handlers for ObjectStateManager and ObjectEventBus
-     */
-    function setupUnifiedEventHandlers() {
-        const objectStateManager = window.modlerComponents?.objectStateManager;
-        if (!objectStateManager) {
-            console.warn('⚠️ ObjectStateManager not available');
-            return;
-        }
-
-        // Setup ObjectEventBus listeners for complete data flow
-        setupObjectEventBusListeners(objectStateManager);
-
-    }
-
-    /**
-     * Setup ObjectEventBus listeners for comprehensive scene → state → UI data flow
-     */
-    function setupObjectEventBusListeners(objectStateManager) {
-        if (!window.objectEventBus) {
-            console.warn('⚠️ ObjectEventBus not available');
-            return;
-        }
-
-        // Setting up ObjectEventBus listeners for unified data flow
-        // NOTE: LIFECYCLE events (create/delete) are handled by MainAdapter
-        // UI receives updates via ObjectEventBus → MainAdapter → MessageProtocol
-
-        // Listen to transform events (position, rotation, scale changes)
-        window.objectEventBus.subscribe('object:transform', (event) => {
-            // Transform events are frequent during tools - only log errors
-
-            // Update ObjectStateManager with transform changes
-            if (event.changeData.position || event.changeData.rotation || event.changeData.scale) {
-                objectStateManager.updateObject(event.objectId, event.changeData);
-            }
-        });
-
-        // Listen to selection events
-        // NOTE: Phase 3 - Selection events are now handled by MainAdapter
-        // MainAdapter subscribes to object:selection events and routes them to UIAdapter
-        // This legacy listener is kept only for ObjectStateManager sync
-        // SimpleCommunication: Selection events handled by SimpleCommunication
-        // DO NOT re-call setSelection() here - causes infinite loop!
-        // SelectionController → ObjectStateManager.setSelection() → ObjectEventBus.emit()
-        // → SimpleCommunication handles UI updates
-
-        // Note: SimpleCommunication handles all Main → UI event delivery via ObjectEventBus
-    }
-
-    // ==================================================================================
-    // SIMPLIFIED PROPERTY HANDLING
-    // ==================================================================================
-
-    // ==================================================================================
-    // MESSAGE HANDLING (PostMessage & Direct)
-    // ==================================================================================
-
-    /**
-     * Setup unified PostMessage handling for both iframe and direct modes
-     * Consolidated from duplicate setupIframeMessageHandling() and setupDirectMessageHandling()
-     */
-    function setupUnifiedMessageHandling() {
-        // Single PostMessage listener handles both iframe and direct modes
-        window.addEventListener('message', (event) => {
-            // Only validate origin in iframe mode (when we're the child)
-            const isInIframe = window !== window.parent;
-            if (isInIframe && !event.origin.startsWith('http://localhost:')) {
-                console.warn('⚠️ PostMessage rejected - invalid origin:', event.origin);
-                return;
-            }
-
-            // All UI → Main messages handled by SimpleCommunication → CommandRouter
-        });
-    }
-
-    // UI notification handled by SimpleCommunication via ObjectEventBus → iframe postMessage
-
-    // ==================================================================================
     // TOOL INTEGRATION (Complete)
     // ==================================================================================
 
@@ -519,10 +433,7 @@ const logger = window.logger;
         const snapController = window.modlerComponents?.snapController;
         if (snapController) {
             snapController.toggle();
-            // Send updated tool state after snap toggle
-            const toolController = window.modlerComponents?.toolController;
-            const currentTool = toolController?.getActiveToolName() || 'select';
-            sendToolStateUpdate(currentTool);
+            // Tool state update handled automatically via ToolController → ObjectEventBus → SimpleCommunication
         } else {
             console.warn('❌ SnapController not available');
         }

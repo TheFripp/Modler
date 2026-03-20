@@ -146,12 +146,15 @@ class CommandRouter {
         // ═══════════════════════════════════════════════════════════
         this.handlers.set('create-container', this.handleCreateContainer.bind(this));
         this.handlers.set('create-layout-container', this.handleCreateContainer.bind(this)); // Alias
+        this.handlers.set('wrap-selection-in-container', this.handleWrapSelectionInContainer.bind(this));
 
         // ═══════════════════════════════════════════════════════════
         // TOOL OPERATIONS
         // ═══════════════════════════════════════════════════════════
         this.handlers.set('activate-tool', this.handleActivateTool.bind(this));
         this.handlers.set('tool-activate', this.handleActivateTool.bind(this)); // Alias
+        this.handlers.set('tool-activation', this.handleActivateTool.bind(this)); // Alias (toolbar sends this)
+        this.handlers.set('snap-toggle', this.handleSnapToggle.bind(this));
 
         // ═══════════════════════════════════════════════════════════
         // HISTORY OPERATIONS
@@ -518,15 +521,32 @@ class CommandRouter {
         });
     }
 
+    handleWrapSelectionInContainer() {
+        if (!this.toolController) {
+            console.error('CommandRouter: ToolController not available');
+            return;
+        }
+        this.toolController.createLayoutContainer();
+    }
+
     handleActivateTool(data) {
-        const { toolId } = data;
+        const toolId = data.toolId || data.toolName || data.data?.toolName;
 
         if (!this.toolController) {
             console.error('CommandRouter: ToolController not available');
             return;
         }
 
-        this.toolController.activateTool(toolId);
+        this.toolController.switchToTool(toolId);
+    }
+
+    handleSnapToggle() {
+        const snapController = window.modlerComponents?.snapController;
+        if (!snapController) {
+            console.error('CommandRouter: SnapController not available');
+            return;
+        }
+        snapController.toggle();
     }
 
     handleUndo(data) {
