@@ -791,7 +791,59 @@ selectionController.selectObject(objectId);
 
 ## Layout Engine Patterns
 
-### 1. Calculate Layout
+### 1. Container Push Operations (Pure Alignment-Based)
+
+```javascript
+// ARCHITECTURE: Layout engine is single source of truth for child positioning/sizing
+// Push tool ONLY modifies container geometry, layout engine handles everything else
+
+// In push-tool.js or similar:
+
+// 1. Modify container geometry using unified approach
+const geometryUtils = window.modlerComponents.geometryUtils;
+const success = geometryUtils.resizeGeometry(
+    containerMesh.geometry,
+    axis,           // 'x', 'y', or 'z'
+    newDimension,   // new size on axis
+    anchorMode      // 'min', 'center', or 'max' (which face to anchor)
+);
+
+// 2. Let layout engine recalculate child positions/sizes
+const sceneController = window.modlerComponents.sceneController;
+const pushContext = { axis: axis }; // Minimal context
+sceneController.updateLayout(containerId, pushContext);
+
+// Layout engine will:
+// - Resize fill objects on their fill axes (always use 'center' anchor)
+// - Reposition ALL objects based on alignment (bottom/center/top, etc.)
+// - Adjust gaps if no fill objects (space-between distribution)
+// - Anchor first object to start edge when using space-between
+```
+
+**Key Principles:**
+- **Unified geometry**: Containers and objects use same `resizeGeometry()` method
+- **No manual positioning**: Never manually adjust child positions - layout engine does it
+- **Pure alignment-based**: Children anchor to their aligned edges (CSS-like)
+- **Fill resizes symmetrically**: Always 'center' anchor, layout engine repositions
+- **Space-between**: First object anchors to start edge, gaps distribute evenly
+
+**DON'T DO THIS** (old pattern):
+```javascript
+// ❌ Manual child position adjustments (conflicts with layout engine)
+const geometryShift = (newDim - oldDim) / 2;
+children.forEach(child => {
+    child.mesh.position[axis] += geometryShift * alignmentFactor; // WRONG!
+});
+
+// ❌ Geometry recreation every frame (expensive + causes desync)
+const newGeometry = geometryFactory.createBoxGeometry(x, y, z); // WRONG!
+containerMesh.geometry = newGeometry;
+
+// ❌ Skipping alignment application during push
+if (pushContext) return positions; // WRONG! Always apply alignment
+```
+
+### 2. Calculate Layout
 
 ```javascript
 // LayoutEngine: /layout/layout-engine.js

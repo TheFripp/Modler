@@ -87,6 +87,9 @@ class UnitConverter {
         const oldUnit = this.userUnit;
         this.userUnit = unit;
 
+        // Save preference immediately
+        this.saveUserPreferences();
+
         // Emit unit change event for UI updates
         if (window.modlerComponents?.objectEventBus) {
             window.modlerComponents.objectEventBus.emit('unit-preference-changed', {
@@ -94,6 +97,11 @@ class UnitConverter {
                 newUnit: unit
             });
         }
+
+        // Also emit a window event for Svelte stores
+        window.dispatchEvent(new CustomEvent('unit-changed', {
+            detail: { unit, oldUnit }
+        }));
 
         return true;
     }

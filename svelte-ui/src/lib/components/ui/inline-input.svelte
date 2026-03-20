@@ -26,6 +26,8 @@
 		fillTitle?: string;
 		onFillToggle?: () => void;
 		onFillHover?: (hovering: boolean) => void;
+		// Unit conversion function (optional - for dimensional properties)
+		convertToInternal?: (displayValue: number, axis?: string) => number;
 	}
 
 	let {
@@ -50,6 +52,8 @@
 		fillTitle = '',
 		onFillToggle,
 		onFillHover,
+		// Unit conversion
+		convertToInternal,
 		...restProps
 	}: Props = $props();
 
@@ -88,7 +92,11 @@
 			// Apply constraints
 			if (max !== undefined) newValue = Math.min(newValue, max);
 			if (min !== undefined) newValue = Math.max(newValue, min);
-			propertyController?.updateProperty(objectId, property, newValue, 'button');
+			// Convert to internal units if conversion function provided
+			const internalValue = convertToInternal && typeof newValue === 'number'
+				? convertToInternal(newValue)
+				: newValue;
+			propertyController?.updateProperty(objectId, property, internalValue, 'button');
 		} else if (type === 'number') {
 			// Fallback for non-property-controller usage
 			const currentValue = getNumericValue();
@@ -117,7 +125,11 @@
 			// Apply constraints
 			if (max !== undefined) newValue = Math.min(newValue, max);
 			if (min !== undefined) newValue = Math.max(newValue, min);
-			propertyController?.updateProperty(objectId, property, newValue, 'button');
+			// Convert to internal units if conversion function provided
+			const internalValue = convertToInternal && typeof newValue === 'number'
+				? convertToInternal(newValue)
+				: newValue;
+			propertyController?.updateProperty(objectId, property, internalValue, 'button');
 		} else if (type === 'number') {
 			// Fallback for non-property-controller usage
 			const currentValue = getNumericValue();
@@ -143,8 +155,12 @@
 		}
 
 		if (objectId && property) {
+			// Convert to internal units if conversion function provided
+			const internalValue = convertToInternal && typeof newValue === 'number'
+				? convertToInternal(newValue)
+				: newValue;
 			// Use property controller for immediate update
-			propertyController?.updateProperty(objectId, property, newValue, 'input');
+			propertyController?.updateProperty(objectId, property, internalValue, 'input');
 		} else if (onchange) {
 			// Legacy handler - update target value to constrained value
 			if (type === 'number' && typeof newValue === 'number') {
@@ -193,7 +209,16 @@
 
 		// Update through property controller if available
 		if (objectId && property) {
-			propertyController?.updateProperty(objectId, property, newValue, 'input');
+			// Convert to internal units if conversion function provided
+			const internalValue = convertToInternal && typeof newValue === 'number'
+				? convertToInternal(newValue)
+				: newValue;
+			propertyController?.updateProperty(objectId, property, internalValue, 'input');
+
+			// Record UI edit for Tab navigation
+			if (window.inputFocusManager) {
+				window.inputFocusManager.recordUIEdit(objectId, property);
+			}
 		}
 	}
 
@@ -214,6 +239,11 @@
 		if (event.key === 'Enter') {
 			const target = event.target as HTMLInputElement;
 			target.blur();
+
+			// Record UI edit immediately for Tab navigation (user expects Tab to work right after Enter)
+			if (objectId && property && window.inputFocusManager) {
+				window.inputFocusManager.recordUIEdit(objectId, property);
+			}
 		}
 	}
 
@@ -284,15 +314,25 @@
 			document.removeEventListener('mousemove', handleDrag);
 
 			// Apply final validated update when drag stops - use captured objectId/property
+			// Round to unit precision (e.g., 1 decimal for meters)
+			const stepValue = typeof step === 'number' ? step : (isOpacity ? 1 : 0.1);
+			const finalValue = stepValue === 1
+				? Math.round(currentDragValue)
+				: Math.round(currentDragValue * 10) / 10;
+
 			if (dragObjectId && dragProperty) {
-				propertyController?.updateProperty(dragObjectId, dragProperty, currentDragValue, 'input');
+				// Convert to internal units if conversion function provided
+				const internalValue = convertToInternal && typeof finalValue === 'number'
+					? convertToInternal(finalValue)
+					: finalValue;
+				propertyController?.updateProperty(dragObjectId, dragProperty, internalValue, 'input');
 			} else if (onchange) {
 				// For non-property-controller inputs (like settings), call onchange callback
 				// Create a synthetic event with the final drag value
 				const syntheticEvent = new Event('change', { bubbles: true });
 				Object.defineProperty(syntheticEvent, 'target', {
 					writable: false,
-					value: { value: String(currentDragValue) }
+					value: { value: String(finalValue) }
 				});
 				onchange(syntheticEvent);
 			}
@@ -337,12 +377,18 @@
 			constrainedValue = Math.min(constrainedValue, max);
 		}
 
-		// Keep full precision for the actual value, but round display appropriately
+		// DUAL PRECISION STRATEGY:
+		// - actualValue: Full precision for smooth 3D scene updates during drag
+		// - displayValue: Rounded for clean UI display
+		// - Final value: Rounded to unit precision when drag ends
+
+		const actualValue = constrainedValue; // Full precision for smooth internal updates
+
+		// Display rounded value in input field for clean UI
 		// Use integer rounding if step is 1 (for repeat counts), otherwise one decimal place
-		const actualValue = stepValue === 1
+		const displayValue = stepValue === 1
 			? Math.round(constrainedValue)
 			: Math.round(constrainedValue * 10) / 10;
-		const displayValue = actualValue;
 
 		// Track the current dragged value for final update
 		currentDragValue = actualValue;
@@ -353,9 +399,13 @@
 
 		// Use captured objectId/property to prevent switching objects mid-drag
 		if (dragObjectId && dragProperty) {
+			// Convert to internal units if conversion function provided
+			const internalValue = convertToInternal && typeof actualValue === 'number'
+				? convertToInternal(actualValue)
+				: actualValue;
 			// Throttled immediate update for smooth 3D scene feedback without UI flickering
-			// Updates 3D scene directly without triggering UI property panel updates
-			propertyController?.updatePropertyImmediate(dragObjectId, dragProperty, actualValue, 'drag');
+			// Updates 3D scene directly with FULL PRECISION for smooth movement
+			propertyController?.updatePropertyImmediate(dragObjectId, dragProperty, internalValue, 'drag');
 		} else {
 			// Fallback direct update with full precision
 			value = actualValue;
@@ -429,7 +479,7 @@
 					'rounded-r-[4px]',
 					'hover:bg-[#212121]',
 					fillActive
-						? 'bg-[#212121] text-white'
+						? 'bg-[#212121] text-[#5eead4]'
 						: 'bg-[#171717] text-muted-foreground'
 				)}
 				title={fillTitle}

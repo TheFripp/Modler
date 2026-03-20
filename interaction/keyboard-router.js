@@ -47,6 +47,34 @@ class KeyboardRouter {
         // Setup single global keyboard listener (capture phase for highest priority)
         document.addEventListener('keydown', this.handleKeyDown, true);
         document.addEventListener('keyup', this.handleKeyUp, false);
+
+        // Listen for forwarded keyboard events from iframe panels
+        window.addEventListener('message', this.handleIframeKeyboardEvent.bind(this));
+    }
+
+    /**
+     * Handle keyboard events forwarded from iframe panels
+     * @param {MessageEvent} event - PostMessage event from iframe
+     */
+    handleIframeKeyboardEvent(event) {
+        // Only handle keyboard-event messages
+        if (event.data?.type !== 'keyboard-event') return;
+
+        const { key, code } = event.data;
+
+        // Handle Tab key forwarded from property panel
+        if (key === 'Tab') {
+            // Create a synthetic KeyboardEvent to process through normal flow
+            const syntheticEvent = new KeyboardEvent('keydown', {
+                key: 'Tab',
+                code: 'Tab',
+                bubbles: true,
+                cancelable: true
+            });
+
+            // Process through normal Tab handling
+            this.handleTabKey(syntheticEvent);
+        }
     }
 
 
@@ -243,11 +271,39 @@ class KeyboardRouter {
             }
         }
 
-        // Phase 3: Focus management is now handled by InputFocusManager
-        // Tab key functionality works through property panel's internal focus system
-        // This method is kept for potential future keyboard-driven focus commands
-        // No focus target - user needs to select an object first
-        console.log('Tab: No object selected. Select an object to focus its property inputs.');
+        // Priority 2: Focus last manipulated property (e.g., dimension.x after push tool)
+        const inputFocusManager = window.inputFocusManager;
+        if (inputFocusManager) {
+            const lastManipulated = inputFocusManager.getLastManipulated();
+            if (lastManipulated) {
+                // Notify property panel iframe to focus input
+                this.notifyPropertyPanelFocus(lastManipulated.objectId, lastManipulated.property);
+                return;
+            }
+        }
+    }
+
+    /**
+     * Notify property panel iframe to focus a specific input
+     * @param {string} objectId - Object ID
+     * @param {string} property - Property path (e.g., "dimensions.x")
+     */
+    notifyPropertyPanelFocus(objectId, property) {
+        // ARCHITECTURE: Property panel IS in an iframe (loaded via DirectComponentManager)
+        // Get the iframe reference from directComponentManager
+        const directComponentManager = window.modlerComponents?.directComponentManager;
+
+        if (directComponentManager && directComponentManager.componentInstances?.propertyPanel) {
+            const iframe = directComponentManager.componentInstances.propertyPanel.iframe;
+
+            if (iframe && iframe.contentWindow) {
+                iframe.contentWindow.postMessage({
+                    type: 'focus-input',
+                    objectId: objectId,
+                    property: property
+                }, '*');
+            }
+        }
     }
 
     /**

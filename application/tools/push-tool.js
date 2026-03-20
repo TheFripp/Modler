@@ -564,10 +564,12 @@ class PushTool {
             this.registerUndoAction(pushedObject);
 
             // Record manipulation for Tab key focus (dimensions along push axis)
+            // Include push direction so property panel knows which face to keep stationary
             if (window.inputFocusManager && pushedObject.userData?.id && this.pushAxis) {
                 window.inputFocusManager.recordManipulation(
                     pushedObject.userData.id,
-                    `dimensions.${this.pushAxis}`
+                    `dimensions.${this.pushAxis}`,
+                    { pushDirection: this.pushDirection, pushAxis: this.pushAxis }
                 );
             }
         }

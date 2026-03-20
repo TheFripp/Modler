@@ -145,8 +145,8 @@ class SimpleCommunication {
                     commandRouter.execute({
                         action: type,
                         ...data,
-                        source: event.source,      // Pass window object for postMessage responses
-                        origin: event.origin        // Keep origin string for validation
+                        sourceWindow: event.source,  // Pass window object for postMessage responses (renamed to avoid collision)
+                        origin: event.origin         // Keep origin string for validation
                     });
                 }
 
@@ -305,23 +305,34 @@ class SimpleCommunication {
     }
 
     /**
-     * Get complete hierarchy as FLAT array
+     * Get complete hierarchy as FLAT array with root ordering
      *
      * CRITICAL: ObjectTree builds the tree structure itself using parentContainer references.
      * We send ALL objects as a flat array, not a nested tree.
+     *
+     * Returns object with:
+     * - objects: flat array of all objects (with parentContainer, childrenOrder)
+     * - rootChildrenOrder: ordering for root-level objects
      */
     getCompleteHierarchy() {
-        if (!this.initializeComponents()) return [];
+        if (!this.initializeComponents()) return { objects: [], rootChildrenOrder: [] };
 
         // Get ALL objects as flat array
         const allObjects = this.sceneController.getAllObjects();
 
-        // Map to basic object data (includes parentContainer for tree building)
+        // Map to basic object data (includes parentContainer + childrenOrder for tree building)
         const hierarchy = allObjects
             .map(obj => this.dataExtractor.extractBasicData(obj))
             .filter(Boolean);
 
-        return hierarchy;
+        // Get root children order from HierarchyManager
+        const hierarchyManager = this.sceneController.getHierarchyManager();
+        const rootChildrenOrder = hierarchyManager?.rootChildrenOrder || [];
+
+        return {
+            objects: hierarchy,
+            rootChildrenOrder: rootChildrenOrder
+        };
     }
 
     /**

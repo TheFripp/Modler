@@ -170,11 +170,28 @@ class MoveTool {
      * Handle mouse up events using centralized event handler
      */
     onMouseUp(hit, event) {
+        // Check if we're dragging and if there was significant movement
+        const wasDragging = this.isDragging;
+        const hadSignificantMovement = wasDragging && (
+            Math.abs(this.cumulativeMovement.x) > 0.001 ||
+            Math.abs(this.cumulativeMovement.y) > 0.001 ||
+            Math.abs(this.cumulativeMovement.z) > 0.001
+        );
+
         const operationCallbacks = BaseFaceToolEventHandler.createOperationCallbacks({
             isActiveCheck: () => this.isDragging,
             endCallback: () => this.endFaceDrag()
         });
-        return this.eventHandler.handleMouseUp(hit, event, operationCallbacks);
+
+        const handled = this.eventHandler.handleMouseUp(hit, event, operationCallbacks);
+
+        // If we ended a drag but didn't move significantly, allow click/double-click processing
+        // This enables double-click navigation even when face highlighting started a drag
+        if (handled && !hadSignificantMovement) {
+            return false; // Allow InputController to process as click/double-click
+        }
+
+        return handled;
     }
 
     /**
@@ -719,56 +736,35 @@ class MoveTool {
                     Math.abs(finalPosition.z - this.dragStartPosition.z) > 0.001;
 
                 if (hasMoved) {
-                    // Move original object back to start position
-                    draggedObject.position.copy(this.dragStartPosition);
-                    draggedObject.updateMatrixWorld(true);
-
-                    // Update original object's position in state
-                    this.objectStateManager?.updateObject(objectData.id, {
-                        position: this.dragStartPosition
-                    });
-
-                    // Duplicate the object at the final position
-                    const geometryFactory = window.modlerComponents?.geometryFactory;
-                    if (geometryFactory) {
-                        // Create COMPLETELY NEW geometry by cloning original geometry
-                        // This ensures the duplicate is independent and not sharing geometry reference
-                        const newGeometry = draggedObject.geometry.clone();
-
-                        // Create NEW material by cloning original material
-                        // This ensures materials are independent
-                        const newMaterial = draggedObject.material.clone();
-
-                        // Create duplicate with same properties but as independent object
-                        // NOTE: For future component instancing feature, we would add:
-                        // - isMasterComponent flag for original
-                        // - masterComponentId reference for instances
-                        // - one-way property sync from master to instances
-
-                        // Prepare rotation - convert from degrees to THREE.Euler
-                        const rotationEuler = objectData.rotation
-                            ? new THREE.Euler(
-                                THREE.MathUtils.degToRad(objectData.rotation.x || 0),
-                                THREE.MathUtils.degToRad(objectData.rotation.y || 0),
-                                THREE.MathUtils.degToRad(objectData.rotation.z || 0),
-                                'XYZ'
-                              )
-                            : new THREE.Euler(0, 0, 0, 'XYZ');
-
-                        const duplicateData = sceneController.addObject(newGeometry, newMaterial, {
-                            name: `${objectData.name} copy`,
-                            type: objectData.type,
+                    // Use DuplicateObjectCommand for unified duplication logic
+                    // CRITICAL: Call this BEFORE moving source back, so children's world positions are correct
+                    // This makes Cmd+drag duplication undoable and supports all object types!
+                    const historyManager = window.modlerComponents?.historyManager;
+                    if (historyManager) {
+                        const command = new DuplicateObjectCommand(objectData.id, {
                             position: finalPosition,
-                            rotation: rotationEuler,
-                            dimensions: { ...objectData.dimensions },  // Clone dimensions object
-                            parentContainer: objectData.parentContainer,
-                            layoutProperties: objectData.layoutProperties ? { ...objectData.layoutProperties } : undefined
+                            customName: `${objectData.name} copy`
                         });
 
-                        if (duplicateData) {
+                        const success = historyManager.executeCommand(command);
+
+                        // NOW move original object back to start position (after duplication)
+                        // This ensures children's world positions were read correctly during duplication
+                        draggedObject.position.copy(this.dragStartPosition);
+                        draggedObject.updateMatrixWorld(true);
+
+                        // Update original object's position in state
+                        this.objectStateManager?.updateObject(objectData.id, {
+                            position: this.dragStartPosition
+                        });
+
+                        if (success && command.duplicatedObjectId) {
                             // Select the new duplicate
-                            this.selectionController.clearSelection();
-                            this.selectionController.select(duplicateData.mesh);
+                            const duplicateData = sceneController.getObject(command.duplicatedObjectId);
+                            if (duplicateData && duplicateData.mesh) {
+                                this.selectionController.clearSelection();
+                                this.selectionController.select(duplicateData.mesh);
+                            }
                         }
                     }
                 }

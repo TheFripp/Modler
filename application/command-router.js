@@ -101,8 +101,9 @@ class CommandRouter {
         // ═══════════════════════════════════════════════════════════
         this.handlers.set('toggle-fill-mode', this.handleFillModeToggle.bind(this));
         this.handlers.set('fill-button-toggle', this.handleFillModeToggle.bind(this)); // Alias
-        this.handlers.set('fill-button-hover', this.handleFillButtonHover.bind(this)); // Visual feedback only
-        this.handlers.set('layout-button-hover', this.handleLayoutButtonHover.bind(this)); // Visual feedback only
+        this.handlers.set('button-hover', this.handleButtonHover.bind(this)); // Consolidated hover handler
+        this.handlers.set('fill-button-hover', this.handleButtonHover.bind(this)); // Legacy alias
+        this.handlers.set('layout-button-hover', this.handleButtonHover.bind(this)); // Legacy alias
         this.handlers.set('update-layout-property', this.handleLayoutPropertyUpdate.bind(this));
         this.handlers.set('toggle-hug-mode', this.handleHugModeToggle.bind(this));
         this.handlers.set('update-layout-direction', this.handleLayoutDirectionUpdate.bind(this));
@@ -171,6 +172,7 @@ class CommandRouter {
         this.handlers.set('get-scene-settings', this.handleGetSceneSettings.bind(this));
         this.handlers.set('interface-settings-changed', this.handleInterfaceSettingsUpdate.bind(this));
         this.handlers.set('get-interface-settings', this.handleGetInterfaceSettings.bind(this));
+        this.handlers.set('unit-settings-changed', this.handleUnitSettingsUpdate.bind(this));
 
         console.log(`✅ CommandRouter: Registered ${this.handlers.size} action handlers`);
     }
@@ -301,6 +303,20 @@ class CommandRouter {
         this.propertyUpdateHandler.handleFillButtonToggle(objectId, axis);
     }
 
+    /**
+     * Consolidated button hover handler
+     * Handles hover feedback for all button types (fill, layout, tile)
+     * @param {Object} data - {buttonType, objectId, axis, isHovering}
+     */
+    handleButtonHover(data) {
+        // Extract buttonType if provided (new format), or infer from legacy message types
+        const { buttonType, objectId, axis, isHovering } = data;
+
+        // Delegate to unified axis button handler (buttonType is optional metadata)
+        this.handleAxisButtonHover(data);
+    }
+
+    // Legacy handlers for backward compatibility
     handleFillButtonHover(data) {
         this.handleAxisButtonHover(data);
     }
@@ -312,7 +328,7 @@ class CommandRouter {
     /**
      * Unified handler for all axis button face highlighting
      * Used by layout buttons, fill buttons, and tile tool axis buttons
-     * @param {Object} data - {objectId, axis, isHovering}
+     * @param {Object} data - {objectId, axis, isHovering, buttonType (optional)}
      */
     handleAxisButtonHover(data) {
         const { objectId, axis, isHovering } = data;
@@ -472,17 +488,19 @@ class CommandRouter {
     }
 
     handleMoveToContainer(data) {
-        const { objectId, containerId, targetContainerId } = data;
-
-        // Support both naming conventions
-        const targetId = containerId || targetContainerId;
+        const { objectId, targetContainerId } = data;
 
         if (!this.sceneController) {
             console.error('CommandRouter: SceneController not available');
             return;
         }
 
-        this.sceneController.moveObjectToContainer(objectId, targetId);
+        if (!targetContainerId) {
+            console.error('CommandRouter: targetContainerId is required for move-to-container');
+            return;
+        }
+
+        this.sceneController.moveObjectToContainer(objectId, targetContainerId);
     }
 
     handleMoveToRoot(data) {
@@ -497,20 +515,102 @@ class CommandRouter {
     }
 
     handleReorderChildren(data) {
-        const { parentId, childId, newIndex, childrenOrder } = data;
+        const { parentId, childId, newIndex, childrenOrder, objectId, targetId, position } = data;
 
         if (!this.sceneController) {
             console.error('CommandRouter: SceneController not available');
             return;
         }
 
+        // Handle ObjectTree drag-drop format (objectId, targetId, position)
+        if (objectId && targetId && position) {
+            this.reorderChildByPosition(objectId, targetId, position, parentId);
+            return;
+        }
+
+        // Legacy format support
         if (childrenOrder) {
             // Full reorder
-            this.sceneController.reorderChildren(parentId, childrenOrder);
+            this.updateChildrenOrder(parentId, childrenOrder);
         } else if (childId !== undefined && newIndex !== undefined) {
             // Move single child to index
-            this.sceneController.moveChildToIndex(parentId, childId, newIndex);
+            this.moveChildToIndex(parentId, childId, newIndex);
         }
+    }
+
+    // Reorder child based on drop position relative to target
+    reorderChildByPosition(objectId, targetId, position, parentId) {
+        // Get children list from parent (or root)
+        const children = parentId ?
+            this.sceneController.getChildObjects(parentId) :
+            this.sceneController.getRootObjects();
+
+        // Build current childrenOrder array
+        const currentOrder = children.map(child => child.id);
+
+        // Remove dragged object from current position
+        const draggedIndex = currentOrder.indexOf(objectId);
+        if (draggedIndex === -1) {
+            console.error('CommandRouter: Dragged object not found in children list');
+            return;
+        }
+        currentOrder.splice(draggedIndex, 1);
+
+        // Find target index
+        let targetIndex = currentOrder.indexOf(targetId);
+        if (targetIndex === -1) {
+            console.error('CommandRouter: Target object not found in children list');
+            return;
+        }
+
+        // Calculate new index based on position
+        const newIndex = position === 'before' ? targetIndex : targetIndex + 1;
+
+        // Insert at new position
+        currentOrder.splice(newIndex, 0, objectId);
+
+        // Update childrenOrder in state
+        if (parentId) {
+            // Container child order
+            const containerData = this.sceneController.getObject(parentId);
+            if (containerData) {
+                this.objectStateManager.updateObject(parentId, {
+                    childrenOrder: currentOrder
+                }, 'reorder');
+            }
+        } else {
+            // Root level order
+            this.sceneController.setRootOrder(currentOrder);
+        }
+    }
+
+    // Update children order array
+    updateChildrenOrder(parentId, childrenOrder) {
+        if (parentId) {
+            this.objectStateManager.updateObject(parentId, {
+                childrenOrder: childrenOrder
+            }, 'reorder');
+        } else {
+            this.sceneController.setRootOrder(childrenOrder);
+        }
+    }
+
+    // Move child to specific index
+    moveChildToIndex(parentId, childId, newIndex) {
+        const children = parentId ?
+            this.sceneController.getChildObjects(parentId) :
+            this.sceneController.getRootObjects();
+
+        const currentOrder = children.map(child => child.id);
+        const oldIndex = currentOrder.indexOf(childId);
+        if (oldIndex === -1) return;
+
+        // Remove from old position
+        currentOrder.splice(oldIndex, 1);
+        // Insert at new position
+        currentOrder.splice(newIndex, 0, childId);
+
+        this.updateChildrenOrder(parentId, currentOrder);
     }
 
     handleReverseChildOrder(data) {
@@ -637,14 +737,14 @@ class CommandRouter {
     handleRequestFileManagerReady(data) {
         const fileManagerHandler = window.modlerComponents?.fileManagerHandler;
         if (fileManagerHandler) {
-            fileManagerHandler.handleRequestFileManagerReady(data.source);
+            fileManagerHandler.handleRequestFileManagerReady(data.sourceWindow);
         }
     }
 
     handleFileManagerRequest(data) {
         const fileManagerHandler = window.modlerComponents?.fileManagerHandler;
         if (fileManagerHandler) {
-            fileManagerHandler.handleFileRequest(data.data || data, data.source);
+            fileManagerHandler.handleFileRequest(data.data || data, data.sourceWindow);
         }
     }
 
@@ -666,7 +766,7 @@ class CommandRouter {
         const settingsHandler = window.modlerComponents?.settingsHandler;
         if (!settingsHandler) return;
 
-        settingsHandler.handleGetCadWireframeSettings(data.source);
+        settingsHandler.handleGetCadWireframeSettings(data.sourceWindow);
     }
 
     // Visual Settings
@@ -687,7 +787,7 @@ class CommandRouter {
         const settingsHandler = window.modlerComponents?.settingsHandler;
         if (!settingsHandler) return;
 
-        settingsHandler.handleGetVisualSettings(data.source);
+        settingsHandler.handleGetVisualSettings(data.sourceWindow);
     }
 
     // Scene Settings
@@ -708,7 +808,23 @@ class CommandRouter {
         const settingsHandler = window.modlerComponents?.settingsHandler;
         if (!settingsHandler) return;
 
-        settingsHandler.handleGetSceneSettings(data.source);
+        settingsHandler.handleGetSceneSettings(data.sourceWindow);
+    }
+
+    // Unit Settings
+    handleUnitSettingsUpdate(data) {
+        const settings = data.data?.settings || data.settings;
+        if (!settings || !settings['unit.current']) {
+            console.error('CommandRouter: No unit setting in unit update', data);
+            return;
+        }
+
+        const newUnit = settings['unit.current'];
+
+        // Update the unit converter
+        if (window.unitConverter) {
+            window.unitConverter.setUserUnit(newUnit);
+        }
     }
 
     // Interface Settings
@@ -729,7 +845,7 @@ class CommandRouter {
         const settingsHandler = window.modlerComponents?.settingsHandler;
         if (!settingsHandler) return;
 
-        settingsHandler.handleGetInterfaceSettings(data.source);
+        settingsHandler.handleGetInterfaceSettings(data.sourceWindow);
     }
 
     /**

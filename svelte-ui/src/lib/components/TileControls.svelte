@@ -50,7 +50,8 @@
 		if (!objectId) return;
 
 		window.parent.postMessage({
-			type: 'layout-button-hover',  // Reuse existing message type
+			type: 'button-hover',
+			buttonType: 'layout',
 			objectId,
 			axis: axisName,
 			isHovering

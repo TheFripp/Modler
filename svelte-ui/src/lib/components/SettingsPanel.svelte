@@ -73,10 +73,11 @@
 
 	function selectUnit(unit: string) {
 		currentUnit = unit;
-		if (unitConverter) {
-			unitConverter.setUserUnit(unit);
-			window.dispatchEvent(new CustomEvent('unit-changed', { detail: { unit } }));
-		}
+
+		// Send to main app using the same pattern as other settings
+		unifiedCommunication.sendVisualSettings('unit', {
+			'unit.current': unit
+		}).catch(console.error);
 	}
 
 	function updateSceneSettings(property: string, value: any) {

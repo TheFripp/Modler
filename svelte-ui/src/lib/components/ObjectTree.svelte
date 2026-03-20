@@ -9,11 +9,7 @@
 
 	// Drag and drop state
 	let draggedObject = null;
-	let dragOverTarget = null;
-	let dropIndicatorPosition = null;
-
-	// Local ordering state (UI-only, not persisted)
-	let customObjectOrder = new Map();
+	let activeDropZone = null; // { parentId: null | number, index: number }
 
 	// Animation state
 	let isLoaded = false;
@@ -76,8 +72,13 @@
 		return tagName === 'input' || tagName === 'textarea' || target.isContentEditable;
 	}
 
+	// Handle both old format (array) and new format ({objects, rootChildrenOrder})
+	$: hierarchyData = Array.isArray($objectHierarchy)
+		? { objects: $objectHierarchy, rootChildrenOrder: [] }
+		: $objectHierarchy;
+
 	// Filter out utility objects and temporary preview objects from hierarchy
-	$: filteredHierarchy = $objectHierarchy.filter(obj =>
+	$: filteredHierarchy = (hierarchyData.objects || []).filter(obj =>
 		obj.name !== 'Floor Grid' &&
 		obj.type !== 'grid' &&
 		!obj.name?.toLowerCase().includes('grid') &&
@@ -87,8 +88,8 @@
 		!obj.isPreview
 	);
 
-	// Build tree structure
-	$: treeStructure = buildTreeStructure(filteredHierarchy);
+	// Build tree structure with server-side ordering
+	$: treeStructure = buildTreeStructure(filteredHierarchy, hierarchyData.rootChildrenOrder || []);
 
 	// Auto-expand all containers on initial load only
 	let hasInitiallyExpanded = false;
@@ -106,7 +107,19 @@
 	}
 
 
-	function buildTreeStructure(objects) {
+	// Helper to find object in tree structure (includes children arrays)
+	function findObjectInTree(objectId, tree = treeStructure) {
+		for (const obj of tree) {
+			if (obj.id === objectId) return obj;
+			if (obj.children && obj.children.length > 0) {
+				const found = findObjectInTree(objectId, obj.children);
+				if (found) return found;
+			}
+		}
+		return null;
+	}
+
+	function buildTreeStructure(objects, rootChildrenOrder) {
 		const objectMap = new Map();
 		objects.forEach(obj => {
 			objectMap.set(obj.id, { ...obj, children: [] });
@@ -130,28 +143,42 @@
 			}
 		});
 
-		function applyOrderingToLevel(objects, parentId) {
-			const order = customObjectOrder.get(parentId || 'root');
+		// Apply server-side ordering using childrenOrder from Main
+		function applyOrderingToLevel(objects, parentObj, rootOrder) {
+			// Get ordering from server data:
+			// - For root level: use rootChildrenOrder from hierarchyData
+			// - For containers: use childrenOrder from parent object
+			let order;
+			if (parentObj === null) {
+				// Root level - use rootChildrenOrder passed from hierarchyData
+				order = rootOrder || [];
+			} else if (parentObj.childrenOrder && parentObj.childrenOrder.length > 0) {
+				// Container level - use childrenOrder from parent object
+				order = parentObj.childrenOrder;
+			}
+
+			// Apply server ordering
 			if (order && order.length > 0) {
 				objects.sort((a, b) => {
 					const aIndex = order.indexOf(a.id);
 					const bIndex = order.indexOf(b.id);
 					if (aIndex === -1 && bIndex === -1) return 0;
-					if (aIndex === -1) return 1;
+					if (aIndex === -1) return 1;  // Unknown items go to end
 					if (bIndex === -1) return -1;
 					return aIndex - bIndex;
 				});
 			}
 
+			// Recursively apply to children
 			objects.forEach(obj => {
 				if (obj.isContainer && obj.children && obj.children.length > 0) {
 					expandedContainers.add(obj.id);
-					applyOrderingToLevel(obj.children, obj.id);
+					applyOrderingToLevel(obj.children, obj, rootOrder);
 				}
 			});
 		}
 
-		applyOrderingToLevel(rootObjects, 'root');
+		applyOrderingToLevel(rootObjects, null, rootChildrenOrder);
 		expandedContainers = new Set(expandedContainers);
 
 		return rootObjects;
@@ -237,9 +264,6 @@
 		event.dataTransfer.setData('text/plain', object.id);
 		event.currentTarget.style.opacity = '0.4';
 
-		dragOverTarget = object;
-		dropIndicatorPosition = 'before';
-
 		try {
 			const transparentDiv = document.createElement('div');
 			transparentDiv.style.width = '1px';
@@ -261,102 +285,104 @@
 	function handleDragEnd(event) {
 		event.currentTarget.style.opacity = '1';
 		draggedObject = null;
-		dragOverTarget = null;
-		dropIndicatorPosition = null;
+		activeDropZone = null;
 	}
 
-	function handleDragOver(event, targetObject) {
-		if (!draggedObject || draggedObject.id === targetObject.id) return;
+	function handleDragOver(event, objectIndex, parentId = null) {
+		if (!draggedObject) return;
 
 		event.preventDefault();
 		event.dataTransfer.dropEffect = 'move';
-		dragOverTarget = targetObject;
 
 		const rect = event.currentTarget.getBoundingClientRect();
 		const y = event.clientY - rect.top;
 		const height = rect.height;
 
-		if (targetObject.isContainer) {
-			// For containers, check if hovering on top half (before) or bottom half (after)
-			// This will show a line indicator for positioning relative to the container
-			dropIndicatorPosition = y < height * 0.5 ? 'before' : 'after';
+		// Top half = drop zone BEFORE this item (index)
+		// Bottom half = drop zone AFTER this item (index + 1)
+		if (y < height * 0.5) {
+			activeDropZone = { parentId, index: objectIndex };
 		} else {
-			// For regular objects, always show line below (after)
-			dropIndicatorPosition = 'after';
+			activeDropZone = { parentId, index: objectIndex + 1 };
 		}
 	}
 
-	function handleDragLeave(event) {
-		const relatedTarget = event.relatedTarget;
-		const currentTarget = event.currentTarget;
-
-		if (relatedTarget && currentTarget && (!currentTarget.contains(relatedTarget) &&
-			!currentTarget.closest('.space-y-1')?.contains(relatedTarget))) {
-			setTimeout(() => {
-				if (!dragOverTarget || (relatedTarget && currentTarget && currentTarget.contains(relatedTarget))) return;
-				dragOverTarget = null;
-				dropIndicatorPosition = null;
-			}, 50);
-		} else if (!relatedTarget) {
-			setTimeout(() => {
-				dragOverTarget = null;
-				dropIndicatorPosition = null;
-			}, 50);
-		}
-	}
-
-	function handleDrop(event, targetObject) {
-		if (!draggedObject || draggedObject.id === targetObject.id) return;
+	function handleDrop(event, dropZoneIndex, parentId = null) {
+		if (!draggedObject || !activeDropZone) return;
 
 		event.preventDefault();
-		executeDrop(draggedObject, targetObject, dropIndicatorPosition);
 
-		draggedObject = null;
-		dragOverTarget = null;
-		dropIndicatorPosition = null;
-
-		// SimpleCommunication: No need to request hierarchy refresh!
-		// Hierarchy updates come automatically via StateSerializer.getCompleteHierarchy()
-		// after any hierarchy change (move, reorder, delete, etc.)
-	}
-
-	function handleRootDrop(event) {
-		if (!draggedObject) return;
-		event.preventDefault();
-		moveObjectToRoot(draggedObject);
-		draggedObject = null;
-		dragOverTarget = null;
-		dropIndicatorPosition = null;
-	}
-
-	function executeDrop(draggedObj, targetObj, position) {
-		// Handle dropping on containers - always treat as moving into container
-		if (targetObj.isContainer && (position === 'before' || position === 'after')) {
-			if (draggedObj.isContainer && !isValidContainerNesting(draggedObj, targetObj)) {
-				return;
-			}
-			moveObjectToContainer(draggedObj, targetObj);
-			return;
+		// Get the correct list based on parentId
+		let objectList;
+		if (parentId === null) {
+			// Root level
+			objectList = treeStructure;
+		} else {
+			// Container level - find the container in tree structure
+			const container = findObjectInTree(parentId);
+			if (!container || !container.children) return;
+			objectList = container.children;
 		}
 
-		// Handle dropping between regular objects
-		if (position === 'before' || position === 'after') {
-			if (targetObj.parentContainer) {
-				// Target is inside a container
-				if (draggedObj.parentContainer === targetObj.parentContainer) {
-					// Same container - reorder
-					reorderObjectInContainer(draggedObj, targetObj, position);
-				} else {
-					// Different container - move to target's container
-					const targetContainer = filteredHierarchy.find(obj => obj.id === targetObj.parentContainer);
-					if (targetContainer) moveObjectToContainer(draggedObj, targetContainer);
+		// dropZoneIndex represents the position in the list:
+		// 0 = before first item
+		// 1 = before second item (after first)
+		// etc.
+
+		let targetObject, position;
+		if (dropZoneIndex === 0) {
+			// Dropping before first item
+			targetObject = objectList[0];
+			position = 'before';
+		} else {
+			// Dropping after item at index (dropZoneIndex - 1)
+			targetObject = objectList[dropZoneIndex - 1];
+			position = 'after';
+		}
+
+		if (!targetObject) return;
+
+		// Capture references before clearing state (needed for setTimeout callbacks)
+		const draggedObjRef = draggedObject;
+		const targetObjRef = targetObject;
+
+		// Handle cross-level moves (root ↔ container)
+		if (draggedObject.parentContainer !== targetObject.parentContainer) {
+			// Moving between different parents - send move command first, then reorder
+			if (targetObject.parentContainer) {
+				// Moving into a container
+				const targetContainer = findObjectInTree(targetObject.parentContainer);
+				if (targetContainer) {
+					// Validate container nesting if dragging a container
+					if (draggedObject.isContainer && !isValidContainerNesting(draggedObject, targetContainer)) {
+						console.warn('Invalid container nesting: Maximum depth exceeded or circular reference detected');
+						draggedObject = null;
+						activeDropZone = null;
+						return;
+					}
+
+					moveObjectToContainer(draggedObject, targetContainer);
+					// After move completes (via hierarchy update), reorder to correct position
+					// Note: This relies on the hierarchy update event triggering a re-render
+					setTimeout(() => {
+						reorderObject(draggedObjRef, targetObjRef, position, targetObjRef.parentContainer);
+					}, 100);
 				}
 			} else {
-				// Target is at root level - always reorder to position relative to target
-				// This handles both: moving from container to root, and reordering within root
-				reorderObjectAtRoot(draggedObj, targetObj, position);
+				// Moving to root
+				moveObjectToRoot(draggedObject);
+				// After move completes, reorder to correct position
+				setTimeout(() => {
+					reorderObject(draggedObjRef, targetObjRef, position, null);
+				}, 100);
 			}
+		} else {
+			// Same parent - just reorder
+			reorderObject(draggedObject, targetObject, position, parentId);
 		}
+
+		draggedObject = null;
+		activeDropZone = null;
 	}
 
 	function moveObjectToContainer(objectToMove, targetContainer) {
@@ -374,23 +400,13 @@
 		}, '*');
 	}
 
-	function reorderObjectAtRoot(draggedObj, targetObj, position) {
+	function reorderObject(draggedObj, targetObj, position, parentId) {
 		window.parent.postMessage({
 			type: 'reorder-children',
 			objectId: draggedObj.id,
 			targetId: targetObj.id,
 			position: position,
-			parentId: null
-		}, '*');
-	}
-
-	function reorderObjectInContainer(draggedObj, targetObj, position) {
-		window.parent.postMessage({
-			type: 'reorder-children',
-			objectId: draggedObj.id,
-			targetId: targetObj.id,
-			position: position,
-			parentId: targetObj.parentContainer
+			parentId: parentId
 		}, '*');
 	}
 
@@ -435,7 +451,7 @@
 	}
 </script>
 
-{#snippet TreeItem(object, depth = 0, index = 0)}
+{#snippet TreeItem(object, depth = 0, index = 0, parentId = null)}
 	<div
 		class="relative"
 		class:opacity-0={!isLoaded}
@@ -444,14 +460,8 @@
 		draggable="true"
 		ondragstart={(e) => handleDragStart(e, object)}
 		ondragend={handleDragEnd}
-		ondragover={(e) => handleDragOver(e, object)}
-		ondragleave={handleDragLeave}
-		ondrop={(e) => handleDrop(e, object)}
+		ondragover={(e) => handleDragOver(e, index, parentId)}
 	>
-		{#if dragOverTarget?.id === object.id && dropIndicatorPosition === 'before'}
-			<div class="absolute top-0 left-0 right-0 h-0.5 bg-blue-500 z-10"></div>
-		{/if}
-
 		<div class="flex items-center gap-1 py-0.5">
 			{#if object.isContainer && !object.autoLayout?.tileMode?.enabled}
 				<button
@@ -550,16 +560,46 @@
 				</button>
 			{/if}
 		</div>
-
-		{#if dragOverTarget?.id === object.id && dropIndicatorPosition === 'after'}
-			<div class="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-500 z-10"></div>
-		{/if}
 	</div>
 
 	{#if object.isContainer && expandedContainers.has(object.id) && object.children && object.children.length > 0 && !object.autoLayout?.tileMode?.enabled}
 		<div class="ml-4 space-y-0.5">
 			{#each object.children as child, childIndex}
-				{@render TreeItem(child, depth + 1, childIndex)}
+				<!-- Drop zone line BEFORE this child -->
+				<div
+					class="relative h-3 -my-1.5"
+					ondragover={(e) => {
+						if (!draggedObject) return;
+						e.preventDefault();
+						e.dataTransfer.dropEffect = 'move';
+						activeDropZone = { parentId: object.id, index: childIndex };
+					}}
+					ondrop={(e) => handleDrop(e, childIndex, object.id)}
+				>
+					{#if activeDropZone?.parentId === object.id && activeDropZone?.index === childIndex && draggedObject}
+						<div class="absolute left-0 right-0 h-0.5 bg-blue-500 z-10 top-1/2 -translate-y-1/2"></div>
+					{/if}
+				</div>
+
+				{@render TreeItem(child, depth + 1, childIndex, object.id)}
+
+				<!-- Drop zone line AFTER the last child -->
+				{#if childIndex === object.children.length - 1}
+					<div
+						class="relative h-3 -my-1.5"
+						ondragover={(e) => {
+							if (!draggedObject) return;
+							e.preventDefault();
+							e.dataTransfer.dropEffect = 'move';
+							activeDropZone = { parentId: object.id, index: childIndex + 1 };
+						}}
+						ondrop={(e) => handleDrop(e, childIndex + 1, object.id)}
+					>
+						{#if activeDropZone?.parentId === object.id && activeDropZone?.index === childIndex + 1 && draggedObject}
+							<div class="absolute left-0 right-0 h-0.5 bg-blue-500 z-10 top-1/2 -translate-y-1/2"></div>
+						{/if}
+					</div>
+				{/if}
 			{/each}
 		</div>
 	{/if}
@@ -567,54 +607,50 @@
 
 <div
 	class="h-full overflow-y-auto px-4 py-4"
+	ondragleave={(e) => {
+		// Clear drop zone when leaving the entire list area
+		if (!e.currentTarget.contains(e.relatedTarget)) {
+			activeDropZone = null;
+		}
+	}}
 >
 	<div class="space-y-0.5">
-		<!-- Top drop zone - allows dropping at the very top of the list -->
-		<!-- Always reserve space to prevent layout shift -->
-		<div
-			class="relative py-2"
-			ondragover={(e) => {
-				if (!draggedObject || treeStructure.length === 0) return;
-				e.preventDefault();
-				e.dataTransfer.dropEffect = 'move';
-				dragOverTarget = { id: 'top-drop-zone', isTopZone: true };
-				dropIndicatorPosition = 'before';
-			}}
-			ondragleave={(e) => {
-				const relatedTarget = e.relatedTarget;
-				const currentTarget = e.currentTarget;
-
-				// Only clear if we're actually leaving the element (not just entering a child)
-				if (dragOverTarget?.isTopZone && relatedTarget && currentTarget && !currentTarget.contains(relatedTarget)) {
-					setTimeout(() => {
-						// Double-check we're still outside
-						if (dragOverTarget?.isTopZone) {
-							dragOverTarget = null;
-							dropIndicatorPosition = null;
-						}
-					}, 50);
-				}
-			}}
-			ondrop={(e) => {
-				e.preventDefault();
-				if (draggedObject && treeStructure.length > 0) {
-					// Drop before the first object in the list
-					const firstObject = treeStructure[0];
-					reorderObjectAtRoot(draggedObject, firstObject, 'before');
-					draggedObject = null;
-					dragOverTarget = null;
-					dropIndicatorPosition = null;
-					// SimpleCommunication: Hierarchy updates automatically
-				}
-			}}
-		>
-			{#if dragOverTarget?.isTopZone && draggedObject}
-				<div class="absolute top-1 left-0 right-0 h-0.5 bg-blue-500"></div>
-			{/if}
-		</div>
-
 		{#each treeStructure as object, index}
-			{@render TreeItem(object, 0, index)}
+			<!-- Drop zone line BEFORE this item -->
+			<div
+				class="relative h-3 -my-1.5"
+				ondragover={(e) => {
+					if (!draggedObject) return;
+					e.preventDefault();
+					e.dataTransfer.dropEffect = 'move';
+					activeDropZone = { parentId: null, index };
+				}}
+				ondrop={(e) => handleDrop(e, index, null)}
+			>
+				{#if activeDropZone?.parentId === null && activeDropZone?.index === index && draggedObject}
+					<div class="absolute left-0 right-0 h-0.5 bg-blue-500 z-10 top-1/2 -translate-y-1/2"></div>
+				{/if}
+			</div>
+
+			{@render TreeItem(object, 0, index, null)}
+
+			<!-- Drop zone line AFTER the last item -->
+			{#if index === treeStructure.length - 1}
+				<div
+					class="relative h-3 -my-1.5"
+					ondragover={(e) => {
+						if (!draggedObject) return;
+						e.preventDefault();
+						e.dataTransfer.dropEffect = 'move';
+						activeDropZone = { parentId: null, index: index + 1 };
+					}}
+					ondrop={(e) => handleDrop(e, index + 1, null)}
+				>
+					{#if activeDropZone?.parentId === null && activeDropZone?.index === index + 1 && draggedObject}
+						<div class="absolute left-0 right-0 h-0.5 bg-blue-500 z-10 top-1/2 -translate-y-1/2"></div>
+					{/if}
+				</div>
+			{/if}
 		{/each}
 	</div>
 </div>

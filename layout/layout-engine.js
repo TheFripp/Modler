@@ -122,7 +122,7 @@ class LayoutEngine {
         });
 
         // Align layout based on push context (anchor mode) or center normally
-        const alignedPositions = this.alignLayoutPositions(positions, objectSizes, axis, layoutAnchor, pushContext, fullContainerSize, padding, layoutConfig);
+        const alignedPositions = this.alignLayoutPositions(positions, objectSizes, axis, layoutAnchor, pushContext, fullContainerSize, padding, layoutConfig, fillCount);
 
         // Note: Padding does NOT offset object positions - it only affects container size
         // Objects stay centered, container expands around them with padding space
@@ -448,9 +448,10 @@ class LayoutEngine {
      * @param {THREE.Vector3} containerSize - Container size for anchor-based alignment
      * @param {Object} padding - Padding configuration
      * @param {Object} layoutConfig - Layout configuration (includes alignment)
+     * @param {number} fillCount - Number of fill objects on layout axis (for space-between detection)
      * @returns {Array} Aligned positions
      */
-    static alignLayoutPositions(positions, sizes, axis, layoutAnchor = null, pushContext = null, containerSize = null, padding = null, layoutConfig = null) {
+    static alignLayoutPositions(positions, sizes, axis, layoutAnchor = null, pushContext = null, containerSize = null, padding = null, layoutConfig = null, fillCount = 0) {
         if (positions.length === 0 || sizes.length === 0) return positions;
 
         // Calculate actual layout bounds

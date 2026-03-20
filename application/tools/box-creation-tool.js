@@ -366,6 +366,14 @@ class BoxCreationTool {
 
         this.currentHeight = targetHeight;
 
+        // Record manipulation for Tab navigation - track dimensions.y (height)
+        if (this.creationObject && window.inputFocusManager) {
+            window.inputFocusManager.recordManipulation(
+                this.creationObject.userData.id,
+                'dimensions.y'
+            );
+        }
+
         // Update invisible box dimensions for property panel
         this.updateInvisibleBoxDimensions();
 

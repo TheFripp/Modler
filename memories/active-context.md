@@ -1,7 +1,7 @@
 # Modler V2 - Active Context
 
 **Session continuity and work-in-progress tracking**
-**Last updated**: 2025-01-20
+**Last updated**: 2025-01-21
 
 ---
 
@@ -11,6 +11,12 @@
 - None (clean slate for next session)
 
 ### Recently Completed
+- **Container Push & Selection Fixes (MAJOR MILESTONE ✅)** - 2025-01-21
+  - Fixed container push alignment behavior (pure alignment-based)
+  - Fixed space-between distribution on layout axis
+  - Fixed container-first selection (raycast override)
+  - Unified geometry manipulation for containers and objects
+  - Eliminated manual child position adjustments
 - **Layout State Machine Refactor (MAJOR MILESTONE ✅)** - 2025-01-20
   - Eliminated redundant state properties (autoLayout.enabled + layoutMode)
   - Centralized mode checking in ObjectStateManager
@@ -111,6 +117,60 @@
 ---
 
 ## Session Notes
+
+### Session 2025-01-21: Container Push Alignment & Selection Fixes
+
+**Part 1: Container Push Alignment Issues**
+- **Problem**: Objects moving incorrectly when pushing container faces
+  - "Jelly effect" - objects jittering during push
+  - Objects centering instead of maintaining alignment (bottom/center/top)
+  - Space-between distribution not working on layout axis
+  - Manual child position adjustments conflicting with layout engine
+- **Root Cause Discovery**:
+  1. Geometry recreation every frame (expensive + causes desync)
+  2. Manual child positioning using incremental shifts (wrong approach)
+  3. Layout engine perpendicular alignment skipped during push
+  4. Position update skip logic preventing alignment from applying
+  5. Anchor-based positioning conflicting with alignment-based positioning
+- **Solution**: Pure Alignment-Based Architecture
+  - **Unified geometry approach**: Use `resizeGeometry()` for both containers and objects (no recreation)
+  - **Layout engine as single source of truth**: All positioning/sizing delegated to layout engine
+  - **Removed manual adjustments**: Deleted all manual child position calculation code
+  - **Always apply alignment**: Removed perpendicular alignment skip during push
+  - **Always apply positions**: Removed position update skip logic
+  - **Simplified fill resizing**: Always use 'center' anchor, layout engine repositions
+  - **Space-between fix**: Anchor first object to container start edge when pushing with no fill objects
+- **Files Modified**:
+  1. `push-tool.js` - Removed manual positioning, simplified layout calls, unified geometry
+  2. `layout-engine.js` - Removed alignment skip, simplified anchor logic
+  3. `scene-layout-manager.js` - Always apply positions, simplified fill resize
+- **Behavior**: CSS-like alignment (children anchored to aligned edges), smooth updates, no jitter
+
+**Part 2: Container Selection Bug**
+- **Problem**: Clicking child objects didn't select parent containers
+- **Root Cause**: Old containers created before raycast override was implemented
+  - New containers had conditional raycast (block when not selected)
+  - Old containers always raycastable → intercepted clicks meant for children
+- **Solution**: Migration Function
+  - Created `applyRaycastOverrideToContainer()` - applies conditional raycast to single container
+  - Created `updateAllContainersWithRaycastOverride()` - migrates all existing containers
+  - Added migration call in `v2-main.js` initialization
+  - Marked containers with `hasRaycastOverride` flag to prevent double-application
+- **Files Modified**:
+  1. `layout-geometry.js` - Added migration functions, marked new containers
+  2. `v2-main.js` - Added migration call on app initialization
+- **Result**: Container-first selection working correctly - clicking children selects parent
+
+**Key Learnings**:
+- Geometry recreation is expensive and causes desync - always modify in place
+- Manual positioning conflicts with layout engine - pick one source of truth
+- Incremental updates create drift - use absolute positioning from initial state
+- Raycasting needs migration for behavioral changes to apply to old objects
+- CSS-like alignment is simpler and more predictable than anchor-based approaches
+
+**Documentation**: Session summary in active-context.md
+
+**Commit**: `cd6fda7` - fix: container push alignment and selection behavior
 
 ### Session 2025-01-20: Layout State Machine Refactor + Bug Fixes
 

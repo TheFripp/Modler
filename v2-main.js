@@ -226,13 +226,6 @@ function initializeApplication() {
     // Initialize PropertyUpdateHandler for property-panel driven layout system
     modlerV2Components.propertyUpdateHandler = new PropertyUpdateHandler();
 
-    // Initialize PropertyUpdateRouter for optimized property updates (Phase 6)
-    modlerV2Components.propertyUpdateRouter = new PropertyUpdateRouter();
-    console.log('✅ PropertyUpdateRouter initialized');
-
-    // Initialize PropertyManager for object property updates and fill functionality
-    modlerV2Components.propertyManager = new PropertyManager();
-
     // Initialize ObjectSerializer for consistent object serialization
     modlerV2Components.objectSerializer = new ObjectSerializer();
 
@@ -410,13 +403,7 @@ function connectComponents() {
         historyManager.initialize();
     }
 
-    // Initialize PropertyManager
-    const { propertyManager } = modlerV2Components;
-    if (propertyManager) {
-        propertyManager.initialize();
-    }
-
-    // Initialize NavigationController with required components
+// Initialize NavigationController with required components
     const { navigationController, selectionController, visualizationManager, containerVisualizer } = modlerV2Components;
     if (navigationController && selectionController && visualizationManager) {
         // Note: containerVisualizer is part of visualizationManager

@@ -4,6 +4,7 @@
 	import InlineInput from './inline-input.svelte';
 	import type { PropertyPath } from '$lib/services/property-controller';
 	import { getPropertyMixedState, selectedObjects, fieldStates } from '$lib/stores/modler';
+	import { currentUnit, toDisplayValue, toInternalValue, getUnitStep } from '$lib/stores/units';
 
 
 	interface Props {
@@ -85,6 +86,23 @@
 		}
 	}
 
+	// Convert internal value to display value (if applicable to this property)
+	function getDisplayValue(internalValue: number, axis: 'x' | 'y' | 'z'): number {
+		// Only convert dimensional properties (position, dimensions), not rotation
+		if (propertyBase === 'rotation') {
+			return internalValue; // Rotation is always in degrees
+		}
+		return toDisplayValue(internalValue, $currentUnit);
+	}
+
+	// Convert display value back to internal value
+	function fromDisplayValue(displayValue: number, axis: 'x' | 'y' | 'z'): number {
+		if (propertyBase === 'rotation') {
+			return displayValue; // Rotation is always in degrees
+		}
+		return toInternalValue(displayValue, $currentUnit);
+	}
+
 	// Listen for focus requests from tools (Tab key)
 	onMount(() => {
 		const focusInput = (requestedObjectId: any, property: string) => {
@@ -110,8 +128,16 @@
 
 		// Listen for PostMessage (for iframe communication)
 		const handlePostMessage = (event: MessageEvent) => {
-			// PropertyPanelSync sends: { type: 'data-update', data: { updateType: 'focus-input', objectId, property } }
-			if (event.data?.type === 'data-update' && event.data?.data?.updateType === 'focus-input') {
+			// Handle both message formats:
+			// 1. New format from KeyboardRouter: { type: 'focus-input', objectId, property }
+			// 2. Legacy format: { type: 'data-update', data: { updateType: 'focus-input', objectId, property } }
+
+			if (event.data?.type === 'focus-input') {
+				// New format from KeyboardRouter
+				const { objectId: requestedObjectId, property } = event.data;
+				focusInput(requestedObjectId, property);
+			} else if (event.data?.type === 'data-update' && event.data?.data?.updateType === 'focus-input') {
+				// Legacy format
 				const { objectId: requestedObjectId, property } = event.data.data;
 				focusInput(requestedObjectId, property);
 			}
@@ -132,34 +158,41 @@
 		{#each ['x', 'y', 'z'] as axis}
 			{@const property = objectId && propertyBase ? `${propertyBase}.${axis}` : undefined}
 			{@const mixedState = property ? getPropertyMixedState(property, $selectedObjects) : { isMixed: false, value: values[axis] }}
-			{@const displayValue = hideValues ? '' : (mixedState.isMixed ? '' : (typeof mixedState.value === 'number' ? Math.round(mixedState.value * 10) / 10 : mixedState.value))}
+			{@const internalValue = mixedState.isMixed ? 0 : (typeof mixedState.value === 'number' ? mixedState.value : values[axis])}
+			{@const displayValue = hideValues ? '' : (mixedState.isMixed ? '' : (propertyBase === 'rotation' ? internalValue : toDisplayValue(internalValue, $currentUnit)))}
 			{@const fieldState = property ? $fieldStates[property] : undefined}
 			{@const isDisabled = disableAll || fieldState?.disabled || false}
 			{@const isFilled = fillStates[axis] || false}
+			{@const unitSuffix = propertyBase !== 'rotation' ? $currentUnit : '°'}
 			<div class="flex-1 min-w-0">
-				<InlineInput
-					id={idPrefix ? `${idPrefix}-${axis}` : undefined}
-					label={labels[axis]}
-					type="number"
-					value={displayValue}
-					placeholder={hideValues ? '' : (mixedState.isMixed ? 'Mixed' : (disableAll ? 'Layout Mode' : (isDisabled ? fieldState?.tooltip || 'Disabled' : '')))}
-					class={cn(
-						mixedState.isMixed ? 'text-muted-foreground/60' : '',
-						isDisabled ? 'opacity-50' : '',
-						isFilled ? 'opacity-50' : ''
-					)}
-					disabled={isDisabled || isFilled}
-					{objectId}
-					property={property}
-					oninput={onUpdate ? (e) => handleInput(axis, e) : undefined}
-					onIncrease={onUpdate ? () => handleIncrease(axis) : undefined}
-					onDecrease={onUpdate ? () => handleDecrease(axis) : undefined}
-					showFillButton={showFillButtons}
-					fillActive={isFilled}
-					fillTitle={`Toggle fill for ${axis.toUpperCase()}-axis`}
-					onFillToggle={() => handleFillToggle(axis)}
-					onFillHover={(hovering) => handleFillHover(axis, hovering)}
-				/>
+				{#key `${axis}-${$currentUnit}`}
+					<InlineInput
+						id={idPrefix ? `${idPrefix}-${axis}` : undefined}
+						label={labels[axis]}
+						type="number"
+						value={displayValue}
+						step={getUnitStep($currentUnit)}
+						suffix={unitSuffix}
+						placeholder={hideValues ? '' : (mixedState.isMixed ? 'Mixed' : (disableAll ? 'Layout Mode' : (isDisabled ? fieldState?.tooltip || 'Disabled' : '')))}
+						class={cn(
+							mixedState.isMixed ? 'text-muted-foreground/60' : '',
+							isDisabled ? 'opacity-50' : '',
+							isFilled ? 'opacity-50' : ''
+						)}
+						disabled={isDisabled}
+						{objectId}
+						property={property}
+						oninput={onUpdate ? (e) => handleInput(axis, e) : undefined}
+						onIncrease={onUpdate ? () => handleIncrease(axis) : undefined}
+						onDecrease={onUpdate ? () => handleDecrease(axis) : undefined}
+						showFillButton={showFillButtons}
+						fillActive={isFilled}
+						fillTitle={`Toggle fill for ${axis.toUpperCase()}-axis`}
+						onFillToggle={() => handleFillToggle(axis)}
+						onFillHover={(hovering) => handleFillHover(axis, hovering)}
+						convertToInternal={propertyBase !== 'rotation' ? fromDisplayValue : undefined}
+					/>
+				{/key}
 			</div>
 		{/each}
 	</div>

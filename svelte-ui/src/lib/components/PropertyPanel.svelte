@@ -96,8 +96,34 @@
 		if (typeof window !== 'undefined') {
 			window.addEventListener('unit-changed', updateCurrentUnit);
 
+			// Forward Tab key to parent window when not in an input
+			const handleTabKey = (event: KeyboardEvent) => {
+				if (event.key === 'Tab') {
+					// Check if an input is focused
+					const activeElement = document.activeElement;
+					const isInputFocused = activeElement && (
+						activeElement.tagName === 'INPUT' ||
+						activeElement.tagName === 'TEXTAREA' ||
+						activeElement instanceof HTMLElement && activeElement.isContentEditable
+					);
+
+					// If no input focused, forward Tab to parent window's KeyboardRouter
+					if (!isInputFocused) {
+						event.preventDefault();
+						window.parent.postMessage({
+							type: 'keyboard-event',
+							key: 'Tab',
+							code: 'Tab'
+						}, '*');
+					}
+				}
+			};
+
+			window.addEventListener('keydown', handleTabKey);
+
 			return () => {
 				window.removeEventListener('unit-changed', updateCurrentUnit);
+				window.removeEventListener('keydown', handleTabKey);
 			};
 		}
 	});

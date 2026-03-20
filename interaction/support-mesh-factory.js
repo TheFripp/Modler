@@ -190,9 +190,12 @@ class SupportMeshFactory {
         // CAD PRINCIPLE: Never use mesh.scale for visibility
         // Scale is always (1, 1, 1) - geometry defines exact dimensions
         wireframe.scale.set(1, 1, 1);
-        wireframe.renderOrder = 999; // Render on top of geometry
+        wireframe.renderOrder = 9999; // Very high render order - always on top
         wireframe.raycast = () => {}; // Non-raycastable
         wireframe.userData.supportMeshType = 'selectionWireframe';
+
+        // Material already configured by MaterialManager with depthTest: false
+        // This ensures selection wireframe always renders on top without z-fighting
 
         // Ensure proper rendering settings
         wireframe.matrixAutoUpdate = true;
@@ -276,8 +279,12 @@ class SupportMeshFactory {
 
         wireframe.position.set(0, 0, 0); // No offset - wireframe should match geometry exactly
         wireframe.scale.set(1, 1, 1);
+        wireframe.renderOrder = 9999; // Same as selection wireframe - always on top
         wireframe.raycast = () => {}; // Non-raycastable
         wireframe.userData.supportMeshType = 'wireframe'; // ContainerVisualizer looks for 'wireframe'
+
+        // Material already configured by MaterialManager with depthTest: false
+        // This ensures container wireframe always renders on top without z-fighting
 
         // Ensure proper rendering settings
         wireframe.matrixAutoUpdate = true;

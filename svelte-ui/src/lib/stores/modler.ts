@@ -509,6 +509,7 @@ function selectionChanged(current: ObjectData[], incoming: ObjectData[]): boolea
 		const inc = incoming[i];
 
 		// Check critical properties that affect UI inputs
+		if (curr.name !== inc.name) return true; // Name changes should update property panel
 		if (JSON.stringify(curr.position) !== JSON.stringify(inc.position)) return true;
 		if (JSON.stringify(curr.rotation) !== JSON.stringify(inc.rotation)) return true;
 		if (JSON.stringify(curr.dimensions) !== JSON.stringify(inc.dimensions)) return true;
@@ -521,8 +522,27 @@ function selectionChanged(current: ObjectData[], incoming: ObjectData[]): boolea
 }
 
 // Sync object hierarchy from Three.js
-export function syncHierarchyFromThreeJS(allObjects: ObjectData[]) {
-	objectHierarchy.set(allObjects);
+export function syncHierarchyFromThreeJS(hierarchyData: ObjectData[] | { objects: ObjectData[], rootChildrenOrder: number[] }) {
+	// Handle both old format (array) and new format (object with objects + rootChildrenOrder)
+	const allObjects = Array.isArray(hierarchyData) ? hierarchyData : hierarchyData.objects || [];
+
+	// Store hierarchy data (either array or full object)
+	objectHierarchy.set(hierarchyData);
+
+	// CRITICAL: Also update selectedObjects if any selected objects are in the hierarchy
+	// This ensures PropertyPanel shows updated names immediately
+	const currentSelection = get(selectedObjects);
+	if (currentSelection.length > 0) {
+		const objectMap = new Map(allObjects.map(obj => [obj.id, obj]));
+		const updatedSelection = currentSelection
+			.map(selectedObj => objectMap.get(selectedObj.id) || selectedObj)
+			.filter(obj => obj != null);
+
+		// Only update if something actually changed
+		if (selectionChanged(currentSelection, updatedSelection)) {
+			selectedObjects.set(updatedSelection);
+		}
+	}
 }
 
 // Sync container context from Three.js

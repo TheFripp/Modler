@@ -74,6 +74,28 @@ class BaseFaceToolBehavior {
             targetObject = hit.object;
         }
 
+        // CRITICAL FIX: If hit object is not selected, ignore it during face tool operations
+        // This prevents non-selected containers from blocking face highlighting on selected containers
+        if (!this.selectionController.isSelected(targetObject)) {
+            const sceneController = window.modlerComponents?.sceneController;
+            const objectData = sceneController?.getObjectByMesh(targetObject);
+
+            // Check if it's a child of a selected container (allow this case)
+            if (objectData && objectData.parentContainer) {
+                const parentContainer = sceneController.getObject(objectData.parentContainer);
+                if (!parentContainer || !this.selectionController.isSelected(parentContainer.mesh)) {
+                    // Not a child of selected container - ignore this hit
+                    this.clearHover();
+                    return false;
+                }
+                // It IS a child of selected container - continue processing below
+            } else {
+                // Not selected and not a child of selected - ignore
+                this.clearHover();
+                return false;
+            }
+        }
+
         // Face detection completed
 
         // CONTAINER MESH REDIRECTION: For containers, always use interactive mesh for face detection

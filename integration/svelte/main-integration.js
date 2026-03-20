@@ -1,40 +1,9 @@
 /**
- * UNIFIED Main Integration - Centralized State & Communication Hub
+ * Main Integration - UI system initialization and event coordination
  *
- * ARCHITECTURAL OVERVIEW:
- * This file is the INTEGRATION LAYER that connects:
- * - ObjectStateManager (data/state management)
- * - MainAdapter/UIAdapter (UI communication via Phase 3 architecture)
- * - Svelte UI panels (user interface)
- *
- * THREE-LAYER ARCHITECTURE (Phase 3):
- * ┌─────────────────────────────────────────────────────────────┐
- * │ Layer 1: DATA LAYER (ObjectStateManager)                    │
- * │ - Single source of truth for all object state               │
- * │ - Handles state updates, validation, propagation            │
- * │ - Emits ObjectEventBus events for all state changes         │
- * └─────────────────────────────────────────────────────────────┘
- *                              ↓
- * ┌─────────────────────────────────────────────────────────────┐
- * │ Layer 2: INTEGRATION LAYER (this file)                      │
- * │ - Handles PostMessage from UI → ObjectStateManager          │
- * │ - Manages tool activation, settings, file operations        │
- * │ - Coordinates DirectComponentManager for panel communication│
- * └─────────────────────────────────────────────────────────────┘
- *                              ↓
- * ┌─────────────────────────────────────────────────────────────┐
- * │ Layer 3: COMMUNICATION LAYER (MainAdapter/UIAdapter)        │
- * │ - MainAdapter: Subscribes to ObjectEventBus events          │
- * │ - Translates events → MessageProtocol → postMessage         │
- * │ - UIAdapter: Receives messages → Updates Svelte stores      │
- * │ - Handles all event types: geometry, material, selection,   │
- * │   hierarchy, lifecycle, tool state                          │
- * └─────────────────────────────────────────────────────────────┘
- *
- * DATA FLOW FOR PROPERTY UPDATES (Phase 3):
- * UI Input → PostMessage → handlePropertyUpdate() → ObjectStateManager.updateObject()
- *   → ObjectEventBus.emit() → MainAdapter.handleEvent() → CommunicationBridge
- *   → postMessage → UIAdapter.receive() → Svelte stores → UI Update
+ * Connects ObjectStateManager ↔ SimpleCommunication ↔ Svelte UI panels.
+ * Handles: panel initialization, property updates from UI, tool activation.
+ * Communication: SimpleCommunication handles all Main ↔ UI via ObjectEventBus + postMessage.
  */
 
 (function() {
@@ -314,6 +283,12 @@
                 return false;
             }
 
+            // Register directComponentManager in modlerComponents for access by other systems
+            if (window.modlerComponents) {
+                window.modlerComponents.directComponentManager = directComponentManager;
+                console.log('✅ DirectComponentManager registered in modlerComponents');
+            }
+
             // Phase 3: MainAdapter handles all Main → UI communication
             console.log('✅ Using MainAdapter for UI communication');
 
@@ -352,6 +327,11 @@
 
             // Step 4: Initialize iframe panel management
             panelManager = new window.SveltePanelManager(portDetector);
+
+            // Expose panelManager to modlerComponents for KeyboardRouter access
+            if (window.modlerComponents) {
+                window.modlerComponents.panelManager = panelManager;
+            }
 
             // Phase 3: MainAdapter handles all Main → UI communication
             console.log('✅ Using MainAdapter for UI communication');
@@ -449,57 +429,6 @@
         // Setup ObjectEventBus listeners for complete data flow
         setupObjectEventBusListeners(objectStateManager);
 
-        // Track if we're currently in a drag operation
-        let isDraggingProperty = false;
-        window.objectEventBus.subscribe('object:property-changed', (evt) => {
-            if (evt.changeData?.source === 'drag') {
-                isDraggingProperty = true;
-                // Clear flag after a short delay (drag updates are continuous)
-                setTimeout(() => { isDraggingProperty = false; }, 100);
-            }
-        });
-
-        // Listen to unified state changes
-        objectStateManager.addEventListener('objects-changed', (event) => {
-            const { objects, selection } = event.detail;
-
-            // Skip full object updates during drag operations to prevent flickering
-            // Individual property updates are still sent via object:property-changed
-            if (isDraggingProperty) {
-                return;
-            }
-
-            // Get PostMessage-ready data for selected objects
-            const postMessageSelection = selection.map(objectId =>
-                objectStateManager.getObjectForPostMessage ?
-                objectStateManager.getObjectForPostMessage(objectId) :
-                objectStateManager.getObject(objectId)
-            ).filter(Boolean);
-
-            // Get current hierarchy from SceneController (single source of truth)
-            const sceneController = window.modlerComponents?.sceneController;
-            const hierarchy = sceneController ? sceneController.getAllObjects() : [];
-
-            // Serialize hierarchy for PostMessage (remove circular references)
-            const ObjectDataFormat = window.ObjectDataFormat;
-            const postMessageHierarchy = hierarchy.map(obj =>
-                ObjectDataFormat ? ObjectDataFormat.serializeForPostMessage(obj) : obj
-            ).filter(Boolean);
-
-            // Notify UI systems with standard format
-            notifyUISystems({
-                type: 'data-update',
-                data: {
-                    selectedObjects: postMessageSelection,
-                    objectHierarchy: postMessageHierarchy,
-                    updateType: 'unified-update'
-                }
-            });
-        });
-
-        // NOTE: Legacy selection-changed CustomEvent listener REMOVED
-        // SimpleCommunication now handles all selection events through ObjectEventBus
-        // This eliminates duplicate selection-changed messages
     }
 
     /**
@@ -534,31 +463,7 @@
         // SelectionController → ObjectStateManager.setSelection() → ObjectEventBus.emit()
         // → SimpleCommunication handles UI updates
 
-        // Listen to property change events for comprehensive UI updates
-        window.objectEventBus.subscribe('object:property-changed', (event) => {
-            // Skip UI updates during drag operations to prevent flickering
-            // Drag updates happen at 60fps and should only update 3D scene
-            // Final value will be synced when drag ends
-            const updateSource = event.changeData.source || 'unknown';
-            if (updateSource === 'drag') {
-                return; // Skip UI notification during drag
-            }
-
-            // Send property update to UI systems using standard format
-            // NOTE: Don't send updatedObject during property updates - causes flickering
-            // The UI already has the object data and can update locally
-            notifyUISystems({
-                type: 'property-update',
-                data: {
-                    objectId: event.objectId,
-                    property: event.changeData.property,
-                    value: event.changeData.value,
-                    updateSource: updateSource
-                }
-            });
-        });
-
-        // ObjectEventBus listeners setup complete
+        // Note: SimpleCommunication handles all Main → UI event delivery via ObjectEventBus
     }
 
     // ==================================================================================
@@ -566,72 +471,36 @@
     // ==================================================================================
 
     /**
-     * REVOLUTIONARY SIMPLIFICATION: All property updates in ~10 lines
+     * Handle all property updates from UI.
+     * Single path: format convert → ObjectStateManager.updateObject()
      */
     function handlePropertyUpdate(objectId, property, value, source = 'input') {
-        // PHASE 6: Try optimized router first, fallback to standard handler
-        const propertyUpdateRouter = window.modlerComponents?.propertyUpdateRouter;
-
-        if (propertyUpdateRouter) {
-            // Use PropertyFormatConverter for proper type conversion
-            const formatConverter = window.propertyFormatConverter;
-            let convertedValue = value;
-
-            if (formatConverter) {
-                const result = formatConverter.convertToInternal(property, value);
-                if (!result.isValid) {
-                    console.warn(`❌ Property format validation failed for ${property}:`, result.error);
-                }
-                convertedValue = result.value;
-            } else {
-                convertedValue = parseFloat(value) || value;
-            }
-
-            // Route through optimized path
-            const success = propertyUpdateRouter.routeUpdate(objectId, property, convertedValue);
-            if (success) return; // Fast path succeeded
-        }
-
-        // Fallback to standard path (for special cases or if router not available)
         const objectStateManager = window.modlerComponents?.objectStateManager;
-        if (!objectStateManager) {
-            console.warn('❌ ObjectStateManager not available');
-            return;
-        }
+        if (!objectStateManager) return;
 
-        // Convert property path to update object with proper format conversion
+        // Convert to internal format
+        const formatConverter = window.propertyFormatConverter;
         const updates = {};
 
-        // Use PropertyFormatConverter for proper type conversion and validation
-        const formatConverter = window.propertyFormatConverter;
         if (formatConverter) {
             const result = formatConverter.convertToInternal(property, value);
             if (!result.isValid) {
-                console.warn(`❌ Property format validation failed for ${property}:`, result.error);
+                console.warn(`Property format validation failed for ${property}:`, result.error);
             }
             updates[property] = result.value;
         } else {
-            // Fallback to basic conversion if PropertyFormatConverter not available
             updates[property] = parseFloat(value) || value;
         }
 
-        // Handle special cases
+        // Default layout direction when enabling autoLayout
         if (property === 'autoLayout.enabled' && value) {
             const currentObject = objectStateManager.getObject(objectId);
             if (currentObject?.isContainer && !currentObject.autoLayout?.direction) {
-                // Initialize autoLayout object if it doesn't exist
-                if (!updates.autoLayout) {
-                    updates.autoLayout = {};
-                }
-                updates.autoLayout.direction = 'x'; // Default direction
+                if (!updates.autoLayout) updates.autoLayout = {};
+                updates.autoLayout.direction = 'x';
             }
         }
 
-        // Property updates are frequent during tools - only log errors
-
-        // SINGLE CALL DOES EVERYTHING: Updates 3D scene, triggers layout, notifies UI
-        // ObjectStateManager.propagateChanges() handles ALL event emissions automatically
-        // ARCHITECTURAL FIX: Removed duplicate event emissions (was causing 4x updates and lag)
         objectStateManager.updateObject(objectId, updates, source);
     }
 
@@ -653,98 +522,14 @@
                 return;
             }
 
-            const { type, ...data } = event.data;
-
-            // NOTE: SimpleCommunication already handles UI → Main messages via CommandRouter
-            // This listener only handles legacy messages not yet migrated (settings, file manager)
-
-            switch (type) {
-                case 'ui-panel-ready':
-                case 'left-panel-ready':
-                    // SimpleCommunication: Initial state sent automatically via ObjectEventBus subscriptions
-                    // No action needed - SimpleCommunication handles this
-                    break;
-                // NOTE: All settings handlers now routed through SimpleCommunication → CommandRouter
-                // Removed duplicate handlers to prevent race conditions:
-                // - cad-wireframe-settings-changed, get-cad-wireframe-settings
-                // - visual-settings-changed, get-visual-settings
-                // - scene-settings-changed, get-scene-settings
-                // - interface-settings-changed, get-interface-settings
-                // - file-manager-request, request-file-manager-ready
-            }
+            // All UI → Main messages handled by SimpleCommunication → CommandRouter
         });
 
         // Make handlePropertyUpdate globally available for direct calls
         window.handlePropertyUpdate = handlePropertyUpdate;
     }
 
-    // ==================================================================================
-    // UI NOTIFICATION (Phase 3: DirectComponentManager → MainAdapter)
-    // ==================================================================================
-
-    // Throttling for UI updates
-    let lastUpdateTime = 0;
-    let updateTimeout = null;
-    let pendingUpdate = null;
-
-    /**
-     * Notify UI systems of state changes (throttled)
-     *
-     * TODO (SimpleCommunication): This function is REDUNDANT in iframe mode.
-     * - SimpleCommunication already handles Main → UI via ObjectEventBus subscriptions
-     * - DirectComponentManager is only for direct-mounted components (non-iframe mode)
-     * - In production, all panels are iframes → SimpleCommunication handles everything
-     *
-     * NEXT STEP: Remove this function and all notifyUISystems() calls once verified
-     */
-    function notifyUISystems(message) {
-        // Throttle rapid updates to prevent spam
-        const now = Date.now();
-        const timeSinceLastUpdate = now - lastUpdateTime;
-
-        if (timeSinceLastUpdate < 50) { // 50ms throttle
-            // Clear existing timeout and set new one
-            if (updateTimeout) {
-                clearTimeout(updateTimeout);
-            }
-
-            pendingUpdate = message;
-            updateTimeout = setTimeout(() => {
-                sendUIUpdate(pendingUpdate);
-                pendingUpdate = null;
-                updateTimeout = null;
-            }, 50);
-            return;
-        }
-
-        sendUIUpdate(message);
-    }
-
-    function sendUIUpdate(message) {
-        lastUpdateTime = Date.now();
-
-        // Phase 3: Use DirectComponentManager for iframe communication
-        if (directComponentManager) {
-            try {
-                // Direct communication with mounted components
-                directComponentManager.broadcastToAll(message);
-            } catch (error) {
-                console.error('❌ Direct component communication failed:', error);
-            }
-        } else {
-            console.warn('⚠️ DirectComponentManager not available - this should not happen in Phase 3');
-        }
-    }
-
-    /**
-     * Phase 3: Legacy fallback removed
-     * All communication now goes through DirectComponentManager → MainAdapter → UIAdapter
-     */
-
-    /**
-     * Sanitize data for PostMessage - SIMPLIFIED VERSION
-     * ObjectStateManager now provides clean standard format data
-     */
+    // UI notification handled by SimpleCommunication via ObjectEventBus → iframe postMessage
 
     // ==================================================================================
     // TOOL INTEGRATION (Complete)
@@ -752,35 +537,16 @@
 
     function activateTool(toolName) {
         const toolController = window.modlerComponents?.toolController;
-        if (toolController) {
-            const success = toolController.switchToTool(toolName);
-            if (success) {
-                // Send updated tool state to all panels
-                sendToolStateUpdate(toolName);
+        if (!toolController) return;
 
-                // Auto-focus the main window so the tool can receive events
-                if (window.focus) {
-                    window.focus();
-                }
-            } else {
-                console.warn('❌ Failed to switch to tool:', toolName);
-            }
-        } else {
-            console.warn('❌ ToolController not available');
+        const success = toolController.switchToTool(toolName);
+        if (success && window.focus) {
+            window.focus();
         }
     }
 
     // Expose tool activation for UI components
     window.activateTool = activateTool;
-
-    // ==================================================================================
-    // SETTINGS HANDLERS (Delegated to SettingsHandler class)
-    // ==================================================================================
-
-
-    // ==================================================================================
-    // SNAP TOGGLE HANDLER
-    // ==================================================================================
 
     /**
      * Handle snap toggle from Svelte toolbar
@@ -834,45 +600,8 @@
         historyManager.executeCommand(command);
     }
 
-    // Phase 3 fill button handlers removed - now handled by CommandRouter → PropertyUpdateHandler
 
-    // handleCreateTiledContainer removed - now handled by CommandRouter
-
-    // handleMoveToContainer and handleMoveToRoot removed - now handled by CommandRouter
-
-    // handleObjectReorder removed - now handled by CommandRouter
-
-    // handleCheckLayoutMode removed - layout mode now provided automatically by StateSerializer
-
-    // handleFillButtonHover, handleLayoutButtonHover, handleReverseChildOrder removed - now handled by CommandRouter
-
-    /**
-     * Send tool state update to all panels
-     */
-    function sendToolStateUpdate(toolName) {
-        // Get current snap state
-        const snapController = window.modlerComponents?.snapController;
-        const snapEnabled = snapController ? snapController.getEnabled() : false;
-
-        const toolStateMessage = {
-            type: 'tool-state-update',
-            data: {
-                toolState: { activeTool: toolName },
-                snapEnabled
-            }
-        };
-
-        if (directComponentManager) {
-            directComponentManager.broadcastToAll(toolStateMessage);
-        }
-        // Phase 3: Tool state automatically sent via ObjectEventBus → MainAdapter
-    }
-
-
-    // Bridge function: Notify tool state changed (for keyboard shortcuts)
-    window.notifyToolStateChanged = function(toolName) {
-        sendToolStateUpdate(toolName);
-    };
+    // Tool state updates handled by SimpleCommunication via ObjectEventBus
 
     // ==================================================================================
     // SCENE EVENT INTEGRATION (Simplified)

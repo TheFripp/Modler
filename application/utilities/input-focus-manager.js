@@ -9,24 +9,38 @@ class InputFocusManager {
     constructor() {
         this.lastManipulatedProperty = null; // e.g., "position.x", "dimensions.z"
         this.lastManipulatedObjectId = null;
+        this.manipulationContext = null; // Extra context like push direction
 
         // Listen for Tab key globally
         this.setupKeyboardListener();
     }
 
     /**
-     * Record which property was manipulated by a tool
+     * Record which property was manipulated by a tool (move, push, box creation, etc.)
      * @param {string} objectId - Object being manipulated
+     * @param {string} property - Property path (e.g., "position.x", "dimensions.y")
+     * @param {Object} context - Optional context (e.g., { pushDirection: 1 } for push tool)
+     */
+    recordManipulation(objectId, property, context = null) {
+        this.lastManipulatedProperty = property;
+        this.lastManipulatedObjectId = objectId;
+        this.manipulationContext = context;
+    }
+
+    /**
+     * Record which property was edited manually in the UI property panel
+     * Same as recordManipulation but semantically different (user typed vs tool dragged)
+     * @param {string} objectId - Object being edited
      * @param {string} property - Property path (e.g., "position.x")
      */
-    recordManipulation(objectId, property) {
+    recordUIEdit(objectId, property) {
         this.lastManipulatedProperty = property;
         this.lastManipulatedObjectId = objectId;
     }
 
     /**
      * Get the last manipulated property
-     * @returns {{objectId: string, property: string} | null}
+     * @returns {{objectId: string, property: string, context: Object|null} | null}
      */
     getLastManipulated() {
         if (!this.lastManipulatedProperty || !this.lastManipulatedObjectId) {
@@ -34,7 +48,8 @@ class InputFocusManager {
         }
         return {
             objectId: this.lastManipulatedObjectId,
-            property: this.lastManipulatedProperty
+            property: this.lastManipulatedProperty,
+            context: this.manipulationContext
         };
     }
 
@@ -44,6 +59,7 @@ class InputFocusManager {
     clear() {
         this.lastManipulatedProperty = null;
         this.lastManipulatedObjectId = null;
+        this.manipulationContext = null;
     }
 
     /**

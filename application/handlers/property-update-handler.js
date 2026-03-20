@@ -88,6 +88,55 @@ class PropertyUpdateHandler {
             // Parse property path into nested object structure
             const updates = this.parsePropertyPath(property, value);
 
+            // SPECIAL CASE: If updating dimensions on an object with fill mode active,
+            // automatically disable fill mode for that axis
+            if (property.startsWith('dimensions.')) {
+                const axis = property.split('.')[1]; // 'x', 'y', or 'z'
+                const obj = this.sceneController?.getObject(objectId);
+
+                if (obj && obj.layoutProperties) {
+                    const sizeProperty = `size${axis.toUpperCase()}`;
+                    const currentMode = obj.layoutProperties[sizeProperty];
+
+                    if (currentMode === 'fill') {
+                        // User is manually setting dimension → disable fill mode
+                        updates.layoutProperties = {
+                            ...obj.layoutProperties,
+                            [sizeProperty]: 'fixed'
+                        };
+                    }
+                }
+
+                // PUSH TOOL INTEGRATION: Check if this dimension was manipulated by push tool
+                // If so, adjust position to keep the opposite face stationary
+                const inputFocusManager = window.inputFocusManager;
+                if (inputFocusManager) {
+                    const lastManipulation = inputFocusManager.getLastManipulated();
+                    if (lastManipulation &&
+                        lastManipulation.objectId === objectId &&
+                        lastManipulation.property === property &&
+                        lastManipulation.context &&
+                        lastManipulation.context.pushDirection) {
+
+                        // Get current dimensions and position
+                        const currentDim = obj.dimensions[axis];
+                        const newDim = value;
+                        const dimChange = newDim - currentDim;
+
+                        // Calculate position offset to keep opposite face stationary
+                        // pushDirection: 1 = pushed in positive direction, -1 = negative
+                        const pushDirection = lastManipulation.context.pushDirection;
+                        const positionOffset = (dimChange / 2) * pushDirection;
+
+                        // Add position update to keep opposite face fixed
+                        if (!updates.position) {
+                            updates.position = { ...obj.position };
+                        }
+                        updates.position[axis] = obj.position[axis] + positionOffset;
+                    }
+                }
+            }
+
             this.objectStateManager.updateObject(objectId, updates, {
                 source: source || 'property-panel',
                 immediate: true
@@ -650,8 +699,14 @@ class PropertyUpdateHandler {
             obj.layoutProperties = {
                 sizeX: 'fixed',
                 sizeY: 'fixed',
-                sizeZ: 'fixed'
+                sizeZ: 'fixed',
+                fixedSize: null
             };
+        }
+
+        // Initialize fixedSize storage if not exists
+        if (!obj.layoutProperties.fixedSize) {
+            obj.layoutProperties.fixedSize = { x: null, y: null, z: null };
         }
 
         // Determine property name based on axis
@@ -661,7 +716,6 @@ class PropertyUpdateHandler {
         const currentValue = this.objectStateManager.getChildSizeMode(objectId, axis);
         const newValue = currentValue === 'fill' ? 'fixed' : 'fill';
 
-        // Update via ObjectStateManager for proper event emission
         const updates = {
             layoutProperties: {
                 ...obj.layoutProperties,
@@ -669,16 +723,58 @@ class PropertyUpdateHandler {
             }
         };
 
+        // When enabling fill → store current dimension
+        // When disabling fill → restore stored dimension (if exists)
+        if (newValue === 'fill') {
+            // Store current dimension before filling - use object's dimensions property directly
+            // DimensionManager.getDimension() may fail for objects in fill mode
+            const currentDimension = obj.dimensions?.[axis];
+
+            if (currentDimension !== null && currentDimension !== undefined) {
+                updates.layoutProperties.fixedSize = {
+                    ...obj.layoutProperties.fixedSize,
+                    [axis]: currentDimension
+                };
+            }
+        } else {
+            // Restore stored dimension when disabling fill
+            const storedDimension = obj.layoutProperties.fixedSize?.[axis];
+
+            if (storedDimension !== null && storedDimension !== undefined) {
+                // Set dimension to stored value
+                const dimensionUpdate = {};
+                dimensionUpdate[axis] = storedDimension;
+                updates.dimensions = dimensionUpdate;
+            }
+        }
+
+
         try {
+
             this.objectStateManager.updateObject(objectId, updates, {
                 source: 'fill-button-toggle',
                 immediate: true
             });
 
+
             // Trigger layout update on parent container to apply the fill change
             if (obj.parentContainer) {
-                this.sceneController.updateLayout(obj.parentContainer);
+                const layoutResult = this.sceneController.updateLayout(obj.parentContainer);
+
+                // CRITICAL FIX: Force UI refresh after fill toggle
+                // When dimensions don't change (hug container), layout doesn't emit events
+                // but UI still needs to refresh to show updated fill button state
+                const updatedObj = this.sceneController.getObject(objectId);
+                if (updatedObj) {
+                    this.objectStateManager.updateObject(objectId, {
+                        dimensions: { ...updatedObj.dimensions }
+                    }, {
+                        source: 'fill-button-ui-refresh',
+                        immediate: true
+                    });
+                }
             }
+
 
             return true;
         } catch (error) {

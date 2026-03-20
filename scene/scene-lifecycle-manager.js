@@ -111,6 +111,10 @@ class SceneLifecycleManager {
         // Configure mesh
         this.configureMesh(mesh, objectData, options);
 
+        // CRITICAL: Force matrix update after position changes
+        // This ensures getWorldPosition() returns correct values when setting parent
+        mesh.updateMatrixWorld(true);
+
         // ARCHITECTURE: Dimensions are now managed by DimensionManager
         // No caching needed - dimensions are read directly from geometry on demand
         // This eliminates the circular Save→Load→Recalculate dependency
@@ -127,8 +131,36 @@ class SceneLifecycleManager {
         this.scene.add(mesh);
         this.objects.set(id, objectData);
 
-        // Track root-level objects in order (delegated to hierarchy manager)
-        if (!objectData.parentContainer) {
+        // CRITICAL FIX: Establish parent-child hierarchy if parentContainer specified
+        // This ensures children are properly linked to parent in Three.js scene graph,
+        // added to parent's childrenOrder, and positioned correctly
+        if (objectData.parentContainer) {
+            const hierarchyManager = this.getHierarchyManager();
+            if (hierarchyManager) {
+                // Get callback references for layout updates from SceneController
+                const sceneController = window.modlerComponents?.sceneController;
+                const callbacks = sceneController ? {
+                    updateLayout: sceneController.updateLayout ? sceneController.updateLayout.bind(sceneController) : () => {},
+                    updateHugContainerSize: sceneController.updateHugContainerSize ? sceneController.updateHugContainerSize.bind(sceneController) : () => {},
+                    resizeToLayoutBounds: sceneController.resizeToLayoutBounds ? sceneController.resizeToLayoutBounds.bind(sceneController) : null
+                } : {};
+
+                // NOTE: Position in options is treated as LOCAL to parent (not world)
+                // setParentContainer will handle hierarchy changes but won't convert coordinates
+                // because mesh.position was already set as local in configureMesh()
+                const success = hierarchyManager.setParentContainer(
+                    id,
+                    objectData.parentContainer,
+                    callbacks,
+                    false  // shouldUpdateLayout=false during creation
+                );
+
+                if (!success) {
+                    console.warn(`SceneLifecycleManager: Failed to set parent ${objectData.parentContainer} for object ${id}`);
+                }
+            }
+        } else {
+            // Track root-level objects in order (delegated to hierarchy manager)
             const manager = this.getHierarchyManager();
             if (manager) {
                 manager.addToRootOrder(id);
@@ -180,7 +212,23 @@ class SceneLifecycleManager {
             return false;
         }
 
-        // Clean up support meshes first
+        // CRITICAL FIX: Recursively delete container children FIRST
+        // This ensures all child objects are cleaned up when parent is deleted
+        if (objectData.isContainer) {
+            const hierarchyManager = this.getHierarchyManager();
+            if (hierarchyManager) {
+                const children = hierarchyManager.getChildObjects(id);
+                if (children.length > 0) {
+                    console.log(`SceneLifecycleManager: Recursively deleting ${children.length} children of container ${id} "${objectData.name}"`);
+                    for (const child of children) {
+                        console.log(`  Deleting child ${child.id} "${child.name}" (type: ${child.type})`);
+                        this.removeObject(child.id); // Recursive deletion
+                    }
+                }
+            }
+        }
+
+        // Clean up support meshes
         const supportMeshFactory = this.getSupportMeshFactory();
         if (supportMeshFactory) {
             supportMeshFactory.cleanupSupportMeshes(objectData.mesh);

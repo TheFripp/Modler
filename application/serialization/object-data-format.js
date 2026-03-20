@@ -179,7 +179,7 @@ function validateObjectData(objectData) {
 
 /**
  * Serialize ObjectData for PostMessage transmission
- * UPDATED: Uses schema-driven serialization exclusively (dual path removed)
+ * Standardizes then deep-clones to create new references (safe for Svelte reactivity)
  * @param {Object} objectData - Standard ObjectData
  * @returns {Object} PostMessage-safe object
  */
@@ -187,24 +187,14 @@ function serializeForPostMessage(objectData) {
     if (!objectData) return null;
 
     try {
-        // FIX: First standardize the data to ensure position/rotation are extracted from mesh
-        // SceneController objectData has mesh.position, not direct position property
+        // Standardize to extract position/rotation from mesh references
         const standardData = standardizeObjectData(objectData);
 
-        // ARCHITECTURE: Schema-driven serialization is required
-        // This eliminates dual code paths and ensures consistency
-        if (!window.SchemaSerializer) {
-            console.error('ObjectDataFormat: SchemaSerializer not available - this is a critical system dependency');
-            throw new Error('SchemaSerializer required for serialization');
-        }
+        // Deep clone to create new references (needed for Svelte reactivity)
+        // JSON round-trip is safe here: standardized data has no functions/circular refs
+        const serialized = JSON.parse(JSON.stringify(standardData));
 
-        const serialized = window.SchemaSerializer.serializeWithSchema(
-            standardData,
-            STANDARD_OBJECT_DATA_SCHEMA,
-            { createNewReferences: true }
-        );
-
-        // Add runtime metadata
+        // Ensure metadata
         serialized.formatVersion = OBJECT_DATA_FORMAT_VERSION;
         serialized.lastModified = Date.now();
 
@@ -212,32 +202,6 @@ function serializeForPostMessage(objectData) {
 
     } catch (error) {
         console.error('ObjectDataFormat.serializeForPostMessage: Serialization failed:', error);
-        return null;
-    }
-}
-
-/**
- * Deserialize ObjectData from PostMessage
- * @param {Object} messageData - Data received via PostMessage
- * @returns {Object} Standard ObjectData
- */
-function deserializeFromPostMessage(messageData) {
-    if (!messageData) return null;
-
-    try {
-        // Validate and standardize the received data
-        const standardData = standardizeObjectData(messageData);
-
-        // Verify format version compatibility
-        if (messageData.formatVersion && messageData.formatVersion !== OBJECT_DATA_FORMAT_VERSION) {
-            console.warn(`ObjectDataFormat: Received data with different format version: ${messageData.formatVersion}`);
-            // Could implement migration logic here if needed
-        }
-
-        return standardData;
-
-    } catch (error) {
-        console.error('ObjectDataFormat.deserializeFromPostMessage: Deserialization failed:', error);
         return null;
     }
 }
@@ -654,7 +618,6 @@ window.ObjectDataFormat = {
     standardizeObjectData,
     validateObjectData,
     serializeForPostMessage,
-    deserializeFromPostMessage,
 
     // Factories
     createObjectMetadata,

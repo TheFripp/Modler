@@ -146,8 +146,6 @@ class UpdateLayoutPropertyCommand extends BaseCommand {
                 objectStateManager.updateObject(this.containerId, {
                     layout: containerData.autoLayout
                 });
-            } else if (window.modlerComponents?.propertyManager) {
-                window.modlerComponents.propertyManager.notifyObjectModified(containerData);
             }
 
             console.log(`↩️ UpdateLayoutPropertyCommand undone: ${this.description}`, {
@@ -204,8 +202,6 @@ class UpdateLayoutPropertyCommand extends BaseCommand {
                 objectStateManager.updateObject(this.containerId, {
                     layout: containerData.autoLayout
                 });
-            } else if (window.modlerComponents?.propertyManager) {
-                window.modlerComponents.propertyManager.notifyObjectModified(containerData);
             }
 
             console.log(`↪️ UpdateLayoutPropertyCommand redone: ${this.description}`, {

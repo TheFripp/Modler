@@ -427,13 +427,23 @@ class SceneLayoutManager {
             // - Fill/fixed sizing (layout axis)
             // - Gap distribution
             {
+                // CRITICAL: During perpendicular push, only update the pushed axis
+                // Preserve layout axis positions to avoid objects snapping back
+                const layoutAxis = container.autoLayout?.direction || 'x';
+                const isPushingPerpendicular = pushContext && pushContext.axis !== layoutAxis;
+
                 // Normal layout update - apply positions
                 // CRITICAL FIX: Use local positions when objects are children of container
                 // Layout positions are already relative to container coordinate space
                 if (container && container.mesh && obj.mesh.parent === container.mesh) {
                     // Object is child of container - use layout position directly as local position
-                    const oldPos = obj.mesh.position.clone();
-                    obj.mesh.position.copy(layoutPosition);
+                    if (isPushingPerpendicular) {
+                        // Only update the pushed axis, preserve layout axis position
+                        obj.mesh.position[pushContext.axis] = layoutPosition[pushContext.axis];
+                    } else {
+                        // Normal layout update - apply all positions
+                        obj.mesh.position.copy(layoutPosition);
+                    }
 
                     // Update object data position to maintain consistency (world position)
                     obj.position = obj.mesh.getWorldPosition(new THREE.Vector3());
@@ -441,12 +451,21 @@ class SceneLayoutManager {
                 } else {
                     // Object not in container hierarchy - use world position (fallback)
                     const containerPosition = container && container.mesh ? container.mesh.position : new THREE.Vector3(0, 0, 0);
-                    const worldPosition = new THREE.Vector3()
-                        .copy(layoutPosition)
-                        .add(containerPosition);
 
-                    obj.mesh.position.copy(worldPosition);
-                    obj.position = worldPosition.clone();
+                    if (isPushingPerpendicular) {
+                        // Only update the pushed axis
+                        const worldPos = layoutPosition[pushContext.axis] + containerPosition[pushContext.axis];
+                        obj.mesh.position[pushContext.axis] = worldPos;
+                        obj.position = obj.mesh.getWorldPosition(new THREE.Vector3());
+                    } else {
+                        // Normal layout update - apply all positions
+                        const worldPosition = new THREE.Vector3()
+                            .copy(layoutPosition)
+                            .add(containerPosition);
+
+                        obj.mesh.position.copy(worldPosition);
+                        obj.position = worldPosition.clone();
+                    }
                 }
             }
             // During push: positions are NOT updated - objects stay where they are

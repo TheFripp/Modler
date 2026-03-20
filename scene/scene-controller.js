@@ -657,6 +657,38 @@ class SceneController {
         const manager = this.getHierarchyManager();
         return manager ? manager.getChildObjects(containerId) : [];
     }
+
+    /**
+     * Get root-level objects (objects without parent containers)
+     */
+    getRootObjects() {
+        const allObjects = Array.from(this.objects.values());
+        return allObjects.filter(obj => !obj.parentContainer);
+    }
+
+    /**
+     * Set root-level children order
+     */
+    setRootOrder(childrenOrder) {
+        const manager = this.getHierarchyManager();
+        if (manager) {
+            manager.rootChildrenOrder = childrenOrder;
+
+            // Emit HIERARCHY event via ObjectEventBus
+            if (window.objectEventBus) {
+                window.objectEventBus.emit(
+                    window.objectEventBus.EVENT_TYPES.HIERARCHY,
+                    null,  // No specific objectId for root reorder
+                    {
+                        type: 'root-reorder',
+                        rootChildrenOrder: childrenOrder,
+                        source: 'root-reorder'
+                    },
+                    { immediate: true, source: 'SceneController.setRootOrder' }
+                );
+            }
+        }
+    }
     
     /**
      * Apply layout positions and sizes (DELEGATED to SceneLayoutManager)
@@ -722,7 +754,7 @@ class SceneController {
      * @param {number} newDimension - New dimension value
      * @returns {boolean} - Success status
      */
-    updateObjectDimensions(objectId, axis, newDimension, anchorMode = 'center') {
+    updateObjectDimensions(objectId, axis, newDimension, anchorMode = 'center', suppressEvents = false) {
         // Validate input parameters
         if (typeof newDimension !== 'number' || isNaN(newDimension) || newDimension <= 0) {
             console.warn('Cannot update dimensions: invalid dimension value', newDimension);
@@ -757,8 +789,10 @@ class SceneController {
 
             // Dimensions automatically updated via DimensionManager getter from geometry
 
-            // Use centralized completion pattern
-            TransformNotificationUtils.completeDimensionChange(mesh, axis);
+            // Use centralized completion pattern (skip during push to prevent UI flickering)
+            if (!suppressEvents) {
+                TransformNotificationUtils.completeDimensionChange(mesh, axis);
+            }
 
             return true;
 

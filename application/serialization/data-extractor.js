@@ -132,6 +132,7 @@ function extractBasicData(sceneObject) {
         type: sceneObject.type || 'object',
         isContainer: sceneObject.isContainer || false,
         parentContainer: sceneObject.parentContainer || null, // CRITICAL for tree building
+        childrenOrder: sceneObject.childrenOrder || [], // For drag-drop reordering in ObjectTree
         selected: sceneObject.selected || false,
         locked: sceneObject.locked || false,
         visible: sceneObject.visible !== undefined ? sceneObject.visible : true,

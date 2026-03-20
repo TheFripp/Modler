@@ -288,7 +288,7 @@ class MaterialManager {
             opacity: options.opacity || configManager?.get('visual.selection.opacity') || 0.8,
             renderOrder: options.renderOrder || configManager?.get('visual.selection.renderOrder') || 999,
             transparent: true,
-            depthTest: true,   // Enable depth test - hide back edges
+            depthTest: false,  // Disable depth test - always render on top
             depthWrite: false, // Don't write to depth buffer
             clippingPlanes: [],
             ...options

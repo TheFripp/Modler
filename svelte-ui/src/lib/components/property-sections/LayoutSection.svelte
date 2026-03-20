@@ -68,7 +68,8 @@
 	// SimpleCommunication: Handle layout button hover for face highlighting
 	function handleLayoutHover(axis: string, isHovering: boolean) {
 		window.parent.postMessage({
-			type: 'layout-button-hover',
+			type: 'button-hover',
+			buttonType: 'layout',
 			objectId,
 			axis,
 			isHovering

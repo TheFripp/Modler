@@ -399,6 +399,7 @@ class DeleteObjectCommand extends BaseCommand {
 
         switch (snapshot.type) {
             case 'box':
+            case 'cube':
                 restoredObjectData = this.restoreBox(snapshot);
                 break;
             case 'test':
@@ -432,18 +433,45 @@ class DeleteObjectCommand extends BaseCommand {
      * Restore a box object
      */
     restoreBox(snapshot) {
-        // Create new box with original dimensions
-        const boxData = this.sceneController.createBox(
-            snapshot.dimensions.width,
-            snapshot.dimensions.height,
-            snapshot.dimensions.depth,
-            snapshot.position,
-            snapshot.name
-        );
+        try {
+            // Recreate the geometry with original dimensions (dimensions use {x, y, z} format)
+            const geometryFactory = window.modlerComponents?.geometryFactory;
+            const dims = snapshot.dimensions || { x: 1, y: 1, z: 1 };
+            const geometry = geometryFactory
+                ? geometryFactory.createBoxGeometry(dims.x, dims.y, dims.z)
+                : new THREE.BoxGeometry(dims.x, dims.y, dims.z);
 
-        // Properties will be restored by restoreAllObjectProperties
+            // Create material using captured data
+            const materialManager = window.modlerComponents?.materialManager;
+            const material = materialManager
+                ? materialManager.createMeshLambertMaterial({
+                    color: snapshot.materialConfig?.color || 0x808080
+                  })
+                : new THREE.MeshLambertMaterial({
+                    color: snapshot.materialConfig?.color || 0x808080
+                  });
 
-        return boxData;
+            // Add object using SceneController's addObject method with original position
+            // Priority: meshData.position > position > default
+            const position = snapshot.meshData?.position || snapshot.position || { x: 0, y: 0, z: 0 };
+
+            const boxData = this.sceneController.addObject(
+                geometry,
+                material,
+                {
+                    name: snapshot.name,
+                    type: snapshot.type,
+                    position: { x: position.x, y: position.y, z: position.z }
+                }
+            );
+
+            // Properties will be restored by restoreAllObjectProperties
+            return boxData;
+
+        } catch (error) {
+            console.error('DeleteObjectCommand: Error restoring box:', error);
+            return null;
+        }
     }
 
     /**
@@ -715,7 +743,6 @@ class DeleteObjectCommand extends BaseCommand {
             if (!snapshot.isContainer) {
                 // Create support meshes for regular objects (same as in SceneController.addObject)
                 supportMeshFactory.createObjectSupportMeshes(mesh);
-                console.log('DeleteObjectCommand: Created support meshes for restored object:', snapshot.name);
             } else {
                 // Containers should already have their wireframe children from LayoutGeometry.createContainerGeometry()
                 // But we might need additional support meshes for interaction

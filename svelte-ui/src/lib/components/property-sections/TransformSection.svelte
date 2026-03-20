@@ -3,11 +3,12 @@
 	import PropertyGroup from '$lib/components/ui/property-group.svelte';
 	import XyzInput from '$lib/components/ui/xyz-input.svelte';
 	import type { SectionFeatures } from '$lib/services/property-section-registry';
+	import { currentUnit as storeCurrentUnit } from '$lib/stores/units';
 
 	// Props
 	export let displayObject: any;
 	export let objectId: string;
-	export let currentUnit: string = 'm';
+	export let currentUnit: string = 'm'; // Deprecated - kept for backward compatibility
 	export let features: SectionFeatures = {
 		position: true,
 		rotation: true,
@@ -52,7 +53,8 @@
 
 		// SimpleCommunication: Direct postMessage to CommandRouter
 		window.parent.postMessage({
-			type: 'fill-button-hover',
+			type: 'button-hover',
+			buttonType: 'fill',
 			objectId: displayObject.id,
 			axis,
 			isHovering
@@ -64,7 +66,7 @@
 	// with displayObject from StateSerializer. No request/response needed.
 </script>
 
-<PropertyGroup title="Transform ({currentUnit})" align="right">
+<PropertyGroup title="Transform" align="right">
 	<div class="space-y-4">
 		<!-- Position Sub-group (optional via features.position) -->
 		{#if features.position !== false}

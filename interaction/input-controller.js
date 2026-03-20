@@ -204,7 +204,10 @@ class InputController {
 
 
             if (isDoubleClick && tool && tool.onDoubleClick) {
-                tool.onDoubleClick(this.lastMouseDownEvent.hit, this.lastMouseDownEvent.event);
+                // For double-click, do a fresh raycast to get the actual child object
+                // (not resolved to parent container like single-click does)
+                const doubleClickHit = this.raycastForDoubleClick();
+                tool.onDoubleClick(doubleClickHit, this.lastMouseDownEvent.event);
             } else if (tool && tool.onClick) {
                 tool.onClick(this.lastMouseDownEvent.hit, this.lastMouseDownEvent.event);
             }
@@ -304,18 +307,6 @@ class InputController {
                             object: parentData.mesh
                         };
                     }
-
-                    // Debug: log why parent check failed
-                    if (parentData) {
-                        console.log('🔍 Parent found but not in selected:', {
-                            childId: objectData.id,
-                            parentId: parentData.id,
-                            selectedIds: selectedObjects.map(obj => obj.userData?.id),
-                            parentMeshInSelected: selectedObjects.includes(parentData.mesh)
-                        });
-                    } else {
-                        console.log('⚠️ Parent data not found for container ID:', objectData.parentContainer);
-                    }
                 }
 
                 // Check if this is the selected container itself (wireframe hit)
@@ -346,16 +337,9 @@ class InputController {
 
                 const objectData = this.sceneController.getObjectByMesh(mainObject);
 
-                // DEFENSIVE: Skip if we can't find object data (orphaned mesh)
+                // DEFENSIVE: Skip if we can't find object data (orphaned mesh or support mesh)
                 if (!objectData) {
-                    console.warn('⚠️ Raycaster hit object with no objectData:', {
-                        name: mainObject.name,
-                        uuid: mainObject.uuid,
-                        type: mainObject.type,
-                        userData: mainObject.userData,
-                        parent: mainObject.parent?.name,
-                        hasGeometry: !!mainObject.geometry
-                    });
+                    // Silently skip - likely a support mesh (wireframe, face highlight, etc.)
                     continue;
                 }
 
@@ -408,6 +392,43 @@ class InputController {
         this.lastClickTime = currentTime;
         this.lastClickPosition = currentPosition;
         return isDoubleClick;
+    }
+
+    /**
+     * Raycast specifically for double-click - returns actual child object, not resolved to parent
+     * This allows double-clicking children to navigate into their container
+     */
+    raycastForDoubleClick() {
+        this.raycaster.setFromCamera(this.mouse, this.camera);
+
+        const supportMeshFactory = window.modlerComponents?.supportMeshFactory;
+
+        // Raycast on Layer 0 to find actual objects (not just interactive meshes)
+        this.raycaster.layers.set(0);
+        const intersects = this.raycaster.intersectObjects(this.scene.children, true);
+
+        for (let hit of intersects) {
+            // Resolve support meshes to main objects
+            const mainObject = supportMeshFactory ? supportMeshFactory.resolveMainObjectFromHit(hit) : hit.object;
+
+            if (!mainObject) continue;
+
+            const objectData = this.sceneController.getObjectByMesh(mainObject);
+
+            // Skip if no object data (orphaned meshes, support meshes, etc.)
+            if (!objectData) continue;
+
+            // Return the actual object that was clicked (child, container, or regular object)
+            // Don't resolve children to parents - that's for single-click container-first behavior
+            if (objectData.selectable !== false) {
+                return {
+                    ...this.createHitResult(hit),
+                    object: mainObject
+                };
+            }
+        }
+
+        return null;
     }
 
     startCameraOrbit(event) {
