@@ -188,21 +188,28 @@ class LayoutPropagationManager {
 
         this.scheduledLayoutUpdates.clear();
 
-        // Schedule deferred propagations for next frame
-        if (deferredPropagations.size > 0) {
+        // Process parent propagations synchronously when within nesting depth limit.
+        // MAX_NESTING_DEPTH = 2, so at most one parent level needs processing.
+        // This eliminates the 1-2 frame delay that caused parent containers to read
+        // intermediate child state, resulting in nested container misalignment.
+        if (deferredPropagations.size > 0 && (this._propagationDepth || 0) < 2) {
+            this._propagationDepth = (this._propagationDepth || 0) + 1;
+            deferredPropagations.forEach(id => this.scheduledLayoutUpdates.add(id));
+            this.processScheduledLayouts();
+            this._propagationDepth--;
+        } else if (deferredPropagations.size > 0) {
+            // Fallback for unexpected deep nesting — defer to next frame
             this.nextFramePropagations = new Set([...this.nextFramePropagations, ...deferredPropagations]);
 
             if (!this.deferredPropagationScheduled) {
                 this.deferredPropagationScheduled = true;
                 requestAnimationFrame(() => {
-                    // Move deferred propagations to scheduled updates
                     this.nextFramePropagations.forEach(id => {
                         this.scheduledLayoutUpdates.add(id);
                     });
                     this.nextFramePropagations.clear();
                     this.deferredPropagationScheduled = false;
 
-                    // Process the propagations
                     this.processScheduledLayouts();
                 });
             }

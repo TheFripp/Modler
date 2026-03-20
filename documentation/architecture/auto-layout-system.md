@@ -319,57 +319,41 @@ if (object.isContainer && sceneObject && (object.autoLayout?.enabled || autoLayo
 ```
 Box 003 (depth 2) dimensions change
   ↓
-Container 002 (depth 1) layout updates
+Container 002 (depth 1) layout updates (synchronous)
   ↓
 Container 002 resizes to fit Box 003
   ↓
-Container 001 (depth 0) layout updates (Container 002 is a child)
+Container 001 (depth 0) layout updates (synchronous, same frame)
   ↓
 Container 001 resizes to fit Container 002
 ```
 
-**Depth-Sorted Processing** (`object-state-manager.js:749`):
+**Depth-Sorted Processing** (`layout/layout-propagation-manager.js`):
+
+The `LayoutPropagationManager` handles bottom-up propagation with depth-sorted processing:
+
+1. All scheduled containers are sorted by depth (deepest first)
+2. Each container's layout is recalculated, then resized via `ContainerCrudManager.resizeContainer()`
+3. Parent containers are collected for propagation
+4. **Synchronous propagation**: Parent layouts process in the same frame (not deferred via RAF)
+
 ```javascript
-processScheduledLayouts() {
-    // Sort by container depth (deepest first)
-    const sorted = Array.from(this.scheduledLayoutUpdates).sort((a, b) => {
-        const depthA = this.getContainerDepth(a);
-        const depthB = this.getContainerDepth(b);
-        return depthB - depthA; // Descending order (deepest first)
-    });
-
-    // Update each container's layout
-    sorted.forEach(containerId => {
-        const container = this.sceneController.getObject(containerId);
-        if (container?.autoLayout?.enabled) {
-            const layoutResult = this.sceneController.updateLayout(containerId);
-
-            // Resize container to fit new layout
-            if (layoutResult?.success && layoutResult.layoutBounds) {
-                const containerCrudManager = window.modlerComponents?.containerCrudManager;
-                if (containerCrudManager) {
-                    containerCrudManager.resizeContainerToLayoutBounds(container, layoutResult.layoutBounds);
-                }
-            }
-
-            // If this container is in a parent container, schedule parent update
-            if (container.parentContainer) {
-                const grandparent = this.sceneController.getObject(container.parentContainer);
-                if (grandparent?.autoLayout?.enabled) {
-                    this.scheduledLayoutUpdates.add(container.parentContainer);
-                }
-            }
-        }
-    });
-
-    this.scheduledLayoutUpdates.clear();
+// Parent propagation is synchronous for shallow hierarchies (MAX_NESTING_DEPTH = 2)
+// This ensures parent containers see fully-updated child sizes
+if (deferredPropagations.size > 0 && this._propagationDepth < 2) {
+    this._propagationDepth++;
+    deferredPropagations.forEach(id => this.scheduledLayoutUpdates.add(id));
+    this.processScheduledLayouts();  // Synchronous recursion
+    this._propagationDepth--;
 }
 ```
 
-**Why Deepest First?**:
-- Inner containers resize before outer containers
-- Prevents multiple recalculations
-- Ensures correct final layout
+**Why Deepest First + Synchronous?**:
+- Inner containers resize before outer containers read their sizes
+- Parent processes in same frame — no visual flicker from intermediate states
+- Recursion depth guard prevents infinite loops (falls back to RAF if depth > 2)
+
+**Key Architectural Rule**: `updateLayout()` performs a single resize via layout bounds. The hug-mode resize (`updateHugContainerSize()`) is NOT called after layout — layout bounds already produce the correct container size. This prevents double-resize conflicts that caused nested container misalignment.
 
 ---
 

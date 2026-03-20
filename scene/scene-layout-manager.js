@@ -347,13 +347,11 @@ class SceneLayoutManager {
             // Re-enable hug updates
             this.hugUpdatesEnabled = wasHugEnabled;
 
-            // If this is a hug container, trigger a single update now that layout is complete
-            // CRITICAL: Don't hug if any child has fill mode - this creates circular dependency
-            if (container.containerMode === 'hug' || container.isHug) {
-                if (!this._hasChildWithFill(children)) {
-                    this.updateHugContainerSize(containerId);
-                }
-            }
+            // NOTE: updateHugContainerSize() is NOT called here.
+            // Layout bounds resize at line 335 already produces the correct container size.
+            // Calling hug resize after layout caused double-resize conflicts that broke
+            // nested container alignment (hug would shift container position and compensate
+            // children, conflicting with the layout-bounds resize).
         }
     }
 
@@ -511,6 +509,8 @@ class SceneLayoutManager {
             if (child.mesh) {
                 child.mesh.position.sub(bboxCenter);
                 child.mesh.updateMatrixWorld(true);
+                // Sync data-model position so subsequent layout reads are correct
+                child.position = child.mesh.getWorldPosition(new THREE.Vector3());
             }
         });
 
@@ -521,7 +521,8 @@ class SceneLayoutManager {
             geometryUtils.resizeGeometry(containerData.mesh.geometry, 'y', newSize.y, 'center');
             geometryUtils.resizeGeometry(containerData.mesh.geometry, 'z', newSize.z, 'center');
 
-            // Dimensions automatically updated via DimensionManager getter from geometry
+            // Sync cached dimensions with geometry to prevent stale reads
+            containerData.dimensions = { x: newSize.x, y: newSize.y, z: newSize.z };
 
             // Update support meshes (selection box, wireframe)
             const supportMeshFactory = window.modlerComponents?.supportMeshFactory;

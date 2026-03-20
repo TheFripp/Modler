@@ -19,11 +19,9 @@ Dual geometry containers (visual wireframes + collision meshes) with Three.js hi
 - Factory access consolidation for consistent container creation
 - Focused on data operations with clear boundaries
 
-**ContainerInteractionManager**: Pure interaction state management
-- Step-into/step-out context
-- Visual feedback and highlighting
-- Collision state management
-- 313 lines focused on user interaction
+**NavigationController**: Container interaction state (step-into/step-out context)
+- Single authority for container navigation state
+- Visual feedback via ContainerVisualizer (reads from NavigationController)
 
 ## Core Architecture
 

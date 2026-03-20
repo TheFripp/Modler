@@ -851,7 +851,16 @@ class ContainerCrudManager {
         let newPosition = containerData.mesh.position.clone();
 
         if (pushContext && pushContext.isPush) {
-            const oldSize = containerData.dimensions;
+            // Read fresh dimensions from geometry (cached dimensions may be stale)
+            let oldSize = containerData.dimensions;
+            const geom = containerData.mesh?.geometry;
+            if (geom) {
+                geom.computeBoundingBox();
+                const box = geom.boundingBox;
+                if (box) {
+                    oldSize = { x: box.max.x - box.min.x, y: box.max.y - box.min.y, z: box.max.z - box.min.z };
+                }
+            }
             const newSize = layoutBounds.size;
             const axis = pushContext.axis;
             const anchorMode = pushContext.anchorMode;
