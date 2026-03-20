@@ -135,8 +135,7 @@ function initializeScene() {
             nextId: 1,
             nextBoxNumber: 1,
             nextContainerNumber: 1
-        },
-        modlerV2Components.sceneController.eventCallbacks
+        }
     );
 
     // Inject centralized factories (Phase 1 - Factory Consolidation)

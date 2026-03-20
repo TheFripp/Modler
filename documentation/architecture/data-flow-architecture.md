@@ -1,8 +1,8 @@
 # Data Flow Architecture
 
-**Version**: 1.0.0
+**Version**: 2.0.0
 **Status**: Current
-**Last Updated**: 2025-01-30
+**Last Updated**: 2026-03-20
 
 ## Overview
 
@@ -27,7 +27,13 @@ User Input → Tool → ObjectStateManager → SceneController → GeometryUtils
 - **CAD Operations**: Modify geometry vertices directly
 - **Transform Operations**: Modify visual position/rotation/scale
 - **State Management**: Coordinate updates between systems
-- **UI Communication**: PropertyPanelSync is ONLY postMessage source
+- **UI Communication**: SimpleCommunication is the ONLY postMessage source for object/hierarchy data
+
+### 4. Event System Architecture
+- **ObjectEventBus** — single event system for all object/interaction events. Leading+trailing throttle at ~60fps.
+- **ConfigurationManager** — separate key-path subscription for settings reactivity (different domain)
+- **FileManager (EventTarget)** — domain-specific file events consumed by FileManagerHandler
+- **`window.dispatchEvent(CustomEvent)`** — system-level events crossing iframe boundaries (unit-changed, modler:panels-ready)
 
 ---
 
@@ -91,33 +97,34 @@ User Input → Tool → ObjectStateManager → SceneController → GeometryUtils
                   │
                   ▼
 ┌─────────────────────────────────────────────────────────────┐
-│ 8. EVENT EMISSION (transform-notification-utils.js)         │
-│    - ObjectEventBus.emit(GEOMETRY, objectId, data)          │
+│ 8. EVENT EMISSION (object-state-manager.js)                  │
+│    - emitChangeEvents() → ObjectEventBus.emit(type, id, data)│
+│    - Leading+trailing throttle at ~60fps                     │
 └─────────────────┬───────────────────────────────────────────┘
                   │
                   ▼
 ┌─────────────────────────────────────────────────────────────┐
-│ 9. UI COMMUNICATION (property-panel-sync.js)                │
-│    - Listens to ObjectEventBus GEOMETRY events              │
-│    - sendToUI('object-modified-geometry', objects)          │
-│    - iframe.contentWindow.postMessage(data, '*')            │
+│ 9. UI COMMUNICATION (simple-postmessage.js)                  │
+│    - SimpleCommunication subscribes to ObjectEventBus        │
+│    - getCompleteObjectData() via DataExtractor               │
+│    - Microtask-batched postMessage to all UI iframes         │
 └─────────────────┬───────────────────────────────────────────┘
                   │
                   ▼
 ┌─────────────────────────────────────────────────────────────┐
-│ 10. UI UPDATE (svelte-ui/PropertyPanel.svelte)              │
-│     - Receives postMessage                                  │
-│     - Updates dimension input fields                        │
-│     - User sees new dimensions                              │
+│ 10. UI UPDATE (svelte-ui/PropertyPanel.svelte)               │
+│     - Receives postMessage via threejs-bridge.ts             │
+│     - Updates Svelte stores → dimension input fields         │
+│     - User sees new dimensions                               │
 └─────────────────────────────────────────────────────────────┘
 ```
 
 **Key Code Locations**:
-- Push Tool: `application/tools/push-tool.js:415`
-- CAD Geometry: `application/utilities/geometry-utils.js:162`
-- State Manager: `core/object-state-manager.js:261`
-- Scene Controller: `scene/scene-controller.js:742`
-- UI Sync: `integration/svelte/property-panel-sync.js:388`
+- Push Tool: `application/tools/push-tool.js`
+- CAD Geometry: `application/utilities/geometry-utils.js`
+- State Manager: `core/object-state-manager.js`
+- Event Bus: `application/events/object-event-bus.js`
+- UI Sync: `integration/communication/simple-postmessage.js`
 
 ---
 

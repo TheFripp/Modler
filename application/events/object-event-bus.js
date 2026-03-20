@@ -281,16 +281,20 @@ class ObjectEventBus {
     _emitThrottled(event) {
         const throttleKey = `${event.eventType}:${event.objectId}`;
 
-        // Store latest event data
+        // Store latest event data for trailing emission
         this.eventQueue.set(throttleKey, event);
 
-        // Check if already throttled
+        // Within cooldown — queue for trailing emission
         if (this.throttleMap.has(throttleKey)) {
             this.stats.throttledEvents++;
-            return true; // Event queued, will be emitted later
+            return true;
         }
 
-        // Set up throttle
+        // Leading edge: emit first event immediately
+        this._emitImmediate(event);
+        this.eventQueue.delete(throttleKey);
+
+        // Set cooldown timer for trailing edge
         const timeoutId = setTimeout(() => {
             const queuedEvent = this.eventQueue.get(throttleKey);
             if (queuedEvent) {

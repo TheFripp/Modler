@@ -479,36 +479,6 @@ const logger = window.logger;
     // Tool state updates handled by SimpleCommunication via ObjectEventBus
 
     // ==================================================================================
-    // SCENE EVENT INTEGRATION (Simplified)
-    // ==================================================================================
-
-    /**
-     * Setup SceneController event listeners
-     */
-    function setupSceneEventListeners() {
-        const sceneController = window.modlerComponents?.sceneController;
-        if (!sceneController) return;
-
-        // Listen to object creation/deletion
-        sceneController.on?.('objectAdded', () => {
-            // Import new object to ObjectStateManager
-            const objectStateManager = window.modlerComponents?.objectStateManager;
-            if (objectStateManager) {
-                objectStateManager.importFromSceneController();
-            }
-        });
-
-        sceneController.on?.('objectRemoved', (objectData) => {
-            // Remove from ObjectStateManager
-            const objectStateManager = window.modlerComponents?.objectStateManager;
-            if (objectStateManager) {
-                objectStateManager.objects.delete(objectData.id);
-                // Note: Hierarchy is rebuilt on-demand via getHierarchy(), no need to rebuild here
-            }
-        });
-    }
-
-    // ==================================================================================
     // SCENE UPDATE FUNCTIONS (Bridge functions for ConfigurationManager)
     // NOTE: These functions are now defined in scene-foundation.js
     // ==================================================================================
@@ -550,10 +520,7 @@ const logger = window.logger;
         // Give v2-main.js time to complete its initialization
         // Since both scripts listen to DOMContentLoaded, we need to wait
         setTimeout(() => {
-            initialize().then(() => {
-                // Setup scene listeners after successful integration
-                setupSceneEventListeners();
-            }).catch(error => {
+            initialize().catch(error => {
                 console.error('❌ Integration startup failed:', error);
             });
         }, 50); // Reduced delay for faster startup

@@ -6,8 +6,6 @@ class SceneController {
     constructor(scene) {
         this.scene = scene;
         this.objects = new Map(); // id -> object data
-        this.eventCallbacks = {}; // Event system for UI notifications
-
         // Root-level object ordering (similar to container childrenOrder)
         this.rootChildrenOrder = [];
 
@@ -134,21 +132,6 @@ class SceneController {
     generateObjectName(type) {
         const manager = this.getLifecycleManager();
         return manager ? manager.generateObjectName(type) : `Object ${Date.now()}`;
-    }
-
-    
-    // Simple event system for object lifecycle notifications
-    on(event, callback) {
-        if (!this.eventCallbacks[event]) {
-            this.eventCallbacks[event] = [];
-        }
-        this.eventCallbacks[event].push(callback);
-    }
-    
-    emit(event, data) {
-        if (this.eventCallbacks[event]) {
-            this.eventCallbacks[event].forEach(callback => callback(data));
-        }
     }
 
     /**

@@ -33,8 +33,6 @@ class SceneLifecycleManager {
         this.nextBoxNumber = 1;
         this.nextContainerNumber = 1;
 
-        // For legacy event system
-        this.eventCallbacks = {};
     }
 
     /**
@@ -43,16 +41,14 @@ class SceneLifecycleManager {
      * @param {Map} objects - Object map from SceneController
      * @param {Array} rootChildrenOrder - Root order array from SceneController
      * @param {Object} counters - ID and name counters {nextId, nextBoxNumber, nextContainerNumber}
-     * @param {Object} eventCallbacks - Event callback registry
      */
-    initialize(scene, objects, rootChildrenOrder, counters, eventCallbacks) {
+    initialize(scene, objects, rootChildrenOrder, counters) {
         this.scene = scene;
         this.objects = objects;
         this.rootChildrenOrder = rootChildrenOrder;
         this.nextId = counters.nextId;
         this.nextBoxNumber = counters.nextBoxNumber;
         this.nextContainerNumber = counters.nextContainerNumber;
-        this.eventCallbacks = eventCallbacks;
         return true;
     }
 
@@ -196,9 +192,6 @@ class SceneLifecycleManager {
             );
         }
 
-        // Emit legacy event for backward compatibility
-        this.emit('objectAdded', objectData);
-
         return objectData;
     }
 
@@ -304,9 +297,6 @@ class SceneLifecycleManager {
                 { immediate: true, source: 'SceneLifecycleManager.removeObject' }
             );
         }
-
-        // Emit event for UI updates
-        this.emit('objectRemoved', objectData);
 
         return true;
     }
@@ -586,17 +576,6 @@ class SceneLifecycleManager {
                 return containerName;
             default:
                 return `Object ${this.nextId}`;
-        }
-    }
-
-    /**
-     * Emit legacy event for backward compatibility
-     * @param {string} event - Event name
-     * @param {*} data - Event data
-     */
-    emit(event, data) {
-        if (this.eventCallbacks[event]) {
-            this.eventCallbacks[event].forEach(callback => callback(data));
         }
     }
 
