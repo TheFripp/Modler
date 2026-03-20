@@ -250,9 +250,12 @@ class PropertyUpdateHandler {
             }
 
             // CRITICAL FIX: Persist via ObjectStateManager instead of direct mutation
+            // Preserve current container mode (hug containers stay hug, layout stays layout)
+            const currentMode = this.objectStateManager.getContainerMode(containerId);
+            const targetMode = (currentMode === 'hug' || currentMode === 'layout') ? currentMode : 'layout';
             this.objectStateManager.updateObject(containerId, {
                 autoLayout: updatedAutoLayout,
-                ...ObjectStateManager.buildContainerModeUpdate('layout')
+                ...ObjectStateManager.buildContainerModeUpdate(targetMode)
             }, { source: 'property-panel', immediate: true });
 
             // Only proceed with layout if enabled and has valid direction

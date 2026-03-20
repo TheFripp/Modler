@@ -243,6 +243,7 @@ class ContainerVisualizer extends ObjectVisualizer {
             this.setContainerSelectionState(object);
             this.showPaddingVisualization(object);
             this.showChildContainers(object);
+            this.showParentContainerContext(object);
         } else {
             super.applyStateVisuals(object, newState, oldState);
         }
@@ -269,6 +270,7 @@ class ContainerVisualizer extends ObjectVisualizer {
             this.hideContainerWireframe(object);
             this.hidePaddingVisualization(object);
             this.hideChildContainers(object, true);
+            this.hideParentContainerContext(object);
             return;
         }
 
@@ -385,6 +387,43 @@ class ContainerVisualizer extends ObjectVisualizer {
                 }
             }
         });
+    }
+
+    /**
+     * Show parent container as semi-transparent wireframe when a nested container is selected
+     */
+    showParentContainerContext(object) {
+        const sceneController = window.modlerComponents?.sceneController;
+        if (!sceneController) return;
+
+        const objectData = sceneController.getObjectByMesh(object);
+        if (!objectData || !objectData.parentContainer) return;
+
+        const parentData = sceneController.getObject(objectData.parentContainer);
+        if (!parentData?.isContainer || !parentData.mesh) return;
+
+        // Don't override if parent is already in navigation context stack
+        if (this.getNavigationContextStack().includes(parentData.mesh)) return;
+
+        // Show parent wireframe at reduced opacity
+        this.setContainerContextState(parentData.mesh);
+        // Track that we showed this parent for cleanup
+        this._parentContextForSelection = parentData.mesh;
+    }
+
+    /**
+     * Hide parent container context wireframe when nested container is deselected
+     */
+    hideParentContainerContext(object) {
+        if (!this._parentContextForSelection) return;
+
+        const parentMesh = this._parentContextForSelection;
+        this._parentContextForSelection = null;
+
+        // Don't hide if parent is in navigation context stack
+        if (this.getNavigationContextStack().includes(parentMesh)) return;
+
+        this.hideContainerWireframe(parentMesh);
     }
 
     /**

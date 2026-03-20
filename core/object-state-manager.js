@@ -737,7 +737,7 @@ class ObjectStateManager extends EventTarget {
             const autoLayoutPropertyChanged = Array.from(object._changedProperties || []).some(prop =>
                 prop.startsWith('autoLayout.')
             );
-            const isLayoutMode = object.containerMode === 'layout' || object.autoLayout?.enabled;
+            const isLayoutMode = object.containerMode === 'layout';
 
             if (object.isContainer && sceneObject) {
                 if (isLayoutMode) {

@@ -92,9 +92,10 @@ class LayoutPropagationManager {
             return; // No parent or not in a container
         }
 
-        // Use centralized state machine to check if parent has layout enabled
-        if (!this.objectStateManager?.isLayoutMode(childObject.parentContainer)) {
-            return; // Parent doesn't have layout enabled
+        // Use centralized state machine to check if parent has layout or hug enabled
+        const parentMode = this.objectStateManager?.getContainerMode(childObject.parentContainer);
+        if (parentMode !== 'layout' && parentMode !== 'hug') {
+            return; // Parent doesn't have layout or hug enabled
         }
 
         const parentContainer = sceneController.getObject(childObject.parentContainer);
@@ -151,22 +152,36 @@ class LayoutPropagationManager {
 
         // Update each container's layout
         sorted.forEach(containerId => {
-            // Use centralized state machine to check layout mode
-            if (!this.objectStateManager?.isLayoutMode(containerId)) {
-                return; // Container no longer has layout enabled
+            // Use centralized state machine to check layout or hug mode
+            const containerMode = this.objectStateManager?.getContainerMode(containerId);
+            if (containerMode !== 'layout' && containerMode !== 'hug') {
+                return; // Container doesn't have layout or hug enabled
             }
 
             const container = sceneController.getObject(containerId);
 
             // Trigger layout recalculation
             // SINGLE FUNNEL: updateLayout() handles resize internally (SceneLayoutManager line 335)
-            sceneController.updateLayout(containerId);
+            const layoutResult = sceneController.updateLayout(containerId);
+
+            // Fallback: hug containers without autoLayout still need resize when children change
+            if (!layoutResult?.success && containerMode === 'hug') {
+                const containerCrudManager = this.getContainerCrudManager();
+                if (containerCrudManager) {
+                    containerCrudManager.resizeContainer(container, {
+                        reason: 'child-changed',
+                        immediate: true
+                    });
+                }
+            }
+
             this.stats.layoutsProcessed++;
 
             // OPTIMIZATION: Defer grandparent propagations to next frame
             if (container.parentContainer) {
-                // Use centralized state machine to check if grandparent has layout
-                if (this.objectStateManager?.isLayoutMode(container.parentContainer)) {
+                // Use centralized state machine to check if grandparent has layout or hug
+                const grandparentMode = this.objectStateManager?.getContainerMode(container.parentContainer);
+                if (grandparentMode === 'layout' || grandparentMode === 'hug') {
                     deferredPropagations.add(container.parentContainer);
                     this.stats.propagationsDeferred++;
                 }

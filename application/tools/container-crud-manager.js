@@ -814,7 +814,8 @@ class ContainerCrudManager {
          */
 
         // Use LayoutEngine's unified bounds calculation for consistency
-        const childMeshes = childObjects.map(child => child.mesh);
+        // Use getChildMeshesForBounds to correctly handle container children (collision mesh)
+        const childMeshes = this.getChildMeshesForBounds(childObjects);
         const localBounds = window.LayoutEngine.calculateUnifiedBounds(childMeshes, {
             type: 'layout',
             useLocalTransform: true  // Apply child's local transform (position in container space)
