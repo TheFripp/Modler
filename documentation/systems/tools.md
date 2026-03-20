@@ -81,7 +81,17 @@ Tools receive pre-coordinated events from InputController rather than direct DOM
 **File**: `application/tools/base-face-tool-behavior.js`
 - **Face highlighting** coordination
 - **Face detection** and normal calculation
+- **Container target resolution** via `_resolveContainerTarget(hit)` — handles isContainerInteractive, isContainerCollision, and containerMesh architectures
 - **Used by MoveTool and PushTool**
+
+### MovementUtils (Shared Utilities)
+**File**: `application/tools/movement-utils.js`
+- **Mouse movement** calculation and validation
+- **3D projection** and axis movement helpers
+- **Alt-key measurement mode**: `handleMeasurementMode(isAltPressed, hit, selectionController)` — shared by SelectTool, MoveTool, PushTool
+- **FileManager operation guards**: `registerFileOperation(name)` / `unregisterFileOperation(name)` — prevents auto-save during drags
+- **Snap detection** integration helpers
+- **Performance monitoring** for container updates
 
 ## Tool Switching
 
@@ -110,9 +120,16 @@ Tools use centralized factory systems for all resource creation and manipulation
 - **ALWAYS use factory systems** for resource management and performance optimization
 - **Automatic cleanup** through factory resource pooling and tracking
 
+### MeasurementTool
+**File**: `application/tools/measurement-tool.js`
+- **Edge measurement** on Alt+hover
+- **Face normal distance** measurement between objects
+- **Thick-line rendering** via `_addThickLines()` helper (screen-space perpendicular offset)
+
 ## Key Patterns
 - **Shared selection behavior** prevents inconsistencies
 - **Face-based interaction** for CAD workflows
 - **Event coordination** prevents conflicts
 - **Tool-agnostic container creation** via direct commands
 - **Centralized resource management** through factory systems
+- **Shared utilities via MovementUtils** — measurement mode, file operations, movement calculations

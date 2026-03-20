@@ -204,6 +204,51 @@ class MovementUtils {
     }
 
     /**
+     * Handle Alt-key measurement mode in tool onHover methods.
+     * Shows edge/distance measurements when Alt is pressed, clears when released.
+     *
+     * @param {boolean} isAltPressed - Whether Alt key is held
+     * @param {Object} hit - Current raycast hit
+     * @param {Object} selectionController - Selection controller for selected objects
+     * @returns {boolean} True if measurement mode handled the event (caller should return)
+     */
+    static handleMeasurementMode(isAltPressed, hit, selectionController) {
+        const measurementTool = window.modlerComponents?.measurementTool;
+        if (!measurementTool) return false;
+
+        if (isAltPressed) {
+            const selectedObjects = selectionController?.getSelectedObjects() || [];
+            measurementTool.onHover(hit, selectedObjects);
+            return true;
+        }
+
+        measurementTool.clearMeasurement();
+        return false;
+    }
+
+    /**
+     * Register a drag operation with FileManager to prevent auto-save during drag.
+     * @param {string} operationName - Name of the operation (e.g., 'move-tool-drag')
+     */
+    static registerFileOperation(operationName) {
+        const fileManager = window.modlerComponents?.fileManager;
+        if (fileManager && typeof fileManager.registerOperation === 'function') {
+            fileManager.registerOperation(operationName);
+        }
+    }
+
+    /**
+     * Unregister a drag operation with FileManager to allow auto-save again.
+     * @param {string} operationName - Name of the operation to unregister
+     */
+    static unregisterFileOperation(operationName) {
+        const fileManager = window.modlerComponents?.fileManager;
+        if (fileManager?.unregisterOperation) {
+            fileManager.unregisterOperation(operationName);
+        }
+    }
+
+    /**
      * Get dominant axis from cumulative movement object (for Tab key focus)
      * @param {{ x: number, y: number, z: number }} movement - Cumulative movement per axis
      * @returns {string} 'x', 'y', or 'z'

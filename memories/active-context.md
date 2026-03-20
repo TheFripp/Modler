@@ -12,6 +12,13 @@
 - 50+ modified/untracked files on `feature/next-development` branch
 
 ### Completed Milestones
+- **Tools Directory Refactoring** - 2026-03-19
+  - Removed dead code: `createContainerGeometry_OLD` (165 lines), `getClosestPointsBetweenBoxes` (46 lines), debug logging
+  - Extracted `_resolveContainerTarget(hit)` in BaseFaceToolBehavior (deduped 4 call sites)
+  - Extracted `_addThickLines()` helper in MeasurementTool (replaced 7 duplicate loops)
+  - Added `MovementUtils.handleMeasurementMode()` (shared by SelectTool, MoveTool, PushTool)
+  - Added `MovementUtils.registerFileOperation/unregisterFileOperation` (shared by MoveTool, PushTool)
+  - Net reduction: ~407 lines across 7 files
 - **Core Systems Simplification** - 2026-03-19
   - Removed debug logging from hot paths (ObjectStateManager, SceneLifecycleManager)
   - Removed dead code (unused fields, empty methods, dead functions in main-integration)
@@ -239,7 +246,8 @@
 `feature/next-development`
 
 ### Recent Commits
-1. (pending) - refactor: simplify core systems and add postMessage batching
+1. (pending) - refactor: tools directory deduplication and dead code removal
+2. `a88991e` - feat: add container creation button to toolbar
 2. `aec223e` - refactor: centralize support mesh visibility through SupportMeshFactory
 3. `1a55b9e` - refactor: architecture simplification phases 0-3
 4. `cd6fda7` - fix: container push alignment and selection behavior

@@ -38,43 +38,26 @@ class PushTool {
 
     onHover(hit, isAltPressed) {
         if (this.isPushing) {
-            // During push, update push movement
             this.updatePush();
 
-            // Show measurement overlay if Alt pressed during push
+            // Show push measurement overlay if Alt pressed during push
             if (isAltPressed) {
                 const measurementTool = window.modlerComponents?.measurementTool;
                 if (measurementTool && this.pushedObject && this.pushAxis) {
                     measurementTool.showPushMeasurement(this.pushedObject, this.pushAxis);
                 }
             } else {
-                // Clear measurement when Alt released
                 const measurementTool = window.modlerComponents?.measurementTool;
-                if (measurementTool) {
-                    measurementTool.clearMeasurement();
-                }
+                if (measurementTool) measurementTool.clearMeasurement();
             }
         } else {
-            // Normal hover behavior - check for measurement mode
-            if (isAltPressed) {
-                // Measurement mode - show edge/distance measurements
-                const measurementTool = window.modlerComponents?.measurementTool;
-                if (measurementTool) {
-                    const selectedObjects = this.selectionController?.getSelectedObjects() || [];
-                    measurementTool.onHover(hit, selectedObjects);
-                }
-            } else {
-                // Normal face highlighting
-                const measurementTool = window.modlerComponents?.measurementTool;
-                if (measurementTool) {
-                    measurementTool.clearMeasurement();
-                }
+            // Handle Alt-key measurement mode
+            if (MovementUtils.handleMeasurementMode(isAltPressed, hit, this.selectionController)) return;
 
-                if (this.shouldShowFaceHighlight(hit)) {
-                    this.faceToolBehavior.handleFaceDetection(hit);
-                } else {
-                    this.faceToolBehavior.clearHover();
-                }
+            if (this.shouldShowFaceHighlight(hit)) {
+                this.faceToolBehavior.handleFaceDetection(hit);
+            } else {
+                this.faceToolBehavior.clearHover();
             }
         }
     }
@@ -154,8 +137,6 @@ class PushTool {
                 // Use centralized state machine
                 const containerMode = this.objectStateManager?.getContainerMode(objectData.id);
                 if (containerMode === 'hug') {
-                    // Container is in hug mode - cannot push
-                    console.log('⚠️ Push blocked: Container is in hug mode');
                     return;
                 }
             }
@@ -166,11 +147,7 @@ class PushTool {
         this.pushedFace = hit.face;
         this.cumulativeAmount = 0;
 
-        // Register operation with FileManager to prevent auto-save during drag
-        const fileManager = window.modlerComponents?.fileManager;
-        if (fileManager && typeof fileManager.registerOperation === 'function') {
-            fileManager.registerOperation('push-tool-drag');
-        }
+        MovementUtils.registerFileOperation('push-tool-drag');
 
         // Disable hug updates during push to prevent interference
         if (sceneController && typeof sceneController.disableHugUpdates === 'function') {
@@ -304,10 +281,7 @@ class PushTool {
         if (!this.pushedObject || Math.abs(delta) < 0.0001) return;
 
         const geometryUtils = window.GeometryUtils;
-        if (!geometryUtils) {
-            console.warn('PushTool: GeometryUtils not available');
-            return;
-        }
+        if (!geometryUtils) return;
 
         // Get current dimensions
         const currentDims = geometryUtils.getGeometryDimensions(this.pushedObject.geometry);
@@ -581,11 +555,7 @@ class PushTool {
         // Reset state
         this.resetState();
 
-        // Unregister operation with FileManager (allow auto-save again)
-        const fileManager = window.modlerComponents?.fileManager;
-        if (fileManager && typeof fileManager.unregisterOperation === 'function') {
-            fileManager.unregisterOperation('push-tool-drag');
-        }
+        MovementUtils.unregisterFileOperation('push-tool-drag');
 
         // Reset cursor
         const canvas = window.modlerComponents?.sceneFoundation?.canvas;

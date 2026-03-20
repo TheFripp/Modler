@@ -50,16 +50,10 @@ class MoveTool {
      * Check if face highlighting should be shown for this object
      */
     shouldShowFaceHighlight(hit) {
-        if (!hit || !hit.object) {
-            console.log('❌ MoveTool.shouldShowFaceHighlight: No hit or object');
-            return false;
-        }
+        if (!hit || !hit.object) return false;
 
         const targetObject = this.faceToolBehavior.getTargetObject(hit);
-        if (!targetObject) {
-            console.log('❌ MoveTool.shouldShowFaceHighlight: No target object');
-            return false;
-        }
+        if (!targetObject) return false;
 
         // Check if object is a child in a layout-enabled container
         // BUT: If the container itself is selected, allow highlights on the container
@@ -101,21 +95,8 @@ class MoveTool {
             return;
         }
 
-        // Check for measurement mode (Alt key)
-        if (isAltPressed) {
-            const measurementTool = window.modlerComponents?.measurementTool;
-            if (measurementTool) {
-                const selectedObjects = this.selectionController?.getSelectedObjects() || [];
-                measurementTool.onHover(hit, selectedObjects);
-            }
-            return;
-        }
-
-        // Clear measurement when Alt not pressed
-        const measurementTool = window.modlerComponents?.measurementTool;
-        if (measurementTool) {
-            measurementTool.clearMeasurement();
-        }
+        // Handle Alt-key measurement mode
+        if (MovementUtils.handleMeasurementMode(isAltPressed, hit, this.selectionController)) return;
 
         // Check if we should show highlight for this object
         if (!this.shouldShowFaceHighlight(hit)) {
@@ -369,7 +350,6 @@ class MoveTool {
                 if (this.objectStateManager?.isLayoutMode(objectData?.parentContainer)) {
                     const isDraggingChild = targetObject === objectData.mesh;
                     if (isDraggingChild) {
-                        console.warn('MoveTool: Cannot move child objects in layout mode. Move the container instead.');
                         return false;
                     }
                 }
@@ -380,11 +360,7 @@ class MoveTool {
         this.dragObject = targetObject; // Use the resolved target (container if selected)
         this.dragStartPosition = targetObject.position.clone();
 
-        // Register operation with FileManager to prevent auto-save during drag
-        const fileManager = window.modlerComponents?.fileManager;
-        if (fileManager && typeof fileManager.registerOperation === 'function') {
-            fileManager.registerOperation('move-tool-drag');
-        }
+        MovementUtils.registerFileOperation('move-tool-drag');
 
         // Reset direction tracking for new drag operation
         this.lastMovementDelta = undefined;
@@ -714,11 +690,7 @@ class MoveTool {
         this.snapAttachmentPoint = null;
         this.dragHitPoint = null;
 
-        // Allow auto-save again
-        const fileManager = window.modlerComponents?.fileManager;
-        if (fileManager?.unregisterOperation) {
-            fileManager.unregisterOperation('move-tool-drag');
-        }
+        MovementUtils.unregisterFileOperation('move-tool-drag');
 
         this.faceToolBehavior.clearHover();
 

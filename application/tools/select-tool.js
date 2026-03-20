@@ -18,21 +18,8 @@ class SelectTool {
      * Handle mouse hover events - show object highlighting for interaction feedback
      */
     onHover(hit, isAltPressed) {
-        // Check for measurement mode (Alt key)
-        if (isAltPressed) {
-            const measurementTool = window.modlerComponents?.measurementTool;
-            if (measurementTool) {
-                const selectedObjects = this.selectionController?.getSelectedObjects() || [];
-                measurementTool.onHover(hit, selectedObjects);
-            }
-            return;
-        }
-
-        // Clear measurement when Alt not pressed
-        const measurementTool = window.modlerComponents?.measurementTool;
-        if (measurementTool) {
-            measurementTool.clearMeasurement();
-        }
+        // Handle Alt-key measurement mode
+        if (MovementUtils.handleMeasurementMode(isAltPressed, hit, this.selectionController)) return;
 
         // Normal hover behavior
         if (hit && hit.object) {

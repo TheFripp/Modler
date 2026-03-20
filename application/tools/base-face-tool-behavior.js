@@ -34,6 +34,35 @@ class BaseFaceToolBehavior {
     }
 
     /**
+     * Resolve the target object from a raycast hit, handling container architectures.
+     * Resolves interactive/collision meshes to their parent container mesh.
+     *
+     * @param {Object} hit - Raycast hit result
+     * @returns {Object|null} Resolved target object
+     */
+    _resolveContainerTarget(hit) {
+        if (!hit || !hit.object) return null;
+
+        const isContainerInteractive = hit.object.userData.isContainerInteractive;
+        const isContainerCollision = hit.object.userData.isContainerCollision;
+
+        if (isContainerInteractive && hit.object.userData.containerMesh) {
+            return hit.object.userData.containerMesh;
+        } else if (isContainerCollision && hit.object.parent) {
+            return hit.object.parent;
+        } else if (isContainerInteractive) {
+            const sceneController = window.modlerComponents?.sceneController;
+            const containerId = hit.object.userData.parentContainer;
+            if (sceneController && containerId) {
+                const containerData = sceneController.getObject(containerId);
+                return containerData?.mesh || hit.object;
+            }
+            return hit.object.parent || hit.object;
+        }
+        return hit.object;
+    }
+
+    /**
      * Handle face detection and highlighting for selected objects
      *
      * Centralizes the common face detection logic used by both move and push tools.
@@ -48,32 +77,9 @@ class BaseFaceToolBehavior {
             return false;
         }
 
-        // Handle container detection for both old and new architectures
+        let targetObject = this._resolveContainerTarget(hit);
         const isContainerInteractive = hit.object.userData.isContainerInteractive;
         const isContainerCollision = hit.object.userData.isContainerCollision;
-
-        let targetObject;
-        if (isContainerInteractive && hit.object.userData.containerMesh) {
-            // NEW ARCHITECTURE: Interactive mesh has direct containerMesh reference
-            targetObject = hit.object.userData.containerMesh;
-        } else if (isContainerCollision && hit.object.parent) {
-            // OLD ARCHITECTURE: Collision mesh is child of container
-            targetObject = hit.object.parent;
-        } else if (isContainerInteractive) {
-            // FALLBACK: Scene-level interactive mesh with parent container ID
-            const sceneController = window.modlerComponents?.sceneController;
-            const containerId = hit.object.userData.parentContainer;
-
-            if (sceneController && containerId) {
-                const containerData = sceneController.getObject(containerId);
-                targetObject = containerData?.mesh || hit.object;
-            } else {
-                targetObject = hit.object.parent || hit.object;
-            }
-        } else {
-            // Regular objects
-            targetObject = hit.object;
-        }
 
         // CRITICAL FIX: If hit object is not selected, ignore it during face tool operations
         // This prevents non-selected containers from blocking face highlighting on selected containers
@@ -223,32 +229,7 @@ class BaseFaceToolBehavior {
     hasValidFaceHover(hit) {
         if (!hit || !hit.object || !hit.face) return false;
 
-        // Use same detection logic as handleFaceDetection
-        const isContainerInteractive = hit.object.userData.isContainerInteractive;
-        const isContainerCollision = hit.object.userData.isContainerCollision;
-
-        let targetObject;
-        if (isContainerInteractive && hit.object.userData.containerMesh) {
-            // NEW ARCHITECTURE: Interactive mesh has direct containerMesh reference
-            targetObject = hit.object.userData.containerMesh;
-        } else if (isContainerCollision && hit.object.parent) {
-            // OLD ARCHITECTURE: Collision mesh is child of container
-            targetObject = hit.object.parent;
-        } else if (isContainerInteractive) {
-            // FALLBACK: Scene-level interactive mesh with parent container ID
-            const sceneController = window.modlerComponents?.sceneController;
-            const containerId = hit.object.userData.parentContainer;
-
-            if (sceneController && containerId) {
-                const containerData = sceneController.getObject(containerId);
-                targetObject = containerData?.mesh || hit.object;
-            } else {
-                targetObject = hit.object.parent || hit.object;
-            }
-        } else {
-            // Regular objects
-            targetObject = hit.object;
-        }
+        const targetObject = this._resolveContainerTarget(hit);
 
         // Check if target object is selected
         // InputController raycast already filters out children when parent container is selected
@@ -269,54 +250,19 @@ class BaseFaceToolBehavior {
     getTargetObject(hit) {
         if (!hit || !hit.object) return null;
 
-        // Check if we're in container context (stepped into a container)
-        const navigationController = window.modlerComponents?.navigationController;
-        const isInContainerContext = navigationController?.isInContainerContext() || false;
+        const resolved = this._resolveContainerTarget(hit);
 
-        // Use same detection logic as handleFaceDetection
+        // For the fallback case (scene-level interactive mesh without containerMesh reference),
+        // additionally check if the resolved container is selected
         const isContainerInteractive = hit.object.userData.isContainerInteractive;
-        const isContainerCollision = hit.object.userData.isContainerCollision;
-
-        // CONTAINER INTEGRITY: Always resolve interactive/collision meshes to their parent containers
-        // This ensures containers move as single units and maintains mesh hierarchy
-
-        if (isContainerInteractive && hit.object.userData.containerMesh) {
-            // NEW ARCHITECTURE: Interactive mesh with direct containerMesh reference
-            const containerMesh = hit.object.userData.containerMesh;
-
-            // Always return the container mesh to maintain container integrity
-            // Interactive meshes should move with their parent containers
-            return containerMesh;
-
-        } else if (isContainerCollision && hit.object.parent) {
-            // OLD ARCHITECTURE: Collision mesh is child of container
-            const containerMesh = hit.object.parent;
-
-            // Always return the container mesh to maintain container integrity
-            // Collision meshes should move with their parent containers
-            return containerMesh;
-
-        } else if (isContainerInteractive) {
-            // FALLBACK: Scene-level interactive mesh with parent container ID
-            const sceneController = window.modlerComponents?.sceneController;
-            const containerId = hit.object.userData.parentContainer;
-
-            if (sceneController && containerId) {
-                const containerData = sceneController.getObject(containerId);
-                const containerMesh = containerData?.mesh;
-
-                // Check if the container is explicitly selected
-                if (containerMesh && this.selectionController.isSelected(containerMesh)) {
-                    return containerMesh;
-                }
+        if (isContainerInteractive && !hit.object.userData.containerMesh && resolved !== hit.object) {
+            // Only return container if it's explicitly selected
+            if (!this.selectionController.isSelected(resolved)) {
+                return hit.object;
             }
-
-            // Default to the hit object for direct manipulation
-            return hit.object;
-        } else {
-            // Regular objects - always return the hit object
-            return hit.object;
         }
+
+        return resolved;
     }
 
     /**
@@ -411,21 +357,13 @@ class BaseFaceToolBehavior {
     getWorldFaceNormal(hit) {
         if (!hit || !hit.face) return new THREE.Vector3(0, 1, 0); // Default up
 
-        // Get face normal in local space
         const worldNormal = hit.face.normal.clone();
 
-        // Transform normal based on the object that was hit - handle all container architectures
-        const isContainerCollision = hit.object.userData.isContainerCollision;
-        const isContainerInteractive = hit.object.userData.isContainerInteractive;
-
-        if (isContainerInteractive && hit.object.userData.containerMesh) {
-            // NEW ARCHITECTURE: Interactive mesh with containerMesh reference
+        // For interactive meshes with containerMesh reference, use container's matrix
+        // All other cases (collision meshes, regular objects) use the hit object's own matrix
+        if (hit.object.userData.isContainerInteractive && hit.object.userData.containerMesh) {
             worldNormal.transformDirection(hit.object.userData.containerMesh.matrixWorld);
-        } else if (isContainerCollision && hit.object.parent) {
-            // OLD ARCHITECTURE: Collision mesh is child of container
-            worldNormal.transformDirection(hit.object.matrixWorld);
         } else {
-            // Regular objects or fallback
             worldNormal.transformDirection(hit.object.matrixWorld);
         }
 

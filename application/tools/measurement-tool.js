@@ -80,6 +80,44 @@ class MeasurementTool {
     }
 
     /**
+     * Add multiple parallel lines for visual thickness using screen-space offsets
+     * @param {THREE.Group} group - Group to add lines to
+     * @param {THREE.Vector3} point1 - Line start point
+     * @param {THREE.Vector3} point2 - Line end point
+     * @param {THREE.Material} material - Material for solid lines (ignored if isDashed)
+     * @param {THREE.Vector3} refMidPoint - Reference midpoint for offset calculation
+     * @param {THREE.Vector3} refStart - Reference line start for offset direction
+     * @param {THREE.Vector3} refEnd - Reference line end for offset direction
+     * @param {boolean} isDashed - If true, creates dashed lines with measurement styling
+     */
+    _addThickLines(group, point1, point2, material, refMidPoint, refStart, refEnd, isDashed = false) {
+        const numLines = 3;
+        for (let i = 0; i < numLines; i++) {
+            const pixelOffset = (i - (numLines - 1) / 2) * 1;
+            const offsetVec = this.getScreenSpacePerpendicularOffset(refMidPoint, refStart, refEnd, pixelOffset);
+
+            const p1 = point1.clone().add(offsetVec);
+            const p2 = point2.clone().add(offsetVec);
+
+            const geometry = new THREE.BufferGeometry().setFromPoints([p1, p2]);
+            const lineMaterial = isDashed ? new THREE.LineDashedMaterial({
+                color: this.lineColor,
+                dashSize: this.dashSize,
+                gapSize: this.gapSize,
+                linewidth: 1,
+                depthTest: false,
+                transparent: true,
+                opacity: 0.9
+            }) : material;
+
+            const line = new THREE.Line(geometry, lineMaterial);
+            if (isDashed) line.computeLineDistances();
+            line.renderOrder = 999;
+            group.add(line);
+        }
+    }
+
+    /**
      * Initialize with scene components
      */
     initialize(sceneController, camera, scene, renderer) {
@@ -537,57 +575,6 @@ class MeasurementTool {
     }
 
     /**
-     * Get closest points between two bounding boxes
-     */
-    getClosestPointsBetweenBoxes(box1, box2) {
-        const center1 = new THREE.Vector3();
-        const center2 = new THREE.Vector3();
-
-        box1.getCenter(center1);
-        box2.getCenter(center2);
-
-        // Find the axis with maximum separation
-        const diff = center2.clone().sub(center1);
-        const absDiff = new THREE.Vector3(Math.abs(diff.x), Math.abs(diff.y), Math.abs(diff.z));
-
-        let point1 = center1.clone();
-        let point2 = center2.clone();
-        let separationAxis = 'x';
-
-        // Determine primary axis of separation
-        if (absDiff.x > absDiff.y && absDiff.x > absDiff.z) {
-            // X-axis separation
-            separationAxis = 'x';
-            point1.x = diff.x > 0 ? box1.max.x : box1.min.x;
-            point2.x = diff.x > 0 ? box2.min.x : box2.max.x;
-            point1.y = center1.y;
-            point1.z = center1.z;
-            point2.y = center2.y;
-            point2.z = center2.z;
-        } else if (absDiff.y > absDiff.z) {
-            // Y-axis separation
-            separationAxis = 'y';
-            point1.y = diff.y > 0 ? box1.max.y : box1.min.y;
-            point2.y = diff.y > 0 ? box2.min.y : box2.max.y;
-            point1.x = center1.x;
-            point1.z = center1.z;
-            point2.x = center2.x;
-            point2.z = center2.z;
-        } else {
-            // Z-axis separation
-            separationAxis = 'z';
-            point1.z = diff.z > 0 ? box1.max.z : box1.min.z;
-            point2.z = diff.z > 0 ? box2.min.z : box2.max.z;
-            point1.x = center1.x;
-            point1.y = center1.y;
-            point2.x = center2.x;
-            point2.y = center2.y;
-        }
-
-        return { point1, point2, separationAxis };
-    }
-
-    /**
      * Check if two bounding boxes overlap along the axes perpendicular to the separation axis
      */
     hasOverlapAlongAxis(box1, box2, separationAxis) {
@@ -676,15 +663,16 @@ class MeasurementTool {
         }
 
         // DEVELOPMENT_VALIDATOR_IGNORE_START: Measurement visuals are temporary overlays, not pooled resources
-        // Create connector lines from edge to measurement line
         const connectorMaterial = new THREE.LineBasicMaterial({
-            color: this.lineColor,
-            linewidth: 1,
-            depthTest: false,
-            transparent: true,
-            opacity: 0.7
+            color: this.lineColor, linewidth: 1, depthTest: false, transparent: true, opacity: 0.7
+        });
+        const capMaterial = new THREE.LineBasicMaterial({
+            color: this.lineColor, linewidth: 1, depthTest: false, transparent: true, opacity: 0.9
         });
 
+        const midPoint = offsetStart.clone().add(offsetEnd).multiplyScalar(0.5);
+
+        // Connector lines from edge to measurement line
         const startConnectorGeometry = new THREE.BufferGeometry().setFromPoints([start, offsetStart]);
         const startConnector = new THREE.Line(startConnectorGeometry, connectorMaterial);
         startConnector.renderOrder = 999;
@@ -695,72 +683,19 @@ class MeasurementTool {
         endConnector.renderOrder = 999;
         group.add(endConnector);
 
-        // Create multiple lines for thickness using screen-space perpendicular offsets
-        const numLines = 3;
-        const midPoint = offsetStart.clone().add(offsetEnd).multiplyScalar(0.5);
+        // Main dashed measurement line
+        this._addThickLines(group, offsetStart, offsetEnd, null, midPoint, offsetStart, offsetEnd, true);
 
-        for (let i = 0; i < numLines; i++) {
-            const pixelOffset = (i - (numLines - 1) / 2) * 1; // 1 pixel spacing between lines
-            const offsetVec = this.getScreenSpacePerpendicularOffset(midPoint, offsetStart, offsetEnd, pixelOffset);
-
-            const start1 = offsetStart.clone().add(offsetVec);
-            const end1 = offsetEnd.clone().add(offsetVec);
-
-            const lineGeometry = new THREE.BufferGeometry().setFromPoints([start1, end1]);
-            const lineMaterial = new THREE.LineDashedMaterial({
-                color: this.lineColor,
-                dashSize: this.dashSize,
-                gapSize: this.gapSize,
-                linewidth: 1,
-                depthTest: false,
-                transparent: true,
-                opacity: 0.9
-            });
-            const line = new THREE.Line(lineGeometry, lineMaterial);
-            line.computeLineDistances();
-            line.renderOrder = 999;
-            group.add(line);
-        }
-
-        // Create end caps (small perpendicular lines)
+        // End caps (small perpendicular lines)
         const capSize = 0.1;
         const capPerpendicular = this.getPerpendicularVector(direction);
-
-        // Position caps at the offset line position
         const startCap1 = offsetStart.clone().add(capPerpendicular.clone().multiplyScalar(capSize));
         const startCap2 = offsetStart.clone().add(capPerpendicular.clone().multiplyScalar(-capSize));
         const endCap1 = offsetEnd.clone().add(capPerpendicular.clone().multiplyScalar(capSize));
         const endCap2 = offsetEnd.clone().add(capPerpendicular.clone().multiplyScalar(-capSize));
 
-        // Create thicker end caps using multiple lines
-        const capMaterial = new THREE.LineBasicMaterial({
-            color: this.lineColor,
-            linewidth: 1,
-            depthTest: false,
-            transparent: true,
-            opacity: 0.9
-        });
-
-        for (let i = 0; i < numLines; i++) {
-            const pixelOffset = (i - (numLines - 1) / 2) * 1; // 1 pixel spacing
-            const offsetVec = this.getScreenSpacePerpendicularOffset(midPoint, offsetStart, offsetEnd, pixelOffset);
-
-            const startCapGeometry = new THREE.BufferGeometry().setFromPoints([
-                startCap1.clone().add(offsetVec),
-                startCap2.clone().add(offsetVec)
-            ]);
-            const startCapLine = new THREE.Line(startCapGeometry, capMaterial);
-            startCapLine.renderOrder = 999;
-            group.add(startCapLine);
-
-            const endCapGeometry = new THREE.BufferGeometry().setFromPoints([
-                endCap1.clone().add(offsetVec),
-                endCap2.clone().add(offsetVec)
-            ]);
-            const endCapLine = new THREE.Line(endCapGeometry, capMaterial);
-            endCapLine.renderOrder = 999;
-            group.add(endCapLine);
-        }
+        this._addThickLines(group, startCap1, startCap2, capMaterial, midPoint, offsetStart, offsetEnd);
+        this._addThickLines(group, endCap1, endCap2, capMaterial, midPoint, offsetStart, offsetEnd);
         // DEVELOPMENT_VALIDATOR_IGNORE_END
 
         // Add 3D text label at the offset line's midpoint (centered on the line)
@@ -831,121 +766,38 @@ class MeasurementTool {
         const extensionLength = 0.3;
 
         // DEVELOPMENT_VALIDATOR_IGNORE_START: Measurement visuals are temporary overlays, not pooled resources
-        const numLines = 3;
         const lineMidPoint = offsetStart.clone().add(offsetEnd).multiplyScalar(0.5);
-
-        // 1. Thin solid line from startPoint to offsetStart (only if needed)
         const extensionMaterial = new THREE.LineBasicMaterial({
-            color: this.lineColor,
-            linewidth: 1,
-            depthTest: false,
-            transparent: true,
-            opacity: 0.5  // 50% opacity
+            color: this.lineColor, linewidth: 1, depthTest: false, transparent: true, opacity: 0.5
         });
-
-        if (actualNeedsStartConnector) {
-            for (let i = 0; i < numLines; i++) {
-                const pixelOffset = (i - (numLines - 1) / 2) * 1; // 1 pixel spacing
-                const offsetVec = this.getScreenSpacePerpendicularOffset(lineMidPoint, offsetStart, offsetEnd, pixelOffset);
-
-                const extensionGeometry = new THREE.BufferGeometry().setFromPoints([
-                    startPoint.clone().add(offsetVec),
-                    offsetStart.clone().add(offsetVec)
-                ]);
-                const extensionLine = new THREE.Line(extensionGeometry, extensionMaterial);
-                extensionLine.renderOrder = 999;
-                group.add(extensionLine);
-            }
-        }
-
-        // 2. Dashed line from offsetStart to offsetEnd (main measurement along face normal)
-        for (let i = 0; i < numLines; i++) {
-            const pixelOffset = (i - (numLines - 1) / 2) * 1; // 1 pixel spacing
-            const offsetVec = this.getScreenSpacePerpendicularOffset(lineMidPoint, offsetStart, offsetEnd, pixelOffset);
-
-            const start1 = offsetStart.clone().add(offsetVec);
-            const end1 = offsetEnd.clone().add(offsetVec);
-
-            const lineGeometry = new THREE.BufferGeometry().setFromPoints([start1, end1]);
-            const lineMaterial = new THREE.LineDashedMaterial({
-                color: this.lineColor,
-                dashSize: this.dashSize,
-                gapSize: this.gapSize,
-                linewidth: 1,
-                depthTest: false,
-                transparent: true,
-                opacity: 0.9
-            });
-            const line = new THREE.Line(lineGeometry, lineMaterial);
-            line.computeLineDistances();
-            line.renderOrder = 999;
-            group.add(line);
-        }
-
-        // 3. Thin solid line from offsetEnd to endPoint (only if needed)
-        if (actualNeedsEndConnector) {
-            for (let i = 0; i < numLines; i++) {
-                const pixelOffset = (i - (numLines - 1) / 2) * 1; // 1 pixel spacing
-                const offsetVec = this.getScreenSpacePerpendicularOffset(lineMidPoint, offsetStart, offsetEnd, pixelOffset);
-
-                const endConnectorGeometry = new THREE.BufferGeometry().setFromPoints([
-                    offsetEnd.clone().add(offsetVec),
-                    endPoint.clone().add(offsetVec)
-                ]);
-                const endConnector = new THREE.Line(endConnectorGeometry, extensionMaterial);
-                endConnector.renderOrder = 999;
-                group.add(endConnector);
-            }
-        }
-
-        // 4. Create brackets at measurement line ends (only when connectors are shown)
         const bracketMaterial = new THREE.LineBasicMaterial({
-            color: this.lineColor,
-            linewidth: 1,
-            depthTest: false,
-            transparent: true,
-            opacity: 0.9
+            color: this.lineColor, linewidth: 1, depthTest: false, transparent: true, opacity: 0.9
         });
 
-        // Bracket direction should be perpendicular to the dashed line
-        const bracketDir = perpendicular.clone();
+        // 1. Connector from startPoint to offset start (only if needed)
+        if (actualNeedsStartConnector) {
+            this._addThickLines(group, startPoint, offsetStart, extensionMaterial, lineMidPoint, offsetStart, offsetEnd);
+        }
 
-        // Only draw start bracket if we have a start connector
+        // 2. Main dashed measurement line
+        this._addThickLines(group, offsetStart, offsetEnd, null, lineMidPoint, offsetStart, offsetEnd, true);
+
+        // 3. Connector from offset end to endPoint (only if needed)
+        if (actualNeedsEndConnector) {
+            this._addThickLines(group, offsetEnd, endPoint, extensionMaterial, lineMidPoint, offsetStart, offsetEnd);
+        }
+
+        // 4. Brackets at measurement line ends (only when connectors are shown)
+        const bracketDir = perpendicular.clone();
         if (actualNeedsStartConnector) {
             const bracketStart1 = offsetStart.clone().sub(bracketDir.clone().multiplyScalar(extensionLength / 2));
             const bracketStart2 = offsetStart.clone().add(bracketDir.clone().multiplyScalar(extensionLength / 2));
-
-            for (let i = 0; i < numLines; i++) {
-                const pixelOffset = (i - (numLines - 1) / 2) * 1; // 1 pixel spacing
-                const offsetVec = this.getScreenSpacePerpendicularOffset(lineMidPoint, offsetStart, offsetEnd, pixelOffset);
-
-                const bracketStartGeometry = new THREE.BufferGeometry().setFromPoints([
-                    bracketStart1.clone().add(offsetVec),
-                    bracketStart2.clone().add(offsetVec)
-                ]);
-                const bracketStartLine = new THREE.Line(bracketStartGeometry, bracketMaterial);
-                bracketStartLine.renderOrder = 999;
-                group.add(bracketStartLine);
-            }
+            this._addThickLines(group, bracketStart1, bracketStart2, bracketMaterial, lineMidPoint, offsetStart, offsetEnd);
         }
-
-        // Only draw end bracket if we have an end connector
         if (actualNeedsEndConnector) {
             const bracketEnd1 = offsetEnd.clone().sub(bracketDir.clone().multiplyScalar(extensionLength / 2));
             const bracketEnd2 = offsetEnd.clone().add(bracketDir.clone().multiplyScalar(extensionLength / 2));
-
-            for (let i = 0; i < numLines; i++) {
-                const pixelOffset = (i - (numLines - 1) / 2) * 1; // 1 pixel spacing
-                const offsetVec = this.getScreenSpacePerpendicularOffset(lineMidPoint, offsetStart, offsetEnd, pixelOffset);
-
-                const bracketEndGeometry = new THREE.BufferGeometry().setFromPoints([
-                    bracketEnd1.clone().add(offsetVec),
-                    bracketEnd2.clone().add(offsetVec)
-                ]);
-                const bracketEndLine = new THREE.Line(bracketEndGeometry, bracketMaterial);
-                bracketEndLine.renderOrder = 999;
-                group.add(bracketEndLine);
-            }
+            this._addThickLines(group, bracketEnd1, bracketEnd2, bracketMaterial, lineMidPoint, offsetStart, offsetEnd);
         }
         // DEVELOPMENT_VALIDATOR_IGNORE_END
 

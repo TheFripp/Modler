@@ -127,6 +127,34 @@ if (currentTool && typeof currentTool.onClick === 'function') {
 }
 ```
 
+## Shared Utilities (MovementUtils)
+
+### Alt-Key Measurement Mode
+All tools that support Alt+hover measurement should use the shared utility:
+```javascript
+onHover(hit, isAltPressed) {
+    if (MovementUtils.handleMeasurementMode(isAltPressed, hit, this.selectionController)) return;
+    // ... normal hover behavior
+}
+```
+
+### FileManager Operation Guards
+Tools with drag operations should register/unregister to prevent auto-save during drags:
+```javascript
+onDragStart() {
+    MovementUtils.registerFileOperation('your-tool-drag');
+}
+onDragEnd() {
+    MovementUtils.unregisterFileOperation('your-tool-drag');
+}
+```
+
+### Container Target Resolution (BaseFaceToolBehavior)
+Face-based tools inherit `_resolveContainerTarget(hit)` which handles all container mesh architectures:
+- `isContainerInteractive` with `containerMesh` reference
+- `isContainerCollision` with parent resolution
+- `isContainerInteractive` with `parentContainer` ID lookup
+
 ## Common Patterns
 
 ### Object Validation
