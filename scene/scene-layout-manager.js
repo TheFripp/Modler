@@ -96,20 +96,8 @@ class SceneLayoutManager {
             ...layoutConfig
         };
 
-        const layoutResult = this.updateLayout(containerId);
-
-        // Resize container to fit the laid out objects
-        if (layoutResult && layoutResult.success) {
-            const containerCrudManager = this.getContainerCrudManager();
-            if (containerCrudManager) {
-                // UNIFIED API: Auto-layout enabled/changed
-                containerCrudManager.resizeContainer(container, {
-                    reason: 'layout-updated',
-                    layoutBounds: layoutResult.layoutBounds,
-                    immediate: true
-                });
-            }
-        }
+        // SINGLE FUNNEL: updateLayout() handles resize internally (line 335)
+        this.updateLayout(containerId);
 
         return true;
     }

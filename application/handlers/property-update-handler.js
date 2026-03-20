@@ -214,15 +214,9 @@ class PropertyUpdateHandler {
                 }, { source: 'property-panel', immediate: true });
 
                 // Trigger layout update if enabled with valid direction
+                // SINGLE FUNNEL: updateLayout() handles resize internally (SceneLayoutManager line 335)
                 if (fullAutoLayout.enabled && fullAutoLayout.direction && fullAutoLayout.direction !== '') {
-                    const layoutResult = sceneController.updateLayout(containerId);
-                    if (layoutResult?.success && layoutResult.layoutBounds) {
-                        this.containerCrudManager.resizeContainer(objectData, {
-                            reason: 'layout-updated',
-                            layoutBounds: layoutResult.layoutBounds,
-                            immediate: true
-                        });
-                    }
+                    sceneController.updateLayout(containerId);
                     this.containerCrudManager.showContainer(containerId, true);
                 }
                 return true;
@@ -262,24 +256,13 @@ class PropertyUpdateHandler {
             }, { source: 'property-panel', immediate: true });
 
             // Only proceed with layout if enabled and has valid direction
+            // SINGLE FUNNEL: updateLayout() handles resize internally (SceneLayoutManager line 335)
             if (updatedAutoLayout.enabled && updatedAutoLayout.direction && updatedAutoLayout.direction !== '') {
                 const layoutResult = sceneController.updateLayout(containerId);
 
                 if (layoutResult && layoutResult.success) {
-                // UNIFIED API: Layout properties changed via UI
-                if (layoutResult.layoutBounds) {
-                    this.containerCrudManager.resizeContainer(objectData, {
-                        reason: 'layout-updated',
-                        layoutBounds: layoutResult.layoutBounds,
-                        immediate: true
-                    });
-                }
-
-                // Step 13: PropertyUpdateHandler → containerCrudManager.showContainer(containerId, true)
-                this.containerCrudManager.showContainer(containerId, true);
-
-
-                return true;
+                    this.containerCrudManager.showContainer(containerId, true);
+                    return true;
                 } else {
                     console.error('Layout update failed for container:', containerId);
                     return false;

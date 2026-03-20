@@ -393,10 +393,8 @@ class SceneHierarchyManager {
         if (container.containerMode === 'hug' || container.isHug) {
             callbacks.updateHugContainerSize(containerId);
         } else if (container.containerMode === 'layout' || (container.autoLayout?.enabled)) {
-            const layoutResult = callbacks.updateLayout(containerId);
-            if (layoutResult?.success && layoutResult.layoutBounds && callbacks.resizeToLayoutBounds) {
-                callbacks.resizeToLayoutBounds(container, layoutResult.layoutBounds);
-            }
+            // SINGLE FUNNEL: updateLayout() handles resize internally (SceneLayoutManager line 335)
+            callbacks.updateLayout(containerId);
         }
     }
 }

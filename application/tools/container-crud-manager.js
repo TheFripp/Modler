@@ -275,20 +275,18 @@ class ContainerCrudManager {
      * @private
      */
     resizeForLayoutMode(container, { layoutBounds, pushContext, immediate }) {
-        // If no bounds provided, calculate layout first
+        // If no bounds provided, delegate to updateLayout which handles resize internally
+        // SINGLE FUNNEL: updateLayout() calls resizeContainer() at SceneLayoutManager line 335
         if (!layoutBounds) {
             const sceneController = window.modlerComponents?.sceneController;
             if (sceneController) {
                 const layoutResult = sceneController.updateLayout(container.id);
-                layoutBounds = layoutResult?.layoutBounds;
+                return layoutResult?.success || false;
             }
-        }
-
-        // No bounds available - can't resize
-        if (!layoutBounds) {
             return false;
         }
 
+        // Bounds provided explicitly — apply them directly
         return this._resizeToLayoutBounds(container, layoutBounds, pushContext);
     }
 

@@ -159,22 +159,9 @@ class LayoutPropagationManager {
             const container = sceneController.getObject(containerId);
 
             // Trigger layout recalculation
-            const layoutResult = sceneController.updateLayout(containerId);
+            // SINGLE FUNNEL: updateLayout() handles resize internally (SceneLayoutManager line 335)
+            sceneController.updateLayout(containerId);
             this.stats.layoutsProcessed++;
-
-            // CRITICAL ARCHITECTURE: Only auto-resize in HUG mode
-            // In LAYOUT mode, container size is ground truth - no auto-resize
-            if (layoutResult?.success) {
-                const containerCrudManager = this.getContainerCrudManager();
-                if (containerCrudManager) {
-                    // UNIFIED API: Automatically detects mode and applies correct behavior
-                    containerCrudManager.resizeContainer(container, {
-                        reason: 'child-changed',           // BOTTOM-UP: Child changed
-                        layoutBounds: layoutResult.layoutBounds,  // Provide bounds for layout mode
-                        immediate: false                   // Already in RAF, no need for immediate
-                    });
-                }
-            }
 
             // OPTIMIZATION: Defer grandparent propagations to next frame
             if (container.parentContainer) {

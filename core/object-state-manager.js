@@ -748,24 +748,13 @@ class ObjectStateManager extends EventTarget {
                     const skipLayoutUpdate = source === 'push-tool';
 
                     if (!skipLayoutUpdate && (autoLayoutChanged || autoLayoutPropertyChanged)) {
-                        const layoutResult = this.sceneController.updateLayout(object.id);
+                        // SINGLE FUNNEL: updateLayout() handles resize internally (SceneLayoutManager line 335)
+                        this.sceneController.updateLayout(object.id);
 
-                        // When first switching TO layout mode, resize container once
-                        // to establish initial size based on children. After that, no auto-resize.
-                        if (autoLayoutChanged && layoutResult?.success && layoutResult.layoutBounds) {
-                            const containerCrudManager = this.getContainerCrudManager();
-                            if (containerCrudManager) {
-                                // UNIFIED API: Switching to layout mode
-                                containerCrudManager.resizeContainer(sceneObject, {
-                                    reason: 'layout-updated',
-                                    layoutBounds: layoutResult.layoutBounds,
-                                    immediate: true
-                                });
-
-                                // CRITICAL: Recalculate layout after resize to get correct gap for new size
-                                // This ensures space-between gap is calculated with the final container size
-                                this.sceneController.updateLayout(object.id);
-                            }
+                        // When first switching TO layout mode, recalculate layout again
+                        // so space-between gap is computed with the correct container size
+                        if (autoLayoutChanged) {
+                            this.sceneController.updateLayout(object.id);
                         }
                     }
                     // Push operations: Skip layout update entirely - geometry already updated
