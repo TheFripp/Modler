@@ -41,6 +41,48 @@ const CONTAINER_MODES = {
 const MAX_NESTING_DEPTH = 2;
 
 /**
+ * Format migration registry — each entry upgrades data from one version to the next.
+ * Add new entries when the format changes to ensure old saved files load correctly.
+ */
+const FORMAT_MIGRATIONS = {
+    // Example for future use:
+    // '1.0.0': {
+    //     to: '1.1.0',
+    //     migrate: (data) => {
+    //         // Add new required property with default
+    //         if (data.isContainer && !data.containerMode) {
+    //             if (data.autoLayout?.enabled) data.containerMode = 'layout';
+    //             else if (data.isHug) data.containerMode = 'hug';
+    //             else data.containerMode = 'manual';
+    //         }
+    //         data.formatVersion = '1.1.0';
+    //         return data;
+    //     }
+    // }
+};
+
+/**
+ * Apply format migrations to upgrade old data to the current version.
+ * Walks the migration chain until data reaches OBJECT_DATA_FORMAT_VERSION.
+ * @param {Object} data - Object data (may have old formatVersion)
+ * @returns {Object} Migrated data at current version
+ */
+function migrateObjectData(data) {
+    let current = data.formatVersion || '1.0.0';
+    let iterations = 0;
+    const MAX_ITERATIONS = 20; // Safety valve
+
+    while (FORMAT_MIGRATIONS[current] && iterations < MAX_ITERATIONS) {
+        const migration = FORMAT_MIGRATIONS[current];
+        data = migration.migrate(data);
+        current = data.formatVersion;
+        iterations++;
+    }
+
+    return data;
+}
+
+/**
  * Standard ObjectData format specification
  * This is the ONLY format that should be used throughout the system
  */
@@ -130,6 +172,9 @@ function standardizeObjectData(sourceData, options = {}) {
                 standardData = convertBestEffort(sourceData);
         }
 
+        // Apply format migrations for old saved data
+        standardData = migrateObjectData(standardData);
+
         // Ensure all required properties exist with proper defaults
         return ensureStandardFormat(standardData, options);
 
@@ -190,9 +235,12 @@ function validateObjectData(objectData) {
         errors.push('dimensions must be an object with x, y, z properties');
     }
 
-    // Validate format version
+    // Validate format version (accept current or any migratable version)
     if (objectData.formatVersion && objectData.formatVersion !== OBJECT_DATA_FORMAT_VERSION) {
-        errors.push(`Unsupported format version: ${objectData.formatVersion}`);
+        // Check if there's a migration path from this version
+        if (!FORMAT_MIGRATIONS[objectData.formatVersion]) {
+            errors.push(`Unsupported format version: ${objectData.formatVersion}`);
+        }
     }
 
     return {
@@ -342,12 +390,8 @@ function convertFromObjectStateManager(stateData) {
 
         position: stateData.position || { x: 0, y: 0, z: 0 },
 
-        rotation: {
-            // Convert radians to degrees if needed
-            x: stateData.rotation ? (stateData.rotation.x > Math.PI ? stateData.rotation.x * 180 / Math.PI : stateData.rotation.x) : 0,
-            y: stateData.rotation ? (stateData.rotation.y > Math.PI ? stateData.rotation.y * 180 / Math.PI : stateData.rotation.y) : 0,
-            z: stateData.rotation ? (stateData.rotation.z > Math.PI ? stateData.rotation.z * 180 / Math.PI : stateData.rotation.z) : 0
-        },
+        // Rotation is already in degrees (ObjectStateManager.extractRotation converts radians→degrees)
+        rotation: stateData.rotation ? { x: stateData.rotation.x, y: stateData.rotation.y, z: stateData.rotation.z } : { x: 0, y: 0, z: 0 },
 
         scale: stateData.scale || { x: 1, y: 1, z: 1 },
         dimensions: stateData.dimensions || { x: 1, y: 1, z: 1 },
@@ -660,9 +704,13 @@ window.ObjectDataFormat = {
     createEmptyObjectData,
     createDefaultAutoLayout,
 
+    // Migration
+    migrateObjectData,
+
     // Constants
     SCHEMA: STANDARD_OBJECT_DATA_SCHEMA,
     VERSION: OBJECT_DATA_FORMAT_VERSION,
+    FORMAT_MIGRATIONS,
     OBJECT_TYPES,
     CONTAINER_MODES,
     MAX_NESTING_DEPTH

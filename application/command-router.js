@@ -226,17 +226,54 @@ class CommandRouter {
             if (!handler) {
                 console.warn(`CommandRouter: No handler for action "${action}"`, command);
                 this.stats.unknownActions++;
+
+                if (command.requestId && command.sourceWindow) {
+                    try {
+                        command.sourceWindow.postMessage({
+                            type: 'command-response',
+                            requestId: command.requestId,
+                            success: false,
+                            error: `Unknown action: ${action}`
+                        }, '*');
+                    } catch (e) { /* sourceWindow may be closed */ }
+                }
+
                 return false;
             }
 
             // Execute handler
             handler(data);
             this.stats.commandsExecuted++;
+
+            // Send success response if requestId provided (opt-in correlation)
+            if (command.requestId && command.sourceWindow) {
+                try {
+                    command.sourceWindow.postMessage({
+                        type: 'command-response',
+                        requestId: command.requestId,
+                        success: true
+                    }, '*');
+                } catch (e) { /* sourceWindow may be closed */ }
+            }
+
             return true;
 
         } catch (error) {
             console.error('CommandRouter: Command execution failed', error, command);
             this.stats.errors++;
+
+            // Send error response if requestId provided
+            if (command.requestId && command.sourceWindow) {
+                try {
+                    command.sourceWindow.postMessage({
+                        type: 'command-response',
+                        requestId: command.requestId,
+                        success: false,
+                        error: error.message || 'Command execution failed'
+                    }, '*');
+                } catch (e) { /* sourceWindow may be closed */ }
+            }
+
             return false;
         }
     }

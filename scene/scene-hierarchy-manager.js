@@ -58,29 +58,29 @@ class SceneHierarchyManager {
      */
     getChildObjects(containerId) {
         const container = this.objects.get(containerId);
+        if (!container) return [];
 
-        // If container has explicit child order, use it
-        if (container && container.childrenOrder && Array.isArray(container.childrenOrder)) {
-            // Map IDs to actual objects, filtering out any invalid IDs
-            const orderedChildren = [];
-            for (const childId of container.childrenOrder) {
-                const child = this.objects.get(childId);
-                if (child && child.parentContainer === containerId) {
-                    orderedChildren.push(child);
+        // Ensure childrenOrder is always initialized (handles legacy saved data)
+        if (!container.childrenOrder || !Array.isArray(container.childrenOrder)) {
+            container.childrenOrder = [];
+            // Build from existing children (O(n) once, then O(c) forever)
+            for (const obj of this.objects.values()) {
+                if (obj.parentContainer === containerId) {
+                    container.childrenOrder.push(obj.id);
                 }
             }
-
-            return orderedChildren;
         }
 
-        // Fallback: return children in iteration order
-        const children = [];
-        for (const obj of this.objects.values()) {
-            if (obj.parentContainer === containerId) {
-                children.push(obj);
+        // Map IDs to actual objects, filtering out any invalid IDs — O(c)
+        const orderedChildren = [];
+        for (const childId of container.childrenOrder) {
+            const child = this.objects.get(childId);
+            if (child && child.parentContainer === containerId) {
+                orderedChildren.push(child);
             }
         }
-        return children;
+
+        return orderedChildren;
     }
 
     /**

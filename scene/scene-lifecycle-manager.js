@@ -227,6 +227,12 @@ class SceneLifecycleManager {
             }
         }
 
+        // Clean up visualization caches (must happen before mesh removal)
+        const visualizationManager = window.modlerComponents?.visualizationManager;
+        if (visualizationManager) {
+            visualizationManager.cleanup(objectData.mesh);
+        }
+
         // Clean up support meshes
         const supportMeshFactory = this.getSupportMeshFactory();
         if (supportMeshFactory) {
@@ -271,6 +277,14 @@ class SceneLifecycleManager {
         if (objectStateManager) {
             objectStateManager.objects.delete(id);
             // Note: Hierarchy is rebuilt on-demand via getHierarchy(), no need to rebuild here
+        }
+
+        // Clean up layout propagation caches to prevent stale entries
+        const layoutPropagationManager = window.modlerComponents?.layoutPropagationManager;
+        if (layoutPropagationManager) {
+            layoutPropagationManager.depthCache.delete(id);
+            layoutPropagationManager.scheduledLayoutUpdates.delete(id);
+            layoutPropagationManager.nextFramePropagations.delete(id);
         }
 
         // UNIFIED ARCHITECTURE: Emit ObjectEventBus LIFECYCLE event for FileManager auto-save

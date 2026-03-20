@@ -449,8 +449,12 @@ class ObjectStateManager extends EventTarget {
         // Apply updates to local state and track which properties changed
         const changedProperties = this.applyUpdates(object, updates);
 
-        // Store changed properties for use in propagateChanges
-        object._changedProperties = changedProperties;
+        // Store changed properties for use in propagateChanges (merge to avoid overwrite race)
+        if (object._changedProperties) {
+            changedProperties.forEach(prop => object._changedProperties.add(prop));
+        } else {
+            object._changedProperties = changedProperties;
+        }
 
         // Validate format after updates if ObjectDataFormat is available
         if (this.objectDataFormat) {
@@ -557,8 +561,20 @@ class ObjectStateManager extends EventTarget {
                 // Set the final value
                 current[parts[parts.length - 1]] = value;
             } else {
-                // Direct property
-                object[path] = value;
+                // Direct property — enforce container mode flag sync
+                if (path === 'containerMode' || path === 'isHug' || path === 'sizingMode') {
+                    const mode = path === 'containerMode' ? value :
+                                 path === 'isHug' && value ? 'hug' :
+                                 path === 'sizingMode' ? value :
+                                 object.containerMode;
+                    const modeUpdate = ObjectStateManager.buildContainerModeUpdate(mode);
+                    Object.assign(object, modeUpdate);
+                    changedProperties.add('containerMode');
+                    changedProperties.add('isHug');
+                    changedProperties.add('sizingMode');
+                } else {
+                    object[path] = value;
+                }
             }
         });
 

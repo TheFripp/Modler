@@ -26,6 +26,7 @@
 ## 🏗️ System Documentation
 
 ### Architecture
+- **System Hardening**: [`/architecture/SYSTEM-HARDENING-2026-03-20.md`](architecture/SYSTEM-HARDENING-2026-03-20.md) - Data integrity, performance, scalability improvements (format migration, hierarchy caching, container mode enforcement)
 - **Data Flow Architecture**: [`/architecture/data-flow-architecture.md`](architecture/data-flow-architecture.md) - ⭐ **Complete integration map: Tool → State → Geometry → UI**
 - **Container Hierarchy**: [`/architecture/container-hierarchy.md`](architecture/container-hierarchy.md) - Parent-child relationships, coordinate spaces, and hierarchy management
 - **Auto-Layout System**: [`/architecture/auto-layout-system.md`](architecture/auto-layout-system.md) - Layout calculation, bidirectional propagation, and sizing behaviors

@@ -34,6 +34,9 @@ class SimpleCommunication {
 
         // Cached iframe references (invalidated on panel create/destroy)
         this._cachedIframes = null;
+
+        // Cached hierarchy (invalidated on structural changes: create/delete/reparent/reorder)
+        this._cachedHierarchy = null;
     }
 
     /**
@@ -327,7 +330,22 @@ class SimpleCommunication {
     handleHierarchyEvent(event) {
         if (!this.initializeComponents()) return;
 
-        // Get COMPLETE hierarchy tree
+        const changeData = event.changeData || {};
+        const changeType = changeData.type;
+
+        // Invalidate hierarchy cache on structural changes
+        const isStructuralChange = !changeType ||
+            changeType === 'parent-changed' ||
+            changeType === 'root-reorder' ||
+            changeType === 'children-reordered' ||
+            changeData.operation === 'created' ||
+            changeData.operation === 'deleted';
+
+        if (isStructuralChange) {
+            this._cachedHierarchy = null;
+        }
+
+        // Get COMPLETE hierarchy tree (cached if structure unchanged)
         const hierarchyTree = this.getCompleteHierarchy();
 
         // Send to all UI iframes
@@ -352,6 +370,11 @@ class SimpleCommunication {
     getCompleteHierarchy() {
         if (!this.initializeComponents()) return { objects: [], rootChildrenOrder: [] };
 
+        // Return cached hierarchy if still valid
+        if (this._cachedHierarchy) {
+            return this._cachedHierarchy;
+        }
+
         // Get ALL objects as flat array
         const allObjects = this.sceneController.getAllObjects();
 
@@ -371,10 +394,12 @@ class SimpleCommunication {
         const hierarchyManager = this.sceneController.getHierarchyManager();
         const rootChildrenOrder = hierarchyManager?.rootChildrenOrder || [];
 
-        return {
+        this._cachedHierarchy = {
             objects: hierarchy,
             rootChildrenOrder: rootChildrenOrder
         };
+
+        return this._cachedHierarchy;
     }
 
     /**

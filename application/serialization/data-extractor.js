@@ -60,9 +60,14 @@ function extractSerializableData(sceneObject) {
         transparent: mesh.material.transparent ?? false
     } : (sceneObject.material || { color: '#888888', opacity: 1, transparent: false });
 
-    // CRITICAL: Direct copy of autoLayout - NO transformation, NO defaults
-    // Preserve EXACT values from SceneController
-    const autoLayout = sceneObject.autoLayout ? { ...sceneObject.autoLayout } : null;
+    // CRITICAL: Deep copy of autoLayout - NO transformation, NO defaults
+    // Preserve EXACT values from SceneController; deep-copy nested objects to prevent mutation
+    const autoLayout = sceneObject.autoLayout ? {
+        ...sceneObject.autoLayout,
+        padding: sceneObject.autoLayout.padding ? { ...sceneObject.autoLayout.padding } : undefined,
+        alignment: sceneObject.autoLayout.alignment ? { ...sceneObject.autoLayout.alignment } : undefined,
+        tileMode: sceneObject.autoLayout.tileMode ? { ...sceneObject.autoLayout.tileMode } : undefined
+    } : null;
 
     // VALIDATION: Ensure isHug and autoLayout.enabled are mutually exclusive
     // This prevents corrupted data from being saved
@@ -137,7 +142,12 @@ function extractBasicData(sceneObject) {
         selected: sceneObject.selected || false,
         locked: sceneObject.locked || false,
         visible: sceneObject.visible !== undefined ? sceneObject.visible : true,
-        autoLayout: sceneObject.autoLayout ? { ...sceneObject.autoLayout } : null  // For tileMode check in UI
+        autoLayout: sceneObject.autoLayout ? {
+            ...sceneObject.autoLayout,
+            padding: sceneObject.autoLayout.padding ? { ...sceneObject.autoLayout.padding } : undefined,
+            alignment: sceneObject.autoLayout.alignment ? { ...sceneObject.autoLayout.alignment } : undefined,
+            tileMode: sceneObject.autoLayout.tileMode ? { ...sceneObject.autoLayout.tileMode } : undefined
+        } : null  // For tileMode check in UI
     };
 }
 
