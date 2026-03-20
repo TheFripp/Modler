@@ -326,17 +326,8 @@ class ObjectSerializer {
         serialized.children = objectData.children || [];
         serialized.layout = objectData.layout || null;
 
-        // SCHEMA-FIRST: Always use schema defaults instead of null
-        serialized.autoLayout = objectData.autoLayout || (
-            window.ObjectDataFormat?.createDefaultAutoLayout?.() || {
-                enabled: false,
-                direction: null,
-                gap: 0,
-                padding: { width: 0, height: 0, depth: 0 },
-                alignment: { x: 'center', y: 'center', z: 'center' },
-                reversed: false
-            }
-        );
+        serialized.autoLayout = objectData.autoLayout ||
+            window.ObjectDataFormat.createDefaultAutoLayout();
 
         // Add container mode
         if (objectData.containerMode) {

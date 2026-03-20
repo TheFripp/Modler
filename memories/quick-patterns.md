@@ -1133,15 +1133,10 @@ const schema = {
     }
 };
 
-// Default objects must include ALL schema properties
-const defaultAutoLayout = {
-    enabled: false,
-    direction: null,
-    gap: 0,
-    padding: { width: 0, height: 0, depth: 0 },
-    reversed: false,  // Add defaults here too
-    alignment: null
-};
+// Default objects — SINGLE SOURCE OF TRUTH in ObjectDataFormat.createDefaultAutoLayout()
+// Never duplicate this inline — always call:
+const defaultAutoLayout = window.ObjectDataFormat.createDefaultAutoLayout();
+// Returns: { enabled: false, direction: null, gap: 0, padding: {...}, alignment: {...}, reversed: false, tileMode: undefined }
 ```
 
 ### 2. Adding New Properties (Checklist)

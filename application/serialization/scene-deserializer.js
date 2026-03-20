@@ -491,17 +491,8 @@ class SceneDeserializer {
                 createdObject.sizingMode = createdObject.containerMode;
                 createdObject.layoutMode = objData.layoutMode || null;
 
-                // SCHEMA-FIRST: Use centralized default factory
-                createdObject.autoLayout = objData.autoLayout || (
-                    window.ObjectDataFormat?.createDefaultAutoLayout?.() || {
-                        enabled: false,
-                        direction: null,
-                        gap: 0,
-                        padding: { width: 0, height: 0, depth: 0 },
-                        alignment: { x: 'center', y: 'center', z: 'center' },
-                        reversed: false
-                    }
-                );
+                createdObject.autoLayout = objData.autoLayout ||
+                    window.ObjectDataFormat.createDefaultAutoLayout();
                 createdObject.childrenOrder = objData.childrenOrder || [];
             }
 

@@ -67,7 +67,7 @@
 
 | File | Location | Responsibility | When to Use |
 |------|----------|---------------|-------------|
-| **simple-postmessage** | `/integration/communication/` | ObjectEventBus → DataExtractor → postMessage | Automatic (Main → UI) |
+| **simple-postmessage** | `/integration/communication/` | ObjectEventBus → DataExtractor → batched postMessage | Automatic (Main → UI) |
 | **command-router** | `/application/` | Routes UI commands to handlers | Automatic (UI → Main) |
 | **main-integration** | `/integration/svelte/` | Receives postMessage, dispatches to CommandRouter | Automatic |
 | **unified-communication** | `/svelte-ui/src/lib/services/` | UI → Main commands | Send commands from UI |
@@ -139,7 +139,8 @@ Tool/Handler
     → SceneController.updateGeometry()
     → ObjectEventBus.emit('object:geometry', event)
       → SimpleCommunication → DataExtractor
-        → postMessage → UI iframes → Svelte stores update
+        → microtask batch → postMessage → UI iframes → Svelte stores update
+// Multiple object changes within same microtask are batched into single message
 ```
 
 ### 2. UI Property Change Flow

@@ -137,6 +137,33 @@ function setupPostMessageFallback() {
 				}
 				break;
 
+			case 'objects-batch-changed':
+				// Batched object updates — apply all at once to minimize Svelte re-renders
+				try {
+					if (data && data.changes) {
+						const currentSelection = get(selectedObjects);
+						let selectionDirty = false;
+						let updatedSelection = [...currentSelection];
+
+						for (const change of data.changes) {
+							if (change.object) {
+								const idx = updatedSelection.findIndex((obj: any) => obj.id === change.objectId);
+								if (idx !== -1) {
+									updatedSelection[idx] = change.object;
+									selectionDirty = true;
+								}
+							}
+						}
+
+						if (selectionDirty) {
+							syncSelectionFromThreeJS(updatedSelection);
+						}
+					}
+				} catch (error) {
+					console.error('PostMessage: Error syncing batched object changes:', error);
+				}
+				break;
+
 			case 'tool-changed':
 				// SimpleCommunication sends tool state changes
 				try {

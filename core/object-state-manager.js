@@ -32,7 +32,6 @@ class ObjectStateManager extends EventTarget {
 
         // System references for propagation
         this.sceneController = null;
-        this.uiSystems = new Set(); // UI systems that need updates
         this.objectDataFormat = null; // Central format standardization
 
         // Change tracking for efficient updates
@@ -136,9 +135,6 @@ class ObjectStateManager extends EventTarget {
         // Listen for lifecycle events to auto-register new objects
         this.setupLifecycleListener();
 
-        // Listen for hierarchy changes from SceneController
-        this.setupHierarchyChangeListener();
-
         // Make ObjectStateManager globally available immediately
         if (window.modlerComponents) {
             window.modlerComponents.objectStateManager = this;
@@ -176,19 +172,6 @@ class ObjectStateManager extends EventTarget {
                 this.selection.delete(objectId);
             }
         });
-    }
-
-    /**
-     * REMOVED: Hierarchy change listener
-     *
-     * This was causing race conditions with PropertyPanelSync.
-     * PropertyPanelSync now listens directly to SceneController HIERARCHY events
-     * and reads fresh data from SceneController.getAllObjects().
-     *
-     * ObjectStateManager no longer maintains a duplicate hierarchy state.
-     */
-    setupHierarchyChangeListener() {
-        // Listener removed - PropertyPanelSync handles hierarchy updates directly from SceneController
     }
 
     /**
@@ -741,16 +724,8 @@ class ObjectStateManager extends EventTarget {
 
                 // SCHEMA-FIRST: Always sync autoLayout for containers, use schema defaults if needed
                 if (object.isContainer) {
-                    sceneObject.autoLayout = object.autoLayout || (
-                        window.ObjectDataFormat?.createDefaultAutoLayout?.() || {
-                            enabled: false,
-                            direction: null,
-                            gap: 0,
-                            padding: { width: 0, height: 0, depth: 0 },
-                            alignment: { x: 'center', y: 'center', z: 'center' },
-                            reversed: false
-                        }
-                    );
+                    sceneObject.autoLayout = object.autoLayout ||
+                        window.ObjectDataFormat.createDefaultAutoLayout();
 
                     // CRITICAL: If user manually sets gap, clear calculatedGap to use fixed gap
                     if (object._changedProperties?.has('autoLayout') || object._changedProperties?.has('autoLayout.gap')) {
@@ -846,26 +821,11 @@ class ObjectStateManager extends EventTarget {
                 Array.from(object._changedProperties || []).some(prop => prop.startsWith('layoutProperties.'));
 
             if (layoutPropertiesChanged && object.parentContainer && !object.isContainer) {
-                console.log('🎨 layoutPropertiesChanged detected:', {
-                    objectId: object.id,
-                    parentContainer: object.parentContainer,
-                    layoutProperties: object.layoutProperties,
-                    changedProperties: Array.from(object._changedProperties || [])
-                });
-
                 // Child's layoutProperties changed (e.g., sizeX changed from 'fixed' to 'fill')
                 // Need to recalculate parent container's layout to resize child accordingly
                 const parentObject = this.sceneController.getObject(object.parentContainer);
-                console.log('🎨 Parent object:', {
-                    found: !!parentObject,
-                    parentId: parentObject?.id,
-                    hasAutoLayout: !!parentObject?.autoLayout,
-                    layoutEnabled: parentObject?.autoLayout?.enabled
-                });
 
                 if (parentObject && parentObject?.autoLayout?.enabled) {
-                    console.log('🎨 Triggering parent layout update for container:', object.parentContainer);
-                    // Parent is in layout mode - trigger layout recalculation
                     this.sceneController.updateLayout(object.parentContainer);
                 }
             }

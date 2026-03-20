@@ -220,10 +220,8 @@ class SceneLifecycleManager {
             if (hierarchyManager) {
                 const children = hierarchyManager.getChildObjects(id);
                 if (children.length > 0) {
-                    console.log(`SceneLifecycleManager: Recursively deleting ${children.length} children of container ${id} "${objectData.name}"`);
                     for (const child of children) {
-                        console.log(`  Deleting child ${child.id} "${child.name}" (type: ${child.type})`);
-                        this.removeObject(child.id); // Recursive deletion
+                        this.removeObject(child.id);
                     }
                 }
             }

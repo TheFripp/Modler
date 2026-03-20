@@ -328,16 +328,7 @@ class SceneLayoutManager {
 
             // Resize container to match new layout bounds
             // CRITICAL: Don't resize if any child has fill mode - container size is fixed when children fill
-            const hasChildWithFill = children.some(child => {
-                const layoutProps = child.layoutProperties;
-                return layoutProps && (
-                    layoutProps.sizeX === 'fill' ||
-                    layoutProps.sizeY === 'fill' ||
-                    layoutProps.sizeZ === 'fill'
-                );
-            });
-
-            if (layoutBounds && layoutBounds.size && !hasChildWithFill) {
+            if (layoutBounds && layoutBounds.size && !this._hasChildWithFill(children)) {
                 const containerCrudManager = this.getContainerCrudManager();
                 if (containerCrudManager) {
                     // UNIFIED API: Layout recalculated (via updateLayout)
@@ -359,17 +350,7 @@ class SceneLayoutManager {
             // If this is a hug container, trigger a single update now that layout is complete
             // CRITICAL: Don't hug if any child has fill mode - this creates circular dependency
             if (container.containerMode === 'hug' || container.isHug) {
-                // Check if any child has fill mode on any axis
-                const hasChildWithFill = children.some(child => {
-                    const layoutProps = child.layoutProperties;
-                    return layoutProps && (
-                        layoutProps.sizeX === 'fill' ||
-                        layoutProps.sizeY === 'fill' ||
-                        layoutProps.sizeZ === 'fill'
-                    );
-                });
-
-                if (!hasChildWithFill) {
+                if (!this._hasChildWithFill(children)) {
                     this.updateHugContainerSize(containerId);
                 }
             }
@@ -548,6 +529,15 @@ class SceneLayoutManager {
                 supportMeshFactory.updateSupportMeshGeometries(containerData.mesh, false);
             }
         }
+    }
+    /**
+     * Check if any child has fill mode enabled on any axis
+     */
+    _hasChildWithFill(children) {
+        return children.some(child => {
+            const lp = child.layoutProperties;
+            return lp && (lp.sizeX === 'fill' || lp.sizeY === 'fill' || lp.sizeZ === 'fill');
+        });
     }
 }
 

@@ -27,6 +27,10 @@ class SimpleCommunication {
             messagesReceived: 0,
             errors: 0
         };
+
+        // Batching: accumulate object-changed messages within a microtask
+        this.pendingObjectChanges = new Map(); // objectId -> { objectId, eventType, object }
+        this.batchScheduled = false;
     }
 
     /**
@@ -83,18 +87,11 @@ class SimpleCommunication {
         });
 
         // Subscribe to object events (geometry, material, transform, lifecycle)
-        eventBus.subscribe(eventBus.EVENT_TYPES.GEOMETRY, (event) => {
-            this.handleObjectEvent(event);
-        });
-        eventBus.subscribe(eventBus.EVENT_TYPES.MATERIAL, (event) => {
-            this.handleObjectEvent(event);
-        });
-        eventBus.subscribe(eventBus.EVENT_TYPES.TRANSFORM, (event) => {
-            this.handleObjectEvent(event);
-        });
-        eventBus.subscribe(eventBus.EVENT_TYPES.LIFECYCLE, (event) => {
-            this.handleObjectEvent(event);
-        });
+        const objectHandler = (event) => this.handleObjectEvent(event);
+        eventBus.subscribe(eventBus.EVENT_TYPES.GEOMETRY, objectHandler);
+        eventBus.subscribe(eventBus.EVENT_TYPES.MATERIAL, objectHandler);
+        eventBus.subscribe(eventBus.EVENT_TYPES.TRANSFORM, objectHandler);
+        eventBus.subscribe(eventBus.EVENT_TYPES.LIFECYCLE, objectHandler);
 
         // Subscribe to tool events (tool:state)
         eventBus.subscribe(eventBus.EVENT_TYPES.TOOL_STATE, (event) => {
@@ -107,7 +104,6 @@ class SimpleCommunication {
             this.sendInitialHierarchySync();
         });
 
-        console.log('✅ SimpleCommunication: Main → UI initialized');
     }
 
     /**
@@ -254,15 +250,44 @@ class SimpleCommunication {
 
         if (!completeData) return;
 
-        // Send to all UI iframes
-        this.sendToAllIframes({
-            type: 'object-changed',
-            data: {
-                objectId,
-                eventType,
-                object: completeData // COMPLETE data!
-            }
+        // Queue for batched delivery (coalesces rapid updates to same object)
+        this.pendingObjectChanges.set(objectId, {
+            objectId,
+            eventType,
+            object: completeData
         });
+
+        if (!this.batchScheduled) {
+            this.batchScheduled = true;
+            queueMicrotask(() => this.flushPendingObjectChanges());
+        }
+    }
+
+    /**
+     * Flush all pending object-changed messages in a single batch
+     */
+    flushPendingObjectChanges() {
+        this.batchScheduled = false;
+
+        if (this.pendingObjectChanges.size === 0) return;
+
+        if (this.pendingObjectChanges.size === 1) {
+            // Single object — send as regular object-changed for backward compat
+            const entry = this.pendingObjectChanges.values().next().value;
+            this.sendToAllIframes({
+                type: 'object-changed',
+                data: entry
+            });
+        } else {
+            // Multiple objects — send as batch
+            const changes = Array.from(this.pendingObjectChanges.values());
+            this.sendToAllIframes({
+                type: 'objects-batch-changed',
+                data: { changes }
+            });
+        }
+
+        this.pendingObjectChanges.clear();
     }
 
     /**

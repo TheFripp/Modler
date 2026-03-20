@@ -8,10 +8,17 @@
 ## Current Work
 
 ### Active Development
-- Architecture simplification phases 0-3 completed (commit `1a55b9e`)
+- Core systems simplification completed
 - 50+ modified/untracked files on `feature/next-development` branch
 
 ### Completed Milestones
+- **Core Systems Simplification** - 2026-03-19
+  - Removed debug logging from hot paths (ObjectStateManager, SceneLifecycleManager)
+  - Removed dead code (unused fields, empty methods, dead functions in main-integration)
+  - Deduplicated fill-mode checks, container layout callbacks, autoLayout defaults
+  - Added microtask-based postMessage batching in SimpleCommunication
+  - Optimized StateSerializer (pass baseData, inline permission checks)
+  - New UI message type: `objects-batch-changed` for batched layout updates
 - **Architecture Simplification (Phases 0-3)** - 2026-03-19
 - **Container Push & Selection Fixes** - 2025-01-21
 - **Layout State Machine Refactor** - 2025-01-20
@@ -29,7 +36,8 @@
 ### Technical Debt
 - Documentation metadata needs to be added to 50+ files
 - Some legacy files may not follow latest patterns
-- Warning logs in raycaster can be cleaned up once stability confirmed
+- ObjectSerializer (~660 lines) may be removable — mostly wraps DataExtractor with questionable cache
+- Grid color methods (~53 lines) in SceneController could move to dedicated manager
 
 ---
 
@@ -40,7 +48,7 @@
 
 ### Medium Priority
 1. Add metadata to documentation files
-2. Performance optimization review
+2. Evaluate ObjectSerializer removal (Phase 4 cleanup)
 
 ### Low Priority
 1. Archive old documentation
@@ -231,11 +239,11 @@
 `feature/next-development`
 
 ### Recent Commits
-1. `1a55b9e` - refactor: architecture simplification phases 0-3
-2. `cd6fda7` - fix: container push alignment and selection behavior
-3. `ecba0d7` - refactor: layout state machine + raycasting/selection fixes
-4. `e208a31` - refactor: unify face highlighting architecture
-5. `bb7ec46` - fix: Enable face highlighting for selected containers
+1. (pending) - refactor: simplify core systems and add postMessage batching
+2. `aec223e` - refactor: centralize support mesh visibility through SupportMeshFactory
+3. `1a55b9e` - refactor: architecture simplification phases 0-3
+4. `cd6fda7` - fix: container push alignment and selection behavior
+5. `ecba0d7` - refactor: layout state machine + raycasting/selection fixes
 
 ### Development Servers
 - Main server: http://localhost:3000

@@ -116,7 +116,7 @@
 ## UI & Communication
 
 ### 3D ↔ UI Communication
-- **simple-postmessage** (`/integration/communication/`) - Main → UI: ObjectEventBus → DataExtractor → postMessage (no intermediate layers)
+- **simple-postmessage** (`/integration/communication/`) - Main → UI: ObjectEventBus → DataExtractor → microtask-batched postMessage (multiple changes coalesced into single message)
 - **command-router** (`/application/`) - Routes incoming UI commands to appropriate handlers (UI → Main)
 - **unified-communication** (`/svelte-ui/src/lib/services/`) - UI → Main command sending via postMessage
 - **property-controller** (`/svelte-ui/src/lib/services/`) - UI property state management; Svelte stores

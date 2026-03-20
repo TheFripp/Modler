@@ -235,44 +235,11 @@ class SceneHierarchyManager {
 
         // Trigger layout updates if requested and callbacks provided
         if (shouldUpdateLayout && callbacks.updateLayout && callbacks.updateHugContainerSize) {
-            // Update layout of the new parent container
             if (parentId) {
-                const container = this.objects.get(parentId);
-                if (container) {
-                    // Handle hug containers
-                    if (container.containerMode === 'hug' || container.isHug) {
-                        callbacks.updateHugContainerSize(parentId);
-                    }
-                    // Handle layout mode containers
-                    else if (container.containerMode === 'layout' || (container.autoLayout && container.autoLayout.enabled)) {
-                        const layoutResult = callbacks.updateLayout(parentId);
-
-                        // Resize container to fit new children
-                        if (layoutResult && layoutResult.success && layoutResult.layoutBounds && callbacks.resizeToLayoutBounds) {
-                            callbacks.resizeToLayoutBounds(container, layoutResult.layoutBounds);
-                        }
-                    }
-                }
+                this._triggerContainerLayoutUpdate(parentId, callbacks);
             }
-
-            // Update layout of old parent container if it had one
             if (oldParentId && oldParentId !== parentId) {
-                const oldContainer = this.objects.get(oldParentId);
-                if (oldContainer) {
-                    // Handle hug containers
-                    if (oldContainer.containerMode === 'hug' || oldContainer.isHug) {
-                        callbacks.updateHugContainerSize(oldParentId);
-                    }
-                    // Handle layout mode containers
-                    else if (oldContainer.containerMode === 'layout' || (oldContainer.autoLayout && oldContainer.autoLayout.enabled)) {
-                        const layoutResult = callbacks.updateLayout(oldParentId);
-
-                        // Resize container to fit remaining children
-                        if (layoutResult && layoutResult.success && layoutResult.layoutBounds && callbacks.resizeToLayoutBounds) {
-                            callbacks.resizeToLayoutBounds(oldContainer, layoutResult.layoutBounds);
-                        }
-                    }
-                }
+                this._triggerContainerLayoutUpdate(oldParentId, callbacks);
             }
         }
 
@@ -420,6 +387,22 @@ class SceneHierarchyManager {
             const index = parent.childrenOrder.indexOf(objectId);
             if (index !== -1) {
                 parent.childrenOrder.splice(index, 1);
+            }
+        }
+    }
+    /**
+     * Trigger layout update on a container based on its mode (hug or layout)
+     */
+    _triggerContainerLayoutUpdate(containerId, callbacks) {
+        const container = this.objects.get(containerId);
+        if (!container) return;
+
+        if (container.containerMode === 'hug' || container.isHug) {
+            callbacks.updateHugContainerSize(containerId);
+        } else if (container.containerMode === 'layout' || (container.autoLayout?.enabled)) {
+            const layoutResult = callbacks.updateLayout(containerId);
+            if (layoutResult?.success && layoutResult.layoutBounds && callbacks.resizeToLayoutBounds) {
+                callbacks.resizeToLayoutBounds(container, layoutResult.layoutBounds);
             }
         }
     }

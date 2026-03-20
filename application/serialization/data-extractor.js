@@ -141,26 +141,8 @@ function extractBasicData(sceneObject) {
     };
 }
 
-/**
- * Create default autoLayout for NEW objects
- * ONLY use when creating brand new containers, never for existing objects
- *
- * @returns {Object} Default autoLayout structure
- */
-function createDefaultAutoLayout() {
-    return {
-        enabled: false,
-        direction: null,
-        gap: 0,
-        padding: { width: 0, height: 0, depth: 0 },
-        alignment: { x: 'center', y: 'center', z: 'center' },
-        reversed: false
-    };
-}
-
 // Export functions
 window.DataExtractor = {
     extractSerializableData,
-    extractBasicData,
-    createDefaultAutoLayout
+    extractBasicData
 };

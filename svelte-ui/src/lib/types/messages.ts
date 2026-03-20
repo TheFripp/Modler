@@ -366,6 +366,17 @@ export interface HierarchyChangedMessage {
 	};
 }
 
+export interface ObjectsBatchChangedMessage {
+	type: 'objects-batch-changed';
+	data: {
+		changes: Array<{
+			objectId: number;
+			eventType: string;
+			object: ObjectData;
+		}>;
+	};
+}
+
 export interface ToolChangedMessage {
 	type: 'tool-changed';
 	data: {
@@ -377,6 +388,7 @@ export interface ToolChangedMessage {
 
 export type MainToUIMessage =
 	| ObjectChangedMessage
+	| ObjectsBatchChangedMessage
 	| SelectionChangedMessage
 	| HierarchyChangedMessage
 	| ToolChangedMessage;
@@ -395,6 +407,7 @@ export function isMainToUIMessage(message: any): message is MainToUIMessage {
 		typeof message === 'object' &&
 		typeof message.type === 'string' &&
 		(message.type === 'object-changed' ||
+			message.type === 'objects-batch-changed' ||
 			message.type === 'selection-changed' ||
 			message.type === 'hierarchy-changed' ||
 			message.type === 'tool-changed')

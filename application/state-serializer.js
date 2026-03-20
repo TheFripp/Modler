@@ -101,7 +101,7 @@ class StateSerializer {
                 // ═══════════════════════════════════════════════════════
 
                 // Fill button properties
-                canHaveFillButtons: this.computeCanHaveFillButtons(objectId),
+                canHaveFillButtons: this.computeCanHaveFillButtons(objectId, baseData),
                 fillButtonStates: this.computeFillButtonStates(objectId),
 
                 // Layout properties
@@ -126,14 +126,14 @@ class StateSerializer {
                 // TOOL & ACTION AVAILABILITY
                 // ═══════════════════════════════════════════════════════
 
-                availableTools: this.computeAvailableTools(objectId),
+                availableTools: this.computeAvailableTools(baseData),
 
                 // Action permissions
-                canDelete: this.computeCanDelete(objectId),
-                canDuplicate: this.computeCanDuplicate(objectId),
-                canMove: this.computeCanMove(objectId),
-                canResize: this.computeCanResize(objectId),
-                canRotate: this.computeCanRotate(objectId),
+                canDelete: !baseData.locked,
+                canDuplicate: true,
+                canMove: !baseData.locked,
+                canResize: this.computeCanResize(baseData),
+                canRotate: !baseData.locked && !baseData.isContainer,
 
                 // ═══════════════════════════════════════════════════════
                 // METADATA
@@ -170,8 +170,7 @@ class StateSerializer {
      * @param {string} objectId
      * @returns {boolean}
      */
-    computeCanHaveFillButtons(objectId) {
-        const obj = this.objectStateManager.getObject(objectId);
+    computeCanHaveFillButtons(objectId, obj) {
         if (!obj || obj.isContainer || obj.locked) {
             return false;
         }
@@ -233,8 +232,7 @@ class StateSerializer {
      * @param {string} objectId
      * @returns {Array<string>}
      */
-    computeAvailableTools(objectId) {
-        const obj = this.objectStateManager.getObject(objectId);
+    computeAvailableTools(obj) {
         if (!obj) return [];
 
         const tools = ['select', 'delete'];
@@ -254,38 +252,6 @@ class StateSerializer {
         return tools;
     }
 
-    /**
-     * Compute whether object can be deleted
-     *
-     * @param {string} objectId
-     * @returns {boolean}
-     */
-    computeCanDelete(objectId) {
-        const obj = this.objectStateManager.getObject(objectId);
-        return obj && !obj.locked;
-    }
-
-    /**
-     * Compute whether object can be duplicated
-     *
-     * @param {string} objectId
-     * @returns {boolean}
-     */
-    computeCanDuplicate(objectId) {
-        const obj = this.objectStateManager.getObject(objectId);
-        return obj !== null;
-    }
-
-    /**
-     * Compute whether object can be moved
-     *
-     * @param {string} objectId
-     * @returns {boolean}
-     */
-    computeCanMove(objectId) {
-        const obj = this.objectStateManager.getObject(objectId);
-        return obj && !obj.locked;
-    }
 
     /**
      * Compute whether object can be resized
@@ -293,8 +259,7 @@ class StateSerializer {
      * @param {string} objectId
      * @returns {boolean}
      */
-    computeCanResize(objectId) {
-        const obj = this.objectStateManager.getObject(objectId);
+    computeCanResize(obj) {
         if (!obj || obj.locked) return false;
 
         // Can't resize if in fill mode on any axis
@@ -308,16 +273,6 @@ class StateSerializer {
         return true;
     }
 
-    /**
-     * Compute whether object can be rotated
-     *
-     * @param {string} objectId
-     * @returns {boolean}
-     */
-    computeCanRotate(objectId) {
-        const obj = this.objectStateManager.getObject(objectId);
-        return obj && !obj.locked && !obj.isContainer;
-    }
 
     // ═══════════════════════════════════════════════════════════════
     // HELPER METHODS

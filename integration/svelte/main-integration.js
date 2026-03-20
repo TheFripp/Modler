@@ -471,40 +471,6 @@ const logger = window.logger;
     // SIMPLIFIED PROPERTY HANDLING
     // ==================================================================================
 
-    /**
-     * Handle all property updates from UI.
-     * Single path: format convert → ObjectStateManager.updateObject()
-     */
-    function handlePropertyUpdate(objectId, property, value, source = 'input') {
-        const objectStateManager = window.modlerComponents?.objectStateManager;
-        if (!objectStateManager) return;
-
-        // Convert to internal format
-        const formatConverter = window.propertyFormatConverter;
-        const updates = {};
-
-        if (formatConverter) {
-            const result = formatConverter.convertToInternal(property, value);
-            if (!result.isValid) {
-                console.warn(`Property format validation failed for ${property}:`, result.error);
-            }
-            updates[property] = result.value;
-        } else {
-            updates[property] = parseFloat(value) || value;
-        }
-
-        // Default layout direction when enabling autoLayout
-        if (property === 'autoLayout.enabled' && value) {
-            const currentObject = objectStateManager.getObject(objectId);
-            if (currentObject?.isContainer && !currentObject.autoLayout?.direction) {
-                if (!updates.autoLayout) updates.autoLayout = {};
-                updates.autoLayout.direction = 'x';
-            }
-        }
-
-        objectStateManager.updateObject(objectId, updates, source);
-    }
-
     // ==================================================================================
     // MESSAGE HANDLING (PostMessage & Direct)
     // ==================================================================================
@@ -525,9 +491,6 @@ const logger = window.logger;
 
             // All UI → Main messages handled by SimpleCommunication → CommandRouter
         });
-
-        // Make handlePropertyUpdate globally available for direct calls
-        window.handlePropertyUpdate = handlePropertyUpdate;
     }
 
     // UI notification handled by SimpleCommunication via ObjectEventBus → iframe postMessage
