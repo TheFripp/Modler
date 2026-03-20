@@ -40,25 +40,23 @@ class LayoutGeometry {
         // BoxGeometry should be centered by default, but explicitly center it to be safe
         containerGeometry.center();
 
-        // Create invisible material for main solid mesh using MaterialManager
+        // Invisible material — container is only visible through wireframes and face highlights
         let mainMaterial;
         if (mManager) {
             mainMaterial = mManager.createInvisibleRaycastMaterial({
-                wireframe: false   // CRITICAL: Explicitly disable wireframe rendering to prevent triangle edges
+                wireframe: false
             });
         } else {
             mainMaterial = new THREE.MeshBasicMaterial({
                 transparent: true,
                 opacity: 0.0,
-                colorWrite: false, // Don't write to color buffer - purely for raycasting
-                depthWrite: false, // Don't write to depth buffer - prevents visual artifacts
-                wireframe: false   // CRITICAL: Explicitly disable wireframe rendering to prevent triangle edges
+                colorWrite: false,
+                depthWrite: false,
+                wireframe: false
             });
         }
 
         const mainMesh = new THREE.Mesh(containerGeometry, mainMaterial);
-        // NOTE: Material-based invisibility (opacity: 0.0, colorWrite: false, depthWrite: false)
-        // makes the container invisible while keeping child objects visible
         mainMesh.userData.isContainer = true;
         mainMesh.userData.containerType = 'main';
 
@@ -326,26 +324,22 @@ class LayoutGeometry {
         allObjects.forEach(objectData => {
             if (objectData.isContainer && objectData.mesh) {
                 const containerMesh = objectData.mesh;
+                // NEVER touch containerMesh.material — it is the invisible raycast material
 
-                // Update material properties
-                if (containerMesh.material) {
-                    containerMesh.material.color.setHex(color);
-                    containerMesh.material.opacity = opacity;
-                    containerMesh.material.transparent = opacity < 1.0;
-
-                    // Update line width if supported
-                    if (containerMesh.material.linewidth !== undefined) {
-                        containerMesh.material.linewidth = lineWidth;
+                // Update CAD wireframe support mesh material (color, opacity, lineWidth)
+                const cadWireframe = containerMesh.userData?.supportMeshes?.cadWireframe;
+                if (cadWireframe?.material) {
+                    cadWireframe.material.color.setHex(color);
+                    cadWireframe.material.opacity = opacity;
+                    cadWireframe.material.transparent = opacity < 1.0;
+                    if (cadWireframe.material.linewidth !== undefined) {
+                        cadWireframe.material.linewidth = lineWidth;
                     }
-
-                    // Update render order
-                    containerMesh.renderOrder = renderOrder;
-
-                    // Mark material for update
-                    containerMesh.material.needsUpdate = true;
-
-                    updatedCount++;
+                    cadWireframe.renderOrder = renderOrder;
+                    cadWireframe.material.needsUpdate = true;
                 }
+
+                updatedCount++;
             }
         });
 

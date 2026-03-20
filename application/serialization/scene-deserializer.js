@@ -303,7 +303,7 @@ class SceneDeserializer {
      */
     restoreHierarchyAndPosition(objData) {
         // Don't update layout yet - we'll do that after all hierarchies are established
-        const success = this.sceneController.setParentContainer(objData.id, objData.parentContainer, false);
+        const success = this.sceneController.setParentContainer(objData.id, objData.parentContainer, false, { skipCoordinateConversion: true });
 
         if (!success) {
             console.warn(`Failed to set parent for object ${objData.id}`);
@@ -413,16 +413,15 @@ class SceneDeserializer {
             // Create material based on object type
             let material;
             if (objData.isContainer) {
-                // CRITICAL: Containers use invisible material (wireframes created by SupportMeshFactory)
-                // This matches the material used by LayoutGeometry.createContainerGeometry()
+                // Invisible material — matches LayoutGeometry.createContainerGeometry()
                 material = this.materialManager
                     ? this.materialManager.createInvisibleRaycastMaterial({ wireframe: false })
                     : new THREE.MeshBasicMaterial({
                         transparent: true,
                         opacity: 0.0,
-                        colorWrite: false,  // Don't write to color buffer - purely for raycasting
-                        depthWrite: false,  // Don't write to depth buffer - prevents visual artifacts
-                        wireframe: false    // Explicitly disable wireframe rendering
+                        colorWrite: false,
+                        depthWrite: false,
+                        wireframe: false
                     });
             } else {
                 // Regular objects use standard material

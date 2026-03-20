@@ -584,7 +584,7 @@ class MaterialManager {
 
         const config = {
             color: options.color || configManager?.get('visual.selection.color') || '#ff6600',
-            opacity: options.opacity || configOpacity || 0.3,
+            opacity: options.opacity || configOpacity || 0.2,
             renderOrder: options.renderOrder || configManager?.get('visual.effects.materials.face.renderOrder') || 1000,
             side: THREE.DoubleSide,
             transparent: true,
@@ -602,14 +602,13 @@ class MaterialManager {
         if (cached) return cached;
 
         // Create new material
-        // Safe color parsing to handle various color input types
         let colorHex;
         if (typeof config.color === 'string') {
             colorHex = parseInt(config.color.replace('#', ''), 16);
         } else if (typeof config.color === 'number') {
             colorHex = config.color;
         } else {
-            colorHex = 0xffffff; // Default to white
+            colorHex = 0xffffff;
         }
         const material = new THREE.MeshBasicMaterial({
             color: colorHex,
@@ -618,8 +617,13 @@ class MaterialManager {
             side: config.side,
             depthTest: config.depthTest,
             depthWrite: config.depthWrite,
-            clippingPlanes: [] // Disable clipping - always render face highlights
+            clippingPlanes: []
         });
+
+        // Prevent z-fighting: push highlight slightly in front of the geometry face
+        material.polygonOffset = true;
+        material.polygonOffsetFactor = -1;
+        material.polygonOffsetUnits = -1;
 
         material.renderOrder = config.renderOrder;
 
@@ -634,12 +638,9 @@ class MaterialManager {
     createContainerFaceHighlightMaterial(options = {}) {
         const configManager = this.getConfigManager();
 
-        // Build configuration - use SAME color as regular face highlights for consistency
-        // Containers should have the same visual feedback as regular objects
-        // But use container-specific opacity setting for independent control
         const config = {
             color: options.color || configManager?.get('visual.selection.color') || '#ff6600',
-            opacity: options.opacity || configManager?.get('visual.containers.faceHighlightOpacity') || 0.3,
+            opacity: options.opacity || configManager?.get('visual.containers.faceHighlightOpacity') || 0.2,
             renderOrder: options.renderOrder || configManager?.get('visual.effects.materials.face.renderOrder') || 1000,
             side: THREE.DoubleSide,
             transparent: true,
@@ -672,8 +673,13 @@ class MaterialManager {
             side: config.side,
             depthTest: config.depthTest,
             depthWrite: config.depthWrite,
-            clippingPlanes: [] // Disable clipping - always render face highlights
+            clippingPlanes: []
         });
+
+        // Prevent z-fighting: push highlight slightly in front of the geometry face
+        material.polygonOffset = true;
+        material.polygonOffsetFactor = -1;
+        material.polygonOffsetUnits = -1;
 
         material.renderOrder = config.renderOrder;
 
@@ -692,7 +698,7 @@ class MaterialManager {
         // Build configuration - uses fixed grey color, only opacity tracks config
         const config = {
             color: options.color || this.colors.DISABLED_STATE, // Dark grey - fixed, not affected by selection color changes
-            opacity: options.opacity || configManager?.get('visual.selection.faceHighlightOpacity') || 0.3,
+            opacity: options.opacity || configManager?.get('visual.selection.faceHighlightOpacity') || 0.2,
             renderOrder: options.renderOrder || configManager?.get('visual.effects.materials.face.renderOrder') || 1000,
             side: THREE.DoubleSide,
             transparent: true,
@@ -717,8 +723,13 @@ class MaterialManager {
             side: config.side,
             depthTest: config.depthTest,
             depthWrite: config.depthWrite,
-            clippingPlanes: [] // Disable clipping - always render face highlights
+            clippingPlanes: []
         });
+
+        // Prevent z-fighting: push highlight slightly in front of the geometry face
+        material.polygonOffset = true;
+        material.polygonOffsetFactor = -1;
+        material.polygonOffsetUnits = -1;
 
         material.renderOrder = config.renderOrder;
 

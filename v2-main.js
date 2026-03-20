@@ -600,12 +600,14 @@ function createFloorGrid() {
         planeMaterial = materialManager.createMeshBasicMaterial({
             transparent: true,
             opacity: 0.0,
+            depthWrite: false, // Invisible plane must not block wireframes below the grid
             side: THREE.DoubleSide
         });
     } else {
         planeMaterial = new THREE.MeshBasicMaterial({
             transparent: true,
             opacity: 0.0,
+            depthWrite: false,
             side: THREE.DoubleSide
         });
     }

@@ -99,7 +99,7 @@ const CONFIGURATION_SCHEMA = {
 
     'visual.selection.faceHighlightOpacity': {
         type: 'number',
-        default: 0.3,
+        default: 0.2,
         constraint: CONSTRAINT_TYPES.RANGE_0_1,
         description: 'Selected face highlight opacity'
     },
@@ -137,7 +137,7 @@ const CONFIGURATION_SCHEMA = {
 
     'visual.containers.faceHighlightOpacity': {
         type: 'number',
-        default: 0.3,
+        default: 0.2,
         constraint: CONSTRAINT_TYPES.RANGE_0_1,
         description: 'Container face highlight opacity'
     },
