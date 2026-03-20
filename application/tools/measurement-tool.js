@@ -24,6 +24,7 @@ class MeasurementTool {
         // Current measurement state for Tab key focus
         this.currentEdgeAxis = null; // 'x', 'y', or 'z' - which dimension is being measured
         this.currentObject = null; // The object being measured
+        this.currentLabelSprite = null; // Reference to active label sprite for click detection
 
         // Stabilization to prevent flickering
         this.lastUpdateTime = 0; // Timestamp of last measurement update
@@ -250,6 +251,7 @@ class MeasurementTool {
         // Store for Tab key functionality
         this.currentEdgeAxis = pushAxis;
         this.currentObject = object;
+        this.currentFace = null; // Clear stale face data so offset uses camera direction
 
         // Find edge aligned with push axis
         const edge = this.findAxisAlignedEdge(object, pushAxis);
@@ -266,6 +268,7 @@ class MeasurementTool {
 
     /**
      * Find an edge of the object's bounding box aligned with the specified axis
+     * Picks the edge closest to the camera so measurements face the viewer
      * @param {THREE.Mesh} object - The object to measure
      * @param {string} axis - The axis to align with ('x', 'y', or 'z')
      * @returns {Object|null} Edge object with start, end, direction properties
@@ -277,38 +280,36 @@ class MeasurementTool {
         const box = new THREE.Box3().setFromObject(object);
         const min = box.min;
         const max = box.max;
+        const cameraPos = this.camera ? this.camera.position : null;
 
-        // Define edges along each axis
-        let start, end;
+        // For each axis, there are 4 parallel edges defined by the 2 perpendicular axes.
+        // Pick the combination of min/max on perpendicular axes closest to camera.
+        const perpAxes = ['x', 'y', 'z'].filter(a => a !== axis);
 
-        switch (axis) {
-            case 'x':
-                // Use bottom-front edge along X axis
-                start = new THREE.Vector3(min.x, min.y, min.z);
-                end = new THREE.Vector3(max.x, min.y, min.z);
-                break;
-            case 'y':
-                // Use front-left edge along Y axis
-                start = new THREE.Vector3(min.x, min.y, min.z);
-                end = new THREE.Vector3(min.x, max.y, min.z);
-                break;
-            case 'z':
-                // Use bottom-left edge along Z axis
-                start = new THREE.Vector3(min.x, min.y, min.z);
-                end = new THREE.Vector3(min.x, min.y, max.z);
-                break;
-            default:
-                return null;
+        // For each perpendicular axis, pick min or max based on camera position
+        const coords = {};
+        for (const a of perpAxes) {
+            if (cameraPos) {
+                const mid = (min[a] + max[a]) / 2;
+                coords[a] = cameraPos[a] >= mid ? max[a] : min[a];
+            } else {
+                coords[a] = min[a];
+            }
         }
 
-        // Calculate direction
+        const start = new THREE.Vector3();
+        const end = new THREE.Vector3();
+
+        start[axis] = min[axis];
+        end[axis] = max[axis];
+        for (const a of perpAxes) {
+            start[a] = coords[a];
+            end[a] = coords[a];
+        }
+
         const direction = end.clone().sub(start).normalize();
 
-        return {
-            start: start,
-            end: end,
-            direction: direction
-        };
+        return { start, end, direction };
     }
 
     /**
@@ -654,10 +655,16 @@ class MeasurementTool {
                 offsetEnd.add(offset);
             }
         } else {
-            // Fallback: use perpendicular to edge direction
-            normalDirection = this.getPerpendicularVector(direction);
+            // Fallback: offset toward camera so measurement is visible
+            const edgeMid = start.clone().add(end).multiplyScalar(0.5);
+            const toCamera = this.camera.position.clone().sub(edgeMid);
+            // Remove the component along the edge direction
+            const edgeDir = direction.clone().normalize();
+            toCamera.sub(edgeDir.multiplyScalar(toCamera.dot(edgeDir)));
+            normalDirection = toCamera.normalize();
+
             const offsetAmount = 0.5;
-            const offset = normalDirection.multiplyScalar(offsetAmount);
+            const offset = normalDirection.clone().multiplyScalar(offsetAmount);
             offsetStart.add(offset);
             offsetEnd.add(offset);
         }
@@ -701,6 +708,7 @@ class MeasurementTool {
         // Add 3D text label at the offset line's midpoint (centered on the line)
         const edgeLabelPos = offsetStart.clone().add(offsetEnd).multiplyScalar(0.5);
         const label = this.create3DLabel(this.formatMeasurementWithUnit(length), edgeLabelPos);
+        this.currentLabelSprite = label;
         group.add(label);
 
         // Add to scene
@@ -804,6 +812,7 @@ class MeasurementTool {
         // Add 3D text label at the midpoint of the dashed line
         const labelPosition = offsetStart.clone().add(offsetEnd).multiplyScalar(0.5);
         const label = this.create3DLabel(this.formatMeasurementWithUnit(distance), labelPosition);
+        this.currentLabelSprite = label;
         group.add(label);
 
         // Add to scene
@@ -934,6 +943,23 @@ class MeasurementTool {
         }
 
         this.currentMeasurement = null;
+        this.currentLabelSprite = null;
+    }
+
+    /**
+     * Check if mouse NDC coordinates are near the measurement label
+     * @param {THREE.Vector2} mouse - Normalized device coordinates (-1 to 1)
+     * @returns {boolean}
+     */
+    isMouseNearLabel(mouse) {
+        if (!this.currentLabelSprite || !this.camera || !this.renderer) return false;
+
+        const projected = this.currentLabelSprite.position.clone().project(this.camera);
+
+        // Threshold in NDC space, roughly matching sprite visual size (scale 0.053 x 0.03)
+        const dx = Math.abs(mouse.x - projected.x);
+        const dy = Math.abs(mouse.y - projected.y);
+        return dx < 0.04 && dy < 0.025;
     }
 
     /**
