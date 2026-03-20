@@ -80,10 +80,17 @@ class SceneFoundation {
             const container = this.canvas?.parentElement;
             const width = container?.clientWidth || 800;
             const height = container?.clientHeight || 600;
-            
+
             this.camera.aspect = width / height;
             this.camera.updateProjectionMatrix();
             this.renderer.setSize(width, height);
+
+            // Update LineMaterial resolution uniform for screen-space line widths
+            const materialManager = window.modlerComponents?.materialManager;
+            if (materialManager?.updateLineMaterialResolution) {
+                materialManager.updateLineMaterialResolution(width, height);
+            }
+
             this.requestRender();
         };
 

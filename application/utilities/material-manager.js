@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { LineMaterial } from 'three/lines/LineMaterial';
 // Modler V2 - Material Manager
 // Centralized material creation, caching, and configuration management
 // Eliminates scattered material creation across visualization systems
@@ -131,7 +132,9 @@ class MaterialManager {
             PREVIEW_WIREFRAME: 'preview-wireframe',
             CAD_WIREFRAME: 'cad-wireframe',
             LAYOUT_GUIDE: 'layout-guide',
-            HOVER_EFFECT: 'hover-effect'
+            HOVER_EFFECT: 'hover-effect',
+            SELECTION_EDGE_FAT: 'selection-edge-fat',
+            CONTAINER_WIREFRAME_FAT: 'container-wireframe-fat'
         };
 
         // Performance metrics
@@ -178,22 +181,28 @@ class MaterialManager {
         const configManager = this.getConfigManager();
         if (!configManager) return;
 
-        // Selection materials
+        // Selection materials (both standard and fat LineMaterial)
         this.registerConfigCallback('visual.selection.color', (newValue) => {
             this.updateMaterialsOfType(this.materialTypes.SELECTION_EDGE, 'color', newValue);
+            this.updateMaterialsOfType(this.materialTypes.SELECTION_EDGE_FAT, 'color', newValue);
             this.updateMaterialsOfType(this.materialTypes.FACE_HIGHLIGHT, 'color', newValue);
             this.invalidateCacheForType(this.materialTypes.SELECTION_EDGE);
+            this.invalidateCacheForType(this.materialTypes.SELECTION_EDGE_FAT);
             this.invalidateCacheForType(this.materialTypes.FACE_HIGHLIGHT);
         });
 
         this.registerConfigCallback('visual.selection.lineWidth', (newValue) => {
             this.updateMaterialsOfType(this.materialTypes.SELECTION_EDGE, 'linewidth', newValue);
+            this.updateMaterialsOfType(this.materialTypes.SELECTION_EDGE_FAT, 'linewidth', newValue);
             this.invalidateCacheForType(this.materialTypes.SELECTION_EDGE);
+            this.invalidateCacheForType(this.materialTypes.SELECTION_EDGE_FAT);
         });
 
         this.registerConfigCallback('visual.selection.opacity', (newValue) => {
             this.updateMaterialsOfType(this.materialTypes.SELECTION_EDGE, 'opacity', newValue);
+            this.updateMaterialsOfType(this.materialTypes.SELECTION_EDGE_FAT, 'opacity', newValue);
             this.invalidateCacheForType(this.materialTypes.SELECTION_EDGE);
+            this.invalidateCacheForType(this.materialTypes.SELECTION_EDGE_FAT);
         });
 
         this.registerConfigCallback('visual.selection.faceHighlightOpacity', (newValue) => {
@@ -202,21 +211,27 @@ class MaterialManager {
             // Don't invalidate cache - we want to keep using the same material instance
         });
 
-        // Container materials
+        // Container materials (both standard and fat LineMaterial)
         this.registerConfigCallback('visual.containers.wireframeColor', (newValue) => {
             this.updateMaterialsOfType(this.materialTypes.CONTAINER_WIREFRAME, 'color', newValue);
+            this.updateMaterialsOfType(this.materialTypes.CONTAINER_WIREFRAME_FAT, 'color', newValue);
             this.updateMaterialsOfType(this.materialTypes.FACE_HIGHLIGHT_CONTAINER, 'color', newValue);
             this.invalidateCacheForType(this.materialTypes.CONTAINER_WIREFRAME);
+            this.invalidateCacheForType(this.materialTypes.CONTAINER_WIREFRAME_FAT);
         });
 
         this.registerConfigCallback('visual.containers.lineWidth', (newValue) => {
             this.updateMaterialsOfType(this.materialTypes.CONTAINER_WIREFRAME, 'linewidth', newValue);
+            this.updateMaterialsOfType(this.materialTypes.CONTAINER_WIREFRAME_FAT, 'linewidth', newValue);
             this.invalidateCacheForType(this.materialTypes.CONTAINER_WIREFRAME);
+            this.invalidateCacheForType(this.materialTypes.CONTAINER_WIREFRAME_FAT);
         });
 
         this.registerConfigCallback('visual.containers.opacity', (newValue) => {
             this.updateMaterialsOfType(this.materialTypes.CONTAINER_WIREFRAME, 'opacity', newValue);
+            this.updateMaterialsOfType(this.materialTypes.CONTAINER_WIREFRAME_FAT, 'opacity', newValue);
             this.invalidateCacheForType(this.materialTypes.CONTAINER_WIREFRAME);
+            this.invalidateCacheForType(this.materialTypes.CONTAINER_WIREFRAME_FAT);
         });
 
         this.registerConfigCallback('visual.containers.faceHighlightOpacity', (newValue) => {
@@ -436,6 +451,121 @@ class MaterialManager {
         material.renderOrder = config.renderOrder;
 
         return this.cacheMaterial(key, material, this.materialTypes.CONTAINER_WIREFRAME);
+    }
+
+    /**
+     * Create fat selection line material using LineMaterial (screen-space pixel-width lines)
+     * Used for selection wireframes that need to be clearly visible on top of geometry
+     * @param {Object} options - Material options
+     * @returns {LineMaterial} Fat selection line material
+     */
+    createSelectionLineMaterial(options = {}) {
+        const configManager = this.getConfigManager();
+
+        const config = {
+            color: options.color || configManager?.get('visual.selection.color') || '#ff6600',
+            lineWidth: options.lineWidth || configManager?.get('visual.selection.lineWidth') || 2,
+            opacity: options.opacity || configManager?.get('visual.selection.opacity') || 0.8,
+            ...options
+        };
+
+        const key = this.generateMaterialKey(this.materialTypes.SELECTION_EDGE_FAT, config);
+        const cached = this.getMaterialFromCache(key);
+        if (cached) return cached;
+
+        let colorHex;
+        if (typeof config.color === 'string') {
+            colorHex = parseInt(config.color.replace('#', ''), 16);
+        } else if (typeof config.color === 'number') {
+            colorHex = config.color;
+        } else {
+            colorHex = 0xff6600;
+        }
+
+        const material = new LineMaterial({
+            color: colorHex,
+            linewidth: config.lineWidth,
+            transparent: true,
+            opacity: config.opacity,
+            depthTest: false,
+            depthWrite: false,
+            worldUnits: false // Screen pixels, not world units
+        });
+
+        // Set resolution from current canvas
+        const renderer = window.modlerComponents?.sceneFoundation?.renderer;
+        if (renderer) {
+            const size = new THREE.Vector2();
+            renderer.getSize(size);
+            material.resolution.copy(size);
+        }
+
+        material.renderOrder = 9999;
+
+        return this.cacheMaterial(key, material, this.materialTypes.SELECTION_EDGE_FAT);
+    }
+
+    /**
+     * Create fat container selection line material using LineMaterial
+     * @param {Object} options - Material options
+     * @returns {LineMaterial} Fat container selection line material
+     */
+    createContainerSelectionLineMaterial(options = {}) {
+        const configManager = this.getConfigManager();
+
+        const config = {
+            color: options.color || configManager?.get('visual.containers.wireframeColor') || '#00ff00',
+            lineWidth: options.lineWidth || configManager?.get('visual.containers.lineWidth') || 1,
+            opacity: options.opacity || configManager?.get('visual.containers.opacity') || 0.8,
+            ...options
+        };
+
+        const key = this.generateMaterialKey(this.materialTypes.CONTAINER_WIREFRAME_FAT, config);
+        const cached = this.getMaterialFromCache(key);
+        if (cached) return cached;
+
+        let colorHex;
+        if (typeof config.color === 'string') {
+            colorHex = parseInt(config.color.replace('#', ''), 16);
+        } else if (typeof config.color === 'number') {
+            colorHex = config.color;
+        } else {
+            colorHex = 0x00ff00;
+        }
+
+        const material = new LineMaterial({
+            color: colorHex,
+            linewidth: config.lineWidth,
+            transparent: true,
+            opacity: config.opacity,
+            depthTest: false,
+            depthWrite: false,
+            worldUnits: false
+        });
+
+        const renderer = window.modlerComponents?.sceneFoundation?.renderer;
+        if (renderer) {
+            const size = new THREE.Vector2();
+            renderer.getSize(size);
+            material.resolution.copy(size);
+        }
+
+        material.renderOrder = 9999;
+
+        return this.cacheMaterial(key, material, this.materialTypes.CONTAINER_WIREFRAME_FAT);
+    }
+
+    /**
+     * Update resolution uniform on all LineMaterial instances (call on canvas resize)
+     * @param {number} width - Canvas width in pixels
+     * @param {number} height - Canvas height in pixels
+     */
+    updateLineMaterialResolution(width, height) {
+        for (const material of this.activeMaterials) {
+            if (material.isLineMaterial) {
+                material.resolution.set(width, height);
+            }
+        }
     }
 
     /**
@@ -912,7 +1042,7 @@ class MaterialManager {
                         const colorHex = parseInt(value.replace('#', ''), 16);
                         material.color.setHex(colorHex);
                     } else if (property === 'linewidth') {
-                        material.lineWidth = value;
+                        material.linewidth = value;
                         needsGeometryUpdate = true; // LineWidth changes require geometry rebuild
                     } else {
                         material[property] = value;

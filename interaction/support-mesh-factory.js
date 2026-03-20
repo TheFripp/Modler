@@ -1,4 +1,6 @@
 import * as THREE from 'three';
+import { LineSegments2 } from 'three/lines/LineSegments2';
+import { LineSegmentsGeometry } from 'three/lines/LineSegmentsGeometry';
 // Modler V2 - Support Mesh Factory
 // Creates all support meshes (selection wireframe, face highlights, interaction mesh) as children
 // Implements "create once, show/hide only" architecture
@@ -129,7 +131,8 @@ class SupportMeshFactory {
         const supportMeshes = isContainer ? {
             faceHighlight: this.createFaceHighlight(mainMesh, true), // true = isContainer
             interactiveMesh: this.createContainerInteractiveMesh(mainMesh),
-            cadWireframe: this.createContainerWireframe(mainMesh) // Containers use containerWireframe for ContainerVisualizer compatibility
+            cadWireframe: this.createContainerWireframe(mainMesh), // Thin wireframe for context/hover states
+            containerSelectionWireframe: this.createContainerSelectionWireframe(mainMesh) // Fat wireframe for selection state
         } : {
             selectionWireframe: this.createSelectionWireframe(mainMesh),
             hoverWireframe: this.createHoverWireframe(mainMesh),
@@ -156,6 +159,10 @@ class SupportMeshFactory {
             // Objects: visible by default for CAD wireframes
             supportMeshes.cadWireframe.visible = !isContainer;
         }
+        if (supportMeshes.containerSelectionWireframe) {
+            mainMesh.add(supportMeshes.containerSelectionWireframe);
+            supportMeshes.containerSelectionWireframe.visible = false;
+        }
         if (supportMeshes.interactiveMesh) {
             mainMesh.add(supportMeshes.interactiveMesh);
             supportMeshes.interactiveMesh.visible = true; // Must be visible for raycasting - material is already transparent
@@ -180,30 +187,30 @@ class SupportMeshFactory {
             console.warn('❌ Failed to create edge geometry for selection wireframe:', mainMesh.name);
             return null;
         }
-        // Get fresh material from MaterialManager to pick up current config values
-        const material = this.materialManager.createSelectionEdgeMaterial();
 
-        // CRITICAL: Force material update to ensure it renders properly
+        // Convert EdgesGeometry to LineSegmentsGeometry for fat line rendering
+        const lineGeometry = new LineSegmentsGeometry().fromEdgesGeometry(edgeGeometry);
+
+        // Get fat LineMaterial for screen-space pixel-width lines
+        const material = this.materialManager.createSelectionLineMaterial();
         material.needsUpdate = true;
 
-        const wireframe = this.resourcePool.getLineMesh(edgeGeometry, material);
+        // LineSegments2 renders thick lines as screen-space quads (not GL line primitives)
+        const wireframe = new LineSegments2(lineGeometry, material);
 
-        // CRITICAL: Compute bounding sphere to prevent frustum culling issues
-        // EdgesGeometry may have stale/incorrect bounding data
-        edgeGeometry.computeBoundingSphere();
-        edgeGeometry.computeBoundingBox();
+        // Compute bounds on the line geometry to prevent frustum culling issues
+        lineGeometry.computeBoundingSphere();
+        lineGeometry.computeBoundingBox();
 
-        // CAD PRINCIPLE: Never use mesh.scale for visibility
-        // Scale is always (1, 1, 1) - geometry defines exact dimensions
+        // Dispose intermediate EdgesGeometry (data has been copied to LineSegmentsGeometry)
+        edgeGeometry.dispose();
+
         wireframe.scale.set(1, 1, 1);
-        wireframe.renderOrder = 9999; // Very high render order - always on top
+        wireframe.renderOrder = 9999;
         wireframe.raycast = () => {}; // Non-raycastable
         wireframe.userData.supportMeshType = 'selectionWireframe';
+        wireframe.userData.isFatLine = true; // Mark for cleanup (not pooled)
 
-        // Material configured by MaterialManager with depthTest: true + LessEqualDepth
-        // Shows wireframe on camera-visible faces only, hides back-face edges
-
-        // Ensure proper rendering settings
         wireframe.matrixAutoUpdate = true;
         wireframe.frustumCulled = true;
 
@@ -335,6 +342,39 @@ class SupportMeshFactory {
     }
 
     /**
+     * Create fat container selection wireframe (LineSegments2 for pixel-width lines)
+     * Separate from cadWireframe — used only for container selection state
+     */
+    createContainerSelectionWireframe(mainMesh) {
+        if (!mainMesh.geometry) return null;
+
+        const edgeGeometry = this.geometryFactory.createEdgeGeometry(mainMesh.geometry);
+        if (!edgeGeometry) return null;
+
+        const lineGeometry = new LineSegmentsGeometry().fromEdgesGeometry(edgeGeometry);
+        const material = this.materialManager.createContainerSelectionLineMaterial();
+        material.needsUpdate = true;
+
+        const wireframe = new LineSegments2(lineGeometry, material);
+
+        lineGeometry.computeBoundingSphere();
+        lineGeometry.computeBoundingBox();
+
+        edgeGeometry.dispose();
+
+        wireframe.scale.set(1, 1, 1);
+        wireframe.renderOrder = 9999;
+        wireframe.raycast = () => {};
+        wireframe.userData.supportMeshType = 'containerSelectionWireframe';
+        wireframe.userData.isFatLine = true;
+
+        wireframe.matrixAutoUpdate = true;
+        wireframe.frustumCulled = true;
+
+        return wireframe;
+    }
+
+    /**
      * Create face highlight mesh - ARCHITECTURE: position once per hover, no repositioning during geometry changes
      * Uses pooled shared materials for consistent opacity across all objects
      * @param {THREE.Mesh} mainMesh - The main mesh to create face highlight for
@@ -438,8 +478,16 @@ class SupportMeshFactory {
         // Update wireframes using GeometryFactory
         if (supportMeshes.selectionWireframe) {
             const newEdgeGeometry = this.geometryFactory.createEdgeGeometry(mainMesh.geometry);
-            this.geometryFactory.returnGeometry(supportMeshes.selectionWireframe.geometry, 'edge');
-            supportMeshes.selectionWireframe.geometry = newEdgeGeometry;
+            if (supportMeshes.selectionWireframe.userData?.isFatLine) {
+                // LineSegments2: convert EdgesGeometry to LineSegmentsGeometry
+                const newLineGeometry = new LineSegmentsGeometry().fromEdgesGeometry(newEdgeGeometry);
+                supportMeshes.selectionWireframe.geometry.dispose();
+                supportMeshes.selectionWireframe.geometry = newLineGeometry;
+                newEdgeGeometry.dispose();
+            } else {
+                this.geometryFactory.returnGeometry(supportMeshes.selectionWireframe.geometry, 'edge');
+                supportMeshes.selectionWireframe.geometry = newEdgeGeometry;
+            }
         }
 
         if (supportMeshes.hoverWireframe) {
@@ -450,7 +498,6 @@ class SupportMeshFactory {
 
         if (supportMeshes.containerWireframe) {
             const newEdgeGeometry = this.geometryFactory.createEdgeGeometry(mainMesh.geometry);
-            // Return old geometry to pool instead of disposing
             this.geometryFactory.returnGeometry(supportMeshes.containerWireframe.geometry, 'edge');
             supportMeshes.containerWireframe.geometry = newEdgeGeometry;
         }
@@ -458,9 +505,17 @@ class SupportMeshFactory {
         // Update CAD wireframes
         if (supportMeshes.cadWireframe) {
             const newEdgeGeometry = this.geometryFactory.createEdgeGeometry(mainMesh.geometry);
-            // Return old geometry to pool instead of disposing
             this.geometryFactory.returnGeometry(supportMeshes.cadWireframe.geometry, 'edge');
             supportMeshes.cadWireframe.geometry = newEdgeGeometry;
+        }
+
+        // Update container selection wireframe (fat LineSegments2)
+        if (supportMeshes.containerSelectionWireframe) {
+            const newEdgeGeometry = this.geometryFactory.createEdgeGeometry(mainMesh.geometry);
+            const newLineGeometry = new LineSegmentsGeometry().fromEdgesGeometry(newEdgeGeometry);
+            supportMeshes.containerSelectionWireframe.geometry.dispose();
+            supportMeshes.containerSelectionWireframe.geometry = newLineGeometry;
+            newEdgeGeometry.dispose();
         }
 
         // contextHighlight removed - using single wireframeMesh managed above
@@ -900,6 +955,10 @@ class SupportMeshFactory {
     showContainerWireframe(mainMesh) { this.setSupportMeshVisibility(mainMesh, 'cadWireframe', true); }
     hideContainerWireframe(mainMesh) { this.setSupportMeshVisibility(mainMesh, 'cadWireframe', false); }
 
+    // -- Container Selection Wireframe (fat LineSegments2 for selection state) --
+    showContainerSelectionWireframe(mainMesh) { this.setSupportMeshVisibility(mainMesh, 'containerSelectionWireframe', true); }
+    hideContainerSelectionWireframe(mainMesh) { this.setSupportMeshVisibility(mainMesh, 'containerSelectionWireframe', false); }
+
     // -- Face Highlight --
     showFaceHighlight(mainMesh) { this.setSupportMeshVisibility(mainMesh, 'faceHighlight', true); }
     hideFaceHighlight(mainMesh) { this.setSupportMeshVisibility(mainMesh, 'faceHighlight', false); }
@@ -979,19 +1038,26 @@ class SupportMeshFactory {
         Object.values(supportMeshes).forEach(mesh => {
             if (mesh) {
                 mainMesh.remove(mesh);
-                // Return geometry to pool instead of disposing
-                if (mesh.geometry) {
-                    this.geometryFactory.returnGeometry(mesh.geometry, 'edge');
-                }
-                // Dispose cloned materials (nested container wireframes)
-                if (mesh.userData?.isClonedMaterial && mesh.material) {
-                    mesh.material.dispose();
-                }
-                // Return non-shared, non-cloned materials to pool
-                else if (mesh.material &&
-                    mesh.material !== this.materials.faceHighlight &&
-                    mesh.material !== this.materials.faceHighlightContainer) {
-                    this.materialManager.disposeMaterial(mesh.material);
+
+                if (mesh.userData?.isFatLine) {
+                    // LineSegments2: dispose geometry directly (not pooled)
+                    if (mesh.geometry) mesh.geometry.dispose();
+                    if (mesh.material) this.materialManager.disposeMaterial(mesh.material);
+                } else {
+                    // Standard LineSegments: return geometry to pool
+                    if (mesh.geometry) {
+                        this.geometryFactory.returnGeometry(mesh.geometry, 'edge');
+                    }
+                    // Dispose cloned materials (nested container wireframes)
+                    if (mesh.userData?.isClonedMaterial && mesh.material) {
+                        mesh.material.dispose();
+                    }
+                    // Return non-shared, non-cloned materials to pool
+                    else if (mesh.material &&
+                        mesh.material !== this.materials.faceHighlight &&
+                        mesh.material !== this.materials.faceHighlightContainer) {
+                        this.materialManager.disposeMaterial(mesh.material);
+                    }
                 }
             }
         });

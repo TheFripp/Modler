@@ -107,10 +107,11 @@ class ContainerVisualizer extends ObjectVisualizer {
         // Use unified wireframe system for selection state
         this.setContainerSelectionState(object);
 
-        // Track wireframe for edge highlights map via supportMeshes (no children scanning)
+        // Track wireframe for edge highlights map via supportMeshes
         const supportMeshes = object.userData?.supportMeshes;
-        if (supportMeshes?.cadWireframe) {
-            this.edgeHighlights.set(object, supportMeshes.cadWireframe);
+        const trackingMesh = supportMeshes?.containerSelectionWireframe || supportMeshes?.cadWireframe;
+        if (trackingMesh) {
+            this.edgeHighlights.set(object, trackingMesh);
         }
     }
 
@@ -147,6 +148,7 @@ class ContainerVisualizer extends ObjectVisualizer {
         if (!this.getNavigationContextStack().includes(object)) {
             const factory = this.getSupportMeshFactory();
             if (factory) {
+                factory.hideContainerSelectionWireframe(object);
                 factory.hideContainerWireframe(object);
             }
         }
@@ -218,6 +220,9 @@ class ContainerVisualizer extends ObjectVisualizer {
 
         const factory = this.getSupportMeshFactory();
         if (factory) {
+            // Show fat selection wireframe (LineSegments2 with pixel-width lines)
+            factory.showContainerSelectionWireframe(containerObject);
+            // Also show thin cadWireframe at full opacity for context
             factory.restoreContainerWireframeOpacity(containerObject);
             factory.showContainerWireframe(containerObject);
         }

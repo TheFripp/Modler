@@ -185,6 +185,21 @@
 					/>
 				</div>
 			</div>
+			<InlineInput
+				label="Line Width"
+				type="number"
+				value={visualSettings.object.lineWidth}
+				objectId={null}
+				property="visual.selection.lineWidth"
+				min={1}
+				max={10}
+				step={0.5}
+				suffix="px"
+				onchange={(event) => {
+					const numValue = parseFloat((event.target as HTMLInputElement).value);
+					updateVisualSettings('object', 'lineWidth', numValue);
+				}}
+			/>
 		</div>
 
 		<!-- Container -->
@@ -216,6 +231,21 @@
 					/>
 				</div>
 			</div>
+			<InlineInput
+				label="Line Width"
+				type="number"
+				value={visualSettings.container.lineWidth}
+				objectId={null}
+				property="visual.containers.lineWidth"
+				min={1}
+				max={10}
+				step={0.5}
+				suffix="px"
+				onchange={(event) => {
+					const numValue = parseFloat((event.target as HTMLInputElement).value);
+					updateVisualSettings('container', 'lineWidth', numValue);
+				}}
+			/>
 		</div>
 
 		<!-- Measurement Tool -->
