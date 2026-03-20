@@ -70,13 +70,6 @@ class SceneHierarchyManager {
                 }
             }
 
-            // Add any children not in the order array (shouldn't happen, but defensive)
-            for (const obj of this.objects.values()) {
-                if (obj.parentContainer === containerId && !container.childrenOrder.includes(obj.id)) {
-                    orderedChildren.push(obj);
-                }
-            }
-
             return orderedChildren;
         }
 

@@ -345,10 +345,17 @@ class SimpleCommunication {
         // Get ALL objects as flat array
         const allObjects = this.sceneController.getAllObjects();
 
-        // Map to basic object data (includes parentContainer + childrenOrder for tree building)
+        // Map to basic object data, filtering out utility objects so UI never sees them
         const hierarchy = allObjects
             .map(obj => this.dataExtractor.extractBasicData(obj))
-            .filter(Boolean);
+            .filter(obj => obj &&
+                obj.name !== 'Floor Grid' &&
+                obj.type !== 'grid' &&
+                !obj.name?.toLowerCase().includes('grid') &&
+                !obj.name?.toLowerCase().includes('interactive') &&
+                !obj.isTemporary &&
+                !obj.isPreview
+            );
 
         // Get root children order from HierarchyManager
         const hierarchyManager = this.sceneController.getHierarchyManager();
@@ -380,16 +387,7 @@ class SimpleCommunication {
      * Send initial hierarchy sync when panels are ready
      */
     sendInitialHierarchySync() {
-        if (!this.initializeComponents()) return;
-
-        const hierarchyTree = this.getCompleteHierarchy();
-
-        this.sendToAllIframes({
-            type: 'hierarchy-changed',
-            data: {
-                hierarchy: hierarchyTree
-            }
-        });
+        this.handleHierarchyEvent({});
     }
 
     // ═══════════════════════════════════════════════════════════════

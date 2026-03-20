@@ -710,17 +710,8 @@ class ObjectStateManager extends EventTarget {
             if (sceneObject) {
                 sceneObject.name = object.name;
 
-                // CRITICAL: Sync childrenOrder for containers (needed for hierarchy serialization)
-                if (object.childrenOrder) {
-                    sceneObject.childrenOrder = object.childrenOrder;
-
-                    // CRITICAL: If childrenOrder changed on a layout container, trigger layout recalculation
-                    if (object._changedProperties?.has('childrenOrder') &&
-                        sceneObject.isContainer &&
-                        sceneObject.autoLayout?.enabled) {
-                        this.sceneController.updateLayout(object.id);
-                    }
-                }
+                // childrenOrder is owned by SceneController — CommandRouter writes it directly
+                // No sync needed here
 
                 // SCHEMA-FIRST: Always sync autoLayout for containers, use schema defaults if needed
                 if (object.isContainer) {
@@ -902,10 +893,6 @@ class ObjectStateManager extends EventTarget {
             Array.from(changedProps).some(prop => prop.startsWith('layoutProperties.'));
 
         if (hasAutoLayoutChange || hasLayoutPropertiesChange) {
-            return window.objectEventBus.EVENT_TYPES.HIERARCHY;
-        }
-        // childrenOrder changes should trigger hierarchy update (for drag-drop reordering)
-        if (changedProps.has('childrenOrder')) {
             return window.objectEventBus.EVENT_TYPES.HIERARCHY;
         }
         // Name changes should trigger hierarchy update (for ObjectTree display)

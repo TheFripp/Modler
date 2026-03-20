@@ -3,11 +3,8 @@ import {
 	initializeModlerBridge,
 	syncSelectionFromThreeJS,
 	syncHierarchyFromThreeJS,
-	syncContainerContextFromThreeJS,
 	toolState,
-	selectedObjects,
-	objectHierarchy,
-	containerContext
+	selectedObjects
 } from '$lib/stores/modler';
 /**
  * Bridge class to connect Three.js Modler components with Svelte UI
@@ -178,56 +175,6 @@ function setupPostMessageFallback() {
 				}
 				break;
 
-			case 'data-update':
-				// Legacy: Keep backward compatibility with old message format
-				try {
-					if (!data || typeof data !== 'object') {
-						console.warn('PostMessage: Invalid data structure received');
-						return;
-					}
-
-					// Handle tool state updates
-					if (data.updateType === 'tool-state-update') {
-						if (data.toolState) {
-							const update: any = { activeTool: data.toolState.activeTool };
-							if (data.snapEnabled !== undefined) {
-								update.snapEnabled = data.snapEnabled;
-							}
-							toolState.set(update);
-						}
-						return;
-					}
-
-					// Update selected objects
-					if (data.selectedObjects) {
-						syncSelectionFromThreeJS(data.selectedObjects);
-					}
-
-					// Update object hierarchy
-					if (data.objectHierarchy) {
-						syncHierarchyFromThreeJS(data.objectHierarchy);
-					}
-
-					// Update container context
-					if (data.containerContext) {
-						syncContainerContextFromThreeJS(data.containerContext);
-					}
-				} catch (error) {
-					console.error('PostMessage: Critical error processing data-update:', error);
-				}
-				break;
-
-			case 'tool-state-update':
-				// Legacy: Handle tool state updates sent directly (backward compatibility)
-				if (data && data.toolState) {
-					const update: any = { activeTool: data.toolState.activeTool };
-					if (data.snapEnabled !== undefined) {
-						update.snapEnabled = data.snapEnabled;
-					}
-					toolState.set(update);
-				}
-				break;
-
 			default:
 				// Ignore unknown message types
 				break;
@@ -268,22 +215,13 @@ function setupDirectDataSync(components: any) {
 }
 
 /**
- * Sync object hierarchy from SceneController with proper filtering
+ * Sync object hierarchy from SceneController (initial sync for direct mode)
+ * Filtering is handled by SimpleCommunication for iframe mode
  */
 function syncHierarchyFromSceneController(sceneController: any) {
 	try {
 		const allObjects = sceneController.getAllObjects();
-
-		// Filter out utility objects (same logic as left panel)
-		const filteredObjects = allObjects.filter((obj: any) =>
-			obj.name !== 'Floor Grid' &&
-			obj.type !== 'grid' &&
-			!obj.name?.toLowerCase().includes('grid') &&
-			obj.name !== '(Interactive)' &&
-			!obj.name?.toLowerCase().includes('interactive')
-		);
-
-		syncHierarchyFromThreeJS(filteredObjects);
+		syncHierarchyFromThreeJS(allObjects);
 	} catch (error) {
 		console.error('❌ Error syncing hierarchy:', error);
 	}
@@ -348,131 +286,3 @@ export function wrapSelectionInContainer() {
 }
 
 
-/**
- * Handle data update from integration system
- *
- * SIMPLIFIED ARCHITECTURE: Consolidated from 9+ update types to 3 core categories:
- * 1. SELECTION UPDATES - Only affect selectedObjects store, never hierarchy
- * 2. HIERARCHY UPDATES - Only affect objectHierarchy store, never selection
- * 3. TOOL STATE UPDATES - Only affect toolState store
- *
- * This prevents competing updates and ensures single source of truth.
- * Field naming is consistent throughout: always 'parentContainer' not 'parent'.
- */
-function handleDataUpdate(data: any) {
-	// === CORE UPDATE TYPE 1: SELECTION UPDATES ===
-	// Only affects selectedObjects store, never hierarchy
-	if (isSelectionUpdate(data.updateType)) {
-		syncSelectionFromIframe(data.selectedObjects || []);
-		return;
-	}
-
-	// === CORE UPDATE TYPE 2: HIERARCHY UPDATES ===
-	// Only affects objectHierarchy store, never selection
-	if (isHierarchyUpdate(data.updateType)) {
-		// Use proper hierarchy data if available, otherwise empty array
-		const hierarchyData = data.objectHierarchy || data.selectedObjects || [];
-		syncHierarchyFromIframe(hierarchyData);
-		return;
-	}
-
-	// === CORE UPDATE TYPE 3: TOOL STATE UPDATES ===
-	if (data.updateType === 'tool-state-update' && data.toolState) {
-		syncToolStateFromIframe(data.toolState);
-		return;
-	}
-
-	// === ADDITIONAL CONTEXT UPDATES ===
-	// Update container context (separate from core types)
-	if (data.hasOwnProperty('containerContext')) {
-		syncContainerContextFromIframe(data.containerContext);
-	}
-
-	// Update tool state (fallback for legacy format)
-	if (data.toolState && data.updateType !== 'tool-state-update') {
-		syncToolStateFromIframe(data.toolState);
-	}
-}
-
-/**
- * Determine if update type should only affect selection
- */
-function isSelectionUpdate(updateType: string): boolean {
-	return [
-		'selection-change',
-		'legacy-selection',
-		'legacy-clear-selection',
-		'property-refresh',
-		'hierarchy-change-selection' // This should only update selection
-	].includes(updateType);
-}
-
-/**
- * Determine if update type should only affect hierarchy
- */
-function isHierarchyUpdate(updateType: string): boolean {
-	return [
-		'hierarchy-changed',
-		'hierarchy-update',
-		// Legacy types being consolidated:
-		'scene-objects',
-		'manual-test',
-		'communication-test',
-		'object-list-populate',
-		'object-list-clear',
-		'initial-sync'
-	].includes(updateType);
-}
-
-
-/**
- * Sync selection data that's already serialized from iframe integration
- */
-function syncSelectionFromIframe(serializedObjects: any[]) {
-	// CRITICAL: Only update if selection actually changed
-	// Prevents flickering when clicking the same object
-	const currentSelection = get(selectedObjects);
-
-	// Quick check: different count = changed
-	if (currentSelection.length !== serializedObjects.length) {
-		selectedObjects.set(serializedObjects);
-		return;
-	}
-
-	// Same count - check if IDs changed
-	let changed = false;
-	for (let i = 0; i < currentSelection.length; i++) {
-		if (currentSelection[i]?.id !== serializedObjects[i]?.id) {
-			changed = true;
-			break;
-		}
-	}
-
-	if (changed) {
-		selectedObjects.set(serializedObjects);
-	}
-}
-
-/**
- * Sync object hierarchy data for the left panel
- */
-function syncHierarchyFromIframe(hierarchyObjects: any[]) {
-	// Use synchronous update for immediate rendering
-	objectHierarchy.set(hierarchyObjects);
-}
-
-/**
- * Sync tool state from main application to Svelte store
- */
-function syncToolStateFromIframe(toolStateData: any) {
-	// Use synchronous update for immediate rendering
-	toolState.set(toolStateData);
-}
-
-/**
- * Sync container context from main application to Svelte store
- */
-function syncContainerContextFromIframe(containerContextData: any) {
-	// Use synchronous update for immediate rendering
-	containerContext.set(containerContextData);
-}

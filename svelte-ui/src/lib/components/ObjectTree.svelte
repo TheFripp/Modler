@@ -77,16 +77,8 @@
 		? { objects: $objectHierarchy, rootChildrenOrder: [] }
 		: $objectHierarchy;
 
-	// Filter out utility objects and temporary preview objects from hierarchy
-	$: filteredHierarchy = (hierarchyData.objects || []).filter(obj =>
-		obj.name !== 'Floor Grid' &&
-		obj.type !== 'grid' &&
-		!obj.name?.toLowerCase().includes('grid') &&
-		obj.name !== '(Interactive)' &&
-		!obj.name?.toLowerCase().includes('interactive') &&
-		!obj.isTemporary &&
-		!obj.isPreview
-	);
+	// Objects are pre-filtered by SimpleCommunication before sending to UI
+	$: filteredHierarchy = hierarchyData.objects || [];
 
 	// Build tree structure with server-side ordering
 	$: treeStructure = buildTreeStructure(filteredHierarchy, hierarchyData.rootChildrenOrder || []);
@@ -342,13 +334,9 @@
 
 		if (!targetObject) return;
 
-		// Capture references before clearing state (needed for setTimeout callbacks)
-		const draggedObjRef = draggedObject;
-		const targetObjRef = targetObject;
-
 		// Handle cross-level moves (root ↔ container)
 		if (draggedObject.parentContainer !== targetObject.parentContainer) {
-			// Moving between different parents - send move command first, then reorder
+			// Moving between different parents - atomic move + reorder in one message
 			if (targetObject.parentContainer) {
 				// Moving into a container
 				const targetContainer = findObjectInTree(targetObject.parentContainer);
@@ -360,22 +348,17 @@
 						activeDropZone = null;
 						return;
 					}
-
-					moveObjectToContainer(draggedObject, targetContainer);
-					// After move completes (via hierarchy update), reorder to correct position
-					// Note: This relies on the hierarchy update event triggering a re-render
-					setTimeout(() => {
-						reorderObject(draggedObjRef, targetObjRef, position, targetObjRef.parentContainer);
-					}, 100);
 				}
-			} else {
-				// Moving to root
-				moveObjectToRoot(draggedObject);
-				// After move completes, reorder to correct position
-				setTimeout(() => {
-					reorderObject(draggedObjRef, targetObjRef, position, null);
-				}, 100);
 			}
+
+			// Single atomic message — no setTimeout race condition
+			window.parent.postMessage({
+				type: 'move-and-reorder',
+				objectId: draggedObject.id,
+				targetParentId: targetObject.parentContainer || null,
+				targetId: targetObject.id,
+				position: position
+			}, '*');
 		} else {
 			// Same parent - just reorder
 			reorderObject(draggedObject, targetObject, position, parentId);
@@ -383,21 +366,6 @@
 
 		draggedObject = null;
 		activeDropZone = null;
-	}
-
-	function moveObjectToContainer(objectToMove, targetContainer) {
-		window.parent.postMessage({
-			type: 'move-to-container',
-			objectId: objectToMove.id,
-			targetContainerId: targetContainer.id
-		}, '*');
-	}
-
-	function moveObjectToRoot(objectToMove) {
-		window.parent.postMessage({
-			type: 'move-to-root',
-			objectId: objectToMove.id
-		}, '*');
 	}
 
 	function reorderObject(draggedObj, targetObj, position, parentId) {

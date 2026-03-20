@@ -224,170 +224,8 @@ export function initializeModlerBridge(components: any) {
 	} else if (components.selectionController) {
 		// Fallback to SelectionController if ObjectStateManager not available
 		const initialSelection = components.selectionController.getSelectedObjects();
-		selectedObjects.set(initialSelection.map(convertThreeObjectToObjectData));
+		selectedObjects.set(initialSelection.map((obj: any) => ({ ...obj })));
 	}
-}
-
-// SIMPLIFIED: Expect standard format data from ObjectStateManager
-function validateAndNormalizeObjectData(objectData: any): ObjectData {
-	// Data should already be in standard format from ObjectStateManager
-	// This function just validates and provides fallbacks for edge cases
-
-	if (!objectData || typeof objectData !== 'object') {
-		console.warn('validateAndNormalizeObjectData: Invalid object data, creating fallback');
-		return createFallbackObjectData();
-	}
-
-	// Check if data is already in standard format
-	if (objectData.formatVersion === '1.0.0' ||
-		(objectData.position && typeof objectData.position === 'object' &&
-		 objectData.rotation && typeof objectData.rotation === 'object')) {
-		// IMPORTANT: Create new object reference to trigger Svelte reactivity
-		// Even though data is in correct format, we need new references for all nested objects
-		const result = {
-			...objectData,
-			position: { ...objectData.position },
-			rotation: { ...objectData.rotation },
-			scale: objectData.scale ? { ...objectData.scale } : undefined,
-			dimensions: { ...objectData.dimensions },
-			material: objectData.material ? { ...objectData.material } : undefined,
-			autoLayout: objectData.autoLayout ? {
-				...objectData.autoLayout,
-				padding: objectData.autoLayout.padding ? { ...objectData.autoLayout.padding } : undefined,
-				alignment: objectData.autoLayout.alignment ? { ...objectData.autoLayout.alignment } : undefined,
-				tileMode: objectData.autoLayout.tileMode ? { ...objectData.autoLayout.tileMode } : undefined
-			} : undefined
-		} as ObjectData;
-		return result;
-	}
-
-	// Handle legacy flat format as fallback (should not happen with new system)
-	if (objectData.hasOwnProperty('position.x')) {
-		console.warn('validateAndNormalizeObjectData: Received legacy flat format, converting');
-		return convertLegacyFlatFormat(objectData);
-	}
-
-	// If format is unknown, try to normalize
-	return normalizeUnknownFormat(objectData);
-}
-
-// Helper: Convert legacy flat format (fallback only)
-function convertLegacyFlatFormat(flatObj: any): ObjectData {
-	return {
-		id: flatObj.id || 'unknown',
-		name: flatObj.name || 'Object',
-		type: flatObj.type || 'object',
-
-		parentContainer: flatObj.parentContainer || null,
-		childIds: flatObj.childIds || [],
-
-		position: {
-			x: flatObj['position.x'] || flatObj.position?.x || 0,
-			y: flatObj['position.y'] || flatObj.position?.y || 0,
-			z: flatObj['position.z'] || flatObj.position?.z || 0
-		},
-		rotation: {
-			x: flatObj['rotation.x'] || flatObj.rotation?.x || 0,
-			y: flatObj['rotation.y'] || flatObj.rotation?.y || 0,
-			z: flatObj['rotation.z'] || flatObj.rotation?.z || 0
-		},
-		scale: {
-			x: flatObj['scale.x'] || flatObj.scale?.x || 1,
-			y: flatObj['scale.y'] || flatObj.scale?.y || 1,
-			z: flatObj['scale.z'] || flatObj.scale?.z || 1
-		},
-		dimensions: {
-			x: flatObj['dimensions.x'] || flatObj.dimensions?.x || 1,
-			y: flatObj['dimensions.y'] || flatObj.dimensions?.y || 1,
-			z: flatObj['dimensions.z'] || flatObj.dimensions?.z || 1
-		},
-		material: {
-			color: flatObj['material.color'] || flatObj.material?.color || '#888888',
-			opacity: flatObj['material.opacity'] || flatObj.material?.opacity || 1,
-			transparent: flatObj['material.transparent'] || flatObj.material?.transparent || false
-		},
-
-		isContainer: flatObj.isContainer || false,
-		containerMode: flatObj.containerMode || null,
-		layoutMode: flatObj.layoutMode || null,
-		autoLayout: {
-			enabled: flatObj['autoLayout.enabled'] || flatObj.autoLayout?.enabled || false,
-			direction: flatObj['autoLayout.direction'] || flatObj.autoLayout?.direction || null,
-			gap: flatObj['autoLayout.gap'] || flatObj.autoLayout?.gap || 0,
-			padding: flatObj['autoLayout.padding'] || flatObj.autoLayout?.padding || { width: 0, height: 0, depth: 0 },
-			alignment: flatObj.autoLayout?.alignment || { x: 'center', y: 'center', z: 'center' },
-			reversed: flatObj.autoLayout?.reversed || false
-		},
-
-		selected: flatObj.selected || false,
-		locked: flatObj.locked || false,
-		visible: flatObj.visible !== false,
-
-		formatVersion: '1.0.0',
-		lastModified: Date.now()
-	};
-}
-
-// Helper: Normalize unknown format (fallback)
-function normalizeUnknownFormat(obj: any): ObjectData {
-	return {
-		id: obj.id || obj.uuid || 'unknown',
-		name: obj.name || 'Object',
-		type: obj.type || 'object',
-
-		parentContainer: obj.parentContainer || null,
-		childIds: obj.childIds || obj.children || [],
-
-		position: obj.position || { x: 0, y: 0, z: 0 },
-		rotation: obj.rotation || { x: 0, y: 0, z: 0 },
-		scale: obj.scale || { x: 1, y: 1, z: 1 },
-		dimensions: obj.dimensions || { x: 1, y: 1, z: 1 },
-
-		material: obj.material || { color: '#888888', opacity: 1, transparent: false },
-
-		isContainer: !!obj.isContainer,
-		containerMode: obj.containerMode || null,
-		layoutMode: obj.layoutMode || null,
-		autoLayout: obj.autoLayout || { enabled: false, direction: null, gap: 0, padding: { width: 0, height: 0, depth: 0 }, alignment: { x: 'center', y: 'center', z: 'center' }, reversed: false },
-
-		selected: !!obj.selected,
-		locked: !!obj.locked,
-		visible: obj.visible !== false,
-
-		formatVersion: '1.0.0',
-		lastModified: Date.now()
-	};
-}
-
-// Helper: Create fallback object when data is corrupted
-function createFallbackObjectData(id?: string): ObjectData {
-	return {
-		id: id || `fallback-${Date.now()}`,
-		name: 'Unknown Object',
-		type: 'object',
-
-		parentContainer: null,
-		childIds: [],
-
-		position: { x: 0, y: 0, z: 0 },
-		rotation: { x: 0, y: 0, z: 0 },
-		scale: { x: 1, y: 1, z: 1 },
-		dimensions: { x: 1, y: 1, z: 1 },
-
-		material: { color: '#ff0000', opacity: 1, transparent: false },
-
-		isContainer: false,
-		containerMode: null,
-		layoutMode: null,
-		autoLayout: { enabled: false, direction: null, gap: 0, padding: { width: 0, height: 0, depth: 0 }, alignment: { x: 'center', y: 'center', z: 'center' }, reversed: false },
-
-		selected: false,
-		locked: false,
-		visible: true,
-
-		formatVersion: '1.0.0',
-		lastModified: Date.now()
-	};
 }
 
 // Update Three.js from Svelte store changes using ObjectStateManager
@@ -463,37 +301,20 @@ function updateSingleObjectViaStateManager(objectStateManager: any, objectId: st
 
 // Sync selection changes from ObjectStateManager (already in standard format)
 export function syncSelectionFromThreeJS(selectedObjectsData: any[]) {
-	try {
-		// Handle null/undefined input
-		if (!Array.isArray(selectedObjectsData)) {
-			console.warn('syncSelectionFromThreeJS: Invalid input, expected array');
-			selectedObjects.set([]);
-			return;
-		}
+	if (!Array.isArray(selectedObjectsData)) {
+		selectedObjects.set([]);
+		return;
+	}
 
-		// Data should already be in standard format from ObjectStateManager
-		// Just validate and normalize if needed
-		const objectDataArray = selectedObjectsData
-			.filter(obj => obj != null) // Remove null/undefined objects
-			.map(obj => {
-				try {
-					return validateAndNormalizeObjectData(obj);
-				} catch (error) {
-					console.error('syncSelectionFromThreeJS: Error validating object:', error);
-					return createFallbackObjectData(obj?.id);
-				}
-			})
-			.filter(obj => obj != null); // Remove any failed validations
+	// Data is in standard format from DataExtractor — create new references for Svelte reactivity
+	const objectDataArray = selectedObjectsData
+		.filter(obj => obj != null)
+		.map(obj => ({ ...obj }));
 
-		// CRITICAL: Only update if selection actually changed
-		// Prevents flickering when clicking the same object
-		const currentSelection = get(selectedObjects);
-		if (selectionChanged(currentSelection, objectDataArray)) {
-			selectedObjects.set(objectDataArray);
-		}
-	} catch (error) {
-		console.error('syncSelectionFromThreeJS: Critical error:', error);
-		selectedObjects.set([]); // Fallback to empty selection
+	// Only update if selection actually changed (prevents input flickering)
+	const currentSelection = get(selectedObjects);
+	if (selectionChanged(currentSelection, objectDataArray)) {
+		selectedObjects.set(objectDataArray);
 	}
 }
 
@@ -533,27 +354,10 @@ function selectionChanged(current: ObjectData[], incoming: ObjectData[]): boolea
 }
 
 // Sync object hierarchy from Three.js
+// Selection and hierarchy are separate concerns — selection updates come via 'selection-changed'
+// and 'object-changed' events, not hierarchy events
 export function syncHierarchyFromThreeJS(hierarchyData: ObjectData[] | { objects: ObjectData[], rootChildrenOrder: number[] }) {
-	// Handle both old format (array) and new format (object with objects + rootChildrenOrder)
-	const allObjects = Array.isArray(hierarchyData) ? hierarchyData : hierarchyData.objects || [];
-
-	// Store hierarchy data (either array or full object)
 	objectHierarchy.set(hierarchyData);
-
-	// CRITICAL: Also update selectedObjects if any selected objects are in the hierarchy
-	// This ensures PropertyPanel shows updated names immediately
-	const currentSelection = get(selectedObjects);
-	if (currentSelection.length > 0) {
-		const objectMap = new Map(allObjects.map(obj => [obj.id, obj]));
-		const updatedSelection = currentSelection
-			.map(selectedObj => objectMap.get(selectedObj.id) || selectedObj)
-			.filter(obj => obj != null);
-
-		// Only update if something actually changed
-		if (selectionChanged(currentSelection, updatedSelection)) {
-			selectedObjects.set(updatedSelection);
-		}
-	}
 }
 
 // Sync container context from Three.js
@@ -566,141 +370,3 @@ if (typeof window !== 'undefined') {
 	(window as any).syncSelectionFromThreeJS = syncSelectionFromThreeJS;
 }
 
-/**
- * Handle property updates directly with Three.js scene
- * Replaces iframe PostMessage communication with direct function calls
- */
-function handleDirectPropertyUpdate(components: any, objectId: string, property: string, value: any, source: string = 'input') {
-	if (!components?.sceneController) {
-		console.warn('⚠️ SceneController not available for property update');
-		return;
-	}
-
-	const { sceneController } = components;
-
-	// Get the object from SceneController
-	const objectData = sceneController.getObject(objectId);
-	if (!objectData) {
-		console.warn('⚠️ Object not found:', objectId);
-		return;
-	}
-
-	const mesh = objectData.mesh;
-	if (!mesh) {
-		console.warn('⚠️ Mesh not found for object:', objectId);
-		return;
-	}
-
-	// Route property updates through centralized PropertyUpdateHandler
-	const { propertyUpdateHandler } = components;
-
-	if (propertyUpdateHandler) {
-		// Use centralized property handling for consistency
-		const success = propertyUpdateHandler.handlePropertyChange(objectId, property, value);
-
-		if (success) {
-			// PropertyUpdateHandler handled the update, including notifications
-			return;
-		}
-
-		// If PropertyUpdateHandler didn't handle it, fall back to direct handling
-		console.warn('PropertyUpdateHandler failed, falling back to direct handling:', { property, value });
-	}
-
-	// Fallback: Handle different property types directly (for properties not yet centralized)
-	if (property.startsWith('position.')) {
-		const axis = property.split('.')[1] as 'x' | 'y' | 'z';
-		if (mesh.position && ['x', 'y', 'z'].includes(axis)) {
-			mesh.position[axis] = value;
-			completeObjectModification(components, mesh, 'transform', true);
-		}
-	} else if (property.startsWith('rotation.')) {
-		const axis = property.split('.')[1] as 'x' | 'y' | 'z';
-		if (mesh.rotation && ['x', 'y', 'z'].includes(axis)) {
-			// Convert degrees to radians
-			mesh.rotation[axis] = value * Math.PI / 180;
-			completeObjectModification(components, mesh, 'transform', true);
-		}
-	} else if (property.startsWith('dimensions.')) {
-		const axis = property.split('.')[1] as 'x' | 'y' | 'z';
-		if (['x', 'y', 'z'].includes(axis)) {
-			// Use SceneController for geometry modifications if available
-			if (sceneController.updateObjectDimensions) {
-				sceneController.updateObjectDimensions(objectId, axis, value);
-			} else {
-				// Fallback: Geometry-based dimension changes (CAD-style)
-				const geometry = mesh.geometry;
-				if (geometry) {
-					try {
-						// Force geometry bounds recalculation
-						geometry.computeBoundingBox();
-						const bbox = geometry.boundingBox;
-
-						// Calculate current dimension and scale factor
-						const axisIndex = { x: 0, y: 1, z: 2 }[axis];
-						const currentDimension = bbox.max[axis] - bbox.min[axis];
-						const scaleFactor = value / currentDimension;
-						const center = (bbox.max[axis] + bbox.min[axis]) * 0.5;
-
-						// Modify vertices directly for true CAD behavior
-						const positions = geometry.getAttribute('position');
-						const vertices = positions.array;
-
-						for (let i = 0; i < vertices.length; i += 3) {
-							const vertexIndex = i + axisIndex;
-							const distanceFromCenter = vertices[vertexIndex] - center;
-							vertices[vertexIndex] = center + (distanceFromCenter * scaleFactor);
-						}
-
-						// Update geometry
-						positions.needsUpdate = true;
-						geometry.computeBoundingBox();
-
-						// Update support mesh geometries to match new main geometry
-						const geometryUtils = (window as any).GeometryUtils;
-						if (geometryUtils) {
-							geometryUtils.updateSupportMeshGeometries(mesh);
-						}
-
-						// Update userData for dimension tracking
-						if (!mesh.userData.dimensions) mesh.userData.dimensions = { x: 1, y: 1, z: 1 };
-						mesh.userData.dimensions[axis] = value;
-
-					} catch (error) {
-						console.error('Fallback dimension update failed:', error);
-						// Final fallback to simple scaling if geometry manipulation fails
-						mesh.scale[axis] = value;
-					}
-				} else {
-					// No geometry available, use simple scaling
-					mesh.scale[axis] = value;
-				}
-			}
-			completeObjectModification(components, mesh, 'geometry', true);
-		}
-	} else {
-		// All other properties should be handled by PropertyUpdateHandler
-		// This fallback should rarely be reached now that we have centralized handling
-		console.warn('Property not handled by PropertyUpdateHandler fallback:', { property, value });
-	}
-}
-
-/**
- * Complete object modification using the same pattern as move tool
- * Ensures selection boxes stay synchronized during real-time updates
- */
-function completeObjectModification(components: any, mesh: any, changeType: string = 'transform', immediateVisuals: boolean = false) {
-	// Use centralized GeometryUtils for support mesh synchronization
-	const geometryUtils = (window as any).GeometryUtils;
-	if (geometryUtils) {
-		geometryUtils.updateSupportMeshGeometries(mesh);
-	} else if ((window as any).CameraMathUtils) {
-		// Fallback to legacy sync method
-		(window as any).CameraMathUtils.syncSelectionWireframes(mesh);
-	}
-
-	// Notify centralized system for bidirectional property panel synchronization
-	if ((window as any).notifyObjectModified) {
-		(window as any).notifyObjectModified(mesh, changeType);
-	}
-}

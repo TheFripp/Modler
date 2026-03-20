@@ -133,6 +133,9 @@ class CommandRouter {
         // ═══════════════════════════════════════════════════════════
         this.handlers.set('reorder-children', this.handleReorderChildren.bind(this));
         this.handlers.set('object-reorder', this.handleReorderChildren.bind(this)); // Alias
+        this.handlers.set('move-to-container', this.handleMoveToContainer.bind(this));
+        this.handlers.set('move-to-root', this.handleMoveToRoot.bind(this));
+        this.handlers.set('move-and-reorder', this.handleMoveAndReorder.bind(this));
 
         // ═══════════════════════════════════════════════════════════
         // OBJECT LIFECYCLE
@@ -434,14 +437,24 @@ class CommandRouter {
         // Insert at new position
         currentOrder.splice(newIndex, 0, objectId);
 
-        // Update childrenOrder in state
+        // Update childrenOrder directly on SceneController (single source of truth)
         if (parentId) {
-            // Container child order
-            const containerData = this.sceneController.getObject(parentId);
-            if (containerData) {
-                this.objectStateManager.updateObject(parentId, {
-                    childrenOrder: currentOrder
-                }, 'reorder');
+            const container = this.sceneController.getObject(parentId);
+            if (container) {
+                container.childrenOrder = currentOrder;
+                // Emit hierarchy event for UI sync
+                if (window.objectEventBus) {
+                    window.objectEventBus.emit(
+                        window.objectEventBus.EVENT_TYPES.HIERARCHY,
+                        parentId,
+                        { type: 'children-reordered', childrenOrder: currentOrder },
+                        { source: 'CommandRouter.reorderChildByPosition' }
+                    );
+                }
+                // Trigger layout recalculation if container has auto-layout
+                if (container.autoLayout?.enabled) {
+                    this.sceneController.updateLayout(parentId);
+                }
             }
         } else {
             // Root level order
@@ -452,9 +465,21 @@ class CommandRouter {
     // Update children order array
     updateChildrenOrder(parentId, childrenOrder) {
         if (parentId) {
-            this.objectStateManager.updateObject(parentId, {
-                childrenOrder: childrenOrder
-            }, 'reorder');
+            const container = this.sceneController.getObject(parentId);
+            if (container) {
+                container.childrenOrder = childrenOrder;
+                if (window.objectEventBus) {
+                    window.objectEventBus.emit(
+                        window.objectEventBus.EVENT_TYPES.HIERARCHY,
+                        parentId,
+                        { type: 'children-reordered', childrenOrder: childrenOrder },
+                        { source: 'CommandRouter.updateChildrenOrder' }
+                    );
+                }
+                if (container.autoLayout?.enabled) {
+                    this.sceneController.updateLayout(parentId);
+                }
+            }
         } else {
             this.sceneController.setRootOrder(childrenOrder);
         }
@@ -476,6 +501,49 @@ class CommandRouter {
         currentOrder.splice(newIndex, 0, childId);
 
         this.updateChildrenOrder(parentId, currentOrder);
+    }
+
+    handleMoveToContainer(data) {
+        const { objectId, targetContainerId } = data;
+
+        if (!this.sceneController) {
+            console.error('CommandRouter: SceneController not available');
+            return;
+        }
+
+        this.sceneController.moveObjectToContainer(objectId, targetContainerId);
+    }
+
+    handleMoveToRoot(data) {
+        const { objectId } = data;
+
+        if (!this.sceneController) {
+            console.error('CommandRouter: SceneController not available');
+            return;
+        }
+
+        this.sceneController.moveObjectToRoot(objectId);
+    }
+
+    handleMoveAndReorder(data) {
+        const { objectId, targetParentId, targetId, position } = data;
+
+        if (!this.sceneController) {
+            console.error('CommandRouter: SceneController not available');
+            return;
+        }
+
+        // Step 1: Move to new parent
+        if (targetParentId) {
+            this.sceneController.moveObjectToContainer(objectId, targetParentId);
+        } else {
+            this.sceneController.moveObjectToRoot(objectId);
+        }
+
+        // Step 2: Reorder within new parent (immediate, no setTimeout needed)
+        if (targetId && position) {
+            this.reorderChildByPosition(objectId, targetId, position, targetParentId);
+        }
     }
 
     handleDeleteObject(data) {
