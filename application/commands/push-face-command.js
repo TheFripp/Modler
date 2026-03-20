@@ -15,10 +15,9 @@ class PushFaceCommand extends BaseCommand {
      * @param {Object} newPosition - New position {x, y, z}
      * @param {Object} [hugTransitionState] - State for hug→layout transition undo/redo
      */
-    constructor(objectId, faceNormal, pushDistance, oldDimensions, newDimensions, oldPosition, newPosition, hugTransitionState = null) {
+    constructor(objectId, faceNormal, pushDistance, oldDimensions, newDimensions, oldPosition, newPosition, hugTransitionState = null, fillTransitionState = null, parentHugTransitionState = null) {
         super('push-face', 'Push face operation');
-        // Ensure objectId is string for schema validation
-        this.objectId = String(objectId);
+        this.objectId = objectId;
         this.faceNormal = faceNormal ? { ...faceNormal } : null;
         this.pushDistance = pushDistance || 0;
         this.oldDimensions = { ...oldDimensions };
@@ -26,6 +25,8 @@ class PushFaceCommand extends BaseCommand {
         this.oldPosition = oldPosition ? { ...oldPosition } : null;
         this.newPosition = newPosition ? { ...newPosition } : null;
         this.hugTransitionState = hugTransitionState;
+        this.fillTransitionState = fillTransitionState;
+        this.parentHugTransitionState = parentHugTransitionState;
     }
 
     execute() {
@@ -53,12 +54,32 @@ class PushFaceCommand extends BaseCommand {
                 this.restoreHugState();
             }
 
+            // Reverse perpendicular fill transition
+            if (this.fillTransitionState) {
+                this.restoreFillState();
+            }
+
+            // Reverse parent hug transition (restore to layout mode)
+            if (this.parentHugTransitionState) {
+                this.restoreParentLayoutState();
+            }
+
             // Restore geometry to old dimensions and position
             this.restoreGeometryState(objectData.mesh, this.oldDimensions, this.oldPosition);
 
             // Recalculate hug size after geometry is restored
             if (this.hugTransitionState) {
                 sceneController.updateHugContainerSize(this.hugTransitionState.containerId);
+            }
+
+            // Recalculate layout after fill state restored
+            if (this.fillTransitionState) {
+                sceneController.updateLayout(this.fillTransitionState.containerId);
+            }
+
+            // Recalculate layout after parent restored to layout mode
+            if (this.parentHugTransitionState) {
+                sceneController.updateLayout(this.parentHugTransitionState.containerId);
             }
 
             logger.info(`↩️ Undid push: ${this.objectId}`);
@@ -90,12 +111,32 @@ class PushFaceCommand extends BaseCommand {
                 this.reapplyLayoutState();
             }
 
+            // Re-apply perpendicular fill transition
+            if (this.fillTransitionState) {
+                this.reapplyFillState();
+            }
+
+            // Re-apply parent hug transition
+            if (this.parentHugTransitionState) {
+                this.reapplyParentHugState();
+            }
+
             // Restore geometry to new dimensions and position
             this.restoreGeometryState(objectData.mesh, this.newDimensions, this.newPosition);
 
             // Recalculate layout after geometry is restored
             if (this.hugTransitionState) {
                 sceneController.updateLayout(this.hugTransitionState.containerId);
+            }
+
+            // Recalculate layout after fill state re-applied
+            if (this.fillTransitionState) {
+                sceneController.updateLayout(this.fillTransitionState.containerId);
+            }
+
+            // Recalculate hug after parent re-applied to hug mode
+            if (this.parentHugTransitionState) {
+                sceneController.updateHugContainerSize(this.parentHugTransitionState.containerId);
             }
 
             logger.info(`↪️ Redid push: ${this.objectId}`);
@@ -155,6 +196,87 @@ class PushFaceCommand extends BaseCommand {
                 }, 'redo');
             }
         }
+    }
+
+    /**
+     * Restore children's original layoutProperties before perpendicular fill
+     */
+    restoreFillState() {
+        const objectStateManager = window.modlerComponents?.objectStateManager;
+        if (!objectStateManager) return;
+
+        for (const [childId, childState] of Object.entries(this.fillTransitionState.childStates)) {
+            if (childState.originalLayoutProperties) {
+                objectStateManager.updateObject(childId, {
+                    layoutProperties: JSON.parse(JSON.stringify(childState.originalLayoutProperties))
+                }, 'undo');
+            }
+        }
+    }
+
+    /**
+     * Re-apply children's fill layoutProperties for redo
+     */
+    reapplyFillState() {
+        const objectStateManager = window.modlerComponents?.objectStateManager;
+        if (!objectStateManager) return;
+
+        for (const [childId, childState] of Object.entries(this.fillTransitionState.childStates)) {
+            if (childState.targetLayoutProperties) {
+                objectStateManager.updateObject(childId, {
+                    layoutProperties: JSON.parse(JSON.stringify(childState.targetLayoutProperties))
+                }, 'undo');
+            }
+        }
+    }
+
+    /**
+     * Restore parent container to layout mode (undo of layout→hug transition)
+     */
+    restoreParentLayoutState() {
+        const objectStateManager = window.modlerComponents?.objectStateManager;
+        if (!objectStateManager) return;
+
+        const state = this.parentHugTransitionState;
+
+        // Restore children's original layoutProperties
+        for (const [childId, childState] of Object.entries(state.childStates)) {
+            if (childState.originalLayoutProperties) {
+                objectStateManager.updateObject(childId, {
+                    layoutProperties: JSON.parse(JSON.stringify(childState.originalLayoutProperties))
+                }, 'undo');
+            }
+        }
+
+        // Restore parent to layout mode with original autoLayout
+        objectStateManager.updateObject(state.containerId, {
+            ...ObjectStateManager.buildContainerModeUpdate('layout'),
+            autoLayout: JSON.parse(JSON.stringify(state.originalAutoLayout))
+        }, 'undo');
+    }
+
+    /**
+     * Re-apply parent hug mode (redo of layout→hug transition)
+     */
+    reapplyParentHugState() {
+        const objectStateManager = window.modlerComponents?.objectStateManager;
+        if (!objectStateManager) return;
+
+        const state = this.parentHugTransitionState;
+
+        // Re-apply children's target layout properties
+        for (const [childId, childState] of Object.entries(state.childStates)) {
+            if (childState.targetLayoutProperties) {
+                objectStateManager.updateObject(childId, {
+                    layoutProperties: JSON.parse(JSON.stringify(childState.targetLayoutProperties))
+                }, 'redo');
+            }
+        }
+
+        // Set parent to hug mode
+        objectStateManager.updateObject(state.containerId, {
+            ...ObjectStateManager.buildContainerModeUpdate('hug')
+        }, 'redo');
     }
 
     /**

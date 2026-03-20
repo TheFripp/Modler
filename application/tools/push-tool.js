@@ -145,6 +145,26 @@ class PushTool {
                 if (containerMode === 'hug') {
                     this.transitionHugToLayout(objectData, this.pushAxis);
                 }
+
+                // If layout container pushed perpendicular to layout direction,
+                // set children to fill on the push axis
+                if (this.objectStateManager?.isLayoutMode(objectData.id)) {
+                    const layoutDirection = objectData.autoLayout?.direction || 'x';
+                    if (this.pushAxis !== layoutDirection) {
+                        this.setChildrenToFillOnAxis(objectData, this.pushAxis);
+                    }
+                }
+            }
+        }
+
+        // If pushing a child inside a layout container, transition parent to hug
+        {
+            const childObjectData = sceneController?.getObjectByMesh(targetObject);
+            if (childObjectData?.parentContainer) {
+                const parent = sceneController.getObject(childObjectData.parentContainer);
+                if (parent?.isContainer && this.objectStateManager?.isLayoutMode(parent.id)) {
+                    this.transitionParentToHug(parent);
+                }
             }
         }
 
@@ -268,6 +288,91 @@ class PushTool {
 
         // Run initial layout to position children in new layout mode
         sceneController.updateLayout(objectData.id);
+    }
+
+    /**
+     * Set children to fill on a specific axis (perpendicular push).
+     * Stores undo state in this.fillTransitionState.
+     */
+    setChildrenToFillOnAxis(objectData, axis) {
+        const sceneController = window.modlerComponents?.sceneController;
+        if (!sceneController || !this.objectStateManager) return;
+
+        const children = sceneController.getChildObjects(objectData.id);
+        const fillProperty = `size${axis.toUpperCase()}`;
+
+        // Snapshot original state for undo
+        const childStates = {};
+        children.forEach(child => {
+            childStates[child.id] = {
+                originalLayoutProperties: child.layoutProperties
+                    ? JSON.parse(JSON.stringify(child.layoutProperties))
+                    : null
+            };
+        });
+
+        this.fillTransitionState = {
+            containerId: objectData.id,
+            childStates: childStates
+        };
+
+        // Set children to fill on the push axis
+        children.forEach(child => {
+            const currentLP = child.layoutProperties || {
+                sizeX: 'fixed', sizeY: 'fixed', sizeZ: 'fixed',
+                fixedSize: { x: null, y: null, z: null }
+            };
+            if (currentLP[fillProperty] !== 'fill') {
+                const fixedSize = { ...(currentLP.fixedSize || { x: null, y: null, z: null }) };
+                fixedSize[axis] = child.dimensions?.[axis] || null;
+
+                this.objectStateManager.updateObject(child.id, {
+                    layoutProperties: {
+                        ...currentLP,
+                        [fillProperty]: 'fill',
+                        fixedSize: fixedSize
+                    }
+                }, 'push-tool');
+            }
+        });
+
+        // Run layout to apply fill sizing
+        sceneController.updateLayout(objectData.id);
+    }
+
+    /**
+     * Transition parent container from layout → hug when pushing a child.
+     * Stores undo state in this.parentHugTransitionState.
+     */
+    transitionParentToHug(parentData) {
+        const sceneController = window.modlerComponents?.sceneController;
+        if (!sceneController || !this.objectStateManager) return;
+
+        const children = sceneController.getChildObjects(parentData.id);
+
+        // Snapshot original state for undo
+        const childStates = {};
+        children.forEach(child => {
+            childStates[child.id] = {
+                originalLayoutProperties: child.layoutProperties
+                    ? JSON.parse(JSON.stringify(child.layoutProperties))
+                    : null
+            };
+        });
+
+        this.parentHugTransitionState = {
+            containerId: parentData.id,
+            originalAutoLayout: JSON.parse(JSON.stringify(parentData.autoLayout || {})),
+            childStates: childStates
+        };
+
+        // Transition parent: layout → hug
+        this.objectStateManager.updateObject(parentData.id, {
+            ...ObjectStateManager.buildContainerModeUpdate('hug')
+        }, 'push-tool');
+
+        // Trigger hug resize to wrap around children
+        sceneController.updateHugContainerSize(parentData.id);
     }
 
     /**
@@ -657,7 +762,7 @@ class PushTool {
                 Math.abs(finalPosition.y - this.initialPosition.y) > 0.001 ||
                 Math.abs(finalPosition.z - this.initialPosition.z) > 0.001;
 
-            if (dimensionsChanged || positionChanged || this.hugTransitionState) {
+            if (dimensionsChanged || positionChanged || this.hugTransitionState || this.fillTransitionState || this.parentHugTransitionState) {
                 // Calculate push distance based on dimension change along push axis
                 let pushDistance = 0;
                 if (this.pushAxis) {
@@ -683,6 +788,38 @@ class PushTool {
                     }
                 }
 
+                // Capture fill transition target state for redo
+                if (this.fillTransitionState) {
+                    const sceneController = window.modlerComponents?.sceneController;
+                    const children = sceneController?.getChildObjects(this.fillTransitionState.containerId);
+                    if (children) {
+                        children.forEach(child => {
+                            const entry = this.fillTransitionState.childStates[child.id];
+                            if (entry) {
+                                entry.targetLayoutProperties = child.layoutProperties
+                                    ? JSON.parse(JSON.stringify(child.layoutProperties))
+                                    : null;
+                            }
+                        });
+                    }
+                }
+
+                // Capture parent hug transition target state for redo
+                if (this.parentHugTransitionState) {
+                    const sceneController = window.modlerComponents?.sceneController;
+                    const children = sceneController?.getChildObjects(this.parentHugTransitionState.containerId);
+                    if (children) {
+                        children.forEach(child => {
+                            const entry = this.parentHugTransitionState.childStates[child.id];
+                            if (entry) {
+                                entry.targetLayoutProperties = child.layoutProperties
+                                    ? JSON.parse(JSON.stringify(child.layoutProperties))
+                                    : null;
+                            }
+                        });
+                    }
+                }
+
                 const command = new PushFaceCommand(
                     pushedObject.userData.id,
                     this.faceNormal,
@@ -691,7 +828,9 @@ class PushTool {
                     finalDimensions,
                     this.initialPosition,
                     finalPosition,
-                    this.hugTransitionState
+                    this.hugTransitionState,
+                    this.fillTransitionState,
+                    this.parentHugTransitionState
                 );
                 historyManager.executeCommand(command);
             }
@@ -820,6 +959,8 @@ class PushTool {
         this.initialDimensions = null;
         this.initialPosition = null;
         this.hugTransitionState = null;
+        this.fillTransitionState = null;
+        this.parentHugTransitionState = null;
     }
 
     /**

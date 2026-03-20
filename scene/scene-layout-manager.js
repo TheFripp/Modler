@@ -358,6 +358,18 @@ class SceneLayoutManager {
             return;
         }
 
+        // Compute geometry center offset (non-zero during push when geometry is
+        // off-center due to anchored resize — one face fixed, center shifts from origin)
+        let geomCenterOffset = null;
+        if (pushContext && container && container.mesh && container.mesh.geometry) {
+            container.mesh.geometry.computeBoundingBox();
+            const bb = container.mesh.geometry.boundingBox;
+            if (bb) {
+                geomCenterOffset = new THREE.Vector3();
+                bb.getCenter(geomCenterOffset);
+            }
+        }
+
         objects.forEach((obj, index) => {
             const layoutPosition = positions[index];
             const layoutSize = sizes[index];
@@ -408,9 +420,11 @@ class SceneLayoutManager {
                     if (isPushingPerpendicular) {
                         // Only update the pushed axis, preserve layout axis position
                         obj.mesh.position[pushContext.axis] = layoutPosition[pushContext.axis];
+                        if (geomCenterOffset) obj.mesh.position[pushContext.axis] += geomCenterOffset[pushContext.axis];
                     } else {
                         // Normal layout update - apply all positions
                         obj.mesh.position.copy(layoutPosition);
+                        if (geomCenterOffset) obj.mesh.position.add(geomCenterOffset);
                     }
 
                     // Update object data position to maintain consistency (world position)
@@ -424,12 +438,14 @@ class SceneLayoutManager {
                         // Only update the pushed axis
                         const worldPos = layoutPosition[pushContext.axis] + containerPosition[pushContext.axis];
                         obj.mesh.position[pushContext.axis] = worldPos;
+                        if (geomCenterOffset) obj.mesh.position[pushContext.axis] += geomCenterOffset[pushContext.axis];
                         obj.position = obj.mesh.getWorldPosition(new THREE.Vector3());
                     } else {
                         // Normal layout update - apply all positions
                         const worldPosition = new THREE.Vector3()
                             .copy(layoutPosition)
                             .add(containerPosition);
+                        if (geomCenterOffset) worldPosition.add(geomCenterOffset);
 
                         obj.mesh.position.copy(worldPosition);
                         obj.position = worldPosition.clone();
