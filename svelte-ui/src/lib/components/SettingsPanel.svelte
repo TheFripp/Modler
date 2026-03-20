@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import PropertyGroup from '$lib/components/ui/property-group.svelte';
+	import SectionHeader from '$lib/components/ui/section-header.svelte';
 	import InlineInput from '$lib/components/ui/inline-input.svelte';
 	import ColorInput from '$lib/components/ui/color-input.svelte';
 
@@ -154,10 +155,7 @@
 	<PropertyGroup title="Visuals" align="left">
 		<!-- Object -->
 		<div class="space-y-2 mb-8">
-			<div class="flex items-center gap-2 mb-2">
-				<h4 class="modler-property-label opacity-70 whitespace-nowrap">Object</h4>
-				<div class="flex-1 border-t border-[#2E2E2E]/50"></div>
-			</div>
+			<SectionHeader label="Object" align="left" />
 			<ColorInput
 				label="Outline"
 				value={visualSettings.object.outlineColor}
@@ -193,10 +191,7 @@
 
 		<!-- Container -->
 		<div class="space-y-2">
-			<div class="flex items-center gap-2 mb-2">
-				<h4 class="modler-property-label opacity-70 whitespace-nowrap">Container</h4>
-				<div class="flex-1 border-t border-[#2E2E2E]/50"></div>
-			</div>
+			<SectionHeader label="Container" align="left" />
 			<div class="flex gap-2">
 				<div style="flex: 0 1 200px; min-width: 0;">
 					<ColorInput
@@ -227,10 +222,7 @@
 
 		<!-- Measurement Tool -->
 		<div class="space-y-2 mt-8">
-			<div class="flex items-center gap-2 mb-2">
-				<h4 class="modler-property-label opacity-70 whitespace-nowrap">Measurement Tool</h4>
-				<div class="flex-1 border-t border-[#2E2E2E]/50"></div>
-			</div>
+			<SectionHeader label="Measurement Tool" align="left" />
 			<ColorInput
 				label="Color"
 				value={toolSettings.measurementColor}
@@ -258,10 +250,7 @@
 				onchange={(value) => updateSceneSettings('gridSubColor', value)}
 			/>
 
-			<div class="flex items-center gap-2 pt-2 mb-2">
-				<h4 class="modler-property-label opacity-70 whitespace-nowrap">Units</h4>
-				<div class="flex-1 border-t border-[#2E2E2E]/50"></div>
-			</div>
+			<SectionHeader label="Units" align="left" class="pt-2" />
 			<select
 				bind:value={currentUnit}
 				onchange={() => selectUnit(currentUnit)}

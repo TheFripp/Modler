@@ -1,52 +1,58 @@
 <script lang="ts">
 	import { cn } from '$lib/utils';
-	import Button from './button.svelte';
 
 	interface Option {
 		value: string;
 		label: string;
 		icon?: string;
+		title?: string;
 	}
 
 	interface Props {
-		label: string;
+		label?: string;
 		options: Option[];
 		value: string;
 		onSelect: (value: string) => void;
 		class?: string;
 		columns?: number;
+		activeClass?: string;
+		inactiveClass?: string;
 	}
 
 	let {
-		label,
+		label = '',
 		options,
 		value,
 		onSelect,
 		class: className = '',
 		columns = options.length,
+		activeClass = 'border-[#404040] shadow-sm text-blue-500',
+		inactiveClass = 'border-[#2E2E2E] hover:border-[#404040] text-muted-foreground',
 		...restProps
 	}: Props = $props();
 </script>
 
-<div class={cn('button-group space-y-2', className)} {...restProps}>
-	<label class="block text-sm font-medium text-muted-foreground">{label}</label>
+<div class={cn('button-group', label ? 'space-y-2' : '', className)} {...restProps}>
+	{#if label}
+		<label class="block text-sm font-medium text-muted-foreground">{label}</label>
+	{/if}
 
 	<div class={cn('grid gap-2', `grid-cols-${columns}`)}>
 		{#each options as option}
-			<Button
-				variant="outline"
-				size="sm"
+			<button
+				type="button"
 				class={cn(
-					'text-xs',
-					value === option.value && 'bg-primary text-primary-foreground border-primary'
+					'px-3 py-2 text-xs font-medium border rounded-md transition-all capitalize',
+					value === option.value ? activeClass : inactiveClass
 				)}
+				title={option.title}
 				onclick={() => onSelect(option.value)}
 			>
 				{#if option.icon}
 					<span class="mr-1">{option.icon}</span>
 				{/if}
 				{option.label}
-			</Button>
+			</button>
 		{/each}
 	</div>
 </div>

@@ -104,6 +104,7 @@ CAD software for creative hobbyists. Rule-based parametric design with intellige
 - **main-integration.js** (`/integration/svelte/`) - Receives postMessage from UI, dispatches to CommandRouter
 - **PropertyController** (`/svelte-ui/src/lib/services/`) - UI property state management
 - **PropertySectionRegistry** (`/svelte-ui/src/lib/services/`) - Maps object types to UI sections
+- **UI Component Library** (`/svelte-ui/src/lib/components/ui/`) - Centralized reusable Svelte components (see [`/documentation/development/svelte-ui-integration.md`](documentation/development/svelte-ui-integration.md))
 
 ### Managers (Specialized Business Logic)
 - **PropertyUpdateHandler** (`/application/handlers/`) - Routes UI property changes → ObjectStateManager

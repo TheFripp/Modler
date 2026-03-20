@@ -1,6 +1,7 @@
 <script lang="ts">
 	import InlineInput from './ui/inline-input.svelte';
-	import { MoveHorizontal, MoveVertical, MoveDiagonal, AlignLeft, AlignCenter, AlignRight, AlignVerticalJustifyCenter, AlignHorizontalJustifyCenter } from 'lucide-svelte';
+	import AxisSelector from './ui/axis-selector.svelte';
+	import { AlignLeft, AlignCenter, AlignRight, AlignVerticalJustifyCenter, AlignHorizontalJustifyCenter } from 'lucide-svelte';
 
 	// Props
 	export let axis: 'x' | 'y' | 'z' | null = null;
@@ -11,11 +12,6 @@
 	export let objectId: string | number | null = null;
 	export let onAxisChange: (axis: 'x' | 'y' | 'z') => void;
 	export let onAlignmentChange: (axis: string, value: string) => void;
-
-	// Reactive axis button states
-	$: isXActive = axis === 'x';
-	$: isYActive = axis === 'y';
-	$: isZActive = axis === 'z';
 
 	// Determine perpendicular axes based on layout direction
 	$: perpendicularAxes = axis ? ['x', 'y', 'z'].filter(a => a !== axis) : [];
@@ -44,63 +40,18 @@
 		const labels = { x: 'Width', y: 'Height', z: 'Depth' };
 		return labels[axisName] || axisName.toUpperCase();
 	}
-
-	// Handle axis button hover for face highlighting
-	function handleAxisHover(axisName: string, isHovering: boolean) {
-		if (!objectId) return;
-
-		window.parent.postMessage({
-			type: 'button-hover',
-			buttonType: 'layout',
-			objectId,
-			axis: axisName,
-			isHovering
-		}, '*');
-	}
 </script>
 
 <div class="space-y-4">
 	<!-- Axis Selection -->
 	<div class="space-y-2">
 		<label class="block text-sm font-medium text-muted-foreground">Axis</label>
-		<div class="grid grid-cols-3 gap-2">
-			<button
-				type="button"
-				onclick={() => onAxisChange('x')}
-				onmouseenter={() => handleAxisHover('x', true)}
-				onmouseleave={() => handleAxisHover('x', false)}
-				class="flex items-center justify-center px-3 py-2 text-xs font-medium border-2 rounded-md transition-all {isXActive
-					? 'border-blue-500 text-foreground shadow-sm'
-					: 'border-[#2E2E2E] text-muted-foreground hover:border-[#404040] hover:text-foreground'}"
-				title="Width"
-			>
-				<MoveHorizontal size={18} />
-			</button>
-			<button
-				type="button"
-				onclick={() => onAxisChange('y')}
-				onmouseenter={() => handleAxisHover('y', true)}
-				onmouseleave={() => handleAxisHover('y', false)}
-				class="flex items-center justify-center px-3 py-2 text-xs font-medium border-2 rounded-md transition-all {isYActive
-					? 'border-blue-500 text-foreground shadow-sm'
-					: 'border-[#2E2E2E] text-muted-foreground hover:border-[#404040] hover:text-foreground'}"
-				title="Height"
-			>
-				<MoveVertical size={18} />
-			</button>
-			<button
-				type="button"
-				onclick={() => onAxisChange('z')}
-				onmouseenter={() => handleAxisHover('z', true)}
-				onmouseleave={() => handleAxisHover('z', false)}
-				class="flex items-center justify-center px-3 py-2 text-xs font-medium border-2 rounded-md transition-all {isZActive
-					? 'border-blue-500 text-foreground shadow-sm'
-					: 'border-[#2E2E2E] text-muted-foreground hover:border-[#404040] hover:text-foreground'}"
-				title="Depth"
-			>
-				<MoveDiagonal size={18} />
-			</button>
-		</div>
+		<AxisSelector
+			activeAxis={axis}
+			onSelect={onAxisChange}
+			{objectId}
+			variant="tile"
+		/>
 	</div>
 
 	<!-- Repeat and Gap on same row -->

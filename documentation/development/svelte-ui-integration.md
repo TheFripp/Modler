@@ -58,15 +58,54 @@ interface ObjectData {
 }
 ```
 
+## UI Component Library
+
+Centralized components in `svelte-ui/src/lib/components/ui/`. All use Svelte 5 `$props()` syntax.
+
+### Primitives
+- **button.svelte** — Variant-based button (default, outline, ghost, destructive, secondary, link)
+- **badge.svelte** — Status/type badge with variants
+- **color-input.svelte** — Hex text input + native color picker with # prefix formatting
+- **section-header.svelte** — Divider line with label, `align='left'|'right'`
+
+### Compound Inputs
+- **inline-input.svelte** — Core property input with drag-to-adjust, arrow buttons, constraints, fill buttons, PropertyController integration
+- **xyz-input.svelte** — 3-axis compound (wraps 3 InlineInputs) with unit conversion and mixed value detection
+- **material-input.svelte** — Color (delegates to ColorInput) + Opacity (InlineInput)
+- **button-group.svelte** — Mutually exclusive toggle buttons with configurable active/inactive styling
+- **axis-selector.svelte** — X/Y/Z axis button grid with hover highlighting, `variant='layout'|'tile'`
+
+### Layout
+- **property-group.svelte** — Collapsible section wrapper with title and divider
+
+### Property Sections (`property-sections/`)
+Registered via `PropertySectionRegistry` and rendered dynamically by `PropertyPanel.svelte`:
+- **TransformSection** — Position, Rotation, Dimensions (uses XyzInput)
+- **MaterialSection** — Color + Opacity (uses MaterialInput)
+- **LayoutSection** — Container mode, direction, gap, alignment grid, padding
+- **TileSection** — Tiled container config (delegates to TileControls)
+
+### Adding New UI
+1. Create reusable primitives/compounds in `ui/` directory
+2. Create property sections in `property-sections/` directory
+3. Register sections in `PropertySectionRegistry` for automatic panel rendering
+
 ## Design System
 ```css
-/* Use these classes */
-.bg-gray-800    /* Main panels */
-.bg-gray-900    /* Input fields */
-.bg-gray-600 .hover:bg-gray-500    /* Buttons */
-.text-gray-50   /* Primary text */
-.text-gray-400  /* Secondary text */
-.border-gray-700    /* Borders */
+/* Modler theme (CSS custom properties in app.css) */
+--modler-panel-bg: #171717       /* Panel background */
+--modler-surface-bg: #212121     /* Elevated surfaces */
+--modler-separator: #2E2E2E      /* Divider lines */
+--modler-selection: #3b82f6      /* Blue - selection */
+--modler-container: #22c55e      /* Green - containers */
+--modler-object: #9ca3af         /* Gray - objects */
+
+/* Input pattern */
+bg-[#212121]/50 rounded-md h-8 border border-[#2E2E2E]/50
+focus-within:border-[#6b7280] transition-colors
+
+/* Button pattern */
+px-3 py-2 text-xs font-medium border rounded-md transition-all
 ```
 
 ## Communication

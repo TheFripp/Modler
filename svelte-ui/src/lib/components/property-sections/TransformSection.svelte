@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import PropertyGroup from '$lib/components/ui/property-group.svelte';
+	import SectionHeader from '$lib/components/ui/section-header.svelte';
 	import XyzInput from '$lib/components/ui/xyz-input.svelte';
 	import type { SectionFeatures } from '$lib/services/property-section-registry';
 	import { currentUnit as storeCurrentUnit } from '$lib/stores/units';
@@ -71,10 +72,7 @@
 		<!-- Position Sub-group (optional via features.position) -->
 		{#if features.position !== false}
 			<div class="space-y-2">
-				<div class="flex items-center gap-2 mb-2">
-					<div class="flex-1 border-t border-[#2E2E2E]/50"></div>
-					<h4 class="modler-property-label text-right whitespace-nowrap {isDisabled ? 'opacity-30' : ''}">Position</h4>
-				</div>
+				<SectionHeader label="Position" class={isDisabled ? 'opacity-30' : ''} />
 				<XyzInput
 					values={displayObject?.position || emptyVector}
 					{objectId}
@@ -89,10 +87,7 @@
 		<!-- Rotation Sub-group (optional via features.rotation) -->
 		{#if features.rotation !== false}
 			<div class="space-y-2">
-				<div class="flex items-center gap-2 mb-2">
-					<div class="flex-1 border-t border-[#2E2E2E]/50"></div>
-					<h4 class="modler-property-label text-right whitespace-nowrap {isDisabled ? 'opacity-30' : ''}">Rotation</h4>
-				</div>
+				<SectionHeader label="Rotation" class={isDisabled ? 'opacity-30' : ''} />
 				<XyzInput
 					values={displayObject?.rotation || emptyVector}
 					{objectId}
@@ -107,10 +102,7 @@
 		<!-- Dimensions Sub-group (optional via features.dimensions) -->
 		{#if features.dimensions !== false}
 			<div class="space-y-2">
-				<div class="flex items-center gap-2 mb-2">
-					<div class="flex-1 border-t border-[#2E2E2E]/50"></div>
-					<h4 class="modler-property-label text-right whitespace-nowrap {isDisabled ? 'opacity-30' : ''}">Dimensions</h4>
-				</div>
+				<SectionHeader label="Dimensions" class={isDisabled ? 'opacity-30' : ''} />
 				<XyzInput
 					values={displayObject?.dimensions || emptyVector}
 					{objectId}

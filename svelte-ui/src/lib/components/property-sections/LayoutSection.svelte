@@ -1,5 +1,8 @@
 <script lang="ts">
 	import PropertyGroup from '$lib/components/ui/property-group.svelte';
+	import SectionHeader from '$lib/components/ui/section-header.svelte';
+	import ButtonGroup from '$lib/components/ui/button-group.svelte';
+	import AxisSelector from '$lib/components/ui/axis-selector.svelte';
 	import InlineInput from '$lib/components/ui/inline-input.svelte';
 	import { updateThreeJSProperty } from '$lib/stores/modler';
 
@@ -18,12 +21,9 @@
 		updateThreeJSProperty(objectId, 'containerMode', mode, 'property-panel');
 	}
 
-	// Reactive layout button states
+	// Reactive layout state
 	$: isLayoutEnabled = displayObject.autoLayout?.enabled ?? false;
 	$: layoutDirection = displayObject.autoLayout?.direction ?? '';
-	$: isXActive = isLayoutEnabled && layoutDirection === 'x';
-	$: isYActive = isLayoutEnabled && layoutDirection === 'y';
-	$: isZActive = isLayoutEnabled && layoutDirection === 'z';
 
 	// Reactive gap value - formatted to exactly 2 decimal places for UI display
 	// toFixed(2) ensures consistent "1.20" format instead of "1.2"
@@ -73,17 +73,6 @@
 		};
 
 		updateThreeJSProperty(objectId, 'autoLayout', autoLayout, 'property-panel');
-	}
-
-	// SimpleCommunication: Handle layout button hover for face highlighting
-	function handleLayoutHover(axis: string, isHovering: boolean) {
-		window.parent.postMessage({
-			type: 'button-hover',
-			buttonType: 'layout',
-			objectId,
-			axis,
-			isHovering
-		}, '*');
 	}
 
 	// Handle reverse layout direction (not object order)
@@ -189,33 +178,22 @@
 	<div class="space-y-4">
 		<!-- Container Mode -->
 		<div class="space-y-2">
-			<div class="flex items-center gap-2 mb-2">
-				<div class="flex-1 border-t border-[#2E2E2E]/50"></div>
-				<label class="modler-property-label text-right whitespace-nowrap">Mode</label>
-			</div>
-			<div class="grid grid-cols-3 gap-2">
-				{#each ['manual', 'layout', 'hug'] as mode}
-					<button
-						type="button"
-						onclick={() => setContainerMode(mode)}
-						class="px-3 py-2 text-xs font-medium border rounded-md transition-all capitalize
-							{currentMode === mode ? 'border-[#404040] shadow-sm text-blue-500' : 'border-[#2E2E2E] hover:border-[#404040] text-muted-foreground'}"
-						title="{mode === 'manual' ? 'Manual positioning' : mode === 'layout' ? 'Auto-layout children' : 'Auto-size to children'}"
-					>
-						{mode}
-					</button>
-				{/each}
-			</div>
+			<SectionHeader label="Mode" />
+			<ButtonGroup
+				options={[
+					{ value: 'manual', label: 'Manual', title: 'Manual positioning' },
+					{ value: 'layout', label: 'Layout', title: 'Auto-layout children' },
+					{ value: 'hug', label: 'Hug', title: 'Auto-size to children' }
+				]}
+				value={currentMode}
+				onSelect={setContainerMode}
+				columns={3}
+			/>
 		</div>
 
 		<!-- Direction -->
 		<div class="space-y-2">
-			<div class="flex items-center gap-2 mb-2">
-				<div class="flex-1 border-t border-[#2E2E2E]/50"></div>
-				<label class="modler-property-label text-right whitespace-nowrap">
-					Direction
-				</label>
-			</div>
+			<SectionHeader label="Direction" />
 
 			<div class="flex gap-2">
 				<!-- Reverse Layout Button -->
@@ -235,50 +213,12 @@
 				</button>
 
 				<!-- Layout Direction Buttons -->
-				<div class="grid grid-cols-3 gap-2 flex-1">
-				<button
-					type="button"
-					onclick={() => selectLayoutAxis('x')}
-					onmouseenter={() => handleLayoutHover('x', true)}
-					onmouseleave={() => handleLayoutHover('x', false)}
-					class="px-3 py-2 text-xs font-medium border rounded-md transition-all flex items-center justify-center {isXActive ? 'border-[#404040] shadow-sm' : 'border-[#2E2E2E] hover:border-[#404040]'}"
-					title="Width (X axis)"
-				>
-					<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="{isXActive ? 'text-blue-500' : 'text-muted-foreground'}">
-						<polyline points="5 9 2 12 5 15"></polyline>
-						<polyline points="19 9 22 12 19 15"></polyline>
-						<line x1="2" y1="12" x2="22" y2="12"></line>
-					</svg>
-				</button>
-				<button
-					type="button"
-					onclick={() => selectLayoutAxis('y')}
-					onmouseenter={() => handleLayoutHover('y', true)}
-					onmouseleave={() => handleLayoutHover('y', false)}
-					class="px-3 py-2 text-xs font-medium border rounded-md transition-all flex items-center justify-center {isYActive ? 'border-[#404040] shadow-sm' : 'border-[#2E2E2E] hover:border-[#404040]'}"
-					title="Height (Y axis)"
-				>
-					<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="{isYActive ? 'text-blue-500' : 'text-muted-foreground'}">
-						<polyline points="9 19 12 22 15 19"></polyline>
-						<polyline points="9 5 12 2 15 5"></polyline>
-						<line x1="12" y1="2" x2="12" y2="22"></line>
-					</svg>
-				</button>
-				<button
-					type="button"
-					onclick={() => selectLayoutAxis('z')}
-					onmouseenter={() => handleLayoutHover('z', true)}
-					onmouseleave={() => handleLayoutHover('z', false)}
-					class="px-3 py-2 text-xs font-medium border rounded-md transition-all flex items-center justify-center {isZActive ? 'border-[#404040] shadow-sm' : 'border-[#2E2E2E] hover:border-[#404040]'}"
-					title="Depth (Z axis)"
-				>
-					<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="{isZActive ? 'text-blue-500' : 'text-muted-foreground'}">
-						<polyline points="13 5 19 5 19 11"></polyline>
-						<polyline points="11 19 5 19 5 13"></polyline>
-						<line x1="19" y1="5" x2="5" y2="19"></line>
-					</svg>
-				</button>
-				</div>
+				<AxisSelector
+					activeAxis={layoutDirection}
+					onSelect={selectLayoutAxis}
+					{objectId}
+					class="flex-1"
+				/>
 			</div>
 		</div>
 
@@ -323,10 +263,7 @@
 
 		<!-- Padding Controls -->
 		<div class="space-y-2 {!isLayoutEnabled ? 'opacity-30' : ''}">
-			<div class="flex items-center gap-2 mb-2">
-				<div class="flex-1 border-t border-[#2E2E2E]/50"></div>
-				<h4 class="modler-property-label text-right whitespace-nowrap">Padding</h4>
-			</div>
+			<SectionHeader label="Padding" />
 			<div class="grid grid-cols-3 gap-2">
 				<InlineInput
 					label="W"
