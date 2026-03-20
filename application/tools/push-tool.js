@@ -4,11 +4,11 @@ import * as THREE from 'three';
  *
  * Unified approach for both containers and regular objects using vertex manipulation.
  * Face highlight tracks the moving face for seamless visual feedback.
+ * Extends BaseTool — component getters, lifecycle inherited
  */
-class PushTool {
+class PushTool extends BaseTool {
     constructor(selectionController, visualEffects) {
-        this.selectionController = selectionController;
-        this.visualEffects = visualEffects;
+        super(selectionController, visualEffects);
         this.faceToolBehavior = new BaseFaceToolBehavior(selectionController, visualEffects, 'push');
         this.eventHandler = new BaseFaceToolEventHandler(this, this.faceToolBehavior, selectionController);
 
@@ -29,12 +29,6 @@ class PushTool {
         this.initialDimensions = null;
         this.initialPosition = null;
         this.hugTransitionState = null;
-
-        // State management
-        this.objectStateManager = null;
-        setTimeout(() => {
-            this.objectStateManager = window.modlerComponents?.objectStateManager;
-        }, 50);
     }
 
     onHover(hit, isAltPressed) {
@@ -43,17 +37,17 @@ class PushTool {
 
             // Show push measurement overlay if Alt pressed during push
             if (isAltPressed) {
-                const measurementTool = window.modlerComponents?.measurementTool;
+                const measurementTool = this.measurementTool;
                 if (measurementTool && this.pushedObject && this.pushAxis) {
                     measurementTool.showPushMeasurement(this.pushedObject, this.pushAxis);
                 }
             } else {
-                const measurementTool = window.modlerComponents?.measurementTool;
+                const measurementTool = this.measurementTool;
                 if (measurementTool) measurementTool.clearMeasurement();
             }
         } else {
             // Handle Alt-key measurement mode
-            if (MovementUtils.handleMeasurementMode(isAltPressed, hit, this.selectionController)) return;
+            if (this.handleMeasurementMode(isAltPressed, hit)) return;
 
             if (this.shouldShowFaceHighlight(hit)) {
                 this.faceToolBehavior.handleFaceDetection(hit);
@@ -130,7 +124,7 @@ class PushTool {
         const targetObject = this.faceToolBehavior.getTargetObject(hit);
         if (!targetObject) return;
 
-        const sceneController = window.modlerComponents?.sceneController;
+        const sceneController = this.sceneController;
 
         // Determine push axis early (needed for hug→layout transition)
         const worldNormal = this.faceToolBehavior.getWorldFaceNormal(hit);
@@ -192,14 +186,14 @@ class PushTool {
         }
 
         // Store initial mouse position
-        const inputController = window.modlerComponents?.inputController;
+        const inputController = this.inputController;
         if (inputController) {
             this.startMousePos = inputController.mouse.clone();
             this.lastMousePos = inputController.mouse.clone();
         }
 
         // Enable snap detection
-        const snapController = window.modlerComponents?.snapController;
+        const snapController = this.snapController;
         if (snapController) {
             snapController.requestSnapDetection();
         }
@@ -236,7 +230,7 @@ class PushTool {
      * Sets layout direction to push axis and enables fill on all children.
      */
     transitionHugToLayout(objectData, pushAxis) {
-        const sceneController = window.modlerComponents?.sceneController;
+        const sceneController = this.sceneController;
         if (!sceneController || !this.objectStateManager) return;
 
         // Snapshot pre-transition state for undo
@@ -295,7 +289,7 @@ class PushTool {
      * Stores undo state in this.fillTransitionState.
      */
     setChildrenToFillOnAxis(objectData, axis) {
-        const sceneController = window.modlerComponents?.sceneController;
+        const sceneController = this.sceneController;
         if (!sceneController || !this.objectStateManager) return;
 
         const children = sceneController.getChildObjects(objectData.id);
@@ -345,7 +339,7 @@ class PushTool {
      * Stores undo state in this.parentHugTransitionState.
      */
     transitionParentToHug(parentData) {
-        const sceneController = window.modlerComponents?.sceneController;
+        const sceneController = this.sceneController;
         if (!sceneController || !this.objectStateManager) return;
 
         const children = sceneController.getChildObjects(parentData.id);
@@ -396,7 +390,7 @@ class PushTool {
      * Calculate movement delta from mouse movement
      */
     calculateMovementDelta() {
-        const inputController = window.modlerComponents?.inputController;
+        const inputController = this.inputController;
         const camera = window.modlerComponents?.sceneFoundation?.camera;
 
         if (!inputController || !camera || !this.lastMousePos) return null;
@@ -455,7 +449,7 @@ class PushTool {
         }
 
         // Check minimum size for containers in layout mode
-        const sceneController = window.modlerComponents?.sceneController;
+        const sceneController = this.sceneController;
         if (sceneController && this.pushedObject.userData?.id) {
             const objectData = sceneController.getObjectByMesh(this.pushedObject);
             // Use centralized state machine
@@ -520,7 +514,7 @@ class PushTool {
                     const dims = geometryUtils.getGeometryDimensions(this.pushedObject.geometry);
 
                     // Update through ObjectStateManager to preserve all properties (like autoLayout)
-                    const objectStateManager = window.modlerComponents?.objectStateManager;
+                    const objectStateManager = this.objectStateManager;
                     if (objectStateManager) {
                         const updates = {
                             dimensions: { x: dims.x, y: dims.y, z: dims.z }
@@ -566,7 +560,7 @@ class PushTool {
      * 2. Pushed object is a child INSIDE a container → resize the parent
      */
     updateContainerLayout() {
-        const sceneController = window.modlerComponents?.sceneController;
+        const sceneController = this.sceneController;
         if (!sceneController || !this.pushedObject?.userData?.id) return;
 
         const objectData = sceneController.getObjectByMesh(this.pushedObject);
@@ -581,7 +575,7 @@ class PushTool {
         // If pushed object is a child INSIDE a container, resize the parent
         // Mirrors move tool's updateContainerDuringDrag() pattern
         if (objectData.parentContainer) {
-            const containerCrudManager = window.modlerComponents?.containerCrudManager;
+            const containerCrudManager = this.containerCrudManager;
             if (containerCrudManager) {
                 containerCrudManager.resizeContainer(objectData.parentContainer, {
                     reason: 'child-changed',
@@ -617,7 +611,7 @@ class PushTool {
         const pushedObject = this.pushedObject;
 
         // Re-enable hug updates
-        const sceneController = window.modlerComponents?.sceneController;
+        const sceneController = this.sceneController;
         if (sceneController && typeof sceneController.enableHugUpdates === 'function') {
             sceneController.enableHugUpdates();
         }
@@ -696,7 +690,7 @@ class PushTool {
                 // If object is inside a container, trigger final parent update for ALL modes
                 // Unified API auto-detects mode (layout/hug/manual)
                 if (objectData?.parentContainer) {
-                    const containerCrudManager = window.modlerComponents?.containerCrudManager;
+                    const containerCrudManager = this.containerCrudManager;
                     if (containerCrudManager) {
                         containerCrudManager.resizeContainer(objectData.parentContainer, {
                             reason: 'child-changed',
@@ -739,7 +733,7 @@ class PushTool {
      * Register undo action for history
      */
     registerUndoAction(pushedObject) {
-        const historyManager = window.modlerComponents?.historyManager;
+        const historyManager = this.historyManager;
         if (!historyManager) return;
 
         const geometryUtils = window.GeometryUtils;
@@ -772,7 +766,7 @@ class PushTool {
 
                 // Capture post-transition state for redo
                 if (this.hugTransitionState) {
-                    const sceneController = window.modlerComponents?.sceneController;
+                    const sceneController = this.sceneController;
                     const objectData = sceneController?.getObject(this.hugTransitionState.containerId);
                     if (objectData) {
                         this.hugTransitionState.targetAutoLayout = JSON.parse(JSON.stringify(objectData.autoLayout));
@@ -790,7 +784,7 @@ class PushTool {
 
                 // Capture fill transition target state for redo
                 if (this.fillTransitionState) {
-                    const sceneController = window.modlerComponents?.sceneController;
+                    const sceneController = this.sceneController;
                     const children = sceneController?.getChildObjects(this.fillTransitionState.containerId);
                     if (children) {
                         children.forEach(child => {
@@ -806,7 +800,7 @@ class PushTool {
 
                 // Capture parent hug transition target state for redo
                 if (this.parentHugTransitionState) {
-                    const sceneController = window.modlerComponents?.sceneController;
+                    const sceneController = this.sceneController;
                     const children = sceneController?.getChildObjects(this.parentHugTransitionState.containerId);
                     if (children) {
                         children.forEach(child => {

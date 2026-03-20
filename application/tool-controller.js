@@ -42,16 +42,17 @@ class ToolController {
         this.tools[name] = tool;
         
         // Register tool behaviors with InputController
+        // BaseTool provides default no-op implementations for all methods
         this.inputController.toolBehaviors[name] = {
-            onHover: (hit, isAltPressed) => tool.onHover ? tool.onHover(hit, isAltPressed) : undefined,
-            onClick: (hit, event) => tool.onClick ? tool.onClick(hit, event) : undefined,
-            onDoubleClick: (hit, event) => tool.onDoubleClick ? tool.onDoubleClick(hit, event) : undefined,
-            onMouseDown: (hit, event) => tool.onMouseDown ? tool.onMouseDown(hit, event) : undefined,
-            onMouseUp: (hit, event) => tool.onMouseUp ? tool.onMouseUp(hit, event) : undefined,
-            onMouseMove: (hit, event) => tool.onMouseMove ? tool.onMouseMove(hit, event) : undefined,
-            onKeyDown: (event) => tool.onKeyDown ? tool.onKeyDown(event) : undefined,
-            onKeyUp: (event) => tool.onKeyUp ? tool.onKeyUp(event) : undefined,
-            hasActiveHighlight: () => tool.hasActiveHighlight ? tool.hasActiveHighlight() : false
+            onHover: (hit, isAltPressed) => tool.onHover(hit, isAltPressed),
+            onClick: (hit, event) => tool.onClick(hit, event),
+            onDoubleClick: (hit, event) => tool.onDoubleClick(hit, event),
+            onMouseDown: (hit, event) => tool.onMouseDown(hit, event),
+            onMouseUp: (hit, event) => tool.onMouseUp(hit, event),
+            onMouseMove: (hit, event) => tool.onMouseMove(hit, event),
+            onKeyDown: (event) => tool.onKeyDown(event),
+            onKeyUp: (event) => tool.onKeyUp(event),
+            hasActiveHighlight: () => tool.hasActiveHighlight()
         };
         
         return tool;

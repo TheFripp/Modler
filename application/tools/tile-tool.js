@@ -3,33 +3,20 @@ import * as THREE from 'three';
  * Tile Tool
  * Creates tiled arrays of objects using container + layout system
  * Supports bidirectional activation: tool→object or object→tool
- * Target: ~150 lines - clean tool architecture
+ * Extends BaseTool — default click delegation, lifecycle, component getters inherited
  */
 
-class TileTool {
+class TileTool extends BaseTool {
     constructor(selectionController, visualEffects) {
-        this.selectionController = selectionController;
-        this.visualEffects = visualEffects;
-
-        // Track which object is being tiled
+        super(selectionController, visualEffects);
         this.targetObject = null;
-        this.hoveredObject = null;
-
-        // Get scene controller reference
-        this.sceneController = null;
     }
 
-    /**
-     * Tool activation - called when tool is switched to
-     */
     activate() {
-        // Get scene controller
-        this.sceneController = window.modlerComponents?.sceneController;
-
         // Check if there's already a selected object
         const selectedObjects = this.selectionController.getSelectedObjects?.() || [];
         if (selectedObjects.length === 1) {
-            const objectData = this.sceneController?.getObjectByMesh?.(selectedObjects[0]);
+            const objectData = this.getObjectData(selectedObjects[0]);
             if (objectData && !objectData.isContainer) {
                 this.targetObject = selectedObjects[0];
                 this.notifyUIStateChange(true);
@@ -37,21 +24,15 @@ class TileTool {
         }
     }
 
-    /**
-     * Tool deactivation - cleanup when switching to another tool
-     */
     deactivate() {
         this.clearHover();
         this.targetObject = null;
         this.notifyUIStateChange(false);
     }
 
-    /**
-     * Handle mouse hover - track hoverable objects (no visual highlight)
-     */
     onHover(hit, isAltPressed) {
         if (hit && hit.object) {
-            const objectData = this.sceneController?.getObjectByMesh?.(hit.object);
+            const objectData = this.getObjectData(hit.object);
 
             // Only track non-container objects
             if (objectData && !objectData.isContainer && objectData.selectable) {
@@ -63,19 +44,13 @@ class TileTool {
         this.clearHover();
     }
 
-    /**
-     * Handle click - select object to be tiled
-     */
     onClick(hit, event) {
         if (hit && hit.object) {
-            const objectData = this.sceneController?.getObjectByMesh?.(hit.object);
+            const objectData = this.getObjectData(hit.object);
 
             // Filter out floor grid and non-selectable objects
             if (objectData && objectData.selectable !== false && !objectData.isContainer) {
-                // Use selection controller to handle selection
                 this.selectionController.handleObjectClick(hit.object, event, { toolType: 'TileTool' });
-
-                // Track this as the target object
                 this.targetObject = hit.object;
                 this.notifyUIStateChange(true);
                 return;
@@ -111,7 +86,7 @@ class TileTool {
             return null;
         }
 
-        const objectData = this.sceneController?.getObjectByMesh?.(this.targetObject);
+        const objectData = this.getObjectData(this.targetObject);
         if (!objectData) {
             console.error('TileTool: Could not find object data');
             return null;
@@ -121,9 +96,7 @@ class TileTool {
         const originalPosition = objectData.mesh.position.clone();
         const originalParent = objectData.parentContainer;
 
-        // Create container at original object position
-        const containerCrud = window.modlerComponents?.containerCrudManager;
-        if (!containerCrud) {
+        if (!this.containerCrudManager) {
             console.error('TileTool: ContainerCrudManager not available');
             return null;
         }
@@ -142,7 +115,7 @@ class TileTool {
         containerSize[axis] = (objectSize[axis] * repeat) + (gap * (repeat - 1));
 
         // Create container
-        const containerData = containerCrud.createContainerGeometryAtPosition(
+        const containerData = this.containerCrudManager.createContainerGeometryAtPosition(
             containerSize,
             { position: originalPosition }
         );
@@ -185,12 +158,10 @@ class TileTool {
 
         // Create additional instances (repeat - 1) times
         for (let i = 1; i < repeat; i++) {
-            // Clone the geometry and material
             const clonedGeometry = objectData.mesh.geometry.clone();
             const clonedMaterial = objectData.mesh.material.clone();
 
-            // Create new object in the container
-            const newObject = this.sceneController.addObject(clonedGeometry, clonedMaterial, {
+            this.sceneController.addObject(clonedGeometry, clonedMaterial, {
                 name: objectData.name,
                 parentContainer: addedContainer.id,
                 position: { x: 0, y: 0, z: 0 }
@@ -198,32 +169,25 @@ class TileTool {
         }
 
         // Apply layout configuration
-        const objectStateManager = window.modlerComponents?.objectStateManager;
-        if (objectStateManager) {
-            objectStateManager.updateObject(
+        if (this.objectStateManager) {
+            this.objectStateManager.updateObject(
                 addedContainer.id,
                 { autoLayout: autoLayout },
                 'tile-tool'
             );
         }
 
-        // Select the container (which has the same name as the original object)
+        // Select the container
         this.selectionController.clearSelection();
         this.selectionController.select(addedContainer.mesh);
 
         return addedContainer;
     }
 
-    /**
-     * Check if tool has active highlight (for camera coordination)
-     */
     hasActiveHighlight() {
         return this.hoveredObject !== null;
     }
 
-    /**
-     * Clear hover highlights
-     */
     clearHover() {
         if (this.hoveredObject) {
             this.visualEffects.clearHighlight();
@@ -231,28 +195,21 @@ class TileTool {
         }
     }
 
-    /**
-     * Notify UI of tile tool state change
-     */
     notifyUIStateChange(hasTarget) {
         if (window.notifyTileToolStateChanged) {
             window.notifyTileToolStateChanged({
                 active: true,
                 hasTarget: hasTarget,
                 targetObjectId: this.targetObject ?
-                    this.sceneController?.getObjectByMesh?.(this.targetObject)?.id : null
+                    this.getObjectData(this.targetObject)?.id : null
             });
         }
     }
 
-    /**
-     * Get current target object (for UI to query)
-     */
     getTargetObject() {
         if (!this.targetObject) return null;
-        return this.sceneController?.getObjectByMesh?.(this.targetObject);
+        return this.getObjectData(this.targetObject);
     }
 }
 
-// Export to window
 window.TileTool = TileTool;

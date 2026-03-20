@@ -2,12 +2,12 @@
  * Move Tool
  * Handles object movement with face highlighting and drag operations using centralized SelectionController
  * Features: Face-constrained dragging, axis-constrained snapping, container-aware updates
+ * Extends BaseTool — component getters, lifecycle inherited
  */
 
-class MoveTool {
+class MoveTool extends BaseTool {
     constructor(selectionController, visualEffects) {
-        this.selectionController = selectionController;
-        this.visualEffects = visualEffects;
+        super(selectionController, visualEffects);
 
         // Use shared behaviors for consistency
         this.faceToolBehavior = new BaseFaceToolBehavior(selectionController, visualEffects, 'move');
@@ -27,9 +27,6 @@ class MoveTool {
         // Duplication mode (visual state managed by DuplicationMode)
         this.duplicationMode = new DuplicationMode();
 
-        // Unified state management system
-        this.objectStateManager = null;
-
         // Container update throttling using shared utils - use default 16ms for smooth updates
         this.containerThrottleState = MovementUtils.createThrottleState();
 
@@ -43,11 +40,6 @@ class MoveTool {
         this.lastPositionUpdateTime = 0;
         this.positionUpdateThrottle = 16; // ~60fps max rate
         this.pendingPositionUpdate = null;
-
-        // Initialize ObjectStateManager after components are loaded
-        setTimeout(() => {
-            this.objectStateManager = window.modlerComponents?.objectStateManager;
-        }, 50);
     }
     
     /**
@@ -61,7 +53,7 @@ class MoveTool {
 
         // Check if object is a child in a layout-enabled container
         // BUT: If the container itself is selected, allow highlights on the container
-        const sceneController = window.modlerComponents?.sceneController;
+        const sceneController = this.sceneController;
         if (sceneController) {
             const objectData = sceneController.getObjectByMesh(targetObject);
 
@@ -100,7 +92,7 @@ class MoveTool {
         }
 
         // Handle Alt-key measurement mode
-        if (MovementUtils.handleMeasurementMode(isAltPressed, hit, this.selectionController)) return;
+        if (this.handleMeasurementMode(isAltPressed, hit)) return;
 
         // Check if we should show highlight for this object
         if (!this.shouldShowFaceHighlight(hit)) {
@@ -134,7 +126,7 @@ class MoveTool {
 
             if (isSelected) {
                 // Selected object - start drag
-                const sceneController = window.modlerComponents?.sceneController;
+                const sceneController = this.sceneController;
                 const objectData = sceneController?.getObjectByMesh(hitObject);
                 const isContainer = objectData?.isContainer;
                 const hasValidFace = this.faceToolBehavior.hasValidFaceHover(hit);
@@ -245,7 +237,7 @@ class MoveTool {
         this.lastPositionUpdateTime = Date.now();
 
         // Get object ID for state management
-        const sceneController = window.modlerComponents?.sceneController;
+        const sceneController = this.sceneController;
         const objectData = sceneController?.getObjectByMesh?.(this.dragObject);
         const objectId = objectData?.id || this.dragObject.uuid;
 
@@ -333,7 +325,7 @@ class MoveTool {
         // Use shared behavior to get target object (handles both old and new container architectures)
         let targetObject = this.faceToolBehavior.getTargetObject(hit);
 
-        const sceneController = window.modlerComponents?.sceneController;
+        const sceneController = this.sceneController;
         const selectedObjects = this.selectionController.getSelectedObjects();
 
         if (sceneController && selectedObjects.length > 0) {
@@ -387,7 +379,7 @@ class MoveTool {
         this.dragHitPoint = hit.point.clone();
 
         // Request snap detection for drag operation
-        const snapController = window.modlerComponents?.snapController;
+        const snapController = this.snapController;
         if (snapController) {
             snapController.requestSnapDetection();
         }
@@ -409,7 +401,7 @@ class MoveTool {
         }
         
         // Store initial mouse position and check for Command/Meta key at drag start
-        const inputController = window.modlerComponents?.inputController;
+        const inputController = this.inputController;
         if (inputController) {
             this.lastMousePos = inputController.mouse.clone();
         }
@@ -436,7 +428,7 @@ class MoveTool {
      * Update object position during drag - Uses global CameraMathUtils for proper cursor following
      */
     updateDragMovement() {
-        const inputController = window.modlerComponents?.inputController;
+        const inputController = this.inputController;
         const camera = window.modlerComponents?.sceneFoundation?.camera;
 
         if (!inputController || !camera || !this.lastMousePos || !window.CameraMathUtils) return;
@@ -511,7 +503,7 @@ class MoveTool {
         const potentialPosition = this.dragObject.position.clone().add(localMovement);
 
         // Update snap detection with travel axis information for edge filtering
-        const snapController = window.modlerComponents?.snapController;
+        const snapController = this.snapController;
         if (snapController && snapController.getEnabled()) {
             // Provide travel axis information to filter edges perpendicular to movement
             snapController.updateSnapDetection('move', [this.dragObject], this.dragFaceNormal);
@@ -552,7 +544,7 @@ class MoveTool {
         
         // Real-time parent container resize when dragging any child object
         // Applies to all child types (boxes, nested containers) regardless of navigation context
-        const sceneController = window.modlerComponents?.sceneController;
+        const sceneController = this.sceneController;
         if (sceneController) {
             const objectData = sceneController.getObjectByMesh(this.dragObject);
             if (objectData && objectData.parentContainer) {
@@ -568,7 +560,7 @@ class MoveTool {
      * Update container during drag operation - triggers container resize
      */
     updateContainerDuringDrag() {
-        const sceneController = window.modlerComponents?.sceneController;
+        const sceneController = this.sceneController;
         if (!sceneController || !this.dragObject) return;
         
         const objectData = sceneController.getObjectByMesh(this.dragObject);
@@ -579,7 +571,7 @@ class MoveTool {
         if (!container) return;
         
         // Trigger container resize calculation
-        const containerCrudManager = window.modlerComponents?.containerCrudManager;
+        const containerCrudManager = this.containerCrudManager;
         if (containerCrudManager) {
             // UNIFIED API: Real-time drag update (throttled)
             containerCrudManager.resizeContainer(objectData.parentContainer, {
@@ -629,7 +621,7 @@ class MoveTool {
      * Finalize duplication mode: create duplicate at final position, restore original
      */
     finalizeDuplication(draggedObject) {
-        const sceneController = window.modlerComponents?.sceneController;
+        const sceneController = this.sceneController;
         const objectData = sceneController?.getObjectByMesh?.(draggedObject);
         if (!objectData || !sceneController) return;
 
@@ -646,7 +638,7 @@ class MoveTool {
 
         if (!hasMoved) return;
 
-        const historyManager = window.modlerComponents?.historyManager;
+        const historyManager = this.historyManager;
         if (!historyManager) return;
 
         // Create duplicate BEFORE moving source back (children's world positions must be correct)
@@ -679,7 +671,7 @@ class MoveTool {
     finalizeMoveCommand(draggedObject) {
         if (!this.objectStateManager) return;
 
-        const sceneController = window.modlerComponents?.sceneController;
+        const sceneController = this.sceneController;
         const objectData = sceneController?.getObjectByMesh?.(draggedObject);
         const objectId = objectData?.id || draggedObject.uuid;
 
@@ -692,7 +684,7 @@ class MoveTool {
         this.objectStateManager.updateObject(objectId, { position: finalPosition });
 
         // Create undoable command if position changed
-        const historyManager = window.modlerComponents?.historyManager;
+        const historyManager = this.historyManager;
         if (historyManager && this.dragStartPosition) {
             const hasMoved =
                 Math.abs(finalPosition.x - this.dragStartPosition.x) > 0.001 ||
@@ -757,8 +749,8 @@ class MoveTool {
      * Notify parent container that a child was moved
      */
     updateParentContainerAfterDrag(draggedObject) {
-        const sceneController = window.modlerComponents?.sceneController;
-        const containerCrudManager = window.modlerComponents?.containerCrudManager;
+        const sceneController = this.sceneController;
+        const containerCrudManager = this.containerCrudManager;
         if (!sceneController || !containerCrudManager) return;
 
         const objectData = sceneController.getObjectByMesh(draggedObject);
@@ -788,37 +780,16 @@ class MoveTool {
     }
 
 
-    /**
-     * Tool activation wrapper for ToolController compatibility
-     */
     activate() {
-        this.onToolActivate();
-    }
-
-    /**
-     * Tool deactivation wrapper for ToolController compatibility
-     */
-    deactivate() {
-        this.onToolDeactivate();
-    }
-
-    /**
-     * Tool activation using centralized event handler
-     */
-    onToolActivate() {
         this.eventHandler.handleToolActivate();
 
         // Store original snap state for legacy compatibility
-        const snapController = window.modlerComponents?.snapController;
-        if (snapController) {
-            this.originalSnapState = snapController.getEnabled();
+        if (this.snapController) {
+            this.originalSnapState = this.snapController.getEnabled();
         }
     }
 
-    /**
-     * Tool deactivation using centralized event handler
-     */
-    onToolDeactivate() {
+    deactivate() {
         const deactivationCallbacks = BaseFaceToolEventHandler.createDeactivationCallbacks({
             isActiveCheck: () => this.isDragging,
             endCallback: () => this.endFaceDrag()
@@ -832,8 +803,7 @@ class MoveTool {
         }
 
         // Clean up snap detection state
-        const snapController = window.modlerComponents?.snapController;
-        if (snapController) {
+        if (this.snapController) {
             this.originalSnapState = undefined;
         }
     }
@@ -876,7 +846,7 @@ class MoveTool {
         const isSelected = this.selectionController.isSelected(hoveredObject);
         if (!isSelected) return false;
 
-        const sceneController = window.modlerComponents?.sceneController;
+        const sceneController = this.sceneController;
         const objectData = sceneController?.getObjectByMesh(hoveredObject);
         return objectData?.isContainer === true;
     }
@@ -890,7 +860,7 @@ class MoveTool {
         const delay = 50;
 
         setTimeout(() => {
-            const inputController = window.modlerComponents?.inputController;
+            const inputController = this.inputController;
             if (!inputController) return;
 
             // Get current mouse position in screen coordinates

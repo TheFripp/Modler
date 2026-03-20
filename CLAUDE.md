@@ -97,6 +97,7 @@ CAD software for creative hobbyists. Rule-based parametric design with intellige
 - **SceneLayoutManager** (`/scene/`) - Layout calculations, container sizing, fill/fixed/hug modes
 - **SceneLifecycleManager** (`/scene/`) - Object creation, deletion, ID generation, support meshes
 - **ToolController** (`/application/`) - Tool activation/switching only
+- **BaseTool** (`/application/tools/base-tool.js`) - Base class for all tools: lazy component getters, default event handlers, hover management. New tools extend BaseTool and override only what they need.
 
 ### Communication & UI
 - **SimpleCommunication** (`/integration/communication/simple-postmessage.js`) - ObjectEventBus → DataExtractor → postMessage (Main → UI)
@@ -126,6 +127,7 @@ CAD software for creative hobbyists. Rule-based parametric design with intellige
 - Visual effect? → `VisualizationManager`
 - Undo/redo? → `HistoryManager.executeCommand()`
 - New object type UI? → `PropertySectionRegistry.register()`
+- New tool? → Extend `BaseTool`, override only needed event handlers, register in `v2-main.js`
 
 **NEVER**: Call specialized managers (SceneHierarchyManager, SceneLayoutManager, SceneLifecycleManager, LayoutPropagationManager) directly - always use coordinators (ObjectStateManager or SceneController)
 

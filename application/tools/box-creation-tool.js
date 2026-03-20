@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 // Modler V2 - Box Creation Tool
 // Refactored for maintainability - uses centralized systems
+// Extends BaseTool — component getters, lifecycle inherited
 
 const BoxCreationState = {
     IDLE: 'idle',
@@ -8,23 +9,14 @@ const BoxCreationState = {
     SETTING_HEIGHT: 'setting_height'
 };
 
-class BoxCreationTool {
+class BoxCreationTool extends BaseTool {
     constructor(selectionController, visualEffects) {
-        this.selectionController = selectionController;
-        this.visualEffects = visualEffects;
+        super(selectionController, visualEffects);
 
         // New unified systems
         this.geometryFactory = new GeometryFactory();
         this.materialManager = new MaterialManager();
         this.resourcePool = new VisualizationResourcePool();
-
-        // Unified state management system
-        this.objectStateManager = null;
-
-        // Initialize ObjectStateManager after components are loaded
-        setTimeout(() => {
-            this.objectStateManager = window.modlerComponents?.objectStateManager;
-        }, 50);
 
         // Core state
         this.state = BoxCreationState.IDLE;
@@ -73,7 +65,7 @@ class BoxCreationTool {
     onMouseMove(hit, event) {
         if (this.state === BoxCreationState.SETTING_HEIGHT && event) {
             // Request snap detection for height adjustment phase with vertical travel axis
-            const snapController = window.modlerComponents?.snapController;
+            const snapController = this.snapController;
             if (snapController) {
                 // Pass vertical axis (Y) as travel direction to filter for horizontal edges only
                 const verticalAxis = new THREE.Vector3(0, 1, 0);
@@ -192,7 +184,7 @@ class BoxCreationTool {
         delete this.creationObject.userData.hideFromSelection;
 
         // Update SceneController object data
-        const sceneController = window.modlerComponents?.sceneController;
+        const sceneController = this.sceneController;
         if (sceneController) {
             const objectData = sceneController.getObject(this.creationObject.userData.id);
             if (objectData) {
@@ -220,7 +212,7 @@ class BoxCreationTool {
         }
 
         // Register the creation as an undoable command AFTER finalization
-        const historyManager = window.modlerComponents?.historyManager;
+        const historyManager = this.historyManager;
         if (historyManager && createdObjectId) {
             // Create a simple command that just tracks the object ID for deletion on undo
             const command = new CreateObjectCommand(newGeometry, this.creationObject.material, {
@@ -293,7 +285,7 @@ class BoxCreationTool {
         // ARCHITECTURE: Create preview mesh once, update geometry on changes
         if (!this.previewBox) {
             // First-time creation - use selection color from settings
-            const configManager = window.modlerComponents?.configurationManager;
+            const configManager = this.configurationManager;
             const selectionColor = configManager?.get('visual.selection.color') || '#ff6600';
 
             const material = this.materialManager.createPreviewWireframeMaterial({
@@ -348,7 +340,7 @@ class BoxCreationTool {
 
     updateHeightFromMouse() {
         // Check for snap point first for precise height matching
-        const snapController = window.modlerComponents?.snapController;
+        const snapController = this.snapController;
         let targetHeight = null;
 
         if (snapController && snapController.getEnabled()) {
@@ -383,7 +375,7 @@ class BoxCreationTool {
 
     // Simple vertical-only mouse movement for height calculation
     calculateHeightFromVerticalMovement() {
-        const inputController = window.modlerComponents?.inputController;
+        const inputController = this.inputController;
         if (!inputController || this.heightDragStartY === undefined) {
             return this.currentHeight || 1.0; // Keep current height if no tracking
         }
@@ -409,7 +401,7 @@ class BoxCreationTool {
         this.currentHeight = 0.01;
 
         // Store initial mouse Y position for delta tracking
-        const inputController = window.modlerComponents?.inputController;
+        const inputController = this.inputController;
         if (inputController) {
             this.heightDragStartY = inputController.mouse.y;
         }
@@ -456,7 +448,7 @@ class BoxCreationTool {
 
     // Mathematical ground plane intersection (avoids grid snapping)
     getGroundPlaneIntersection() {
-        const inputController = window.modlerComponents?.inputController;
+        const inputController = this.inputController;
         if (!inputController) return null;
 
         // Create raycaster from current mouse position
@@ -498,7 +490,7 @@ class BoxCreationTool {
 
         // Remove invisible creation object if it exists
         if (this.creationObject) {
-            const sceneController = window.modlerComponents?.sceneController;
+            const sceneController = this.sceneController;
             if (sceneController) {
                 sceneController.removeObject(this.creationObject.userData.id);
             }
@@ -516,7 +508,7 @@ class BoxCreationTool {
 
     // Create invisible box object for properties panel
     createInvisibleBoxForProperties() {
-        const sceneController = window.modlerComponents?.sceneController;
+        const sceneController = this.sceneController;
         if (!sceneController) return;
 
         // Create minimal geometry
@@ -589,7 +581,7 @@ class BoxCreationTool {
 
         // Update SceneController object data directly (skip ObjectStateManager during creation)
         // During creation, we're replacing the entire geometry, not doing CAD vertex manipulation
-        const sceneController = window.modlerComponents?.sceneController;
+        const sceneController = this.sceneController;
         if (sceneController && this.creationObject.userData && this.creationObject.userData.id) {
             const objectData = sceneController.getObject(this.creationObject.userData.id);
             if (objectData) {
