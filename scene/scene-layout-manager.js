@@ -316,7 +316,7 @@ class SceneLayoutManager {
 
             // Resize container to match new layout bounds
             // CRITICAL: Don't resize if any child has fill mode - container size is fixed when children fill
-            if (layoutBounds && layoutBounds.size && !this._hasChildWithFill(children)) {
+            if (layoutBounds && layoutBounds.size && !this._hasChildWithFill(children) && !pushContext) {
                 const containerCrudManager = this.getContainerCrudManager();
                 if (containerCrudManager) {
                     // UNIFIED API: Layout recalculated (via updateLayout)

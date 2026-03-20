@@ -149,6 +149,8 @@ class FileManager extends EventTarget {
 
         // If there are active operations, mark as OPERATION_IN_PROGRESS instead of DIRTY
         if (this.activeOperations.size > 0) {
+            // Already in OPERATION_IN_PROGRESS — skip redundant emission
+            if (this.state === this.FILE_STATES.OPERATION_IN_PROGRESS) return;
             this.setState(this.FILE_STATES.OPERATION_IN_PROGRESS);
         } else {
             this.setState(this.FILE_STATES.DIRTY);

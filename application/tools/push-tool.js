@@ -402,25 +402,35 @@ class PushTool {
     }
 
     /**
-     * Update container layout for containers in layout mode
-     * Called during push to recalculate child positions/sizes based on new container size
+     * Update container layout during push drag
+     * Handles two cases:
+     * 1. Pushed object IS a container → recalculate its internal layout
+     * 2. Pushed object is a child INSIDE a container → resize the parent
      */
     updateContainerLayout() {
         const sceneController = window.modlerComponents?.sceneController;
         if (!sceneController || !this.pushedObject?.userData?.id) return;
 
         const objectData = sceneController.getObjectByMesh(this.pushedObject);
-        // Use centralized state machine
-        if (!objectData?.isContainer || !this.objectStateManager?.isLayoutMode(objectData.id)) return;
+        if (!objectData) return;
 
-        // Let layout engine handle all positioning and sizing
-        // It will recalculate based on new container size:
-        // - Fill objects resize on their fill axes
-        // - Fixed objects maintain size
-        // - All objects reposition based on alignment
-        // - Gaps adjust if no fill objects
-        const pushContext = { axis: this.pushAxis };
-        sceneController.updateLayout(objectData.id, pushContext);
+        // If pushed object IS a container in layout mode, recalculate its layout
+        if (objectData.isContainer && this.objectStateManager?.isLayoutMode(objectData.id)) {
+            const pushContext = { axis: this.pushAxis };
+            sceneController.updateLayout(objectData.id, pushContext);
+        }
+
+        // If pushed object is a child INSIDE a container, resize the parent
+        // Mirrors move tool's updateContainerDuringDrag() pattern
+        if (objectData.parentContainer) {
+            const containerCrudManager = window.modlerComponents?.containerCrudManager;
+            if (containerCrudManager) {
+                containerCrudManager.resizeContainer(objectData.parentContainer, {
+                    reason: 'child-changed',
+                    immediate: false
+                });
+            }
+        }
     }
 
     /**
@@ -525,12 +535,15 @@ class PushTool {
                     sceneController.updateHugContainerSize(objectData.id);
                 }
 
-                // If object is inside a layout container, trigger final layout update
-                // No pushContext needed - children are already correctly positioned
+                // If object is inside a container, trigger final parent update for ALL modes
+                // Unified API auto-detects mode (layout/hug/manual)
                 if (objectData?.parentContainer) {
-                    // Use centralized state machine
-                    if (this.objectStateManager?.isLayoutMode(objectData.parentContainer)) {
-                        sceneController.updateLayout(objectData.parentContainer);
+                    const containerCrudManager = window.modlerComponents?.containerCrudManager;
+                    if (containerCrudManager) {
+                        containerCrudManager.resizeContainer(objectData.parentContainer, {
+                            reason: 'child-changed',
+                            immediate: true
+                        });
                     }
                 }
             }
