@@ -90,11 +90,26 @@ class CommandRouter {
         // ═══════════════════════════════════════════════════════════
         this.handlers.set('update-property', this.handlePropertyUpdate.bind(this));
         this.handlers.set('property-update', this.handlePropertyUpdate.bind(this)); // Alias
-        this.handlers.set('update-dimension', this.handleDimensionUpdate.bind(this));
-        this.handlers.set('update-position', this.handlePositionUpdate.bind(this));
-        this.handlers.set('update-rotation', this.handleRotationUpdate.bind(this));
-        this.handlers.set('update-color', this.handleColorUpdate.bind(this));
-        this.handlers.set('update-opacity', this.handleOpacityUpdate.bind(this));
+
+        // Property shortcut handlers — all delegate to handlePropertyUpdate
+        const propertyShortcuts = {
+            'update-dimension': (d) => `dimensions.${d.axis}`,
+            'update-position': (d) => `position.${d.axis}`,
+            'update-rotation': (d) => `rotation.${d.axis}`,
+            'update-color': () => 'material.color',
+            'update-opacity': () => 'material.opacity',
+            'rename-object': () => 'name',
+        };
+        for (const [action, getProperty] of Object.entries(propertyShortcuts)) {
+            this.handlers.set(action, (data) => {
+                this.handlePropertyUpdate({
+                    objectId: data.objectId,
+                    property: getProperty(data),
+                    value: data.value ?? data.name,
+                    source: data.source
+                });
+            });
+        }
 
         // ═══════════════════════════════════════════════════════════
         // LAYOUT OPERATIONS
@@ -104,10 +119,6 @@ class CommandRouter {
         this.handlers.set('button-hover', this.handleButtonHover.bind(this)); // Consolidated hover handler
         this.handlers.set('fill-button-hover', this.handleButtonHover.bind(this)); // Legacy alias
         this.handlers.set('layout-button-hover', this.handleButtonHover.bind(this)); // Legacy alias
-        this.handlers.set('update-layout-property', this.handleLayoutPropertyUpdate.bind(this));
-        this.handlers.set('toggle-hug-mode', this.handleHugModeToggle.bind(this));
-        this.handlers.set('update-layout-direction', this.handleLayoutDirectionUpdate.bind(this));
-        this.handlers.set('update-layout-gap', this.handleLayoutGapUpdate.bind(this));
 
         // ═══════════════════════════════════════════════════════════
         // SELECTION OPERATIONS
@@ -120,13 +131,8 @@ class CommandRouter {
         // ═══════════════════════════════════════════════════════════
         // HIERARCHY OPERATIONS
         // ═══════════════════════════════════════════════════════════
-        this.handlers.set('move-to-container', this.handleMoveToContainer.bind(this));
-        this.handlers.set('object-move-to-container', this.handleMoveToContainer.bind(this)); // Alias
-        this.handlers.set('move-to-root', this.handleMoveToRoot.bind(this));
-        this.handlers.set('object-move-to-root', this.handleMoveToRoot.bind(this)); // Alias
         this.handlers.set('reorder-children', this.handleReorderChildren.bind(this));
         this.handlers.set('object-reorder', this.handleReorderChildren.bind(this)); // Alias
-        this.handlers.set('reverse-child-order', this.handleReverseChildOrder.bind(this));
 
         // ═══════════════════════════════════════════════════════════
         // OBJECT LIFECYCLE
@@ -134,14 +140,12 @@ class CommandRouter {
         this.handlers.set('delete-object', this.handleDeleteObject.bind(this));
         this.handlers.set('object-delete', this.handleDeleteObject.bind(this)); // Alias
         this.handlers.set('duplicate-object', this.handleDuplicateObject.bind(this));
-        this.handlers.set('rename-object', this.handleRenameObject.bind(this));
 
         // ═══════════════════════════════════════════════════════════
         // CONTAINER OPERATIONS
         // ═══════════════════════════════════════════════════════════
         this.handlers.set('create-container', this.handleCreateContainer.bind(this));
         this.handlers.set('create-layout-container', this.handleCreateContainer.bind(this)); // Alias
-        this.handlers.set('create-tiled-container', this.handleCreateTiledContainer.bind(this));
 
         // ═══════════════════════════════════════════════════════════
         // TOOL OPERATIONS
@@ -160,20 +164,21 @@ class CommandRouter {
         // ═══════════════════════════════════════════════════════════
         this.handlers.set('ui-panel-ready', this.handleUIPanelReady.bind(this));
         this.handlers.set('left-panel-ready', this.handleUIPanelReady.bind(this)); // Alias
-        this.handlers.set('request-file-manager-ready', this.handleRequestFileManagerReady.bind(this));
-        this.handlers.set('file-manager-request', this.handleFileManagerRequest.bind(this));
-
-        // Settings operations - separate handlers for each type
-        this.handlers.set('cad-wireframe-settings-changed', this.handleCadWireframeSettingsUpdate.bind(this));
-        this.handlers.set('get-cad-wireframe-settings', this.handleGetCadWireframeSettings.bind(this));
-        this.handlers.set('visual-settings-changed', this.handleVisualSettingsUpdate.bind(this));
-        this.handlers.set('get-visual-settings', this.handleGetVisualSettings.bind(this));
-        this.handlers.set('scene-settings-changed', this.handleSceneSettingsUpdate.bind(this));
-        this.handlers.set('get-scene-settings', this.handleGetSceneSettings.bind(this));
-        this.handlers.set('interface-settings-changed', this.handleInterfaceSettingsUpdate.bind(this));
-        this.handlers.set('get-interface-settings', this.handleGetInterfaceSettings.bind(this));
-        this.handlers.set('unit-settings-changed', this.handleUnitSettingsUpdate.bind(this));
-
+        // Settings operations — update and get handlers follow identical patterns
+        const settingsRoutes = {
+            'cad-wireframe': 'CadWireframe',
+            'visual': 'Visual',
+            'scene': 'Scene',
+            'interface': 'Interface',
+        };
+        for (const [prefix, methodSuffix] of Object.entries(settingsRoutes)) {
+            this.handlers.set(`${prefix}-settings-changed`, (data) => {
+                this.delegateSettingsUpdate(`handle${methodSuffix}SettingsUpdate`, data);
+            });
+            this.handlers.set(`get-${prefix}-settings`, (data) => {
+                this.delegateSettingsGet(`handleGet${methodSuffix}Settings`, data);
+            });
+        }
         console.log(`✅ CommandRouter: Registered ${this.handlers.size} action handlers`);
     }
 
@@ -237,61 +242,6 @@ class CommandRouter {
         });
     }
 
-    handleDimensionUpdate(data) {
-        const { objectId, axis, value, source } = data;
-
-        this.handlePropertyUpdate({
-            objectId,
-            property: `dimensions.${axis}`,
-            value,
-            source
-        });
-    }
-
-    handlePositionUpdate(data) {
-        const { objectId, axis, value, source } = data;
-
-        this.handlePropertyUpdate({
-            objectId,
-            property: `position.${axis}`,
-            value,
-            source
-        });
-    }
-
-    handleRotationUpdate(data) {
-        const { objectId, axis, value, source } = data;
-
-        this.handlePropertyUpdate({
-            objectId,
-            property: `rotation.${axis}`,
-            value,
-            source
-        });
-    }
-
-    handleColorUpdate(data) {
-        const { objectId, value, source } = data;
-
-        this.handlePropertyUpdate({
-            objectId,
-            property: 'material.color',
-            value,
-            source
-        });
-    }
-
-    handleOpacityUpdate(data) {
-        const { objectId, value, source } = data;
-
-        this.handlePropertyUpdate({
-            objectId,
-            property: 'material.opacity',
-            value,
-            source
-        });
-    }
-
     handleFillModeToggle(data) {
         const { objectId, axis } = data;
 
@@ -304,33 +254,10 @@ class CommandRouter {
     }
 
     /**
-     * Consolidated button hover handler
-     * Handles hover feedback for all button types (fill, layout, tile)
-     * @param {Object} data - {buttonType, objectId, axis, isHovering}
+     * Button hover handler - face highlighting for fill/layout/tile axis buttons
+     * @param {Object} data - {objectId, axis, isHovering}
      */
     handleButtonHover(data) {
-        // Extract buttonType if provided (new format), or infer from legacy message types
-        const { buttonType, objectId, axis, isHovering } = data;
-
-        // Delegate to unified axis button handler (buttonType is optional metadata)
-        this.handleAxisButtonHover(data);
-    }
-
-    // Legacy handlers for backward compatibility
-    handleFillButtonHover(data) {
-        this.handleAxisButtonHover(data);
-    }
-
-    handleLayoutButtonHover(data) {
-        this.handleAxisButtonHover(data);
-    }
-
-    /**
-     * Unified handler for all axis button face highlighting
-     * Used by layout buttons, fill buttons, and tile tool axis buttons
-     * @param {Object} data - {objectId, axis, isHovering, buttonType (optional)}
-     */
-    handleAxisButtonHover(data) {
         const { objectId, axis, isHovering } = data;
 
         if (!objectId || !axis) {
@@ -376,55 +303,17 @@ class CommandRouter {
                 true // camera-facing only
             );
 
-            // Show the face highlight
-            supportMeshes.faceHighlight.visible = true;
+            // Show face highlight via centralized visibility API
+            if (supportMeshFactory) {
+                supportMeshFactory.showFaceHighlight(selectedObject);
+            }
         } else {
             // Disable button highlight mode and hide face highlight
             visualEffects.setButtonHighlight(false);
-            supportMeshes.faceHighlight.visible = false;
+            if (supportMeshFactory) {
+                supportMeshFactory.hideFaceHighlight(selectedObject);
+            }
         }
-    }
-
-    handleLayoutPropertyUpdate(data) {
-        const { objectId, property, value } = data;
-
-        if (!this.propertyUpdateHandler) {
-            console.error('CommandRouter: PropertyUpdateHandler not available');
-            return;
-        }
-
-        this.propertyUpdateHandler.handleLayoutPropertyUpdate(objectId, property, value);
-    }
-
-    handleHugModeToggle(data) {
-        const { objectId } = data;
-
-        if (!this.sceneController) {
-            console.error('CommandRouter: SceneController not available');
-            return;
-        }
-
-        this.sceneController.toggleHugMode(objectId);
-    }
-
-    handleLayoutDirectionUpdate(data) {
-        const { objectId, direction } = data;
-
-        this.handlePropertyUpdate({
-            objectId,
-            property: 'autoLayout.direction',
-            value: direction
-        });
-    }
-
-    handleLayoutGapUpdate(data) {
-        const { objectId, gap } = data;
-
-        this.handlePropertyUpdate({
-            objectId,
-            property: 'autoLayout.gap',
-            value: gap
-        });
     }
 
     handleSelectObject(data) {
@@ -485,33 +374,6 @@ class CommandRouter {
                 this.selectionController.select(obj.mesh);
             }
         });
-    }
-
-    handleMoveToContainer(data) {
-        const { objectId, targetContainerId } = data;
-
-        if (!this.sceneController) {
-            console.error('CommandRouter: SceneController not available');
-            return;
-        }
-
-        if (!targetContainerId) {
-            console.error('CommandRouter: targetContainerId is required for move-to-container');
-            return;
-        }
-
-        this.sceneController.moveObjectToContainer(objectId, targetContainerId);
-    }
-
-    handleMoveToRoot(data) {
-        const { objectId } = data;
-
-        if (!this.sceneController) {
-            console.error('CommandRouter: SceneController not available');
-            return;
-        }
-
-        this.sceneController.moveObjectToRoot(objectId);
     }
 
     handleReorderChildren(data) {
@@ -613,17 +475,6 @@ class CommandRouter {
         this.updateChildrenOrder(parentId, currentOrder);
     }
 
-    handleReverseChildOrder(data) {
-        const { parentId } = data;
-
-        if (!this.sceneController) {
-            console.error('CommandRouter: SceneController not available');
-            return;
-        }
-
-        this.sceneController.reverseChildOrder(parentId);
-    }
-
     handleDeleteObject(data) {
         const { objectId, objectIds } = data;
 
@@ -653,16 +504,6 @@ class CommandRouter {
         this.historyManager.executeCommand(command);
     }
 
-    handleRenameObject(data) {
-        const { objectId, name } = data;
-
-        this.handlePropertyUpdate({
-            objectId,
-            property: 'name',
-            value: name
-        });
-    }
-
     handleCreateContainer(data) {
         const { objectId, direction, gap } = data;
 
@@ -673,21 +514,6 @@ class CommandRouter {
 
         this.containerCrudManager.createContainerFromObject(objectId, {
             direction: direction || 'x',
-            gap: gap || 10
-        });
-    }
-
-    handleCreateTiledContainer(data) {
-        const { objectId, axis, repeat, gap } = data;
-
-        if (!this.containerCrudManager) {
-            console.error('CommandRouter: ContainerCrudManager not available');
-            return;
-        }
-
-        this.containerCrudManager.createTiledContainer(objectId, {
-            axis: axis || 'x',
-            repeat: repeat || 3,
             gap: gap || 10
         });
     }
@@ -734,118 +560,19 @@ class CommandRouter {
         window.simpleCommunication.sendInitialHierarchySync(window.stateSerializer);
     }
 
-    handleRequestFileManagerReady(data) {
-        const fileManagerHandler = window.modlerComponents?.fileManagerHandler;
-        if (fileManagerHandler) {
-            fileManagerHandler.handleRequestFileManagerReady(data.sourceWindow);
-        }
-    }
-
-    handleFileManagerRequest(data) {
-        const fileManagerHandler = window.modlerComponents?.fileManagerHandler;
-        if (fileManagerHandler) {
-            fileManagerHandler.handleFileRequest(data.data || data, data.sourceWindow);
-        }
-    }
-
-    // CAD Wireframe Settings
-    handleCadWireframeSettingsUpdate(data) {
+    // Settings delegation helpers
+    delegateSettingsUpdate(method, data) {
         const settingsHandler = window.modlerComponents?.settingsHandler;
         if (!settingsHandler) return;
-
         const settings = data.data?.settings || data.settings;
-        if (!settings) {
-            console.error('CommandRouter: No settings in cad-wireframe update', data);
-            return;
-        }
-
-        settingsHandler.handleCadWireframeSettingsUpdate(settings);
+        if (!settings) return;
+        settingsHandler[method](settings);
     }
 
-    handleGetCadWireframeSettings(data) {
+    delegateSettingsGet(method, data) {
         const settingsHandler = window.modlerComponents?.settingsHandler;
         if (!settingsHandler) return;
-
-        settingsHandler.handleGetCadWireframeSettings(data.sourceWindow);
-    }
-
-    // Visual Settings
-    handleVisualSettingsUpdate(data) {
-        const settingsHandler = window.modlerComponents?.settingsHandler;
-        if (!settingsHandler) return;
-
-        const settings = data.data?.settings || data.settings;
-        if (!settings) {
-            console.error('CommandRouter: No settings in visual update', data);
-            return;
-        }
-
-        settingsHandler.handleVisualSettingsUpdate(settings);
-    }
-
-    handleGetVisualSettings(data) {
-        const settingsHandler = window.modlerComponents?.settingsHandler;
-        if (!settingsHandler) return;
-
-        settingsHandler.handleGetVisualSettings(data.sourceWindow);
-    }
-
-    // Scene Settings
-    handleSceneSettingsUpdate(data) {
-        const settingsHandler = window.modlerComponents?.settingsHandler;
-        if (!settingsHandler) return;
-
-        const settings = data.data?.settings || data.settings;
-        if (!settings) {
-            console.error('CommandRouter: No settings in scene update', data);
-            return;
-        }
-
-        settingsHandler.handleSceneSettingsUpdate(settings);
-    }
-
-    handleGetSceneSettings(data) {
-        const settingsHandler = window.modlerComponents?.settingsHandler;
-        if (!settingsHandler) return;
-
-        settingsHandler.handleGetSceneSettings(data.sourceWindow);
-    }
-
-    // Unit Settings
-    handleUnitSettingsUpdate(data) {
-        const settings = data.data?.settings || data.settings;
-        if (!settings || !settings['unit.current']) {
-            console.error('CommandRouter: No unit setting in unit update', data);
-            return;
-        }
-
-        const newUnit = settings['unit.current'];
-
-        // Update the unit converter
-        if (window.unitConverter) {
-            window.unitConverter.setUserUnit(newUnit);
-        }
-    }
-
-    // Interface Settings
-    handleInterfaceSettingsUpdate(data) {
-        const settingsHandler = window.modlerComponents?.settingsHandler;
-        if (!settingsHandler) return;
-
-        const settings = data.data?.settings || data.settings;
-        if (!settings) {
-            console.error('CommandRouter: No settings in interface update', data);
-            return;
-        }
-
-        settingsHandler.handleInterfaceSettingsUpdate(settings);
-    }
-
-    handleGetInterfaceSettings(data) {
-        const settingsHandler = window.modlerComponents?.settingsHandler;
-        if (!settingsHandler) return;
-
-        settingsHandler.handleGetInterfaceSettings(data.sourceWindow);
+        settingsHandler[method](data.sourceWindow);
     }
 
     /**

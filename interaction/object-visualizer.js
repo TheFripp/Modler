@@ -42,6 +42,13 @@ class ObjectVisualizer {
     }
 
     /**
+     * Get SupportMeshFactory (centralized visibility gateway)
+     */
+    getSupportMeshFactory() {
+        return window.modlerComponents?.supportMeshFactory;
+    }
+
+    /**
      * Get configuration manager (centralized access)
      */
     getConfigManager() {
@@ -158,8 +165,13 @@ class ObjectVisualizer {
             // CREATE ONCE ARCHITECTURE: Use pre-created support mesh for regular objects
             const supportMeshes = object.userData.supportMeshes;
             if (supportMeshes && supportMeshes.selectionWireframe) {
-                // Show the pre-created wireframe
-                supportMeshes.selectionWireframe.visible = true;
+                // Show via centralized visibility API
+                const factory = this.getSupportMeshFactory();
+                if (factory) {
+                    factory.showSelectionWireframe(object);
+                } else {
+                    supportMeshes.selectionWireframe.visible = true;
+                }
 
                 // Store reference for tracking
                 this.edgeHighlights.set(object, supportMeshes.selectionWireframe);
@@ -167,41 +179,8 @@ class ObjectVisualizer {
                 return;
             }
 
-            // FALLBACK: Create legacy wireframe if no support meshes exist (backward compatibility)
-            // Silently create legacy wireframe - this is expected for old scenes
-
-            // Force geometry bounds recalculation
-            if (object.geometry) {
-                object.geometry.computeBoundingBox();
-            }
-
-            // Create edge geometry using GeometryFactory for pooling
-            const edgeGeometry = this.geometryFactory.createEdgeGeometry(object.geometry);
-            const edgeMesh = this.createThickLineGroup(edgeGeometry, this.edgeMaterial.lineWidth || 2, this.edgeMaterial);
-
-            // Return geometry to pool for reuse
-            this.geometryFactory.returnGeometry(edgeGeometry, 'edge');
-
-            // Make non-raycastable
-            edgeMesh.raycast = () => {};
-
-            // Copy transform from original object
-            edgeMesh.position.copy(object.position);
-            edgeMesh.rotation.copy(object.rotation);
-            edgeMesh.scale.copy(object.scale);
-
-            // Add small Y-offset to prevent z-fighting with floor grid
-            edgeMesh.position.y += 0.001;
-
-            // Add to scene
-            if (object.parent) {
-                object.parent.add(edgeMesh);
-            }
-
-            // Store reference
-            this.edgeHighlights.set(object, edgeMesh);
-
-            // Support meshes are now children - no registration needed
+            // All objects should have support meshes from SupportMeshFactory at creation time
+            console.warn('ObjectVisualizer: Object missing support meshes, cannot create edge highlight:', object.name);
 
         } catch (error) {
             console.warn('Failed to create edge highlight for object:', object.name, error);
@@ -227,8 +206,13 @@ class ObjectVisualizer {
             // CREATE ONCE ARCHITECTURE: Check if this is a pre-created support mesh
             const supportMeshes = object.userData.supportMeshes;
             if (supportMeshes && supportMeshes.selectionWireframe === edgeMesh) {
-                // Hide the pre-created wireframe instead of destroying it
-                supportMeshes.selectionWireframe.visible = false;
+                // Hide via centralized visibility API
+                const factory = this.getSupportMeshFactory();
+                if (factory) {
+                    factory.hideSelectionWireframe(object);
+                } else {
+                    supportMeshes.selectionWireframe.visible = false;
+                }
 
                 // Remove from tracking
                 this.edgeHighlights.delete(object);
@@ -236,20 +220,8 @@ class ObjectVisualizer {
                 return;
             }
 
-            // FALLBACK: Clean up legacy wireframe (backward compatibility)
-            // Silently clean up legacy wireframe - this is expected for old scenes
-
-            // Support meshes are now children - no unregistration needed
-
-            // Remove from scene
-            if (edgeMesh.parent) {
-                edgeMesh.parent.remove(edgeMesh);
-            }
-
-            // Clean up geometry
-            this.cleanupHighlightMesh(edgeMesh);
-
-            // Remove from tracking
+            // Unexpected: edge mesh tracked but not matching support mesh
+            console.warn('ObjectVisualizer: Tracked edge mesh does not match support mesh, cleaning up:', object.name);
             this.edgeHighlights.delete(object);
         }
     }
@@ -298,8 +270,13 @@ class ObjectVisualizer {
         // Don't copy object's material color - it overwrites the configured color AND opacity
         // The pooled material from SupportMeshFactory already has the correct configured color
 
-        // Show the pre-created mesh
-        supportMeshes.faceHighlight.visible = true;
+        // Show via centralized visibility API
+        const factory = this.getSupportMeshFactory();
+        if (factory) {
+            factory.showFaceHighlight(object);
+        } else {
+            supportMeshes.faceHighlight.visible = true;
+        }
     }
 
     /**
@@ -309,10 +286,15 @@ class ObjectVisualizer {
     hideFaceHighlight(object, face) {
         if (!object || !face) return;
 
-        // ARCHITECTURE: Simply hide the pre-created support mesh
-        const supportMeshes = object.userData?.supportMeshes;
-        if (supportMeshes?.faceHighlight) {
-            supportMeshes.faceHighlight.visible = false;
+        // ARCHITECTURE: Simply hide via centralized visibility API
+        const factory = this.getSupportMeshFactory();
+        if (factory) {
+            factory.hideFaceHighlight(object);
+        } else {
+            const supportMeshes = object.userData?.supportMeshes;
+            if (supportMeshes?.faceHighlight) {
+                supportMeshes.faceHighlight.visible = false;
+            }
         }
     }
 
@@ -520,19 +502,11 @@ class ObjectVisualizer {
      * Destroy visualizer and clean up all resources
      */
     destroy() {
-        // Clean up all edge highlights
-        for (const [object, edgeMesh] of this.edgeHighlights) {
-            // Check if this is a pre-created support mesh
-            const supportMeshes = object.userData?.supportMeshes;
-            if (supportMeshes?.selectionWireframe === edgeMesh) {
-                // Support mesh - just hide it, cleanup handled by object removal
-                edgeMesh.visible = false;
-            } else {
-                // Legacy wireframe - clean up manually
-                if (edgeMesh.parent) {
-                    edgeMesh.parent.remove(edgeMesh);
-                }
-                this.cleanupHighlightMesh(edgeMesh);
+        // Hide all edge highlights via centralized API
+        const factory = this.getSupportMeshFactory();
+        for (const [object] of this.edgeHighlights) {
+            if (factory) {
+                factory.hideSelectionWireframe(object);
             }
         }
         this.edgeHighlights.clear();

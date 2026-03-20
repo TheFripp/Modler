@@ -109,10 +109,10 @@ class ContainerVisualizer extends ObjectVisualizer {
         // Use unified wireframe system for selection state
         this.setContainerSelectionState(object);
 
-        // Track wireframe for edge highlights map
-        const wireframeChild = object.children.find(child => child.userData.supportMeshType === 'wireframe');
-        if (wireframeChild) {
-            this.edgeHighlights.set(object, wireframeChild);
+        // Track wireframe for edge highlights map via supportMeshes (no children scanning)
+        const supportMeshes = object.userData?.supportMeshes;
+        if (supportMeshes?.cadWireframe) {
+            this.edgeHighlights.set(object, supportMeshes.cadWireframe);
         }
     }
 
@@ -137,14 +137,11 @@ class ContainerVisualizer extends ObjectVisualizer {
      * Hide container wireframe
      */
     hideContainerWireframe(object) {
-        // Find wireframe child directly (consistent with setContainerSelectionState)
-        const wireframeChild = object.children.find(child =>
-            child.userData.supportMeshType === 'wireframe');
-
-        if (wireframeChild) {
-            // Only hide if not in container context stack
-            if (!this.containerContextStack.includes(object)) {
-                wireframeChild.visible = false;
+        // Only hide if not in container context stack
+        if (!this.containerContextStack.includes(object)) {
+            const factory = this.getSupportMeshFactory();
+            if (factory) {
+                factory.hideContainerWireframe(object);
             }
         }
 
@@ -214,26 +211,14 @@ class ContainerVisualizer extends ObjectVisualizer {
     setContainerContextState(containerObject) {
         if (!containerObject) return;
 
-        // Find the existing wireframe child
-        const wireframeChild = containerObject.children.find(child =>
-            child.userData.supportMeshType === 'wireframe');
-
-        if (wireframeChild) {
-            // Make visible and set to faded opacity for context state
-            wireframeChild.visible = true;
-            if (wireframeChild.material) {
-                // Store original opacity if not already stored
-                if (wireframeChild.userData.originalOpacity === undefined) {
-                    wireframeChild.userData.originalOpacity = wireframeChild.material.opacity;
-                }
-
-                // Set faded opacity for context state
-                wireframeChild.material.opacity = wireframeChild.userData.originalOpacity * 0.3; // 30% of original
-                wireframeChild.material.transparent = true;
-
-                // Mark as in context state
-                wireframeChild.userData.wireframeState = 'context';
-            }
+        const factory = this.getSupportMeshFactory();
+        if (factory) {
+            // Get original opacity for 30% fade calculation
+            const supportMeshes = containerObject.userData?.supportMeshes;
+            const wireframe = supportMeshes?.cadWireframe;
+            const originalOpacity = wireframe?.userData?.originalOpacity ?? wireframe?.material?.opacity ?? 1;
+            factory.setContainerWireframeOpacity(containerObject, originalOpacity * 0.3);
+            if (wireframe) wireframe.userData.wireframeState = 'context';
         }
     }
 
@@ -243,23 +228,10 @@ class ContainerVisualizer extends ObjectVisualizer {
     setContainerSelectionState(containerObject) {
         if (!containerObject) return;
 
-        const wireframeChild = containerObject.children.find(child =>
-            child.userData.supportMeshType === 'wireframe');
-
-        if (wireframeChild) {
-            wireframeChild.visible = true;
-            if (wireframeChild.material) {
-                // Restore original opacity
-                if (wireframeChild.userData.originalOpacity !== undefined) {
-                    wireframeChild.material.opacity = wireframeChild.userData.originalOpacity;
-                } else {
-                    wireframeChild.material.opacity = this.containerMaterial.opacity;
-                }
-                wireframeChild.material.transparent = true;
-
-                // Mark as in selection state
-                wireframeChild.userData.wireframeState = 'selected';
-            }
+        const factory = this.getSupportMeshFactory();
+        if (factory) {
+            factory.restoreContainerWireframeOpacity(containerObject);
+            factory.showContainerWireframe(containerObject);
         }
     }
 

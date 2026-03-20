@@ -746,14 +746,11 @@ class DeleteObjectCommand extends BaseCommand {
             } else {
                 // Containers should already have their wireframe children from LayoutGeometry.createContainerGeometry()
                 // But we might need additional support meshes for interaction
-                const wireframeChild = mesh.children.find(child => child.userData.supportMeshType === 'wireframe');
-                if (wireframeChild) {
-                    console.log('DeleteObjectCommand: Container restored with wireframe child:', snapshot.name);
-
+                const hasWireframe = mesh.userData?.supportMeshes?.cadWireframe;
+                if (hasWireframe) {
                     // Ensure container has proper support meshes for interaction
                     supportMeshFactory.createObjectSupportMeshes(mesh);
                 } else {
-                    console.warn('DeleteObjectCommand: Container missing wireframe child after restoration:', snapshot.name);
                     // Create all support meshes including wireframes as fallback
                     supportMeshFactory.createObjectSupportMeshes(mesh);
                 }

@@ -62,97 +62,28 @@ class ContainerInteractionManager {
 
     /**
      * Create faded edge highlight for container context
+     * Delegates to SupportMeshFactory - uses pre-created support meshes (no duplicate creation)
      */
     createContainerEdgeHighlight(object) {
-        if (!object || !object.geometry) return;
+        if (!object) return;
 
-        try {
-            // Use centralized wireframe creation to prevent triangulation artifacts
-            const visualEffects = window.modlerComponents?.visualEffects;
-            let edgeMesh;
-
-            if (visualEffects) {
-                // Extract dimensions from container geometry for centralized wireframe creation
-                // Use geometry bounds instead of world bounds to avoid double positioning
-                const geometry = object.geometry;
-                geometry.computeBoundingBox();
-                const box = geometry.boundingBox;
-                const size = box.getSize(new THREE.Vector3());
-
-                // Get container color from configuration (same as regular container selection)
-                const configManager = window.modlerComponents?.configurationManager;
-                const containerConfig = configManager ?
-                    configManager.get('visual.containers') :
-                    { wireframeColor: '#00ff00' };
-
-                const containerColorHex = parseInt(containerConfig.wireframeColor.replace('#', ''), 16);
-
-                // Use centralized VisualEffects wireframe creation (prevents triangles)
-                edgeMesh = visualEffects.createPreviewBox(
-                    size.x, size.y, size.z,
-                    new THREE.Vector3(0, 0, 0), // Position will be set below using object's position
-                    containerColorHex, // Use configured container color
-                    0.25 // 25% opacity for container context as specified
-                );
-
-                // Override the material opacity to match containerEdgeMaterial
-                edgeMesh.material.opacity = 0.25;
-            } else {
-                // Fallback to manual creation if VisualEffects not available
-                console.warn('VisualEffects not available, using fallback container edge creation');
-
-                // Get container material from VisualizationManager
-                const visualizationManager = window.modlerComponents?.visualizationManager;
-                const containerMaterial = visualizationManager?.containerVisualizer?.containerMaterial ||
-                    new THREE.LineBasicMaterial({
-                        color: 0x00ff00,
-                        transparent: true,
-                        opacity: 0.25,
-                        renderOrder: 998
-                    });
-
-                // Use the same geometry-based approach for consistency
-                const edgeGeometry = new THREE.EdgesGeometry(object.geometry);
-                edgeMesh = new THREE.LineSegments(edgeGeometry, containerMaterial);
-            }
-
-            // Make edge highlights non-raycastable
-            edgeMesh.raycast = () => {};
-
-            // Position and orient the edge highlight to match the object
-            edgeMesh.position.copy(object.position);
-            edgeMesh.rotation.copy(object.rotation);
-            edgeMesh.scale.copy(object.scale);
-            edgeMesh.updateMatrix();
-
-            // Add to scene
-            const scene = window.modlerComponents?.sceneFoundation?.scene;
-            if (scene) {
-                scene.add(edgeMesh);
-                this.containerEdgeHighlight = edgeMesh;
-            }
-
-        } catch (error) {
-            console.error('Error creating container edge highlight:', error);
+        const supportMeshFactory = window.modlerComponents?.supportMeshFactory;
+        if (supportMeshFactory) {
+            supportMeshFactory.showContainerWireframe(object);
+            supportMeshFactory.setContainerWireframeOpacity(object, 0.25);
         }
+
+        // Track the object for cleanup (no separate mesh to track anymore)
+        this.containerEdgeHighlight = object;
     }
 
     /**
      * Update container edge highlight when container is resized
+     * No-op since we use pre-created support meshes that auto-update with geometry
      */
     updateContainerEdgeHighlight() {
-        if (this.containerContext && this.containerEdgeHighlight) {
-            // Remove old highlight
-            if (this.containerEdgeHighlight.parent) {
-                this.containerEdgeHighlight.parent.remove(this.containerEdgeHighlight);
-            }
-            if (this.containerEdgeHighlight.geometry) {
-                this.containerEdgeHighlight.geometry.dispose();
-            }
-
-            // Create new highlight with updated geometry
-            this.createContainerEdgeHighlight(this.containerContext);
-        }
+        // Support meshes are children of the main mesh - they inherit transforms automatically
+        // Geometry updates are handled by SupportMeshFactory.updateSupportMeshGeometries()
     }
 
     /**
@@ -281,14 +212,13 @@ class ContainerInteractionManager {
 
     /**
      * Clean up container edge highlights (called by NavigationController)
+     * Hides the pre-created support mesh wireframe
      */
     cleanupEdgeHighlights() {
         if (this.containerEdgeHighlight) {
-            if (this.containerEdgeHighlight.parent) {
-                this.containerEdgeHighlight.parent.remove(this.containerEdgeHighlight);
-            }
-            if (this.containerEdgeHighlight.geometry) {
-                this.containerEdgeHighlight.geometry.dispose();
+            const supportMeshFactory = window.modlerComponents?.supportMeshFactory;
+            if (supportMeshFactory) {
+                supportMeshFactory.hideContainerWireframe(this.containerEdgeHighlight);
             }
             this.containerEdgeHighlight = null;
         }

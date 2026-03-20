@@ -178,11 +178,11 @@ class BoxCreationTool {
         // Update position to center
         this.creationObject.position.set(centerX, centerY, centerZ);
 
-        // Make appropriate support meshes visible
-        if (this.creationObject.userData.supportMeshes) {
-            const supportMeshes = this.creationObject.userData.supportMeshes;
+        // Make appropriate support meshes visible via centralized visibility API
+        const supportMeshFactory = window.modlerComponents?.supportMeshFactory;
+        if (supportMeshFactory) {
             // CAD wireframe should be visible for regular objects
-            if (supportMeshes.cadWireframe) supportMeshes.cadWireframe.visible = true;
+            supportMeshFactory.showCadWireframe(this.creationObject);
             // Interactive mesh stays invisible (used only for raycasting)
             // Face highlight stays invisible (shown only on hover/selection)
             // Selection wireframe stays invisible (shown only on selection)

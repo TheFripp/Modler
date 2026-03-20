@@ -189,30 +189,16 @@ class BaseFaceToolBehavior {
                 }
 
                 // Show grey "disabled" face highlight if tool is not allowed on this object
-                // Swap material temporarily to show disabled state
-                if (isDisabledAction) {
+                // Use centralized disabled state management
+                {
                     const supportMeshFactory = window.modlerComponents?.supportMeshFactory;
-                    if (supportMeshFactory && supportMeshFactory.materials.faceHighlightDisabled) {
-                        // Only swap if not already using disabled material (prevent nested swaps)
-                        if (supportMeshes.faceHighlight.material !== supportMeshFactory.materials.faceHighlightDisabled) {
-                            // Store original material for restoration
-                            supportMeshes.faceHighlight.userData.originalMaterial = supportMeshes.faceHighlight.material;
-                            // Swap to grey disabled material
-                            supportMeshes.faceHighlight.material = supportMeshFactory.materials.faceHighlightDisabled;
-                        }
-                    }
-                } else {
-                    // Restore original material if previously swapped
-                    if (supportMeshes.faceHighlight.userData.originalMaterial) {
-                        // Validate that original material still exists before restoring
-                        if (supportMeshes.faceHighlight.userData.originalMaterial) {
-                            supportMeshes.faceHighlight.material = supportMeshes.faceHighlight.userData.originalMaterial;
-                        }
-                        delete supportMeshes.faceHighlight.userData.originalMaterial;
+                    if (supportMeshFactory) {
+                        supportMeshFactory.setFaceHighlightDisabled(targetObject, isDisabledAction);
+                        supportMeshFactory.showFaceHighlight(targetObject);
+                    } else {
+                        supportMeshes.faceHighlight.visible = true;
                     }
                 }
-
-                supportMeshes.faceHighlight.visible = true;
             } else {
                 // Fallback to Visual Effects for objects without support meshes
                 const materialManager = window.modlerComponents?.materialManager;
@@ -337,18 +323,17 @@ class BaseFaceToolBehavior {
      */
     clearHover() {
         if (this.hoveredObject) {
-            // Hide support mesh face highlight if it exists
+            // Hide support mesh face highlight via centralized API
+            const supportMeshFactory = window.modlerComponents?.supportMeshFactory;
             const supportMeshes = this.hoveredObject.userData.supportMeshes;
             if (supportMeshes?.faceHighlight) {
-                // Restore original material if it was swapped to disabled state
-                if (supportMeshes.faceHighlight.userData.originalMaterial) {
-                    // Validate that original material still exists before restoring
-                    if (supportMeshes.faceHighlight.userData.originalMaterial) {
-                        supportMeshes.faceHighlight.material = supportMeshes.faceHighlight.userData.originalMaterial;
-                    }
-                    delete supportMeshes.faceHighlight.userData.originalMaterial;
+                if (supportMeshFactory) {
+                    // Restore disabled material and hide
+                    supportMeshFactory.setFaceHighlightDisabled(this.hoveredObject, false);
+                    supportMeshFactory.hideFaceHighlight(this.hoveredObject);
+                } else {
+                    supportMeshes.faceHighlight.visible = false;
                 }
-                supportMeshes.faceHighlight.visible = false;
             } else {
                 // Fallback to Visual Effects for objects without support meshes
                 this.visualEffects.clearHighlight();
@@ -405,11 +390,15 @@ class BaseFaceToolBehavior {
             return false;
         }
 
-        // Container is pushable if it has layout enabled OR is in fixed sizing mode
+        // Container is pushable if it has layout enabled OR is in manual/fixed sizing mode
+        const mode = objectData.containerMode;
+        if (mode) {
+            // In hug mode, container is not pushable (auto-sizes to children)
+            return mode === 'hug';
+        }
+        // Legacy fallback
         const hasLayoutEnabled = objectData.autoLayout && objectData.autoLayout.enabled;
         const isFixedMode = objectData.sizingMode === 'fixed';
-
-        // In hug mode if neither layout nor fixed sizing is active
         return !hasLayoutEnabled && !isFixedMode;
     }
 

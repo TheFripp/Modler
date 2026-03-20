@@ -793,16 +793,101 @@ class SupportMeshFactory {
         this.positionFaceHighlightForHit(faceHighlightMesh, syntheticHit);
     }
 
+    // ====== VISIBILITY API ======
+    // Single gateway for all support mesh visibility changes.
+    // Tools, visualizers, and commands should call these methods instead of setting .visible directly.
+
     /**
      * Show/hide support mesh by type
      */
     setSupportMeshVisibility(mainMesh, meshType, visible) {
-        const supportMeshes = mainMesh.userData.supportMeshes;
+        const supportMeshes = mainMesh?.userData?.supportMeshes;
         if (!supportMeshes) return;
 
         const mesh = supportMeshes[meshType];
         if (mesh) {
             mesh.visible = visible;
+        }
+    }
+
+    // -- Selection Wireframe (regular objects) --
+    showSelectionWireframe(mainMesh) { this.setSupportMeshVisibility(mainMesh, 'selectionWireframe', true); }
+    hideSelectionWireframe(mainMesh) { this.setSupportMeshVisibility(mainMesh, 'selectionWireframe', false); }
+
+    // -- CAD Wireframe (always-visible thin edges) --
+    showCadWireframe(mainMesh) { this.setSupportMeshVisibility(mainMesh, 'cadWireframe', true); }
+    hideCadWireframe(mainMesh) { this.setSupportMeshVisibility(mainMesh, 'cadWireframe', false); }
+
+    // -- Container Wireframe (maps to cadWireframe key for containers) --
+    showContainerWireframe(mainMesh) { this.setSupportMeshVisibility(mainMesh, 'cadWireframe', true); }
+    hideContainerWireframe(mainMesh) { this.setSupportMeshVisibility(mainMesh, 'cadWireframe', false); }
+
+    // -- Face Highlight --
+    showFaceHighlight(mainMesh) { this.setSupportMeshVisibility(mainMesh, 'faceHighlight', true); }
+    hideFaceHighlight(mainMesh) { this.setSupportMeshVisibility(mainMesh, 'faceHighlight', false); }
+
+    // -- Interactive Mesh (container raycasting) --
+    showInteractiveMesh(mainMesh) { this.setSupportMeshVisibility(mainMesh, 'interactiveMesh', true); }
+    hideInteractiveMesh(mainMesh) { this.setSupportMeshVisibility(mainMesh, 'interactiveMesh', false); }
+
+    /**
+     * Set container wireframe opacity (for context state)
+     * Stores original opacity for restoration and ensures wireframe is visible
+     */
+    setContainerWireframeOpacity(mainMesh, opacity) {
+        const supportMeshes = mainMesh?.userData?.supportMeshes;
+        if (!supportMeshes?.cadWireframe?.material) return;
+
+        const wireframe = supportMeshes.cadWireframe;
+        // Store original opacity on first call for later restoration
+        if (wireframe.userData.originalOpacity === undefined) {
+            wireframe.userData.originalOpacity = wireframe.material.opacity;
+        }
+        wireframe.material.opacity = opacity;
+        wireframe.material.transparent = true;
+        wireframe.material.needsUpdate = true;
+        wireframe.visible = true;
+    }
+
+    /**
+     * Restore container wireframe to full opacity
+     */
+    restoreContainerWireframeOpacity(mainMesh) {
+        const supportMeshes = mainMesh?.userData?.supportMeshes;
+        if (!supportMeshes?.cadWireframe?.material) return;
+
+        const wireframe = supportMeshes.cadWireframe;
+        if (wireframe.userData.originalOpacity !== undefined) {
+            wireframe.material.opacity = wireframe.userData.originalOpacity;
+            wireframe.material.needsUpdate = true;
+        }
+        wireframe.userData.wireframeState = 'selected';
+    }
+
+    /**
+     * Swap face highlight to disabled (grey) or restore original material
+     * @param {THREE.Mesh} mainMesh - The main object mesh
+     * @param {boolean} disabled - True to show grey disabled state, false to restore
+     */
+    setFaceHighlightDisabled(mainMesh, disabled) {
+        const supportMeshes = mainMesh?.userData?.supportMeshes;
+        if (!supportMeshes?.faceHighlight) return;
+
+        const faceHighlight = supportMeshes.faceHighlight;
+
+        if (disabled) {
+            if (this.materials.faceHighlightDisabled &&
+                faceHighlight.material !== this.materials.faceHighlightDisabled) {
+                // Store original material for restoration
+                faceHighlight.userData.originalMaterial = faceHighlight.material;
+                faceHighlight.material = this.materials.faceHighlightDisabled;
+            }
+        } else {
+            // Restore original material if previously swapped
+            if (faceHighlight.userData.originalMaterial) {
+                faceHighlight.material = faceHighlight.userData.originalMaterial;
+                delete faceHighlight.userData.originalMaterial;
+            }
         }
     }
 

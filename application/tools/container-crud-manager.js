@@ -240,9 +240,9 @@ class ContainerCrudManager {
             return mode; // 'layout', 'hug', or 'manual'
         }
 
-        // Fallback: check fixed mode explicitly
-        if (container.sizingMode === 'fixed') {
-            return 'fixed';
+        // Fallback: check fixed mode explicitly (legacy)
+        if (container.containerMode === 'manual' || container.sizingMode === 'fixed') {
+            return 'manual';
         }
 
         // Default: hug mode (container wraps children)
@@ -372,7 +372,7 @@ class ContainerCrudManager {
             position: bounds.center.clone(),
             isContainer: true,
             selectable: true, // Container must be selectable for raycasting and face highlighting
-            sizingMode: 'hug',
+            containerMode: 'hug',
             originalBounds: bounds // Store original bounds for interactive mesh creation
             // autoLayout provided by schema factory in SceneLifecycleManager
         });
@@ -481,7 +481,7 @@ class ContainerCrudManager {
             position,
             isContainer: true,
             selectable: true, // Container must be selectable for raycasting and face highlighting
-            sizingMode: 'hug' // Default container sizing mode - automatically resizes to fit children
+            containerMode: 'hug' // Default container sizing mode - automatically resizes to fit children
             // autoLayout provided by schema factory in SceneLifecycleManager
         });
 
@@ -508,7 +508,9 @@ class ContainerCrudManager {
         } else {
             // Enable container
             objectData.isContainer = true;
-            objectData.sizingMode = 'hug'; // Default container sizing mode
+            objectData.containerMode = 'hug';
+            objectData.sizingMode = 'hug'; // Legacy compat
+            objectData.isHug = true; // Legacy compat
             // Object converted to container
             return true;
         }
@@ -734,11 +736,14 @@ class ContainerCrudManager {
         const sceneController = validation.sceneController;
 
         // Check sizing mode constraints
-        if (containerData.sizingMode === 'fixed' && !newContainerSize) {
+        const mode = containerData.containerMode || containerData.sizingMode;
+        if (mode === 'fixed' && !newContainerSize) {
             return false;
         }
-        if (!containerData.sizingMode) {
-            containerData.sizingMode = 'hug';
+        if (!containerData.containerMode) {
+            containerData.containerMode = 'hug';
+            containerData.sizingMode = 'hug'; // Legacy compat
+            containerData.isHug = true; // Legacy compat
         }
 
         // Apply throttling
@@ -958,9 +963,11 @@ class ContainerCrudManager {
 
     /**
      * Show container wireframe
+     * Delegates to SupportMeshFactory as single authority for support mesh visibility
      */
-    showContainer(containerId) {
+    showContainer(containerId, restoreOpacity = false) {
         const sceneController = window.modlerComponents?.sceneController;
+        const supportMeshFactory = window.modlerComponents?.supportMeshFactory;
         if (!sceneController) return false;
 
         const objectData = sceneController.getObject(containerId);
@@ -968,40 +975,23 @@ class ContainerCrudManager {
             return false;
         }
 
-        // NEW ARCHITECTURE: Show wireframe child instead of main mesh
-        const mainMesh = objectData.mesh;
-        const wireframeChild = mainMesh.children.find(child => child.userData.supportMeshType === 'wireframe');
-
-        if (wireframeChild) {
-            wireframeChild.visible = true;
-
-            // Restore original opacity if it was hidden
-            if (wireframeChild.material && wireframeChild.userData.isHidden) {
-                const originalOpacity = wireframeChild.userData.originalOpacity;
-                if (originalOpacity !== undefined) {
-                    // Use MaterialGuard for safe opacity modification
-                    const guard = window.MaterialGuard;
-                    if (guard) {
-                        guard.setOpacity(wireframeChild.material, originalOpacity, 'ContainerCrudManager');
-                    } else {
-                        // Fallback if MaterialGuard not available
-                        wireframeChild.material.opacity = originalOpacity;
-                    }
-                }
-                wireframeChild.userData.isHidden = false;
+        if (supportMeshFactory) {
+            if (restoreOpacity) {
+                supportMeshFactory.restoreContainerWireframeOpacity(objectData.mesh);
             }
-
-            return true;
+            supportMeshFactory.showContainerWireframe(objectData.mesh);
         }
 
-        return false;
+        return true;
     }
 
     /**
      * Hide container wireframe (but keep contents visible)
+     * Delegates to SupportMeshFactory as single authority for support mesh visibility
      */
     hideContainer(containerId) {
         const sceneController = window.modlerComponents?.sceneController;
+        const supportMeshFactory = window.modlerComponents?.supportMeshFactory;
         if (!sceneController) return false;
 
         const objectData = sceneController.getObject(containerId);
@@ -1009,23 +999,11 @@ class ContainerCrudManager {
             return false;
         }
 
-        // NEW ARCHITECTURE: Hide wireframe child (main mesh stays invisible, children stay visible)
-        const mainMesh = objectData.mesh;
-        const wireframeChild = mainMesh.children.find(child => child.userData.supportMeshType === 'wireframe');
-
-        if (wireframeChild) {
-            // Store original opacity for restoration
-            if (wireframeChild.material && !wireframeChild.userData.isHidden) {
-                wireframeChild.userData.originalOpacity = wireframeChild.material.opacity;
-            }
-
-            // Hide wireframe child completely - child objects remain visible as they're separate meshes
-            wireframeChild.visible = false;
-            wireframeChild.userData.isHidden = true; // Mark as logically hidden
-            return true;
+        if (supportMeshFactory) {
+            supportMeshFactory.hideContainerWireframe(objectData.mesh);
         }
 
-        return false;
+        return true;
     }
 
     /**

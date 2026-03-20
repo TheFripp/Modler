@@ -125,8 +125,10 @@ class VisualEffects {
             const supportMeshFactory = window.modlerComponents?.supportMeshFactory;
             if (supportMeshFactory) {
                 supportMeshFactory.positionFaceHighlightForHit(supportMeshes.faceHighlight, hit);
+                supportMeshFactory.showFaceHighlight(targetObject);
+            } else {
+                supportMeshes.faceHighlight.visible = true;
             }
-            supportMeshes.faceHighlight.visible = true;
             this.highlightMesh = supportMeshes.faceHighlight;
         } else {
             // ARCHITECTURE: Support mesh system required - no legacy fallback
@@ -157,7 +159,12 @@ class VisualEffects {
                 const targetObject = this.getContainerTarget(this.currentHighlight.object);
                 const supportMeshes = targetObject?.userData?.supportMeshes;
                 if (supportMeshes?.faceHighlight === this.highlightMesh) {
-                    supportMeshes.faceHighlight.visible = false;
+                    const supportMeshFactory = window.modlerComponents?.supportMeshFactory;
+                    if (supportMeshFactory) {
+                        supportMeshFactory.hideFaceHighlight(targetObject);
+                    } else {
+                        supportMeshes.faceHighlight.visible = false;
+                    }
                     isPreCreatedMesh = true;
                 }
             }
@@ -657,14 +664,16 @@ class VisualEffects {
         // Return box geometry to pool since we only need edges
         this.geometryFactory.returnGeometry(boxGeometry, 'box');
 
-        // Create line material for edges
-        const material = new THREE.LineBasicMaterial({
-            color: color,
-            opacity: opacity,
-            transparent: true,
-            depthTest: true,
-            depthWrite: false
-        });
+        // Create line material for edges via MaterialManager
+        const material = this.materialManager.createPaddingVisualizationMaterial
+            ? this.materialManager.createPaddingVisualizationMaterial({ color, opacity })
+            : new THREE.LineBasicMaterial({
+                color: color,
+                opacity: opacity,
+                transparent: true,
+                depthTest: true,
+                depthWrite: false
+            });
 
         // Create LineSegments (wireframe box with only face edges)
         const box = new THREE.LineSegments(edgesGeometry, material);
