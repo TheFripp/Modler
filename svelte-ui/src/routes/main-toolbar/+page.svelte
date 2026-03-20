@@ -2,8 +2,8 @@
 	import { onMount } from 'svelte';
 	import { initializeBridge } from '$lib/bridge/threejs-bridge';
 	import { toolState } from '$lib/stores/modler';
-	import { activateToolInScene, toggleSnapInScene } from '$lib/bridge/threejs-bridge';
-	import { MousePointer, Move, FoldHorizontal, Box, Magnet, SquareStack } from 'lucide-svelte';
+	import { activateToolInScene, toggleSnapInScene, wrapSelectionInContainer } from '$lib/bridge/threejs-bridge';
+	import { MousePointer, Move, FoldHorizontal, Box, Magnet, SquareStack, Group } from 'lucide-svelte';
 
 	// Main tool configuration with Lucide icons
 	const tools = [
@@ -62,6 +62,18 @@
 				<svelte:component this={tool.icon} size={22} />
 			</button>
 		{/each}
+
+		<!-- Separator -->
+		<div class="separator"></div>
+
+		<!-- Container Action -->
+		<button
+			class="toolbar-btn"
+			on:click={() => wrapSelectionInContainer()}
+			title="Wrap in Container (⌘F)"
+		>
+			<Group size={22} />
+		</button>
 
 		<!-- Separator -->
 		<div class="separator"></div>

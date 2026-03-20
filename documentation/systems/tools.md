@@ -22,6 +22,14 @@ All mouse events flow through InputController, which coordinates between camera 
 ### Tool Event Pattern
 Tools receive pre-coordinated events from InputController rather than direct DOM events. This prevents race conditions and ensures predictable behavior.
 
+## Toolbar Layout
+
+`[Select Q] [Move W] [Push E] [Box R] [Tile T] | [Container ⌘F] | [Snap]`
+
+- **Tool buttons** (Select through Tile): Mode toggles — clicking activates the tool
+- **Container button**: Action — wraps current selection in a container (same as ⌘F)
+- **Snap toggle**: Toggles snapping on/off
+
 ## Current Tools
 
 ### SelectTool
@@ -79,9 +87,9 @@ Tools receive pre-coordinated events from InputController rather than direct DOM
 
 ### ToolController
 **File**: `application/tool-controller.js`
-- **Keyboard shortcuts** (1=Select, 2=Move, etc.)
+- **Keyboard shortcuts** (Q=Select, W=Move, E=Push, R=Box, T=Tile)
 - **Tool state management**
-- **Container creation** via Cmd+F → ContainerManager
+- **Container creation** via Cmd+F keyboard shortcut or toolbar Container button → `createLayoutContainer()`
 
 ### Tool Integration
 - **Event delegation** from InputController
