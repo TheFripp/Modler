@@ -8,6 +8,16 @@
 	export let objectId: string;
 	export let currentUnit: string = 'm';
 
+	// Container mode state (manual / layout / hug)
+	$: currentMode = displayObject.containerMode ||
+		(displayObject.autoLayout?.enabled ? 'layout' : (displayObject.isHug ? 'hug' : 'manual'));
+
+	function setContainerMode(mode: string) {
+		// Optimistic update
+		displayObject = { ...displayObject, containerMode: mode };
+		updateThreeJSProperty(objectId, 'containerMode', mode, 'property-panel');
+	}
+
 	// Reactive layout button states
 	$: isLayoutEnabled = displayObject.autoLayout?.enabled ?? false;
 	$: layoutDirection = displayObject.autoLayout?.direction ?? '';
@@ -177,6 +187,27 @@
 
 <PropertyGroup title="Layout" align="right">
 	<div class="space-y-4">
+		<!-- Container Mode -->
+		<div class="space-y-2">
+			<div class="flex items-center gap-2 mb-2">
+				<div class="flex-1 border-t border-[#2E2E2E]/50"></div>
+				<label class="modler-property-label text-right whitespace-nowrap">Mode</label>
+			</div>
+			<div class="grid grid-cols-3 gap-2">
+				{#each ['manual', 'layout', 'hug'] as mode}
+					<button
+						type="button"
+						onclick={() => setContainerMode(mode)}
+						class="px-3 py-2 text-xs font-medium border rounded-md transition-all capitalize
+							{currentMode === mode ? 'border-[#404040] shadow-sm text-blue-500' : 'border-[#2E2E2E] hover:border-[#404040] text-muted-foreground'}"
+						title="{mode === 'manual' ? 'Manual positioning' : mode === 'layout' ? 'Auto-layout children' : 'Auto-size to children'}"
+					>
+						{mode}
+					</button>
+				{/each}
+			</div>
+		</div>
+
 		<!-- Direction -->
 		<div class="space-y-2">
 			<div class="flex items-center gap-2 mb-2">

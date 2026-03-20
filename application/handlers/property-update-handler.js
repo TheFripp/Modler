@@ -76,8 +76,14 @@ class PropertyUpdateHandler {
 
         // Special handling for container layout properties
         // These need custom logic beyond simple state updates
-        if (property.startsWith('autoLayout.') || property === 'layoutMode') {
+        // Also catch property === 'autoLayout' (whole-object update from LayoutSection)
+        if (property === 'autoLayout' || property.startsWith('autoLayout.') || property === 'layoutMode') {
             return this.handleContainerLayoutPropertyChange(objectId, property, value);
+        }
+
+        // Container mode changes need buildContainerModeUpdate to sync legacy flags
+        if (property === 'containerMode' || property === 'sizingMode') {
+            return this.handleContainerSizingChange(objectId, property, value);
         }
 
         // Generic property update: route to ObjectStateManager
@@ -194,6 +200,31 @@ class PropertyUpdateHandler {
                 }, { source: 'property-panel', immediate: true });
 
                 // No layout update needed - just preserve current positions
+                return true;
+            }
+
+            // Handle full autoLayout object replacement (sent by LayoutSection via updateThreeJSProperty)
+            if (property === 'autoLayout' && typeof newValue === 'object') {
+                const fullAutoLayout = { ...updatedAutoLayout, ...newValue };
+                const mode = fullAutoLayout.enabled ? 'layout' : 'manual';
+
+                this.objectStateManager.updateObject(containerId, {
+                    autoLayout: fullAutoLayout,
+                    ...ObjectStateManager.buildContainerModeUpdate(mode)
+                }, { source: 'property-panel', immediate: true });
+
+                // Trigger layout update if enabled with valid direction
+                if (fullAutoLayout.enabled && fullAutoLayout.direction && fullAutoLayout.direction !== '') {
+                    const layoutResult = sceneController.updateLayout(containerId);
+                    if (layoutResult?.success && layoutResult.layoutBounds) {
+                        this.containerCrudManager.resizeContainer(objectData, {
+                            reason: 'layout-updated',
+                            layoutBounds: layoutResult.layoutBounds,
+                            immediate: true
+                        });
+                    }
+                    this.containerCrudManager.showContainer(containerId, true);
+                }
                 return true;
             }
 

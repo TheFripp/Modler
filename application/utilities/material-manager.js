@@ -289,7 +289,7 @@ class MaterialManager {
             opacity: options.opacity || configManager?.get('visual.selection.opacity') || 0.8,
             renderOrder: options.renderOrder || configManager?.get('visual.selection.renderOrder') || 999,
             transparent: true,
-            depthTest: false,  // Disable depth test - always render on top
+            depthTest: true,   // Hide back-face edges, only show camera-visible faces
             depthWrite: false, // Don't write to depth buffer
             clippingPlanes: [],
             ...options
@@ -317,9 +317,14 @@ class MaterialManager {
             transparent: config.transparent,
             opacity: config.opacity,
             linewidth: config.lineWidth,
+            depthTest: true,
+            depthWrite: false,
             clippingPlanes: [] // Disable clipping - always render wireframes
         });
 
+        // LessEqualDepth prevents z-fighting: wireframe edges are coplanar with geometry,
+        // so "equal" depth must pass. High renderOrder (9999) ensures wireframe renders after geometry.
+        material.depthFunc = THREE.LessEqualDepth;
         material.lineWidth = config.lineWidth;
         material.renderOrder = config.renderOrder;
 
@@ -341,7 +346,7 @@ class MaterialManager {
             opacity: options.opacity || configManager?.get('visual.containers.opacity') || 0.8,
             renderOrder: options.renderOrder || configManager?.get('visual.containers.renderOrder') || 998,
             transparent: true,
-            depthTest: false,  // Render on top of geometry
+            depthTest: true,   // Hide back-face edges, only show camera-visible faces
             depthWrite: false, // Don't write to depth buffer
             clippingPlanes: [],
             ...options
@@ -369,9 +374,13 @@ class MaterialManager {
             transparent: config.transparent,
             opacity: config.opacity,
             linewidth: config.lineWidth,
+            depthTest: true,
+            depthWrite: false,
             clippingPlanes: [] // Disable clipping - always render wireframes
         });
 
+        // LessEqualDepth prevents z-fighting with coplanar geometry
+        material.depthFunc = THREE.LessEqualDepth;
         material.lineWidth = config.lineWidth;
         material.renderOrder = config.renderOrder;
 

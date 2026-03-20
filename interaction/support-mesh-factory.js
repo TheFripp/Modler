@@ -195,8 +195,8 @@ class SupportMeshFactory {
         wireframe.raycast = () => {}; // Non-raycastable
         wireframe.userData.supportMeshType = 'selectionWireframe';
 
-        // Material already configured by MaterialManager with depthTest: false
-        // This ensures selection wireframe always renders on top without z-fighting
+        // Material configured by MaterialManager with depthTest: true + LessEqualDepth
+        // Shows wireframe on camera-visible faces only, hides back-face edges
 
         // Ensure proper rendering settings
         wireframe.matrixAutoUpdate = true;
@@ -284,8 +284,8 @@ class SupportMeshFactory {
         wireframe.raycast = () => {}; // Non-raycastable
         wireframe.userData.supportMeshType = 'wireframe'; // ContainerVisualizer looks for 'wireframe'
 
-        // Material already configured by MaterialManager with depthTest: false
-        // This ensures container wireframe always renders on top without z-fighting
+        // Material configured by MaterialManager with depthTest: true + LessEqualDepth
+        // Shows wireframe on camera-visible faces only, hides back-face edges
 
         // Ensure proper rendering settings
         wireframe.matrixAutoUpdate = true;

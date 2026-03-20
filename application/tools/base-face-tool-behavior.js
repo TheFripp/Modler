@@ -6,11 +6,18 @@ import * as THREE from 'three';
  * Centralizes face detection, hover state management, and container interactive mesh handling
  * to eliminate code duplication and ensure consistent behavior.
  *
- * **Shared Functionality:**
- * - Face detection and highlighting on selected objects only
- * - Container interactive mesh handling with parent resolution
- * - Hover state management with visual feedback
- * - Common face-based event patterns
+ * Face Highlight Rules (per-tool via this.rules):
+ * | Rule                    | Move  | Push  | Default |
+ * |-------------------------|-------|-------|---------|
+ * | blockHugModeContainers  | false | true  | false   |
+ * | showDisabledState       | false | true  | false   |
+ * | allowLayoutChildren     | false | false | false   |
+ *
+ * Common rules (always applied):
+ * - Only selected objects get face highlights
+ * - Only camera-facing faces get highlights
+ * - Container interactive mesh redirects to parent container
+ * - Children in selected containers redirect to container face
  *
  * @class BaseFaceToolBehavior
  */
@@ -22,10 +29,18 @@ class BaseFaceToolBehavior {
      * @param {Object} visualEffects - Manages face highlighting and visual feedback
      * @param {string} toolType - Type of tool using this behavior ('move', 'push', etc.)
      */
-    constructor(selectionController, visualEffects, toolType = 'unknown') {
+    constructor(selectionController, visualEffects, toolType = 'unknown', options = {}) {
         this.selectionController = selectionController;
         this.visualEffects = visualEffects;
         this.toolType = toolType;
+
+        // Declarative highlight rules (configured per tool, see table in class doc)
+        this.rules = {
+            blockHugModeContainers: toolType === 'push',
+            showDisabledState: toolType === 'push',
+            allowLayoutChildren: false,
+            ...options.rules
+        };
 
         // Shared hover state
         this.hoveredObject = null;
@@ -152,9 +167,8 @@ class BaseFaceToolBehavior {
                 return false;
             }
 
-            // CONTAINER MODE CHECK: Only show face highlights for containers in layout mode, not hug mode
-            // This check only applies to push tool - move tool should work in hug mode
-            const isDisabledAction = this.toolType === 'push' && this.isContainerInHugMode(targetObject);
+            // CONTAINER MODE CHECK: Use declarative rules to determine if action is blocked
+            const isDisabledAction = this.rules.blockHugModeContainers && this.isContainerInHugMode(targetObject);
 
             // Store the actual target object for interaction
             this.hoveredObject = targetObject;
@@ -235,9 +249,10 @@ class BaseFaceToolBehavior {
         // InputController raycast already filters out children when parent container is selected
         const isSelectedObject = targetObject && this.selectionController.isSelected(targetObject);
         const hasHighlightedFace = this.hoveredObject === targetObject;
-        const isNotHugMode = !this.isContainerInHugMode(targetObject);
+        // Only block for tools that declare blockHugModeContainers (e.g. push)
+        const isNotBlocked = !this.rules.blockHugModeContainers || !this.isContainerInHugMode(targetObject);
 
-        return isSelectedObject && hasHighlightedFace && isNotHugMode;
+        return isSelectedObject && hasHighlightedFace && isNotBlocked;
     }
 
     /**
@@ -337,16 +352,18 @@ class BaseFaceToolBehavior {
             return false;
         }
 
-        // Container is pushable if it has layout enabled OR is in manual/fixed sizing mode
+        // If autoLayout is enabled, container is in layout mode (not hug)
+        // This catches the case where containerMode is stale
+        if (objectData.autoLayout?.enabled) return false;
+
         const mode = objectData.containerMode;
         if (mode) {
-            // In hug mode, container is not pushable (auto-sizes to children)
             return mode === 'hug';
         }
-        // Legacy fallback
-        const hasLayoutEnabled = objectData.autoLayout && objectData.autoLayout.enabled;
-        const isFixedMode = objectData.sizingMode === 'fixed';
-        return !hasLayoutEnabled && !isFixedMode;
+
+        // Legacy fallback — check for explicit hug indicators, default to NOT hug
+        if (objectData.isHug === true) return true;
+        return false;
     }
 
     /**
