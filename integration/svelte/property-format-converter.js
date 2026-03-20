@@ -57,6 +57,7 @@ class PropertyFormatConverter {
             'name': 'string',
             'type': 'string',
             'autoLayout.direction': 'string',
+            'containerMode': 'string',
             'layoutMode': 'string',
 
             // Object properties (pass through as-is)

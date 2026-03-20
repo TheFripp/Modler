@@ -1,3 +1,4 @@
+import * as THREE from 'three';
 // Modler V2 - Foundation Layer
 // Basic Three.js Setup - Direct implementation, no abstractions
 

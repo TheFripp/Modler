@@ -1,3 +1,4 @@
+import * as THREE from 'three';
 /**
  * SceneDeserializer - Complete Scene Import System
  *
@@ -465,8 +466,13 @@ class SceneDeserializer {
                 },
                 // Pass autoLayout in options so it's stored in objectData
                 autoLayout: objData.autoLayout,
-                // CRITICAL: Ensure isHug and autoLayout.enabled are mutually exclusive
-                // Priority: autoLayout.enabled takes precedence over isHug
+                // Migrate to containerMode: use saved value, or derive from old flags
+                containerMode: objData.containerMode || (
+                    objData.autoLayout?.enabled ? 'layout' :
+                    objData.isHug ? 'hug' :
+                    (objData.layoutMode ? 'layout' : 'hug')
+                ),
+                // LEGACY: kept for backward compat
                 isHug: objData.autoLayout?.enabled ? false : (objData.isHug || false),
                 layoutMode: objData.layoutMode,
                 childrenOrder: objData.childrenOrder,
@@ -475,8 +481,14 @@ class SceneDeserializer {
 
             // Restore container properties
             if (objData.isContainer && createdObject) {
-                // CRITICAL: Ensure isHug and autoLayout.enabled remain mutually exclusive
-                createdObject.isHug = objData.autoLayout?.enabled ? false : (objData.isHug || false);
+                // Set containerMode (canonical) and legacy flags
+                createdObject.containerMode = createdObject.containerMode || (
+                    objData.autoLayout?.enabled ? 'layout' :
+                    objData.isHug ? 'hug' :
+                    (objData.layoutMode ? 'layout' : 'hug')
+                );
+                createdObject.isHug = createdObject.containerMode === 'hug';
+                createdObject.sizingMode = createdObject.containerMode;
                 createdObject.layoutMode = objData.layoutMode || null;
 
                 // SCHEMA-FIRST: Use centralized default factory

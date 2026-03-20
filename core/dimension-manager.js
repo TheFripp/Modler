@@ -1,3 +1,4 @@
+import * as THREE from 'three';
 /**
  * DimensionManager - Single Source of Truth for Object Dimensions
  *

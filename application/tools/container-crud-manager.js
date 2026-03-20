@@ -1,3 +1,4 @@
+import * as THREE from 'three';
 // Modler V2 - Container CRUD Operations
 // Container creation, configuration, and lifecycle management (Create, Read, Update, Delete)
 // 38 methods covering: creation, nesting, resizing, layout integration, visibility, cleanup

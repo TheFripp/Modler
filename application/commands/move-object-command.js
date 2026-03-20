@@ -1,3 +1,4 @@
+const logger = window.logger;
 /**
  * Move Object Command
  * Undoable command for moving objects
@@ -137,3 +138,5 @@ class MoveObjectCommand extends BaseCommand {
         return `Move object (Δx: ${dx}, Δy: ${dy}, Δz: ${dz})`;
     }
 }
+
+window.MoveObjectCommand = MoveObjectCommand;

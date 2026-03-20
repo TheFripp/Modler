@@ -1,3 +1,4 @@
+import * as THREE from 'three';
 // Modler V2 - Support Mesh Factory
 // Creates all support meshes (selection wireframe, face highlights, interaction mesh) as children
 // Implements "create once, show/hide only" architecture

@@ -1,3 +1,4 @@
+import * as THREE from 'three';
 // Modler V2 - Scene Layer
 // Scene Controller - Object lifecycle management without complexity
 
@@ -174,9 +175,9 @@ class SceneController {
                     return;
                 }
 
-                // Check if parent container has isHug enabled
+                // Check if parent container has hug mode enabled
                 const parentData = this.getObject(objectData.parentContainer);
-                if (!parentData || !parentData.isContainer || !parentData.isHug) {
+                if (!parentData || !parentData.isContainer || !(parentData.containerMode === 'hug' || parentData.isHug)) {
                     return;
                 }
 

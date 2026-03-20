@@ -1,3 +1,4 @@
+import * as THREE from 'three';
 /**
  * Transformation Manager
  * Centralized transformation operations following GeometryFactory pattern

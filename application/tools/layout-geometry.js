@@ -1,3 +1,4 @@
+import * as THREE from 'three';
 // Modler V2 - Layout Geometry Utilities
 // Geometry and bounds calculation utilities for layout containers
 // Target: ~100 lines - focused geometry utilities

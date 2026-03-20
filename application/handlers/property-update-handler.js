@@ -1,3 +1,4 @@
+const logger = window.logger;
 // Property Update Handler - Property-panel driven layout system
 // Implements the corrected architecture from container-architecture-master.md
 
@@ -189,7 +190,7 @@ class PropertyUpdateHandler {
                 // Persist via ObjectStateManager
                 this.objectStateManager.updateObject(containerId, {
                     autoLayout: updatedAutoLayout,
-                    isHug: true
+                    ...ObjectStateManager.buildContainerModeUpdate('hug')
                 }, { source: 'property-panel', immediate: true });
 
                 // No layout update needed - just preserve current positions
@@ -226,7 +227,7 @@ class PropertyUpdateHandler {
             // CRITICAL FIX: Persist via ObjectStateManager instead of direct mutation
             this.objectStateManager.updateObject(containerId, {
                 autoLayout: updatedAutoLayout,
-                isHug: false
+                ...ObjectStateManager.buildContainerModeUpdate('layout')
             }, { source: 'property-panel', immediate: true });
 
             // Only proceed with layout if enabled and has valid direction
@@ -274,7 +275,7 @@ class PropertyUpdateHandler {
      * Check if a property is a container sizing property
      */
     isContainerSizingProperty(property) {
-        const sizingProperties = ['sizingMode'];
+        const sizingProperties = ['sizingMode', 'containerMode'];
         return sizingProperties.includes(property);
     }
 
@@ -577,13 +578,14 @@ class PropertyUpdateHandler {
                 return false;
             }
 
-            // Handle sizing mode changes
-            if (property === 'sizingMode') {
+            // Handle sizing mode changes (accepts both 'sizingMode' and 'containerMode')
+            if (property === 'sizingMode' || property === 'containerMode') {
                 // Get old value for undo
-                const oldValue = objectData.sizingMode;
+                const oldValue = objectData.containerMode || objectData.sizingMode;
 
-                // Update object data
-                objectData.sizingMode = value;
+                // Update object data — set containerMode and keep legacy flags in sync
+                const modeUpdate = ObjectStateManager.buildContainerModeUpdate(value);
+                Object.assign(objectData, modeUpdate);
 
                 // Trigger container update with new sizing mode
                 if (objectData.mesh) {

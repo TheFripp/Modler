@@ -1,3 +1,4 @@
+import * as THREE from 'three';
 /**
  * Snap Controller
  * Centralized snapping system for precise object positioning

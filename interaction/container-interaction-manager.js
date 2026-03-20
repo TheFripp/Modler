@@ -1,3 +1,4 @@
+import * as THREE from 'three';
 // Modler V2 - Container Interaction State Management
 // Handles container step-in/out logic, interaction context, and visual feedback
 // Target: ~200 lines - pure interaction state management

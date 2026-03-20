@@ -5,7 +5,7 @@
   "type": "commonjs",
   "scripts": {
     "dev": "concurrently \"npm run dev:main\" \"npm run dev:svelte\"",
-    "dev:main": "node server.js",
+    "dev:main": "vite",
     "dev:svelte": "cd svelte-ui && npm run dev",
     "start": "node server.js",
     "build": "cd svelte-ui && npm run build",
@@ -19,9 +19,9 @@
   },
   "devDependencies": {
     "concurrently": "^8.2.2",
-    "http-server": "^14.1.1"
+    "http-server": "^14.1.1",
+    "vite": "^8.0.1"
   },
-  "dependencies": {},
   "keywords": [
     "cad",
     "3d",
@@ -49,5 +49,8 @@
     "application/",
     "layout/",
     "svelte-ui/build/"
-  ]
+  ],
+  "dependencies": {
+    "three": "^0.136.0"
+  }
 }

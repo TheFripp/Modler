@@ -91,7 +91,8 @@ function extractSerializableData(sceneObject) {
 
         // Container properties - DIRECT COPY with validation
         isContainer: sceneObject.isContainer || false,
-        isHug: isHug,  // Validated to ensure mutual exclusivity
+        containerMode: sceneObject.containerMode || null,
+        isHug: isHug,  // LEGACY: Validated to ensure mutual exclusivity
         layoutMode: sceneObject.layoutMode || null,
         autoLayout: autoLayout,  // EXACT copy or null
         calculatedGap: sceneObject.calculatedGap, // May be undefined - that's OK

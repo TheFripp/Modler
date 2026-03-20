@@ -108,14 +108,14 @@ if (ObjectStateManager.getObject(objectId)) {
 **⚠️ CRITICAL: NEVER access window.parent.modlerComponents from Svelte iframes!**
 - Svelte iframes run on different origin (localhost:5173 vs localhost:3000)
 - Browser blocks cross-origin direct access → SecurityError
-- **Phase 3**: Automatic communication via MainAdapter/UIAdapter
+- **SimpleCommunication** handles all Main → UI data flow automatically
 - UI updates happen automatically when ObjectEventBus emits events
 
-### 1. Send Data to UI (3D → UI) - Phase 3
+### 1. Send Data to UI (Main → UI)
 
 ```javascript
-// Phase 3: Automatic via ObjectEventBus → MainAdapter
-// NO manual UI notification needed - just emit events!
+// Automatic via ObjectEventBus → SimpleCommunication
+// NO manual UI notification needed - just update state!
 
 // Object state changes automatically notify UI
 ObjectStateManager.updateObject(objectId, {
@@ -123,8 +123,8 @@ ObjectStateManager.updateObject(objectId, {
     dimensions: newDimensions
 });
 // → ObjectEventBus emits events
-// → MainAdapter listens and sends to UI
-// → UIAdapter updates Svelte stores
+// → SimpleCommunication extracts complete data via DataExtractor
+// → postMessage sends to all UI iframes
 // → UI automatically re-renders
 
 // For direct ObjectEventBus emission (rare):
@@ -136,7 +136,7 @@ window.objectEventBus.emit(
 );
 ```
 
-### 2. Send Commands to Main (UI → 3D) - Phase 3
+### 2. Send Commands to Main (UI → Main)
 
 ```javascript
 // In Svelte component
@@ -155,10 +155,9 @@ await unifiedCommunication.instance.sendToolActivation('move');
 // Send object selection
 await unifiedCommunication.instance.sendSelectionChange(objectId);
 
-// All commands use direct postMessage to main-integration.js
-// → Handlers route to ObjectStateManager
-// → ObjectEventBus emits events
-// → MainAdapter sends updates back to UI
+// Flow: postMessage → main-integration.js → CommandRouter
+// → PropertyUpdateHandler → ObjectStateManager
+// → ObjectEventBus → SimpleCommunication → UI updates
 ```
 
 ---
@@ -1104,7 +1103,7 @@ const {
     inputController,
     cameraController,
     containerCrudManager,
-    propertyPanelSync
+    commandRouter
 } = window.modlerComponents;
 
 // Standalone global (not in modlerComponents)
@@ -1216,11 +1215,11 @@ autoLayout.newProp = true;  // WRONG - will be stripped during sync
 
 ✅ **DO**:
 ```javascript
-// Use ObjectStateManager (Phase 3: UI updates automatically)
+// Use ObjectStateManager (UI updates automatically via SimpleCommunication)
 ObjectStateManager.updateObject(id, {
     position: {x, y, z}
 });
-// → ObjectEventBus → MainAdapter → UIAdapter → UI updates
+// → ObjectEventBus → SimpleCommunication → postMessage → UI updates
 
 // Show/hide support meshes
 visualizationManager.showSupportMesh(id, 'edges');

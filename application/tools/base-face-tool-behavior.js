@@ -1,3 +1,4 @@
+import * as THREE from 'three';
 /**
  * Base Face Tool Behavior - Shared Face Detection and Hover Logic
  *

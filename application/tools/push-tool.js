@@ -1,3 +1,4 @@
+import * as THREE from 'three';
 /**
  * Push Tool - Face-Based Geometry Modification (Simplified)
  *

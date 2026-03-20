@@ -1,3 +1,4 @@
+import * as THREE from 'three';
 // Modler V2 - Camera Math Utilities
 // Coordinate conversions and mathematical operations for camera systems
 //

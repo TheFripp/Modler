@@ -1,3 +1,4 @@
+import * as THREE from 'three';
 /**
  * AxisGizmo - 3D Orientation Indicator
  *

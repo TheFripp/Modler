@@ -1,3 +1,5 @@
+import * as THREE from 'three';
+const logger = window.logger;
 /**
  * Modler V2 - System Integration
  * Streamlined initialization and component coordination

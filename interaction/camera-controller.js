@@ -1,3 +1,4 @@
+import * as THREE from 'three';
 // Modler V2 - Streamlined Camera Controller
 // Essential camera controls only - integrated with InputController
 // Target: ~150 lines (down from 416 lines - 64% reduction)

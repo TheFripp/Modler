@@ -1,3 +1,4 @@
+import * as THREE from 'three';
 /**
  * Snap Visualizer
  * Visual feedback system for snap indicators

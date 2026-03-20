@@ -1,3 +1,4 @@
+import * as THREE from 'three';
 /**
  * Movement Utils - Shared Mouse and Container Operations
  *
@@ -200,6 +201,17 @@ class MovementUtils {
             averageUpdateTime: 0,
             lastUpdateTime: 0
         };
+    }
+
+    /**
+     * Get dominant axis from cumulative movement object (for Tab key focus)
+     * @param {{ x: number, y: number, z: number }} movement - Cumulative movement per axis
+     * @returns {string} 'x', 'y', or 'z'
+     */
+    static getDominantAxisFromMovement(movement) {
+        if (movement.x > movement.y && movement.x > movement.z) return 'x';
+        if (movement.y > movement.z) return 'y';
+        return 'z';
     }
 }
 

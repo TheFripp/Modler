@@ -1,3 +1,4 @@
+import * as THREE from 'three';
 /**
  * ObjectSerializer - Unified Object Serialization System
  *
@@ -206,8 +207,9 @@ class ObjectSerializer {
             autoLayout: objectData.autoLayout,
 
             // Container-specific properties
-            isHug: objectData.isHug,
-            layoutMode: objectData.layoutMode,
+            containerMode: objectData.containerMode,
+            isHug: objectData.isHug, // Legacy
+            layoutMode: objectData.layoutMode, // Legacy
             childrenOrder: objectData.childrenOrder,
 
             // Add parametric and instance data
@@ -336,7 +338,11 @@ class ObjectSerializer {
             }
         );
 
-        // Add sizing mode for containers
+        // Add container mode
+        if (objectData.containerMode) {
+            serialized.containerMode = objectData.containerMode;
+        }
+        // Legacy: sizing mode for backward compat
         if (objectData.sizingMode) {
             serialized.sizingMode = objectData.sizingMode;
         }

@@ -1,3 +1,4 @@
+import * as THREE from 'three';
 // Modler V2 - Geometry Factory
 // Centralized geometry creation with pooling and resource management
 // Eliminates redundant geometry creation across visualization systems

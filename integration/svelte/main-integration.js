@@ -1,3 +1,4 @@
+const logger = window.logger;
 /**
  * Main Integration - UI system initialization and event coordination
  *

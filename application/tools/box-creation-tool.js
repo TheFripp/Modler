@@ -1,3 +1,4 @@
+import * as THREE from 'three';
 // Modler V2 - Box Creation Tool
 // Refactored for maintainability - uses centralized systems
 

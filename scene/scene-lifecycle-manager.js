@@ -1,3 +1,4 @@
+import * as THREE from 'three';
 /**
  * SceneLifecycleManager - Object Creation and Deletion Operations
  *
@@ -359,8 +360,10 @@ class SceneLifecycleManager {
             },
             parentContainer: options.parentContainer || null,
 
-            isHug: options.sizingMode === 'hug' || options.isHug || false,
-            sizingMode: options.sizingMode || null,
+            containerMode: options.containerMode || (options.isContainer ? (options.sizingMode || 'hug') : null),
+            // LEGACY flags - kept in sync for backward compat
+            isHug: options.containerMode === 'hug' || options.sizingMode === 'hug' || options.isHug || false,
+            sizingMode: options.containerMode || options.sizingMode || null,
             childrenOrder: options.childrenOrder || [],
             layoutMode: options.layoutMode || null,
 

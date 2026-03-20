@@ -1,3 +1,5 @@
+import * as THREE from 'three';
+const logger = window.logger;
 /**
  * Duplicate Object Command
  * Undoable command for duplicating objects in the scene
@@ -193,7 +195,7 @@ class DuplicateObjectCommand extends BaseCommand {
             parentContainer: sourceContainer.parentContainer,
             isContainer: true,
             selectable: true,
-            sizingMode: sourceContainer.sizingMode || 'hug',
+            containerMode: sourceContainer.containerMode || sourceContainer.sizingMode || 'hug',
             autoLayout: sourceContainer.autoLayout ? {
                 enabled: sourceContainer.autoLayout.enabled,
                 mode: sourceContainer.autoLayout.mode,

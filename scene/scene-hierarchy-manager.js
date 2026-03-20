@@ -1,3 +1,4 @@
+import * as THREE from 'three';
 /**
  * SceneHierarchyManager - Parent-Child Relationship Management
  *
@@ -103,6 +104,16 @@ class SceneHierarchyManager {
 
         if (parentId && !this.objects.get(parentId)?.isContainer) {
             return false;
+        }
+
+        // Enforce max nesting depth
+        if (parentId && obj.isContainer) {
+            const MAX_NESTING = window.ObjectDataFormat?.MAX_NESTING_DEPTH ?? 2;
+            const parentDepth = this.getContainerNestingDepth(parentId);
+            if (parentDepth >= MAX_NESTING) {
+                console.warn(`SceneHierarchyManager: Cannot nest container at depth ${parentDepth + 1}, max is ${MAX_NESTING}`);
+                return false;
+            }
         }
 
         const mesh = obj.mesh;
@@ -229,11 +240,11 @@ class SceneHierarchyManager {
                 const container = this.objects.get(parentId);
                 if (container) {
                     // Handle hug containers
-                    if (container.isHug) {
+                    if (container.containerMode === 'hug' || container.isHug) {
                         callbacks.updateHugContainerSize(parentId);
                     }
                     // Handle layout mode containers
-                    else if (container.autoLayout && container.autoLayout.enabled) {
+                    else if (container.containerMode === 'layout' || (container.autoLayout && container.autoLayout.enabled)) {
                         const layoutResult = callbacks.updateLayout(parentId);
 
                         // Resize container to fit new children
@@ -249,11 +260,11 @@ class SceneHierarchyManager {
                 const oldContainer = this.objects.get(oldParentId);
                 if (oldContainer) {
                     // Handle hug containers
-                    if (oldContainer.isHug) {
+                    if (oldContainer.containerMode === 'hug' || oldContainer.isHug) {
                         callbacks.updateHugContainerSize(oldParentId);
                     }
                     // Handle layout mode containers
-                    else if (oldContainer.autoLayout && oldContainer.autoLayout.enabled) {
+                    else if (oldContainer.containerMode === 'layout' || (oldContainer.autoLayout && oldContainer.autoLayout.enabled)) {
                         const layoutResult = callbacks.updateLayout(oldParentId);
 
                         // Resize container to fit remaining children

@@ -924,3 +924,4 @@ class MoveTool {
     }
 
 }
+window.MoveTool = MoveTool;

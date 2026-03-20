@@ -1,3 +1,4 @@
+import * as THREE from 'three';
 // Modler V2 - Zoom Centering System
 // Smooth centering of selected objects during zoom operations
 

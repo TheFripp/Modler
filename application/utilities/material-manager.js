@@ -1,3 +1,4 @@
+import * as THREE from 'three';
 // Modler V2 - Material Manager
 // Centralized material creation, caching, and configuration management
 // Eliminates scattered material creation across visualization systems

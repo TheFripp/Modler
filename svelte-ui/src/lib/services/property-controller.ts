@@ -107,9 +107,13 @@ class PropertyController {
 			type: 'string',
 			allowedValues: ['x', 'y', 'z']
 		});
+		this.constraints.set('containerMode', {
+			type: 'string',
+			allowedValues: ['manual', 'layout', 'hug']
+		});
 		this.constraints.set('sizingMode', {
 			type: 'string',
-			allowedValues: ['hug', 'fixed']
+			allowedValues: ['hug', 'fixed', 'manual', 'layout']
 		});
 
 		// Auto Layout constraints

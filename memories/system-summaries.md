@@ -59,8 +59,6 @@
 - **camera-controller** (`/interaction/`) - Camera orbit, pan, zoom controls
 - **camera-math-utils** (`/interaction/`) - Camera-related mathematical utilities
 - **zoom-centering** (`/interaction/`) - Zoom and camera centering operations
-- **field-navigation-manager** (`/interaction/`) - Field-based navigation management
-
 ### Container Interaction
 - **container-interaction-manager** (`/interaction/`) - Container-specific interaction handling
 
@@ -106,9 +104,6 @@
 - **snap-controller** (`/application/`) - Snapping system coordination
 - **navigation-controller** (`/application/managers/`) - Navigation state management
 - **tile-instance-manager** (`/application/managers/`) - Tile instance tracking and management
-- **property-manager** (`/application/managers/`) - Property-related operations
-- **hierarchical-selection-manager** (`/application/managers/`) - Hierarchical selection tracking
-
 ### Utilities
 - **development-validator** (`/application/utilities/`) - Enforces architectural patterns; catches violations
 - **input-focus-manager** (`/application/utilities/`) - Input focus state management
@@ -120,11 +115,9 @@
 
 ## UI & Communication
 
-### 3D ↔ UI Communication (Phase 3)
-- **main-adapter** (`/integration/communication/`) - Subscribes to ObjectEventBus, sends events to UI via MessageProtocol
-- **ui-adapter** (`/svelte-ui/src/lib/services/`) - Receives MessageProtocol messages, updates Svelte stores
-- **message-protocol** (`/integration/communication/`) - Message type definitions and builders (STATE_CHANGED, SELECTION_CHANGED, etc.)
-- **communication-bridge** (`/integration/communication/`) - postMessage serialization/deserialization layer
+### 3D ↔ UI Communication
+- **simple-postmessage** (`/integration/communication/`) - Main → UI: ObjectEventBus → DataExtractor → postMessage (no intermediate layers)
+- **command-router** (`/application/`) - Routes incoming UI commands to appropriate handlers (UI → Main)
 - **unified-communication** (`/svelte-ui/src/lib/services/`) - UI → Main command sending via postMessage
 - **property-controller** (`/svelte-ui/src/lib/services/`) - UI property state management; Svelte stores
 - **property-section-registry** (`/svelte-ui/src/lib/services/`) - Maps object types to UI panel sections
@@ -157,7 +150,7 @@
 → `window.modlerComponents.objectStateManager.updateObject(id, updates)`
 
 **Send data to UI**
-→ `window.modlerComponents.propertyPanelSync.sendToUI(eventType, data)`
+→ Automatic via ObjectEventBus → SimpleCommunication → postMessage (just update state via ObjectStateManager)
 
 **Handle UI command**
 → `property-update-handler.handlePropertyChange()` → `ObjectStateManager`
@@ -200,7 +193,7 @@
 ## Critical Patterns Checklist
 
 ✅ **ALWAYS**:
-- Use `ObjectStateManager.updateObject()` for state changes (Phase 3: UI updates automatically)
+- Use `ObjectStateManager.updateObject()` for state changes (UI updates automatically via SimpleCommunication)
 - Use `VisualizationManager` to show/hide support meshes (never recreate)
 - Use CAD geometry operations, never visual transforms
 - Keep call stacks < 5 function calls
@@ -209,7 +202,7 @@
 
 ❌ **NEVER**:
 - Bypass `ObjectStateManager` for state changes
-- Call `window.postMessage` directly from Main (ObjectEventBus → MainAdapter is automatic)
+- Call `window.postMessage` directly from Main (ObjectEventBus → SimpleCommunication is automatic)
 - Recreate support meshes (show/hide only)
 - Use visual transforms instead of CAD geometry
 - Make assumptions without investigation
@@ -220,7 +213,7 @@
 
 ## Layer Boundaries
 
-**Cross-layer communication rules (Phase 3)**:
+**Cross-layer communication rules**:
 - Application → Interaction ✅
 - Interaction → Scene ✅
 - Scene → Foundation ✅
@@ -228,7 +221,7 @@
 - Application → THREE.js directly ❌
 - Tools → SceneController directly ❌ (use ObjectStateManager)
 - UI → SceneController directly ❌ (use PropertyUpdateHandler)
-- Main → UI: ObjectEventBus → MainAdapter (automatic) ✅
+- Main → UI: ObjectEventBus → SimpleCommunication (automatic) ✅
 - UI → Main: UnifiedCommunication.send() ✅
 
 ---
@@ -293,8 +286,8 @@ const {
     inputController,          // /interaction/input-controller.js
     cameraController,         // /interaction/camera-controller.js
     containerCrudManager,     // /application/tools/container-crud-manager.js
-    mainAdapter,              // /integration/communication/main-adapter.js (Phase 3)
-    communicationBridge       // /integration/communication/communication-bridge.js (Phase 3)
+    commandRouter,            // /application/command-router.js
+    simpleCommunication       // /integration/communication/simple-postmessage.js
 } = window.modlerComponents;
 ```
 

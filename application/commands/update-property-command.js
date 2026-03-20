@@ -1,3 +1,4 @@
+const logger = window.logger;
 /**
  * Update Property Command
  * Undoable command for property changes from the property panel
@@ -165,3 +166,5 @@ class UpdatePropertyCommand extends BaseCommand {
         return `Update ${this.property}: ${this.oldValue} → ${this.newValue}`;
     }
 }
+
+window.UpdatePropertyCommand = UpdatePropertyCommand;

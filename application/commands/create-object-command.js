@@ -1,3 +1,5 @@
+import * as THREE from 'three';
+const logger = window.logger;
 /**
  * Create Object Command
  * Undoable command for creating new objects in the scene
@@ -172,3 +174,5 @@ class CreateObjectCommand extends BaseCommand {
         return `Create ${this.options.name || 'object'}`;
     }
 }
+
+window.CreateObjectCommand = CreateObjectCommand;

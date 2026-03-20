@@ -1,3 +1,4 @@
+import * as THREE from 'three';
 // Modler V2 - Centralized Navigation Controller
 // Unified container hierarchy navigation with consistent visual state management
 // Extends HierarchicalSelectionManager with visual state control

@@ -1,3 +1,4 @@
+import * as THREE from 'three';
 /**
  * SceneLayoutManager - Container Layout and Sizing Operations
  *
@@ -357,7 +358,7 @@ class SceneLayoutManager {
 
             // If this is a hug container, trigger a single update now that layout is complete
             // CRITICAL: Don't hug if any child has fill mode - this creates circular dependency
-            if (container.isHug) {
+            if (container.containerMode === 'hug' || container.isHug) {
                 // Check if any child has fill mode on any axis
                 const hasChildWithFill = children.some(child => {
                     const layoutProps = child.layoutProperties;

@@ -1,3 +1,4 @@
+import * as THREE from 'three';
 // Modler V2 - Geometry Utilities
 // CAD-style geometry manipulation utilities for vertex-level operations
 

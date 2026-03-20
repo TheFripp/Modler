@@ -28,7 +28,7 @@ CAD software for creative hobbyists. Rule-based parametric design with intellige
 ### Architecture & Implementation
 
 10. **Foundation systems first** - Establish "why" before "how", understand architectural context before coding
-11. **Single source of truth** - ObjectStateManager for state, SceneController coordinates geometry (delegates to SceneHierarchyManager, SceneLayoutManager, SceneLifecycleManager), PropertyPanelSync for UI communication
+11. **Single source of truth** - ObjectStateManager for state, SceneController coordinates geometry (delegates to SceneHierarchyManager, SceneLayoutManager, SceneLifecycleManager), SimpleCommunication for UI synchronization
 12. **CAD geometry, never transforms** - All manipulation through geometry, never visual-only transforms
 13. **Support mesh principle** - Create once as children, then show/hide. Master object is truth.
 14. **State-first pattern** - Tools use ObjectStateManager.updateObject(), never direct mesh manipulation
@@ -46,6 +46,19 @@ CAD software for creative hobbyists. Rule-based parametric design with intellige
 
 ## Foundation Systems (Architectural "Why")
 
+### Object Types & Constants
+- **OBJECT_TYPES**: `{ BOX: 'box', CONTAINER: 'container' }` — defined in `ObjectDataFormat`, exported globally
+- **CONTAINER_MODES**: `{ MANUAL: 'manual', LAYOUT: 'layout', HUG: 'hug' }` — single source of truth for container mode
+- **MAX_NESTING_DEPTH**: `2` — enforced in both UI (ObjectTree) and data layer (SceneHierarchyManager)
+- **Why**: Centralized constants prevent magic strings, enable validation, and make adding new types straightforward
+
+### Container Mode System
+- **`containerMode`**: Single canonical property on every container: `'manual' | 'layout' | 'hug'`
+- **`ObjectStateManager.buildContainerModeUpdate(mode)`**: Static helper that returns update object keeping legacy flags (`isHug`, `sizingMode`) in sync
+- **`getContainerMode(id)`**: Reads `containerMode` first, falls back to legacy flags for old saved data
+- **Legacy flags** (`isHug`, `sizingMode`, `layoutMode`): Still present for backward compat, kept in sync on writes. Do NOT set them directly — use `buildContainerModeUpdate()`
+- **Why**: Replaced 5 overlapping flags with one enum. Eliminates mutual-exclusivity bugs and priority-chain confusion.
+
 ### Object Hierarchy & Ordering
 - **childrenOrder arrays**: Containers store explicit child order for layout engine. Initialized on first child add, maintained through moves/reorders. Serialized to UI via ObjectDataFormat.
 - **Why**: Layout engines need predictable, user-controllable object sequence. Drag-drop in ObjectTree directly maps to 3D layout order.
@@ -56,12 +69,12 @@ CAD software for creative hobbyists. Rule-based parametric design with intellige
 - **SceneController + Managers** → Execute geometry changes, emit events for UI synchronization
 - **Why**: Clear separation prevents competing updates, ensures event emission, maintains consistency. Never bypass ObjectStateManager for state changes.
 
-### UI ↔ 3D Communication (Phase 3)
-- **MainAdapter**: Subscribes to ObjectEventBus, translates events → MessageProtocol → postMessage to UI
-- **UIAdapter**: Receives messages from Main, updates Svelte stores (selectedObject, objectHierarchy, toolState)
-- **MessageProtocol**: Defines message types (STATE_CHANGED, SELECTION_CHANGED, HIERARCHY_UPDATED, TOOL_STATE_CHANGED)
-- **CommunicationBridge**: Handles postMessage serialization/deserialization between Main and UI iframes
-- **Why**: Event-driven architecture, single communication path, type-safe messages, automatic UI synchronization
+### UI ↔ 3D Communication
+- **Main → UI**: `ObjectEventBus` → `SimpleCommunication` → `DataExtractor` → `postMessage` to UI iframes
+- **UI → Main**: Svelte components → `postMessage` → `main-integration.js` handlers → `CommandRouter` → `PropertyUpdateHandler` → `ObjectStateManager`
+- **SimpleCommunication** (`/integration/communication/simple-postmessage.js`): Subscribes to ObjectEventBus, extracts complete data via DataExtractor, computes derived properties, sends to all UI iframes
+- **CommandRouter** (`/application/command-router.js`): Routes incoming UI commands to appropriate handlers
+- **Why**: Direct data extraction with no intermediate serialization layers. Event-driven, automatic UI synchronization.
 
 ### Support Mesh Architecture
 - Created once as children at object creation, then only show/hide via VisualizationManager
@@ -85,11 +98,10 @@ CAD software for creative hobbyists. Rule-based parametric design with intellige
 - **SceneLifecycleManager** (`/scene/`) - Object creation, deletion, ID generation, support meshes
 - **ToolController** (`/application/`) - Tool activation/switching only
 
-### Communication & UI (Phase 3)
-- **MainAdapter** (`/integration/communication/`) - ObjectEventBus → MessageProtocol → postMessage (Main side)
-- **UIAdapter** (`/svelte-ui/src/lib/services/`) - Receives messages → Updates Svelte stores (UI side)
-- **MessageProtocol** (`/integration/communication/`) - Message type definitions and builders
-- **CommunicationBridge** (`/integration/communication/`) - postMessage serialization layer
+### Communication & UI
+- **SimpleCommunication** (`/integration/communication/simple-postmessage.js`) - ObjectEventBus → DataExtractor → postMessage (Main → UI)
+- **CommandRouter** (`/application/command-router.js`) - Routes UI commands to handlers (UI → Main)
+- **main-integration.js** (`/integration/svelte/`) - Receives postMessage from UI, dispatches to CommandRouter
 - **PropertyController** (`/svelte-ui/src/lib/services/`) - UI property state management
 - **PropertySectionRegistry** (`/svelte-ui/src/lib/services/`) - Maps object types to UI sections
 
@@ -107,7 +119,7 @@ CAD software for creative hobbyists. Rule-based parametric design with intellige
 - Layout calculation? → `SceneController.updateLayout()` (delegates to SceneLayoutManager)
 - Layout propagation? → Automatic via `ObjectStateManager.updateObject()` (delegates to LayoutPropagationManager)
 - UI property update? → `PropertyUpdateHandler` → `ObjectStateManager`
-- UI notification (3D → UI)? → Automatic via `ObjectEventBus` → `MainAdapter` → `MessageProtocol`
+- UI notification (3D → UI)? → Automatic via `ObjectEventBus` → `SimpleCommunication` → `postMessage`
 - UI command (UI → 3D)? → `postMessage` → handler in `main-integration.js`
 - Container operation? → `ContainerCrudManager`
 - Visual effect? → `VisualizationManager`
@@ -148,8 +160,9 @@ CAD software for creative hobbyists. Rule-based parametric design with intellige
 ❌ **NEVER**:
 - Bypass ObjectStateManager for state changes
 - Call specialized managers directly (SceneHierarchyManager, SceneLayoutManager, SceneLifecycleManager, LayoutPropagationManager)
+- Set `isHug`, `sizingMode`, or `layoutMode` directly — use `ObjectStateManager.buildContainerModeUpdate(mode)` instead
 - Use visual transforms instead of CAD geometry
-- Call `window.postMessage` directly from Main (ObjectEventBus → MainAdapter is automatic)
+- Call `window.postMessage` directly from Main (ObjectEventBus → SimpleCommunication is automatic)
 - Recreate support meshes (show/hide only)
 - Make assumptions without investigation
 - Add complexity without clear architectural benefit

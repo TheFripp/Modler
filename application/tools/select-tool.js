@@ -108,3 +108,4 @@ class SelectTool {
         }
     }
 }
+window.SelectTool = SelectTool;

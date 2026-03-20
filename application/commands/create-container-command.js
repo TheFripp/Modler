@@ -1,3 +1,4 @@
+import * as THREE from 'three';
 // Modler V2 - Create Container Command
 // Command pattern implementation for container creation with undo/redo support
 

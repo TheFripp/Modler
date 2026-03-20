@@ -1,3 +1,4 @@
+import * as THREE from 'three';
 /**
  * Tile Tool
  * Creates tiled arrays of objects using container + layout system

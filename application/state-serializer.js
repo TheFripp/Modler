@@ -361,6 +361,7 @@ class StateSerializer {
             name: parent.name,
             type: parent.type,
             isContainer: parent.isContainer,
+            containerMode: parent.containerMode,
             layoutMode: parent.layoutMode,
             autoLayout: parent.autoLayout,
             isHug: parent.isHug,

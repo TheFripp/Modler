@@ -1,3 +1,4 @@
+const logger = window.logger;
 /**
  * Tool Controller
  * Manages tool registration, switching, and active state
@@ -440,3 +441,4 @@ class ToolController {
         this.activeToolName = null;
     }
 }
+window.ToolController = ToolController;

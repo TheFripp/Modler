@@ -44,129 +44,112 @@
         </div>
     </div>
 
-    <!-- External Scripts -->
-    <script src="vendor/three.min.js"></script>
+    <!-- External Scripts (non-module, must load before modules) -->
     <script src="vendor/split.min.js"></script>
 
-    <!-- Core Logging System (Load FIRST for all other scripts) -->
-    <script src="core/logger.js"></script>
+    <!-- All application scripts as ES modules -->
+    <script type="module" src="core/logger.js"></script>
 
-    <script src="foundation/scene-foundation.js"></script>
-    <script src="scene/scene-hierarchy-manager.js"></script>
-    <script src="scene/scene-layout-manager.js"></script>
-    <script src="scene/scene-lifecycle-manager.js"></script>
-    <script src="scene/scene-controller.js"></script>
-    <script src="scene/visual-effects.js"></script>
-    <script src="scene/snap-visualizer.js"></script>
-    <script src="interaction/support-mesh-factory.js"></script>
-    <script src="interaction/object-visualizer.js"></script>
-    <script src="interaction/container-visualizer.js"></script>
-    <script src="interaction/visualization-manager.js"></script>
-    <script src="interaction/axis-gizmo.js"></script>
-    <script src="interaction/container-interaction-manager.js"></script>
-    <script src="interaction/selection-controller.js"></script>
-    <script src="interaction/camera-math-utils.js"></script>
-    <script src="interaction/zoom-centering.js"></script>
-    <script src="interaction/camera-controller.js"></script>
-    <script src="interaction/keyboard-router.js"></script>
-    <script src="layout/layout-engine.js"></script>
-    <script src="core/object-state-manager.js"></script>
-    <script src="core/dimension-manager.js"></script>
-    <script src="interaction/input-controller.js"></script>
-    <script src="application/tool-controller.js"></script>
-    <script src="application/configuration-manager.js"></script>
-    <script src="application/snap-controller.js"></script>
-<script src="application/managers/navigation-controller.js"></script>
-<script src="application/commands/base-command.js"></script>
-    <script src="application/commands/delete-object-command.js"></script>
-    <script src="application/commands/create-object-command.js"></script>
-    <script src="application/commands/duplicate-object-command.js"></script>
-    <script src="application/commands/move-object-command.js"></script>
-    <script src="application/commands/push-face-command.js"></script>
-    <script src="application/commands/update-property-command.js"></script>
-    <script src="application/commands/create-container-command.js"></script>
-    <script src="application/commands/update-layout-property-command.js"></script>
-    <script src="application/managers/history-manager.js"></script>
-    <script src="application/tools/movement-utils.js"></script>
-    <script src="application/tools/base-face-tool-behavior.js"></script>
-    <script src="application/tools/base-face-tool-event-handler.js"></script>
-    <script src="application/tools/select-tool.js"></script>
-    <script src="application/tools/move-tool.js"></script>
-    <script src="application/tools/push-tool.js"></script>
-    <script src="application/tools/measurement-tool.js"></script>
-    <script src="application/tools/tile-tool.js"></script>
-    <script src="application/managers/tile-instance-manager.js"></script>
-    <script src="application/utilities/position-transform.js"></script>
-    <script src="application/utilities/geometry-utils.js"></script>
-    <script src="application/utilities/transform-notification-utils.js"></script>
-    <script src="application/utilities/transformation-manager.js"></script>
-    <script src="application/utilities/visualization-resource-pool.js"></script>
-    <script src="application/utilities/geometry-factory.js"></script>
-    <script src="application/utilities/material-manager.js"></script>
-    <script src="application/utilities/development-validator.js"></script>
-    <script src="application/tools/layout-geometry.js"></script>
-    <script src="application/tools/container-crud-manager.js"></script>
-    <script src="application/handlers/property-update-handler.js"></script>
-    <script src="application/tools/box-creation-tool.js"></script>
+    <script type="module" src="foundation/scene-foundation.js"></script>
+    <script type="module" src="scene/scene-hierarchy-manager.js"></script>
+    <script type="module" src="scene/scene-layout-manager.js"></script>
+    <script type="module" src="scene/scene-lifecycle-manager.js"></script>
+    <script type="module" src="scene/scene-controller.js"></script>
+    <script type="module" src="scene/visual-effects.js"></script>
+    <script type="module" src="scene/snap-visualizer.js"></script>
+    <script type="module" src="interaction/support-mesh-factory.js"></script>
+    <script type="module" src="interaction/object-visualizer.js"></script>
+    <script type="module" src="interaction/container-visualizer.js"></script>
+    <script type="module" src="interaction/visualization-manager.js"></script>
+    <script type="module" src="interaction/axis-gizmo.js"></script>
+    <script type="module" src="interaction/container-interaction-manager.js"></script>
+    <script type="module" src="interaction/selection-controller.js"></script>
+    <script type="module" src="interaction/camera-math-utils.js"></script>
+    <script type="module" src="interaction/zoom-centering.js"></script>
+    <script type="module" src="interaction/camera-controller.js"></script>
+    <script type="module" src="interaction/keyboard-router.js"></script>
+    <script type="module" src="layout/layout-engine.js"></script>
+    <script type="module" src="core/object-state-manager.js"></script>
+    <script type="module" src="core/dimension-manager.js"></script>
+    <script type="module" src="interaction/input-controller.js"></script>
+    <script type="module" src="application/tool-controller.js"></script>
+    <script type="module" src="application/configuration-manager.js"></script>
+    <script type="module" src="application/snap-controller.js"></script>
+    <script type="module" src="application/managers/navigation-controller.js"></script>
+    <script type="module" src="application/commands/base-command.js"></script>
+    <script type="module" src="application/commands/delete-object-command.js"></script>
+    <script type="module" src="application/commands/create-object-command.js"></script>
+    <script type="module" src="application/commands/duplicate-object-command.js"></script>
+    <script type="module" src="application/commands/move-object-command.js"></script>
+    <script type="module" src="application/commands/push-face-command.js"></script>
+    <script type="module" src="application/commands/update-property-command.js"></script>
+    <script type="module" src="application/commands/create-container-command.js"></script>
+    <script type="module" src="application/commands/update-layout-property-command.js"></script>
+    <script type="module" src="application/managers/history-manager.js"></script>
+    <script type="module" src="application/tools/movement-utils.js"></script>
+    <script type="module" src="application/tools/base-face-tool-behavior.js"></script>
+    <script type="module" src="application/tools/base-face-tool-event-handler.js"></script>
+    <script type="module" src="application/tools/select-tool.js"></script>
+    <script type="module" src="application/tools/duplication-mode.js"></script>
+    <script type="module" src="application/tools/move-tool.js"></script>
+    <script type="module" src="application/tools/push-tool.js"></script>
+    <script type="module" src="application/tools/measurement-tool.js"></script>
+    <script type="module" src="application/tools/tile-tool.js"></script>
+    <script type="module" src="application/managers/tile-instance-manager.js"></script>
+    <script type="module" src="application/utilities/position-transform.js"></script>
+    <script type="module" src="application/utilities/geometry-utils.js"></script>
+    <script type="module" src="application/utilities/transform-notification-utils.js"></script>
+    <script type="module" src="application/utilities/transformation-manager.js"></script>
+    <script type="module" src="application/utilities/visualization-resource-pool.js"></script>
+    <script type="module" src="application/utilities/geometry-factory.js"></script>
+    <script type="module" src="application/utilities/material-manager.js"></script>
+    <script type="module" src="application/utilities/development-validator.js"></script>
+    <script type="module" src="application/tools/layout-geometry.js"></script>
+    <script type="module" src="application/tools/container-crud-manager.js"></script>
+    <script type="module" src="application/handlers/property-update-handler.js"></script>
+    <script type="module" src="application/tools/box-creation-tool.js"></script>
 
-    <!-- Unified Notification System (Phase 1 Foundation) - MOVED BEFORE v2-main.js -->
-    <script src="application/events/object-event-bus.js"></script>
-    <script src="application/serialization/object-data-format.js"></script>
+    <script type="module" src="application/events/object-event-bus.js"></script>
+    <script type="module" src="application/serialization/object-data-format.js"></script>
 
-    <!-- Layout System (Phase 4 Refactoring) -->
-    <script src="layout/layout-propagation-manager.js"></script>
+    <script type="module" src="layout/layout-propagation-manager.js"></script>
 
-    <!-- File System - Scene serialization and storage -->
-    <script src="application/serialization/scene-serializer.js"></script>
-    <script src="application/serialization/scene-deserializer.js"></script>
-    <script src="application/storage/indexeddb-wrapper.js"></script>
-    <script src="application/utilities/thumbnail-capture.js"></script>
+    <script type="module" src="application/serialization/scene-serializer.js"></script>
+    <script type="module" src="application/serialization/scene-deserializer.js"></script>
+    <script type="module" src="application/storage/indexeddb-wrapper.js"></script>
+    <script type="module" src="application/utilities/thumbnail-capture.js"></script>
 
-    <!-- UI System - Notifications -->
-    <script src="application/ui/notification-manager.js"></script>
+    <script type="module" src="application/ui/notification-manager.js"></script>
 
-    <script src="application/managers/file-manager.js"></script>
+    <script type="module" src="application/managers/file-manager.js"></script>
 
-    <!-- Schema System -->
-    <script src="application/schemas/configuration-schema.js"></script>
+    <script type="module" src="application/schemas/configuration-schema.js"></script>
 
-    <!-- Property Format & Unit Conversion System (AFTER ObjectDataFormat) -->
-    <script src="application/utilities/unit-converter.js"></script>
-    <script src="application/utilities/input-focus-manager.js"></script>
-    <script src="integration/svelte/property-format-converter.js"></script>
-    <script src="application/serialization/object-serializer.js"></script>
+    <script type="module" src="application/utilities/unit-converter.js"></script>
+    <script type="module" src="application/utilities/input-focus-manager.js"></script>
+    <script type="module" src="integration/svelte/property-format-converter.js"></script>
+    <script type="module" src="application/serialization/object-serializer.js"></script>
 
-    <!-- SimpleCommunication System (Communication Simplification 2025) -->
-    <!-- Replaced Phase 3 (2,500 lines) with ~600 lines of simple, direct communication -->
-    <script src="application/command-router.js"></script>
-    <script src="application/serialization/data-extractor.js"></script>
-    <script src="application/state-serializer.js"></script>
-    <script src="integration/communication/simple-postmessage.js"></script>
+    <script type="module" src="application/command-router.js"></script>
+    <script type="module" src="application/serialization/data-extractor.js"></script>
+    <script type="module" src="application/state-serializer.js"></script>
+    <script type="module" src="integration/communication/simple-postmessage.js"></script>
 
-    <!-- Svelte UI Integration Classes (Load BEFORE v2-main.js) -->
-    <script src="integration/svelte/port-detection.js"></script>
-    <script src="integration/svelte/panel-manager.js"></script>
-    <script src="integration/svelte/direct-component-manager.js"></script>
-    <script src="integration/svelte/file-manager-handler.js"></script>
-    <script src="integration/split-panel-controller.js"></script>
+    <script type="module" src="integration/svelte/port-detection.js"></script>
+    <script type="module" src="integration/svelte/panel-manager.js"></script>
+    <script type="module" src="integration/svelte/direct-component-manager.js"></script>
+    <script type="module" src="integration/svelte/file-manager-handler.js"></script>
+    <script type="module" src="integration/split-panel-controller.js"></script>
 
-    <script src="v2-main.js"></script>
+    <script type="module" src="v2-main.js"></script>
 
-    <!-- Legacy V1 UI scripts removed - replaced by Svelte UI -->
+    <script type="module" src="integration/svelte/panel-communication.js"></script>
+    <script type="module" src="integration/svelte/settings-handler.js"></script>
+    <script type="module" src="integration/svelte/main-integration.js"></script>
 
-    <!-- Parametric Property System: Deferred loading (see bottom of file) -->
-
-    <!-- Svelte UI Main Integration (Load AFTER v2-main.js) -->
-    <script src="integration/svelte/panel-communication.js"></script>
-    <script src="integration/svelte/settings-handler.js"></script>
-    <script src="integration/svelte/main-integration.js"></script>
-
-    <!-- Performance Optimization: Deferred loading for non-critical systems -->
-    <script>
-        // Load parametric system after initial render (rarely used, can be deferred)
+    <!-- Deferred parametric system loading -->
+    <script type="module">
         window.addEventListener('load', () => {
-            // Check if parametric is needed (future: load on first use)
-            // For now, load after page is fully loaded
             const parametricScripts = [
                 'application/parametric/formula-evaluator.js',
                 'application/parametric/dependency-graph.js',
@@ -177,7 +160,7 @@
             parametricScripts.forEach((src) => {
                 const script = document.createElement('script');
                 script.src = src;
-                script.async = true;
+                script.type = 'module';
                 document.body.appendChild(script);
             });
         });

@@ -1,3 +1,4 @@
+import * as THREE from 'three';
 /**
  * Development-time validation for THREE.js object creation
  * Helps detect manual THREE.js creation that should use centralized systems
@@ -330,18 +331,18 @@ class DevelopmentValidator {
         // Check for schema violations
         const violations = [];
 
-        // Check for mutually exclusive properties
-        if (updates.isHug && updates.autoLayout?.enabled) {
+        // Validate containerMode is a valid value if set
+        if (updates.containerMode && !['manual', 'layout', 'hug'].includes(updates.containerMode)) {
             violations.push({
                 type: 'schema-violation',
-                message: 'isHug and autoLayout.enabled are mutually exclusive',
+                message: `Invalid containerMode: '${updates.containerMode}'. Must be 'manual', 'layout', or 'hug'.`,
                 objectId,
                 updates
             });
             console.warn(
                 `🚨 Schema Violation: Object ${objectId}\n` +
-                `   isHug and autoLayout.enabled cannot both be true\n` +
-                `   See: /documentation/container-properties.md`
+                `   Invalid containerMode: '${updates.containerMode}'\n` +
+                `   Must be 'manual', 'layout', or 'hug'`
             );
         }
 
@@ -385,16 +386,16 @@ class DevelopmentValidator {
             );
         }
 
-        // Check for isHug with autoLayout
-        if (options.isHug && options.autoLayout?.enabled) {
+        // Validate containerMode at creation
+        if (options.containerMode && !['manual', 'layout', 'hug'].includes(options.containerMode)) {
             violations.push({
                 type: 'schema-violation',
-                message: 'Cannot create object with both isHug and autoLayout enabled',
+                message: `Invalid containerMode at creation: '${options.containerMode}'`,
                 options
             });
             console.warn(
                 `🚨 Schema Violation: Object creation\n` +
-                `   isHug and autoLayout.enabled are mutually exclusive`
+                `   Invalid containerMode: '${options.containerMode}'`
             );
         }
 

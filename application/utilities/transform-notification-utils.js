@@ -1,3 +1,4 @@
+import * as THREE from 'three';
 // Modler V2 - Transform Notification Utilities
 // Standardized notification patterns after transform operations
 //

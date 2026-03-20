@@ -18,6 +18,29 @@
 const OBJECT_DATA_FORMAT_VERSION = '1.0.0';
 
 /**
+ * Object type constants — single source of truth for type strings
+ */
+const OBJECT_TYPES = {
+    BOX: 'box',
+    CONTAINER: 'container'
+    // Future: CYLINDER: 'cylinder', SPHERE: 'sphere', GROUP: 'group', COMPONENT: 'component'
+};
+
+/**
+ * Container mode constants — single source of truth for container modes
+ */
+const CONTAINER_MODES = {
+    MANUAL: 'manual',
+    LAYOUT: 'layout',
+    HUG: 'hug'
+};
+
+/**
+ * Maximum container nesting depth (0-indexed: depth 2 = 3 levels total)
+ */
+const MAX_NESTING_DEPTH = 2;
+
+/**
  * Standard ObjectData format specification
  * This is the ONLY format that should be used throughout the system
  */
@@ -46,8 +69,9 @@ const STANDARD_OBJECT_DATA_SCHEMA = {
 
     // Container properties
     isContainer: 'boolean',
-    isHug: 'boolean', // Hug mode: container auto-resizes to fit children (mutually exclusive with layout mode)
-    layoutMode: 'string|null',
+    containerMode: 'string|null', // 'manual' | 'layout' | 'hug' — single source of truth for container mode
+    isHug: 'boolean', // LEGACY: kept for backward compat, derived from containerMode
+    layoutMode: 'string|null', // LEGACY: kept for backward compat, derived from containerMode
     autoLayout: {
         enabled: 'boolean',
         direction: 'string|null',
@@ -341,6 +365,7 @@ function convertFromObjectStateManager(stateData) {
         parentContainer: stateData.parentContainer || null,
 
         // Additional container properties
+        containerMode: stateData.containerMode || null,
         isHug: stateData.isHug || false,
         layoutMode: stateData.layoutMode || null,
         childrenOrder: stateData.childrenOrder || [],
@@ -371,6 +396,7 @@ function convertBestEffort(sourceData) {
         dimensions: sourceData.dimensions || { x: 1, y: 1, z: 1 },
 
         material: sourceData.material || { color: '#888888', opacity: 1, transparent: false },
+        containerMode: sourceData.containerMode || null,
         autoLayout: sourceData.autoLayout || createDefaultAutoLayout(),
         parentContainer: sourceData.parentContainer || null
     };
@@ -516,6 +542,7 @@ function createEmptyObjectData(id = null) {
         name: 'Empty Object',
         type: 'object',
         isContainer: false,
+        containerMode: null,
         isHug: false,
 
         position: { x: 0, y: 0, z: 0 },
@@ -552,11 +579,17 @@ function createEmptyObjectData(id = null) {
  * @returns {Object} Complete object metadata following STANDARD_OBJECT_DATA_SCHEMA
  */
 function createObjectMetadata(options = {}) {
+    const validTypes = Object.values(OBJECT_TYPES);
+    const type = options.type || OBJECT_TYPES.BOX;
+    if (options.type && !validTypes.includes(options.type) && options.type !== 'mesh') {
+        console.warn(`ObjectDataFormat: Unknown object type '${options.type}', valid types: ${validTypes.join(', ')}`);
+    }
+
     return {
         // Core identification
         id: options.id || 0,
         name: options.name || 'Object',
-        type: options.type || 'mesh',
+        type: type,
 
         // Hierarchy
         parentContainer: options.parentContainer || null,
@@ -578,8 +611,10 @@ function createObjectMetadata(options = {}) {
 
         // Container properties - ALWAYS use schema defaults
         isContainer: options.isContainer || false,
-        isHug: options.sizingMode === 'hug' || options.isHug || false,
-        sizingMode: options.sizingMode || null,
+        containerMode: options.containerMode || (options.isContainer ? (options.sizingMode || 'hug') : null),
+        // LEGACY flags - derived from containerMode, kept for backward compat
+        isHug: options.containerMode === 'hug' || options.sizingMode === 'hug' || options.isHug || false,
+        sizingMode: options.containerMode || options.sizingMode || null,
         autoLayout: options.autoLayout || createDefaultAutoLayout(), // SCHEMA DEFAULT - never null
         layoutMode: options.layoutMode || null,
         layoutProperties: options.layoutProperties || {
@@ -626,7 +661,10 @@ window.ObjectDataFormat = {
 
     // Constants
     SCHEMA: STANDARD_OBJECT_DATA_SCHEMA,
-    VERSION: OBJECT_DATA_FORMAT_VERSION
+    VERSION: OBJECT_DATA_FORMAT_VERSION,
+    OBJECT_TYPES,
+    CONTAINER_MODES,
+    MAX_NESTING_DEPTH
 };
 
 // Also export as module for Node.js compatibility

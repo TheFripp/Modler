@@ -1,3 +1,4 @@
+import * as THREE from 'three';
 // Modler V2 - Visualization Resource Pool
 // Object pooling for frequently used visual elements
 // Reduces garbage collection pressure and improves performance

@@ -33,14 +33,22 @@ export const multiSelection = derived(selectedObjects, ($selectedObjects) => {
 		id: 'multi-selection',
 		name: `${$selectedObjects.length} selected`,
 		type: 'multi',
-		isContainer: false, // Will determine mixed container state below
+		isContainer: false,
 		position: { x: 0, y: 0, z: 0 },
 		rotation: { x: 0, y: 0, z: 0 },
+		scale: { x: 1, y: 1, z: 1 },
 		dimensions: { x: 0, y: 0, z: 0 },
-		material: { color: '#ffffff', opacity: 1 },
-		autoLayout: undefined,
-		sizingMode: undefined,
-		parentContainer: undefined
+		material: { color: '#ffffff', opacity: 1, transparent: false },
+		autoLayout: { enabled: false, direction: null, gap: 0, padding: { width: 0, height: 0, depth: 0 }, alignment: { x: 'center', y: 'center', z: 'center' }, reversed: false },
+		containerMode: null,
+		layoutMode: null,
+		childIds: [],
+		parentContainer: null,
+		selected: false,
+		locked: false,
+		visible: true,
+		formatVersion: '1.0.0',
+		lastModified: Date.now()
 	};
 
 	// Check if all objects are containers
@@ -52,7 +60,7 @@ export const multiSelection = derived(selectedObjects, ($selectedObjects) => {
 		mixed.type = 'container';
 		// Use first object's autoLayout as template
 		mixed.autoLayout = first.autoLayout;
-		mixed.sizingMode = first.sizingMode;
+		mixed.containerMode = first.containerMode;
 	} else if (someContainers) {
 		mixed.type = 'mixed';
 	}
@@ -127,7 +135,7 @@ export function getFieldStates(object: ObjectData | null): FieldStates {
 	if (!object) return states;
 
 	// Container in hug mode - dimensions should be disabled
-	if (object.isContainer && object.sizingMode === 'hug') {
+	if (object.isContainer && object.containerMode === 'hug') {
 		states['dimensions.x'] = {
 			disabled: true,
 			reason: 'hug-mode',
@@ -302,12 +310,15 @@ function convertLegacyFlatFormat(flatObj: any): ObjectData {
 		},
 
 		isContainer: flatObj.isContainer || false,
+		containerMode: flatObj.containerMode || null,
 		layoutMode: flatObj.layoutMode || null,
 		autoLayout: {
 			enabled: flatObj['autoLayout.enabled'] || flatObj.autoLayout?.enabled || false,
 			direction: flatObj['autoLayout.direction'] || flatObj.autoLayout?.direction || null,
 			gap: flatObj['autoLayout.gap'] || flatObj.autoLayout?.gap || 0,
-			padding: flatObj['autoLayout.padding'] || flatObj.autoLayout?.padding || { width: 0, height: 0, depth: 0 }
+			padding: flatObj['autoLayout.padding'] || flatObj.autoLayout?.padding || { width: 0, height: 0, depth: 0 },
+			alignment: flatObj.autoLayout?.alignment || { x: 'center', y: 'center', z: 'center' },
+			reversed: flatObj.autoLayout?.reversed || false
 		},
 
 		selected: flatObj.selected || false,
@@ -337,8 +348,9 @@ function normalizeUnknownFormat(obj: any): ObjectData {
 		material: obj.material || { color: '#888888', opacity: 1, transparent: false },
 
 		isContainer: !!obj.isContainer,
+		containerMode: obj.containerMode || null,
 		layoutMode: obj.layoutMode || null,
-		autoLayout: obj.autoLayout || { enabled: false, direction: null, gap: 0, padding: { width: 0, height: 0, depth: 0 } },
+		autoLayout: obj.autoLayout || { enabled: false, direction: null, gap: 0, padding: { width: 0, height: 0, depth: 0 }, alignment: { x: 'center', y: 'center', z: 'center' }, reversed: false },
 
 		selected: !!obj.selected,
 		locked: !!obj.locked,
@@ -367,8 +379,9 @@ function createFallbackObjectData(id?: string): ObjectData {
 		material: { color: '#ff0000', opacity: 1, transparent: false },
 
 		isContainer: false,
+		containerMode: null,
 		layoutMode: null,
-		autoLayout: { enabled: false, direction: null, gap: 0, padding: { width: 0, height: 0, depth: 0 } },
+		autoLayout: { enabled: false, direction: null, gap: 0, padding: { width: 0, height: 0, depth: 0 }, alignment: { x: 'center', y: 'center', z: 'center' }, reversed: false },
 
 		selected: false,
 		locked: false,

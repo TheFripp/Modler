@@ -1,3 +1,4 @@
+import * as THREE from 'three';
 // Modler V2 - Consolidated Input System
 // Unified DOM event handling → Tool actions
 // Target: ~200 lines - consolidates input-foundation + input-handler

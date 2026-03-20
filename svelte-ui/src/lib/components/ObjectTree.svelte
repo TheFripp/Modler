@@ -414,8 +414,9 @@
 		if (childContainer.id === parentContainer.id) return false;
 		if (isDescendantContainer(parentContainer.id, childContainer.id)) return false;
 
+		const MAX_NESTING_DEPTH = 2; // Matches ObjectDataFormat.MAX_NESTING_DEPTH
 		const currentDepth = getContainerNestingDepth(parentContainer.id);
-		return currentDepth < 2;
+		return currentDepth < MAX_NESTING_DEPTH;
 	}
 
 	function isDescendantContainer(potentialDescendantId, ancestorId) {

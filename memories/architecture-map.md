@@ -63,14 +63,13 @@
 | **geometry-utils** | `/application/utilities/` | Geometry operations | Geometry creation/manipulation |
 | **material-manager** | `/application/utilities/` | Material creation & caching | Create/update materials |
 
-### Communication & UI (Phase 3)
+### Communication & UI
 
 | File | Location | Responsibility | When to Use |
 |------|----------|---------------|-------------|
-| **main-adapter** | `/integration/communication/` | ObjectEventBus → postMessage | Automatic (Main side) |
-| **ui-adapter** | `/svelte-ui/src/lib/services/` | postMessage → Svelte stores | Automatic (UI side) |
-| **message-protocol** | `/integration/communication/` | Message types & builders | Message definitions |
-| **communication-bridge** | `/integration/communication/` | postMessage serialization | Automatic |
+| **simple-postmessage** | `/integration/communication/` | ObjectEventBus → DataExtractor → postMessage | Automatic (Main → UI) |
+| **command-router** | `/application/` | Routes UI commands to handlers | Automatic (UI → Main) |
+| **main-integration** | `/integration/svelte/` | Receives postMessage, dispatches to CommandRouter | Automatic |
 | **unified-communication** | `/svelte-ui/src/lib/services/` | UI → Main commands | Send commands from UI |
 | **property-controller** | `/svelte-ui/src/lib/services/` | UI property state | UI state management |
 | **property-update-handler** | `/application/handlers/` | UI property changes → 3D | Route property updates |
@@ -110,7 +109,7 @@
 │  └─→ PropertyUpdateHandler → ObjectStateManager
 │
 ┌─ UI notification (3D → UI)?
-│  └─→ Automatic via ObjectEventBus → MainAdapter → MessageProtocol
+│  └─→ Automatic via ObjectEventBus → SimpleCommunication → postMessage
 │
 ┌─ UI command (UI → 3D)?
 │  └─→ UnifiedCommunication.send() → postMessage → main-integration.js
@@ -132,26 +131,26 @@
 
 ## Common Workflows
 
-### 1. State Change Flow (Phase 3)
+### 1. State Change Flow
 ```javascript
 // User action → State update → UI notification
 Tool/Handler
   → ObjectStateManager.updateObject(objectId, updates)
     → SceneController.updateGeometry()
     → ObjectEventBus.emit('object:geometry', event)
-      → MainAdapter.handleEvent() → MessageProtocol
-        → postMessage → UIAdapter.receive() → Svelte stores update
+      → SimpleCommunication → DataExtractor
+        → postMessage → UI iframes → Svelte stores update
 ```
 
-### 2. UI Property Change Flow (Phase 3)
+### 2. UI Property Change Flow
 ```javascript
 // User edits property → Update 3D → Reflect in UI
 UI Panel (Svelte)
   → UnifiedCommunication.sendPropertyUpdate(objectId, property, value)
-    → postMessage → main-integration.js
+    → postMessage → main-integration.js → CommandRouter
       → PropertyUpdateHandler.handlePropertyChange()
         → ObjectStateManager.updateObject()
-          → ObjectEventBus.emit() → MainAdapter → UIAdapter → UI updates
+          → ObjectEventBus → SimpleCommunication → UI updates
 ```
 
 ### 3. Container Creation Flow
@@ -161,7 +160,7 @@ User: Cmd+F
   → ToolController.createContainerFromSelection()
     → ContainerCrudManager.createContainerFromSelection()
       → SceneController.addObject({isContainer: true})
-        → PropertyPanelSync.sendToUI('objectAdded')
+        → ObjectEventBus → SimpleCommunication → UI updates
 ```
 
 ### 4. Visual Effect Flow
@@ -190,13 +189,13 @@ PushTool.onDrag(distance)
 - Interaction → Scene
 - Scene → Foundation
 - Any → ObjectStateManager
-- Any → PropertyPanelSync (for UI notifications)
+- Main → UI: Automatic via ObjectEventBus → SimpleCommunication
 
 ❌ **FORBIDDEN**:
 - Application → THREE.js directly
 - Tools → SceneController directly (use ObjectStateManager)
 - UI → SceneController directly (use PropertyUpdateHandler)
-- Any → `window.postMessage` directly (use PropertyPanelSync)
+- Any → `window.postMessage` directly from Main (SimpleCommunication handles this)
 
 ---
 
@@ -224,7 +223,7 @@ UI.onChange()
   → PropertyUpdateHandler.handlePropertyChange()
     → ObjectStateManager.updateObject()
       → SceneController.updateGeometry()
-        → PropertyPanelSync.sendToUI()
+        → SimpleCommunication.postMessage()
 ```
 **5 calls** ✅
 

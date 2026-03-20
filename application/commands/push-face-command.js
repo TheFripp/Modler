@@ -1,3 +1,4 @@
+const logger = window.logger;
 /**
  * Push Face Command
  * Undoable command for face push operations (dimension and position changes)
@@ -149,3 +150,5 @@ class PushFaceCommand extends BaseCommand {
         return `Push face (Δx: ${dx}, Δy: ${dy}, Δz: ${dz})`;
     }
 }
+
+window.PushFaceCommand = PushFaceCommand;

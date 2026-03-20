@@ -34,13 +34,20 @@ const EXPECTED_TYPESCRIPT_INTERFACE = {
 
     // Container properties
     isContainer: 'boolean',
+    containerMode: 'string|null',
+    isHug: 'boolean',
     layoutMode: 'string|null',
     autoLayout: {
         enabled: 'boolean',
         direction: 'string|null',
         gap: 'number',
-        padding: 'object'
+        padding: 'object',
+        alignment: 'object|undefined',
+        reversed: 'boolean|undefined',
+        tileMode: 'object|undefined'
     },
+    calculatedGap: 'number|undefined',
+    layoutProperties: 'object|undefined',
 
     // State flags
     selected: 'boolean',
@@ -112,10 +119,7 @@ function compareSchemas(expected, actual, path = '') {
     // Check for extra properties in actual schema
     for (const key in actual) {
         if (!expected.hasOwnProperty(key)) {
-            // Allow calculatedGap as it's a runtime-only property
-            if (key === 'calculatedGap' && path === '') {
-                continue;
-            }
+            // No special cases needed — all properties should be in expected
             errors.push(`Extra property in schema (not in TypeScript): ${path}${key}`);
         }
     }

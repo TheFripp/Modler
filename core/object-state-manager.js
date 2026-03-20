@@ -1,3 +1,4 @@
+import * as THREE from 'three';
 /**
  * ObjectStateManager - State Coordination Layer
  *
@@ -327,6 +328,7 @@ class ObjectStateManager extends EventTarget {
         if (includeExtendedProps) {
             structure.scale = { x: 1, y: 1, z: 1 };
             structure.childIds = [];
+            structure.containerMode = null;
             structure.layoutMode = null;
             structure.selected = false;
             structure.locked = false;
@@ -769,7 +771,7 @@ class ObjectStateManager extends EventTarget {
             const autoLayoutPropertyChanged = Array.from(object._changedProperties || []).some(prop =>
                 prop.startsWith('autoLayout.')
             );
-            const isLayoutMode = object.autoLayout?.enabled;
+            const isLayoutMode = object.containerMode === 'layout' || object.autoLayout?.enabled;
 
             if (object.isContainer && sceneObject) {
                 if (isLayoutMode) {
@@ -1036,16 +1038,16 @@ class ObjectStateManager extends EventTarget {
         const obj = this.getObject(objectId);
         if (!obj?.isContainer) return null;
 
-        // Check autoLayout.enabled first (modern approach)
+        // PRIMARY: Use containerMode if set (new canonical property)
+        if (obj.containerMode === 'layout' || obj.containerMode === 'hug' || obj.containerMode === 'manual') {
+            return obj.containerMode;
+        }
+
+        // LEGACY FALLBACK: Derive from old flags (for data created before containerMode existed)
         if (obj.autoLayout?.enabled) return 'layout';
-
-        // Check legacy layoutMode property (for backward compatibility)
         if (obj.layoutMode !== null && obj.layoutMode !== undefined) return 'layout';
-
-        // Check hug mode
         if (obj.isHug === true) return 'hug';
 
-        // Manual mode (no automatic sizing)
         return 'manual';
     }
 
@@ -1067,6 +1069,21 @@ class ObjectStateManager extends EventTarget {
      */
     isHugMode(objectId) {
         return this.getContainerMode(objectId) === 'hug';
+    }
+
+    /**
+     * Build the update object for changing container mode.
+     * Sets containerMode and keeps legacy flags (isHug, sizingMode) in sync.
+     *
+     * @param {'layout'|'hug'|'manual'} mode - Target mode
+     * @returns {Object} Update object to spread into updateObject() calls
+     */
+    static buildContainerModeUpdate(mode) {
+        return {
+            containerMode: mode,
+            isHug: mode === 'hug',
+            sizingMode: mode
+        };
     }
 
     /**

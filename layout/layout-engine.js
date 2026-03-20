@@ -1,3 +1,4 @@
+import * as THREE from 'three';
 // Modler V2 - Layout Engine
 // Pure layout calculation functions for 3D auto layout system
 // Follows V2 architecture: calculations separate from Three.js manipulation

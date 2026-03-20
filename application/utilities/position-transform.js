@@ -1,3 +1,4 @@
+import * as THREE from 'three';
 /**
  * Position Transform Utility
  * Specialized coordinate space transformations for nested containers and complex hierarchies

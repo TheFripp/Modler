@@ -1,3 +1,4 @@
+import * as THREE from 'three';
 // Modler V2 - Quick Measurement Tool
 // Activated by holding Option/Alt key - shows edge dimensions and object distances
 

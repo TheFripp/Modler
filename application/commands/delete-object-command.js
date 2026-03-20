@@ -1,3 +1,4 @@
+import * as THREE from 'three';
 // Modler V2 - Delete Object Command
 // Reversible object deletion for undo/redo system
 

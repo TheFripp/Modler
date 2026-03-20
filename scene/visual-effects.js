@@ -1,3 +1,4 @@
+import * as THREE from 'three';
 // Modler V2 - Scene Layer
 // Visual Effects - Face highlighting with minimal abstraction
 

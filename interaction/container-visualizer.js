@@ -1,3 +1,4 @@
+import * as THREE from 'three';
 // Modler V2 - Container Visualization Extension
 // Extends ObjectVisualizer with container-specific behaviors
 // Handles container wireframes, context states, padding visualization, and layout guides
