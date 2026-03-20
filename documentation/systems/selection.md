@@ -8,88 +8,89 @@ Container-first selection with direct object access through double-click.
 - **Single-click child object** → selects parent container (when not in container context)
 - **Single-click child object** → selects child directly (when already stepped into parent container)
 - **Double-click child object** → steps into container, selects child directly
+- **Double-click empty space** → navigates up one level
+- **Escape** → navigates up one level
 - **Selection priority**: Context-aware container logic > Individual object
 
 ### Selection Operations
-- **Add to selection**: `selectionController.select(object)`
-- **Remove from selection**: `selectionController.deselect(object)`
-- **Toggle selection**: `selectionController.toggle(object)`
-- **Clear all**: `selectionController.clearSelection(reason)`
+- `selectionController.select(object)` — context-aware selection with container-first logic
+- `selectionController.select(object, { direct: true })` — UI-initiated, bypasses container-first and navigates to parent
+- `selectionController.select(object, { resolved: true })` — target already resolved, skips container-first resolution
+- `selectionController.deselect(object)`
+- `selectionController.toggle(object)`
+- `selectionController.clearSelection()`
 
-## Components
+## Architecture
 
-### SelectionController ⭐ **CENTRALIZED**
+### SelectionController
 **File**: `interaction/selection-controller.js`
-- **Unified selection logic** - eliminates BaseSelectionBehavior duplication
-- **Container context awareness** - handles step-in/out state transitions
-- **Tool integration** - single entry point for all selection operations
-- **Container interactive mesh management** - disables interference during context
-- Property panel updates and tool notifications
+- Core selection state (Set of meshes)
+- Container-first resolution via `resolveSelectionTarget()`
+- Click handling: `handleObjectClick()` → resolves target → `select({ resolved: true })`
+- Double-click delegates to NavigationController
+- Emits selection events via ObjectEventBus → SimpleCommunication → UI
+
+### NavigationController
+**File**: `application/managers/navigation-controller.js`
+- **Single authority** for container hierarchy navigation state
+- `navigationStack` + `currentContainer` — the canonical context stack
+- `navigateToContainer()`, `navigateUp()`, `navigateToRoot()`, `navigateToObject()`
+- `getContextStackMeshes()` — returns full stack as Three.js meshes
+- Visual state applied via ContainerVisualizer
+- Keyboard: Escape → `navigateUp()`
+
+### ContainerVisualizer
+**File**: `interaction/container-visualizer.js`
+- Visual-only: wireframe states, padding visualization, child container visibility
+- Reads navigation state from NavigationController (no local stack)
+- `stepIntoContainer()` — applies faded wireframe, disables interactive mesh
+- `exitAllContainerContexts()` — cleans up all container wireframes
 
 ### VisualizationManager
 **File**: `interaction/visualization-manager.js`
-- Edge highlight creation/removal through unified visualization system
-- Material management for wireframes
-- Visual feedback coordination
+- Unified visual state management (`setState(object, state)`)
+- States: `normal`, `selected`, `hovered`, `multi-selected`, `context`, `selected-in-context`
 
-### ContainerInteractionManager
-**File**: `interaction/container-interaction-manager.js`
-- Step-into container functionality
-- Container context visual feedback
-- Collision mesh management during context
+## Selection Flow
 
-## Selection Workflow
+### Click → Selection
+1. InputController raycasts, resolves support meshes to main objects
+2. SelectTool delegates to `SelectionController.handleObjectClick()`
+3. SelectionController applies container-first logic (child → parent container)
+4. `select({ resolved: true })` updates state, visualization, emits events
+5. ObjectEventBus → SimpleCommunication → UI panels update
 
-### Basic Selection
-1. User clicks object
-2. SelectionController determines if container or direct selection
-3. SelectionController updates selection state
-4. VisualizationManager creates edge highlights
-5. Property panel updates via bridge
+### Double-Click → Step In
+1. InputController detects double-click, uses `raycastForDoubleClick()` (returns actual child, not parent)
+2. SelectTool delegates to `SelectionController.handleDoubleClick()`
+3. NavigationController.handleDoubleClick() → `navigateToContainer()` or `navigateToObject()`
+4. ContainerVisualizer applies faded wireframe, disables interactive mesh
+5. Subsequent clicks select children directly (in-context)
 
-### Container Step-Into
-1. User double-clicks child object
-2. ContainerInteractionManager establishes container context
-3. **Container interactive mesh disabled** - prevents selection interference
-4. Child object selected directly
-5. Container shows faded wireframe
-6. **Context-aware selection** - subsequent clicks select children directly
+### UI → Scene Selection
+1. ObjectTree click → postMessage `object-select` with `directSelection: true`
+2. CommandRouter → `SelectionController.select(mesh, { direct: true })`
+3. NavigationController automatically navigates to parent container
 
-### Container Context Selection (NEW)
-1. User steps into container (double-click or selection from object list)
-2. SelectionController disables container's interactive mesh
-3. **Direct child selection** - clicking child objects selects them directly
-4. **Bypasses container-first logic** when already in correct context
-5. Step-out restores normal container-first behavior
-
-## Integration Points
-
-### Tool Integration
-- **SelectionController**: Centralized selection logic handling all tools
-- **Direct access**: Tools call SelectionController methods directly
-- **Face highlighting**: Only on selected objects
-
-### UI Integration
-- **Property panel**: Real-time updates via Svelte bridge
-- **Object hierarchy**: Selection state synced to UI
-- **Multi-selection**: Property panel shows common properties
+## Raycasting Layers
+- **Layer 0**: Regular objects (default)
+- **Layer 1**: Container interactive meshes
+- When container selected: Layer 1 first (for face detection by move/push tools), fallback to Layer 0
+- When no container selected: Layer 0 only
 
 ## Key Methods
 
-### Core Selection
-- `select(object)` → boolean - Context-aware selection with container logic
-- `deselect(object)` → boolean - Remove from selection
-- `toggle(object)` → boolean - Toggle selection state
-- `isSelected(object)` → boolean - Check selection status
+### SelectionController
+- `handleObjectClick(object, event)` — main click entry point
+- `handleDoubleClick(hit, event)` — delegates to NavigationController
+- `handleEmptySpaceClick(event)` — delegates to NavigationController
+- `resolveSelectionTarget(object)` — container-first resolution
+- `isObjectPartOfContainer(objectData, containerMesh)` — context validation
 
-### Tool Interface
-- `handleObjectClick(object, event, options)` → boolean - **Main entry point** with container context awareness
-- `handleDoubleClick(hit, event)` → boolean - Container step-into with child selection
-- `handleEmptySpaceClick(event)` → void - Clear selection and exit context
-
-### Container Context
-- `stepIntoContainer(containerObject)` → void - Establish container context
-- `stepOutOfContainer()` → void - Exit container context
-- `isInContainerContext()` → boolean - Check if in container context
-- `getContainerContext()` → Object|null - Get current container
-- `isObjectPartOfContainer(objectData, containerMesh)` → boolean - Context validation
+### NavigationController
+- `navigateToContainer(containerId, options)` — step into container
+- `navigateToObject(objectId, options)` — navigate to any object atomically
+- `navigateUp()` — step out one level
+- `navigateToRoot(options)` — exit all containers
+- `isInContainerContext()` — check current state
+- `getContextStackMeshes()` — full stack as meshes

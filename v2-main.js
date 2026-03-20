@@ -182,13 +182,10 @@ function initializeInteraction() {
 
     // Initialize unified visualization system components
     modlerV2Components.visualizationManager = new VisualizationManager();
-    modlerV2Components.containerInteractionManager = new ContainerInteractionManager();
     modlerV2Components.selectionController = new SelectionController();
 
-    // Connect selection components
     modlerV2Components.selectionController.initialize(
         modlerV2Components.visualizationManager
-        // containerInteractionManager removed - NavigationController handles all container context
     );
 
     // Move gizmo removed - face-based movement system is cleaner and more intuitive

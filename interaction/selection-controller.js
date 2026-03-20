@@ -6,17 +6,13 @@ class SelectionController {
     constructor() {
         // Core selection state
         this.selectedObjects = new Set();
-        this.selectionHistory = [];
-        this.maxHistorySize = 10;
 
         // Component references (set during initialization)
         this.visualizationManager = null;
-        // containerContextManager removed - NavigationController handles all container context
 
         // Double-click tracking for container step-in (moved from BaseSelectionBehavior)
         this.lastClickedChildObject = null;
         this.lastClickTime = 0;
-
     }
 
     /**
@@ -24,7 +20,6 @@ class SelectionController {
      */
     initialize(visualizationManager) {
         this.visualizationManager = visualizationManager;
-        // containerContextManager removed - NavigationController handles all container context
     }
 
     // ====== COMPONENT GETTERS (reduce repeated lookups) ======
@@ -64,44 +59,38 @@ class SelectionController {
 
     /**
      * Resolve target object for selection based on container-first logic
-     * Returns { targetObject, shouldNavigate }
      */
     resolveSelectionTarget(object) {
         const objectData = this.getObjectData(object);
-        if (!objectData) return { targetObject: object, shouldNavigate: false };
+        if (!objectData) return object;
 
         const isInContainerContext = this.isInContainerContext();
         const currentContainerContext = this.getContainerContext();
 
         // In container context - check if object is part of current container
-        if (isInContainerContext && currentContainerContext && objectData) {
+        if (isInContainerContext && currentContainerContext) {
             const isPartOfCurrentContainer = this.isObjectPartOfContainer(objectData, currentContainerContext);
 
-            if (isPartOfCurrentContainer) {
-                // Direct selection within current container
-                return { targetObject: object, shouldNavigate: false };
-            } else {
+            if (!isPartOfCurrentContainer) {
                 // Object outside current container - navigate up first
                 const navigationController = this.getNavigationController();
                 if (navigationController) {
                     navigationController.navigateUp();
                 }
-                // Then select directly
-                return { targetObject: object, shouldNavigate: false };
             }
+            // Direct selection within (or after navigating out of) container
+            return object;
         }
 
         // Not in container context - apply container-first logic
         if (objectData.parentContainer) {
             const parentContainer = this.getParentContainer(objectData);
             if (parentContainer?.mesh) {
-                // Regular containers: Select parent container instead of child
-                return { targetObject: parentContainer.mesh, shouldNavigate: false };
+                return parentContainer.mesh;
             }
         }
 
-        // Default: direct selection
-        return { targetObject: object, shouldNavigate: false };
+        return object;
     }
 
     // Core selection methods
@@ -110,17 +99,19 @@ class SelectionController {
 
         const sceneController = this.getSceneController();
         if (!sceneController) {
-            console.warn('⚠️ SceneController not available');
+            console.warn('SceneController not available');
             return false;
         }
 
         // Resolve which object to actually select (container-first logic)
-        // Skip container-first logic if this is a direct selection from UI
-        let targetObject, shouldNavigate;
+        // options.resolved: target already resolved by caller (e.g. handleObjectClick)
+        // options.direct: UI-initiated selection, bypass container-first and navigate to parent
+        let targetObject;
 
-        if (options.direct) {
+        if (options.resolved) {
             targetObject = object;
-            shouldNavigate = false;
+        } else if (options.direct) {
+            targetObject = object;
 
             // If directly selecting a child object from UI, step into parent container
             const objectData = this.getObjectData(object);
@@ -131,24 +122,11 @@ class SelectionController {
                 }
             }
         } else {
-            const resolved = this.resolveSelectionTarget(object);
-            targetObject = resolved.targetObject;
-            shouldNavigate = resolved.shouldNavigate;
+            targetObject = this.resolveSelectionTarget(object);
         }
 
         // Add to selection
         this.selectedObjects.add(targetObject);
-        this.addToHistory('select', targetObject);
-
-        // Handle navigation if needed (for container double-clicks)
-        if (shouldNavigate) {
-            const navigationController = this.getNavigationController();
-            const objectData = this.getObjectData(targetObject);
-            if (navigationController && objectData) {
-                navigationController.navigateToContainer(objectData.id);
-                return true; // NavigationController handles visual updates
-            }
-        }
 
         // Update visualization
         if (this.visualizationManager) {
@@ -165,7 +143,6 @@ class SelectionController {
         if (!object || !this.selectedObjects.has(object)) return false;
 
         this.selectedObjects.delete(object);
-        this.addToHistory('deselect', object);
 
         // Delegate visual updates to VisualizationManager
         if (this.visualizationManager) {
@@ -178,18 +155,11 @@ class SelectionController {
     toggle(object) {
         if (this.isSelected(object)) {
             const result = this.deselect(object);
-            // After deselecting, update property panel with remaining selection or clear
-            this.updatePropertyPanelForCurrentSelection();
+            this.notifySelectionChange();
             return result;
         } else {
             return this.select(object);
         }
-    }
-
-    updatePropertyPanelForCurrentSelection() {
-        // Legacy method - functionality moved to unified ObjectEventBus communication
-        // All panel updates now handled by notifySelectionChange() → ObjectEventBus → PropertyPanelSync
-        this.notifySelectionChange();
     }
 
     clearSelection() {
@@ -203,7 +173,6 @@ class SelectionController {
         }
 
         this.selectedObjects.clear();
-        this.addToHistory('clear', null);
         this.notifySelectionChange();
 
         return objectsToDeselect.length;
@@ -257,27 +226,6 @@ class SelectionController {
     hasSelection() {
         return this.selectedObjects.size > 0;
     }
-
-
-    // Selection history
-    addToHistory(action, object) {
-        const historyEntry = {
-            action: action,
-            object: object,
-            objectName: object ? (object.name || 'unnamed') : null,
-            timestamp: Date.now(),
-            selectionCount: this.selectedObjects.size
-        };
-
-        this.selectionHistory.push(historyEntry);
-
-        // Keep history size manageable
-        if (this.selectionHistory.length > this.maxHistorySize) {
-            this.selectionHistory.shift();
-        }
-    }
-
-
 
 
     // Selection events
@@ -346,27 +294,19 @@ class SelectionController {
         }
     }
 
-    // Statistics
     getStats() {
         return {
-            selectedCount: this.selectedObjects.size,
-            historyEntries: this.selectionHistory.length,
-            lastAction: this.selectionHistory.length > 0 ? this.selectionHistory[this.selectionHistory.length - 1] : null
+            selectedCount: this.selectedObjects.size
         };
     }
 
-    // Cleanup
     destroy() {
         this.clearSelection();
-        this.selectionHistory = [];
         this.selectionChangeCallback = null;
 
-        // Clean up dependent components
         if (this.visualizationManager) {
             this.visualizationManager.destroy();
         }
-        // containerContextManager removed - managed by NavigationController
-
     }
 
     // ====== OBJECT INTERACTION METHODS (moved from BaseSelectionBehavior) ======
@@ -431,17 +371,15 @@ class SelectionController {
         if (isMultiSelect) {
             this.toggle(targetObject);
         } else {
-            // CRITICAL: Check if clicking the same object that's already the only selection
-            // Prevents UI flickering when clicking already-selected object
+            // Skip if clicking the same already-selected object (prevents UI flicker)
             const isSameObjectAlreadySelected =
                 this.selectedObjects.size === 1 &&
                 this.selectedObjects.has(targetObject);
 
             if (!isSameObjectAlreadySelected) {
                 this.clearSelection();
-                this.select(targetObject);
+                this.select(targetObject, { resolved: true });
             }
-            // If same object already selected, do nothing (no clear, no select, no events)
         }
 
         return true;
@@ -484,29 +422,6 @@ class SelectionController {
         }
     }
 
-
-    /**
-     * Check if an object is a DIRECT child of the current container context
-     */
-    isDirectChildOfCurrentContainer(objectData) {
-        if (!objectData) return false;
-
-        const isInContainerContext = this.isInContainerContext();
-
-        // Not in container context - only top-level objects are valid
-        if (!isInContainerContext) {
-            return !objectData.parentContainer;
-        }
-
-        // In container context - check if object's parent matches current container
-        const currentContainerContext = this.getContainerContext();
-        if (currentContainerContext) {
-            const currentContainerData = this.getObjectData(currentContainerContext);
-            return objectData.parentContainer === currentContainerData?.id;
-        }
-
-        return false;
-    }
 
     /**
      * Check if object is selectable

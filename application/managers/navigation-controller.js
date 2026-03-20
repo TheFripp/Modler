@@ -17,10 +17,6 @@ class NavigationController {
         this.containerVisualizer = null;
         this.selectionController = null;
 
-        // Navigation mode
-        this.mode = 'container-first'; // 'container-first' or 'direct-child'
-
-        // Component references (set during initialization)
         this.initialized = false;
     }
 
@@ -38,10 +34,8 @@ class NavigationController {
 
     /**
      * Navigate to a specific container by ID
-     * Works from any UI source (clicks, object list, breadcrumbs)
      * @param {string} containerId - Container to navigate to
      * @param {Object} options - Navigation options
-     * @param {boolean} options.skipDimming - Skip automatic dimming update (for atomic operations)
      */
     navigateToContainer(containerId, options = {}) {
         if (!this.initialized) {
@@ -66,7 +60,7 @@ class NavigationController {
         this.currentContainer = containerData;
 
         // Apply visual state using container visualizer
-        this.containerVisualizer.stepIntoContainer(containerData.mesh, { skipDimming: options.skipDimming });
+        this.containerVisualizer.stepIntoContainer(containerData.mesh);
 
         // Set proper selection state for container
         this.visualizationManager.setState(containerData.mesh, 'selected-in-context');
@@ -125,20 +119,13 @@ class NavigationController {
             if (objectData.parentContainer) {
                 const parentContainer = sceneController.getObject(objectData.parentContainer);
                 if (parentContainer) {
-                    // ATOMIC OPERATION: Step into parent container without triggering dimming
-                    this.navigateToContainer(objectData.parentContainer, { ...options, skipDimming: true });
+                    this.navigateToContainer(objectData.parentContainer, options);
 
                     // Then select the specific child object
-                    // Only clear selection if not adding to selection (shift-click)
                     if (!options.addToSelection) {
                         this.selectionController.clearSelection('navigate-to-object');
                     }
                     this.selectionController.select(objectData.mesh);
-
-                    // NOW trigger dimming after both container entry and object selection are complete
-                    if (this.containerVisualizer) {
-                        this.containerVisualizer.scheduleDimmingUpdate();
-                    }
                     return true;
                 } else {
                     console.error('Parent container not found:', objectData.parentContainer);
@@ -206,23 +193,9 @@ class NavigationController {
         this.navigationStack = [];
         this.currentContainer = null;
 
-        // Step out of all container contexts
+        // Clean up visual state for all containers we were in
         if (wasInContainerContext) {
-            // ARCHITECTURAL CHANGE: Do not enable all containers at root level
-            // Containers should only be selectable via their child objects
-            // this.containerVisualizer.enableAllContainers(); // DISABLED
-
-            // FIXED: Properly step out of all containers to trigger wireframe cleanup
-            // Instead of directly clearing the stack, step out of each container
-            while (this.containerVisualizer.containerContextStack.length > 0) {
-                this.containerVisualizer.stepOutOfContainer();
-            }
-
-            // CLEANUP: Remove any lingering container edge highlights
-            const containerInteractionManager = window.modlerComponents?.containerInteractionManager;
-            if (containerInteractionManager) {
-                containerInteractionManager.cleanupEdgeHighlights();
-            }
+            this.containerVisualizer.exitAllContainerContexts();
         }
 
         // Clear selection only if not adding to selection (shift-click)
@@ -299,89 +272,18 @@ class NavigationController {
         return this.currentContainer;
     }
 
-    // ====== VISUAL STATE INTEGRATION ======
-
     /**
-     * Handle object selection with navigation awareness
-     * Replaces direct selection controller calls
-     * @param {THREE.Object3D} object - Selected object
-     * @param {Event} event - Mouse event
+     * Get full context stack as meshes (for ContainerVisualizer)
+     * @returns {THREE.Object3D[]} Array of container meshes from outermost to current
      */
-    handleObjectSelection(object, event) {
-        if (!this.initialized || !object) return false;
-
-        const sceneController = window.modlerComponents?.sceneController;
-        if (!sceneController) return false;
-
-        const objectData = sceneController.getObjectByMesh(object);
-        if (!objectData) return false;
-
-        // Handle container-first selection logic
-        if (this.mode === 'container-first') {
-            return this.handleContainerFirstSelection(objectData, object, event);
+    getContextStackMeshes() {
+        const meshes = this.navigationStack
+            .filter(c => c?.mesh)
+            .map(c => c.mesh);
+        if (this.currentContainer?.mesh) {
+            meshes.push(this.currentContainer.mesh);
         }
-
-        return false;
-    }
-
-    /**
-     * Handle container-first selection logic
-     * @param {Object} objectData - Object data from scene controller
-     * @param {THREE.Object3D} object - Three.js object
-     * @param {Event} event - Mouse event
-     */
-    handleContainerFirstSelection(objectData, object, event) {
-        const isMultiSelect = event && (event.ctrlKey || event.metaKey || event.shiftKey);
-
-        // If clicking on a container
-        if (objectData.isContainer) {
-            if (isMultiSelect) {
-                // Multi-select: just add to selection
-                this.selectionController.toggle(object);
-            } else {
-                // Single select: select container and potentially step into it
-                this.selectionController.clearSelection('container-selection');
-                this.selectionController.select(object);
-
-                // Update current container if stepping into it
-                if (this.shouldStepIntoContainer(objectData)) {
-                    this.navigateToContainer(objectData.id);
-                }
-            }
-            return true;
-        }
-
-        // If clicking on a child object
-        if (objectData.parentContainer) {
-            if (this.mode === 'container-first') {
-                // Navigate to parent container and select child
-                this.navigateToObject(objectData.id);
-                return true;
-            }
-        }
-
-        // Regular object selection
-        if (isMultiSelect) {
-            this.selectionController.toggle(object);
-        } else {
-            this.selectionController.clearSelection('object-selection');
-            this.selectionController.select(object);
-        }
-
-        return true;
-    }
-
-    /**
-     * Determine if we should automatically step into a container
-     * @param {Object} containerData - Container data
-     */
-    shouldStepIntoContainer(containerData) {
-        // Step into container if it has children and we're not already inside it
-        const sceneController = window.modlerComponents?.sceneController;
-        if (!sceneController) return false;
-
-        const childObjects = sceneController.getChildObjects(containerData.id);
-        return childObjects.length > 0 && this.currentContainer?.id !== containerData.id;
+        return meshes;
     }
 
     /**
@@ -441,14 +343,13 @@ class NavigationController {
      * Reset navigation state (useful for tool switching)
      */
     reset() {
+        const wasInContext = this.currentContainer !== null;
         this.navigationStack = [];
         this.currentContainer = null;
 
-        // Exit all container contexts
-        if (this.containerVisualizer && this.containerVisualizer.isInContainerContext()) {
-            this.containerVisualizer.stepOutOfContainer();
+        if (wasInContext && this.containerVisualizer) {
+            this.containerVisualizer.exitAllContainerContexts();
         }
-
     }
 
     /**
@@ -457,7 +358,6 @@ class NavigationController {
     getNavigationStats() {
         return {
             initialized: this.initialized,
-            mode: this.mode,
             stackDepth: this.navigationStack.length,
             currentContainer: this.currentContainer?.name || 'none',
             breadcrumbs: this.getBreadcrumbs().map(b => b.name).join(' > ')

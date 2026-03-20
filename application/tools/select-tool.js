@@ -57,12 +57,9 @@ class SelectTool {
      * Handle mouse click events
      */
     onClick(hit, event) {
-        // Use SelectionController directly
         if (hit && hit.object) {
-            console.log('🎯 Click hit object:', hit.object.name);
-            this.selectionController.handleObjectClick(hit.object, event, { toolType: 'SelectTool' });
+            this.selectionController.handleObjectClick(hit.object, event);
         } else {
-            console.log('🌌 Click on empty space - clearing selection');
             this.selectionController.handleEmptySpaceClick(event);
         }
     }
