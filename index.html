@@ -17,6 +17,15 @@
     <!-- Preconnect to Svelte dev server for faster iframe loading -->
     <link rel="preconnect" href="http://localhost:5173">
     <link rel="dns-prefetch" href="http://localhost:5173">
+
+    <!-- Import map for bare module specifiers -->
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "./node_modules/three/build/three.module.js"
+        }
+    }
+    </script>
 </head>
 <body>
     <!-- 3D Canvas - Fixed Background -->

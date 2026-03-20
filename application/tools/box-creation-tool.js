@@ -180,7 +180,6 @@ class BoxCreationTool {
         this.creationObject.position.set(centerX, centerY, centerZ);
 
         // Make appropriate support meshes visible via centralized visibility API
-        const supportMeshFactory = window.modlerComponents?.supportMeshFactory;
         if (supportMeshFactory) {
             // CAD wireframe should be visible for regular objects
             supportMeshFactory.showCadWireframe(this.creationObject);
