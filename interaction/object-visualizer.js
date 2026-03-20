@@ -140,6 +140,7 @@ class ObjectVisualizer {
 
     /**
      * Create edge highlight for object - uses pre-created support meshes (CREATE ONCE architecture)
+     * Note: VisualizationManager guarantees only non-container objects reach this method
      */
     createEdgeHighlight(object) {
         // Don't create duplicate highlights
@@ -152,16 +153,6 @@ class ObjectVisualizer {
         if (object.userData && object.userData.hideFromSelection) return;
 
         try {
-            // Check if this is a container - delegate to ContainerVisualizer
-            const sceneController = window.modlerComponents?.sceneController;
-            if (sceneController) {
-                const objectData = sceneController.getObjectByMesh(object);
-                if (objectData && objectData.isContainer) {
-                    // Containers are handled by ContainerVisualizer unified system
-                    return;
-                }
-            }
-
             // CREATE ONCE ARCHITECTURE: Use pre-created support mesh for regular objects
             const supportMeshes = object.userData.supportMeshes;
             if (supportMeshes && supportMeshes.selectionWireframe) {
@@ -189,18 +180,9 @@ class ObjectVisualizer {
 
     /**
      * Remove edge highlight for object - uses pre-created support meshes (CREATE ONCE architecture)
+     * Note: VisualizationManager guarantees only non-container objects reach this method
      */
     removeEdgeHighlight(object) {
-        // Check if this is a container - delegate to ContainerVisualizer
-        const sceneController = window.modlerComponents?.sceneController;
-        if (sceneController) {
-            const objectData = sceneController.getObjectByMesh(object);
-            if (objectData && objectData.isContainer) {
-                // Containers are handled by ContainerVisualizer unified system
-                return;
-            }
-        }
-
         const edgeMesh = this.edgeHighlights.get(object);
         if (edgeMesh) {
             // CREATE ONCE ARCHITECTURE: Check if this is a pre-created support mesh
@@ -227,18 +209,23 @@ class ObjectVisualizer {
     }
 
     /**
-     * Create hover effect (can be overridden)
+     * Create hover effect - shows subtle wireframe via pre-created hoverWireframe support mesh
      */
     createHoverEffect(object) {
-        // Default implementation - could be material highlight, glow, etc.
-        // For now, just track the state
+        const factory = this.getSupportMeshFactory();
+        if (factory) {
+            factory.showHoverWireframe(object);
+        }
     }
 
     /**
-     * Remove hover effect
+     * Remove hover effect - hides the hoverWireframe support mesh
      */
     removeHoverEffect(object) {
-        // Default implementation
+        const factory = this.getSupportMeshFactory();
+        if (factory) {
+            factory.hideHoverWireframe(object);
+        }
     }
 
     /**

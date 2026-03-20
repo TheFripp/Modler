@@ -132,6 +132,7 @@ class SupportMeshFactory {
             cadWireframe: this.createContainerWireframe(mainMesh) // Containers use containerWireframe for ContainerVisualizer compatibility
         } : {
             selectionWireframe: this.createSelectionWireframe(mainMesh),
+            hoverWireframe: this.createHoverWireframe(mainMesh),
             faceHighlight: this.createFaceHighlight(mainMesh, false), // false = not container
             cadWireframe: this.createCadWireframe(mainMesh)
         };
@@ -140,6 +141,10 @@ class SupportMeshFactory {
         if (supportMeshes.selectionWireframe) {
             mainMesh.add(supportMeshes.selectionWireframe);
             supportMeshes.selectionWireframe.visible = false;
+        }
+        if (supportMeshes.hoverWireframe) {
+            mainMesh.add(supportMeshes.hoverWireframe);
+            supportMeshes.hoverWireframe.visible = false;
         }
         if (supportMeshes.faceHighlight) {
             mainMesh.add(supportMeshes.faceHighlight);
@@ -199,6 +204,38 @@ class SupportMeshFactory {
         // Shows wireframe on camera-visible faces only, hides back-face edges
 
         // Ensure proper rendering settings
+        wireframe.matrixAutoUpdate = true;
+        wireframe.frustumCulled = true;
+
+        return wireframe;
+    }
+
+    /**
+     * Create hover wireframe for regular objects (subtle wireframe on mouse hover)
+     */
+    createHoverWireframe(mainMesh) {
+        if (!mainMesh.geometry || mainMesh.type === 'Group') {
+            return null;
+        }
+
+        const edgeGeometry = this.geometryFactory.createEdgeGeometry(mainMesh.geometry);
+        if (!edgeGeometry) {
+            return null;
+        }
+
+        const material = this.materialManager.createHoverEdgeMaterial();
+        material.needsUpdate = true;
+
+        const wireframe = this.resourcePool.getLineMesh(edgeGeometry, material);
+
+        edgeGeometry.computeBoundingSphere();
+        edgeGeometry.computeBoundingBox();
+
+        wireframe.scale.set(1, 1, 1);
+        wireframe.renderOrder = 9998; // Below selection wireframe (9999), above CAD wireframe (998)
+        wireframe.raycast = () => {};
+        wireframe.userData.supportMeshType = 'hoverWireframe';
+
         wireframe.matrixAutoUpdate = true;
         wireframe.frustumCulled = true;
 
@@ -401,9 +438,14 @@ class SupportMeshFactory {
         // Update wireframes using GeometryFactory
         if (supportMeshes.selectionWireframe) {
             const newEdgeGeometry = this.geometryFactory.createEdgeGeometry(mainMesh.geometry);
-            // Return old geometry to pool instead of disposing
             this.geometryFactory.returnGeometry(supportMeshes.selectionWireframe.geometry, 'edge');
             supportMeshes.selectionWireframe.geometry = newEdgeGeometry;
+        }
+
+        if (supportMeshes.hoverWireframe) {
+            const newEdgeGeometry = this.geometryFactory.createEdgeGeometry(mainMesh.geometry);
+            this.geometryFactory.returnGeometry(supportMeshes.hoverWireframe.geometry, 'edge');
+            supportMeshes.hoverWireframe.geometry = newEdgeGeometry;
         }
 
         if (supportMeshes.containerWireframe) {
@@ -817,6 +859,38 @@ class SupportMeshFactory {
     // -- Selection Wireframe (regular objects) --
     showSelectionWireframe(mainMesh) { this.setSupportMeshVisibility(mainMesh, 'selectionWireframe', true); }
     hideSelectionWireframe(mainMesh) { this.setSupportMeshVisibility(mainMesh, 'selectionWireframe', false); }
+
+    // -- Hover Wireframe (regular objects, subtle hover indicator) --
+    showHoverWireframe(mainMesh) { this.setSupportMeshVisibility(mainMesh, 'hoverWireframe', true); }
+    hideHoverWireframe(mainMesh) { this.setSupportMeshVisibility(mainMesh, 'hoverWireframe', false); }
+
+    // -- Container Hover Wireframe (opacity-based, reuses cadWireframe) --
+    showContainerHoverWireframe(mainMesh) {
+        const supportMeshes = mainMesh?.userData?.supportMeshes;
+        if (!supportMeshes?.cadWireframe?.material) return;
+        const wireframe = supportMeshes.cadWireframe;
+        if (wireframe.userData.originalOpacity === undefined) {
+            wireframe.userData.originalOpacity = wireframe.material.opacity;
+        }
+        wireframe.material.opacity = wireframe.userData.originalOpacity * 0.5;
+        wireframe.material.transparent = true;
+        wireframe.material.needsUpdate = true;
+        wireframe.visible = true;
+    }
+    hideContainerHoverWireframe(mainMesh) {
+        const supportMeshes = mainMesh?.userData?.supportMeshes;
+        if (!supportMeshes?.cadWireframe) return;
+        const wireframe = supportMeshes.cadWireframe;
+        // Only hide if not in a selected or context state
+        if (wireframe.userData.wireframeState !== 'selected' && wireframe.userData.wireframeState !== 'context') {
+            wireframe.visible = false;
+        }
+        // Restore opacity if it was changed for hover
+        if (wireframe.userData.originalOpacity !== undefined) {
+            wireframe.material.opacity = wireframe.userData.originalOpacity;
+            wireframe.material.needsUpdate = true;
+        }
+    }
 
     // -- CAD Wireframe (always-visible thin edges) --
     showCadWireframe(mainMesh) { this.setSupportMeshVisibility(mainMesh, 'cadWireframe', true); }

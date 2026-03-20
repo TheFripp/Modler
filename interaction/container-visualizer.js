@@ -224,6 +224,26 @@ class ContainerVisualizer extends ObjectVisualizer {
     }
 
     /**
+     * Create hover effect for containers - shows cadWireframe at reduced opacity
+     */
+    createHoverEffect(object) {
+        const factory = this.getSupportMeshFactory();
+        if (factory) {
+            factory.showContainerHoverWireframe(object);
+        }
+    }
+
+    /**
+     * Remove hover effect for containers
+     */
+    removeHoverEffect(object) {
+        const factory = this.getSupportMeshFactory();
+        if (factory) {
+            factory.hideContainerHoverWireframe(object);
+        }
+    }
+
+    /**
      * Override applyStateVisuals for container-specific states
      */
     applyStateVisuals(object, newState, oldState) {
@@ -281,14 +301,10 @@ class ContainerVisualizer extends ObjectVisualizer {
      * Show container wireframe (force show even in context)
      */
     showContainerWireframe(object) {
-        const sceneController = window.modlerComponents?.sceneController;
-        const containerCrudManager = window.modlerComponents?.containerCrudManager;
-
-        if (sceneController && containerCrudManager) {
-            const objectData = sceneController.getObjectByMesh(object);
-            if (objectData && objectData.isContainer) {
-                containerCrudManager.showContainer(objectData.id, true);
-            }
+        const factory = this.getSupportMeshFactory();
+        if (factory) {
+            factory.restoreContainerWireframeOpacity(object);
+            factory.showContainerWireframe(object);
         }
     }
 
@@ -306,10 +322,9 @@ class ContainerVisualizer extends ObjectVisualizer {
         // Only show if layout is enabled and has non-zero padding
         if (!objectData.autoLayout.enabled || !this.hasNonZeroPadding(objectData)) return;
 
-        // Use ContainerCrudManager's padding visualization if available
-        const containerCrudManager = window.modlerComponents?.containerCrudManager;
-        if (containerCrudManager && containerCrudManager.showPaddingVisualization) {
-            containerCrudManager.showPaddingVisualization(objectData.id);
+        const visualEffects = window.modlerComponents?.visualEffects;
+        if (visualEffects && typeof visualEffects.showPaddingVisualization === 'function') {
+            visualEffects.showPaddingVisualization(objectData.mesh, objectData.autoLayout.padding);
         }
     }
 
@@ -318,13 +333,14 @@ class ContainerVisualizer extends ObjectVisualizer {
      */
     hidePaddingVisualization(object) {
         const sceneController = window.modlerComponents?.sceneController;
-        const containerCrudManager = window.modlerComponents?.containerCrudManager;
+        if (!sceneController) return;
 
-        if (sceneController && containerCrudManager) {
-            const objectData = sceneController.getObjectByMesh(object);
-            if (objectData && objectData.isContainer && containerCrudManager.hidePaddingVisualization) {
-                containerCrudManager.hidePaddingVisualization(objectData.id);
-            }
+        const objectData = sceneController.getObjectByMesh(object);
+        if (!objectData || !objectData.isContainer) return;
+
+        const visualEffects = window.modlerComponents?.visualEffects;
+        if (visualEffects && typeof visualEffects.hidePaddingVisualization === 'function') {
+            visualEffects.hidePaddingVisualization(objectData.mesh);
         }
     }
 
@@ -351,19 +367,17 @@ class ContainerVisualizer extends ObjectVisualizer {
         if (!parentObjectData || !parentObjectData.isContainer) return;
 
         const childObjects = sceneController.getChildObjects(parentObjectData.id);
-        const containerCrudManager = window.modlerComponents?.containerCrudManager;
         const factory = this.getSupportMeshFactory();
+        if (!factory) return;
 
         childObjects.forEach(childData => {
-            if (childData.isContainer && containerCrudManager) {
-                containerCrudManager.showContainer(childData.id);
+            if (childData.isContainer) {
+                factory.showContainerWireframe(childData.mesh);
 
                 // Depth-based opacity: 75% at depth 1, 50% at depth 2, etc.
                 const childDepth = depth + 1;
                 const opacity = Math.max(0.25, 1.0 - childDepth * 0.25);
-                if (factory) {
-                    factory.setContainerWireframeOpacity(childData.mesh, opacity);
-                }
+                factory.setContainerWireframeOpacity(childData.mesh, opacity);
 
                 // Recursively show deeper nested containers
                 this.showChildContainers(childData.mesh, childDepth);
@@ -382,18 +396,18 @@ class ContainerVisualizer extends ObjectVisualizer {
         const parentObjectData = sceneController.getObjectByMesh(parentObject);
         if (!parentObjectData || !parentObjectData.isContainer) return;
 
-        // Get child objects and hide containers among them
         const childObjects = sceneController.getChildObjects(parentObjectData.id);
-        const containerCrudManager = window.modlerComponents?.containerCrudManager;
+        const factory = this.getSupportMeshFactory();
+        if (!factory) return;
 
         childObjects.forEach(childData => {
-            if (childData.isContainer && containerCrudManager) {
+            if (childData.isContainer) {
                 // Always recurse first (since showChildContainers is now recursive)
                 this.hideChildContainers(childData.mesh, forceHideAll);
 
                 // Hide child container if forced or if not currently selected
                 if (forceHideAll || !selectionController.isSelected(childData.mesh)) {
-                    containerCrudManager.hideContainer(childData.id);
+                    factory.hideContainerWireframe(childData.mesh);
                 }
             }
         });

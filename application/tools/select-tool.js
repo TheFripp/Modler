@@ -21,21 +21,34 @@ class SelectTool {
         // Handle Alt-key measurement mode
         if (MovementUtils.handleMeasurementMode(isAltPressed, hit, this.selectionController)) return;
 
-        // Normal hover behavior
+        const visualizationManager = window.modlerComponents?.visualizationManager;
+
         if (hit && hit.object) {
-            // Highlight selectable objects to show they can be interacted with
             const objectData = window.modlerComponents?.sceneController?.getObjectByMesh(hit.object);
 
             if (objectData && objectData.selectable) {
-                // Select tool doesn't show hover highlights - clean selection experience
+                // Clear previous hover if switching to a different object
+                if (this.hoveredObject && this.hoveredObject !== hit.object) {
+                    if (!this.selectionController.isSelected(this.hoveredObject)) {
+                        visualizationManager?.setState(this.hoveredObject, 'normal');
+                    }
+                }
+
+                // Show hover highlight if not already selected
+                if (!this.selectionController.isSelected(hit.object)) {
+                    visualizationManager?.setState(hit.object, 'hovered');
+                }
+
                 this.hoveredObject = hit.object;
                 return;
             }
         }
 
-        // Clear highlight if not hovering over selectable object
+        // Clear hover when not over a selectable object
         if (this.hoveredObject) {
-            this.visualEffects.clearHighlight();
+            if (!this.selectionController.isSelected(this.hoveredObject)) {
+                visualizationManager?.setState(this.hoveredObject, 'normal');
+            }
             this.hoveredObject = null;
         }
     }
@@ -87,7 +100,10 @@ class SelectTool {
      */
     onToolDeactivate() {
         if (this.hoveredObject) {
-            this.visualEffects.clearHighlight();
+            const visualizationManager = window.modlerComponents?.visualizationManager;
+            if (visualizationManager && !this.selectionController.isSelected(this.hoveredObject)) {
+                visualizationManager.setState(this.hoveredObject, 'normal');
+            }
             this.hoveredObject = null;
         }
     }

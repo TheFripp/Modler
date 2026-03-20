@@ -332,6 +332,57 @@ class MaterialManager {
     }
 
     /**
+     * Create or get cached hover edge material (subtle wireframe for hover state)
+     * @param {Object} options - Material options
+     * @returns {THREE.LineBasicMaterial} Hover edge material
+     */
+    createHoverEdgeMaterial(options = {}) {
+        const configManager = this.getConfigManager();
+
+        const config = {
+            color: options.color || '#ffaa44',
+            lineWidth: options.lineWidth || configManager?.get('visual.selection.lineWidth') || 2,
+            opacity: options.opacity || 0.4,
+            renderOrder: options.renderOrder || 9998,
+            transparent: true,
+            depthTest: true,
+            depthWrite: false,
+            clippingPlanes: [],
+            ...options
+        };
+
+        const key = this.generateMaterialKey(this.materialTypes.HOVER_EFFECT, config);
+
+        const cached = this.getMaterialFromCache(key);
+        if (cached) return cached;
+
+        let colorHex;
+        if (typeof config.color === 'string') {
+            colorHex = parseInt(config.color.replace('#', ''), 16);
+        } else if (typeof config.color === 'number') {
+            colorHex = config.color;
+        } else {
+            colorHex = 0xffaa44;
+        }
+
+        const material = new THREE.LineBasicMaterial({
+            color: colorHex,
+            transparent: config.transparent,
+            opacity: config.opacity,
+            linewidth: config.lineWidth,
+            depthTest: true,
+            depthWrite: false,
+            clippingPlanes: []
+        });
+
+        material.depthFunc = THREE.LessEqualDepth;
+        material.lineWidth = config.lineWidth;
+        material.renderOrder = config.renderOrder;
+
+        return this.cacheMaterial(key, material, this.materialTypes.HOVER_EFFECT);
+    }
+
+    /**
      * Create or get cached container wireframe material (green wireframe)
      * @param {Object} options - Material options
      * @returns {THREE.LineBasicMaterial} Container wireframe material

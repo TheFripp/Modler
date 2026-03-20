@@ -127,6 +127,7 @@ class CommandRouter {
         this.handlers.set('object-select', this.handleSelectObject.bind(this)); // Alias
         this.handlers.set('deselect-all', this.handleDeselectAll.bind(this));
         this.handlers.set('multi-select', this.handleMultiSelect.bind(this));
+        this.handlers.set('object-hover', this.handleObjectHover.bind(this));
 
         // ═══════════════════════════════════════════════════════════
         // HIERARCHY OPERATIONS
@@ -400,6 +401,26 @@ class CommandRouter {
         // Select the object (SelectionController handles visualization and events)
         // Pass directSelection flag to bypass container-first logic when selecting from UI list
         this.selectionController.select(obj.mesh, { direct: directSelection });
+    }
+
+    /**
+     * Handle object hover from UI tree panel
+     * @param {Object} data - {objectId, isHovering}
+     */
+    handleObjectHover(data) {
+        const { objectId, isHovering } = data;
+        if (!objectId) return;
+
+        const visualizationManager = window.modlerComponents?.visualizationManager;
+        if (!visualizationManager || !this.sceneController) return;
+
+        const obj = this.sceneController.getObject(objectId);
+        if (!obj || !obj.mesh) return;
+
+        // Don't change state of selected objects
+        if (this.selectionController?.isSelected(obj.mesh)) return;
+
+        visualizationManager.setState(obj.mesh, isHovering ? 'hovered' : 'normal');
     }
 
     handleDeselectAll(data) {

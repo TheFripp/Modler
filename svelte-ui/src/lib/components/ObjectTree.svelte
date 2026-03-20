@@ -202,6 +202,27 @@
 		}, '*');
 	}
 
+	// Hover state for tree-to-3D highlighting
+	let hoveredTreeObjectId = null;
+
+	function handleObjectMouseEnter(object) {
+		hoveredTreeObjectId = object.id;
+		window.parent.postMessage({
+			type: 'object-hover',
+			objectId: object.id,
+			isHovering: true
+		}, '*');
+	}
+
+	function handleObjectMouseLeave(object) {
+		hoveredTreeObjectId = null;
+		window.parent.postMessage({
+			type: 'object-hover',
+			objectId: object.id,
+			isHovering: false
+		}, '*');
+	}
+
 	function handleObjectDoubleClick(event, object) {
 		event.stopPropagation();
 		event.preventDefault();
@@ -488,11 +509,14 @@
 					type="button"
 					onclick={(e) => handleObjectClick(e, object)}
 					ondblclick={(e) => handleObjectDoubleClick(e, object)}
+					onmouseenter={() => handleObjectMouseEnter(object)}
+					onmouseleave={() => handleObjectMouseLeave(object)}
 					class={cn(
 						'flex items-center gap-2 px-2 py-2 rounded-md flex-1 min-w-0 transition-colors',
 						'text-foreground/70 hover:text-foreground hover:bg-white/5',
 						'focus:outline-none',
-						isObjectHighlighted(object, $selectedObjects) && 'bg-[#212121]/50'
+						isObjectHighlighted(object, $selectedObjects) && 'bg-[#212121]/50',
+						hoveredTreeObjectId === object.id && !isObjectHighlighted(object, $selectedObjects) && 'bg-white/[0.08]'
 					)}
 				>
 					{#if object.isContainer && object.autoLayout?.tileMode?.enabled}
