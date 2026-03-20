@@ -82,11 +82,22 @@ class SelectionController {
             return object;
         }
 
-        // Not in container context - apply container-first logic
+        // Not in container context - resolve up to root-level container
         if (objectData.parentContainer) {
-            const parentContainer = this.getParentContainer(objectData);
-            if (parentContainer?.mesh) {
-                return parentContainer.mesh;
+            const sceneController = this.getSceneController();
+            let current = objectData;
+            let rootContainer = null;
+            while (current?.parentContainer && sceneController) {
+                const parent = sceneController.getObject(current.parentContainer);
+                if (parent?.isContainer) {
+                    rootContainer = parent;
+                    current = parent;
+                } else {
+                    break;
+                }
+            }
+            if (rootContainer?.mesh) {
+                return rootContainer.mesh;
             }
         }
 

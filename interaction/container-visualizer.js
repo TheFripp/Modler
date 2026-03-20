@@ -339,22 +339,34 @@ class ContainerVisualizer extends ObjectVisualizer {
     }
 
     /**
-     * Show child containers when parent container is selected
+     * Show child containers when parent container is selected.
+     * Recursively shows all descendant containers with depth-based opacity:
+     * depth 1 = 75%, depth 2 = 50%, depth 3 = 25%, etc.
      */
-    showChildContainers(parentObject) {
+    showChildContainers(parentObject, depth = 0) {
         const sceneController = window.modlerComponents?.sceneController;
         if (!sceneController) return;
 
         const parentObjectData = sceneController.getObjectByMesh(parentObject);
         if (!parentObjectData || !parentObjectData.isContainer) return;
 
-        // Get child objects and show containers among them
         const childObjects = sceneController.getChildObjects(parentObjectData.id);
         const containerCrudManager = window.modlerComponents?.containerCrudManager;
+        const factory = this.getSupportMeshFactory();
 
         childObjects.forEach(childData => {
             if (childData.isContainer && containerCrudManager) {
                 containerCrudManager.showContainer(childData.id);
+
+                // Depth-based opacity: 75% at depth 1, 50% at depth 2, etc.
+                const childDepth = depth + 1;
+                const opacity = Math.max(0.25, 1.0 - childDepth * 0.25);
+                if (factory) {
+                    factory.setContainerWireframeOpacity(childData.mesh, opacity);
+                }
+
+                // Recursively show deeper nested containers
+                this.showChildContainers(childData.mesh, childDepth);
             }
         });
     }
@@ -376,14 +388,12 @@ class ContainerVisualizer extends ObjectVisualizer {
 
         childObjects.forEach(childData => {
             if (childData.isContainer && containerCrudManager) {
+                // Always recurse first (since showChildContainers is now recursive)
+                this.hideChildContainers(childData.mesh, forceHideAll);
+
                 // Hide child container if forced or if not currently selected
                 if (forceHideAll || !selectionController.isSelected(childData.mesh)) {
                     containerCrudManager.hideContainer(childData.id);
-
-                    // Recursively hide nested containers when forcing
-                    if (forceHideAll) {
-                        this.hideChildContainers(childData.mesh, true);
-                    }
                 }
             }
         });
