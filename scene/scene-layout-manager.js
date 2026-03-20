@@ -529,15 +529,36 @@ class SceneLayoutManager {
             }
         });
 
+        // Sync position changes through ObjectStateManager (emits events for UI sync)
+        const objectStateManager = this.getObjectStateManager();
+        if (objectStateManager) {
+            objectStateManager.updateObject(containerId, {
+                position: {
+                    x: containerData.mesh.position.x,
+                    y: containerData.mesh.position.y,
+                    z: containerData.mesh.position.z
+                }
+            }, { source: 'hug-resize', skipLayoutPropagation: true });
+
+            children.forEach(child => {
+                if (child.mesh && child.id) {
+                    objectStateManager.updateObject(child.id, {
+                        position: {
+                            x: child.position.x,
+                            y: child.position.y,
+                            z: child.position.z
+                        }
+                    }, { source: 'hug-resize', skipLayoutPropagation: true });
+                }
+            });
+        }
+
         // Update container geometry (now centered at origin in its local space)
         const geometryUtils = window.GeometryUtils;
         if (geometryUtils && containerData.mesh.geometry) {
             geometryUtils.resizeGeometry(containerData.mesh.geometry, 'x', newSize.x, 'center');
             geometryUtils.resizeGeometry(containerData.mesh.geometry, 'y', newSize.y, 'center');
             geometryUtils.resizeGeometry(containerData.mesh.geometry, 'z', newSize.z, 'center');
-
-            // Sync cached dimensions with geometry to prevent stale reads
-            containerData.dimensions = { x: newSize.x, y: newSize.y, z: newSize.z };
 
             // Update support meshes (selection box, wireframe)
             const supportMeshFactory = window.modlerComponents?.supportMeshFactory;
