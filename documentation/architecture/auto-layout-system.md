@@ -1,8 +1,8 @@
 # Auto-Layout System Architecture
 
-**Version**: 1.0.0
+**Version**: 1.1.0
 **Status**: Current
-**Last Updated**: 2025-01-30
+**Last Updated**: 2026-03-20
 
 ## Overview
 
@@ -72,13 +72,10 @@ layoutProperties: {
     enabled: true,
     direction: 'x',        // Layout axis
     gap: 0.2,              // Gap between objects
-    padding: {             // Container padding
-        top: 0.1,
-        bottom: 0.1,
-        left: 0.1,
-        right: 0.1,
-        front: 0,
-        back: 0
+    padding: {             // Container padding (symmetric per axis)
+        width: 0.1,        // X-axis inset (both ±X sides)
+        height: 0.1,       // Y-axis inset (both ±Y sides)
+        depth: 0            // Z-axis inset (both ±Z sides)
     },
     columns: 3             // Grid layout only
 }
@@ -357,10 +354,10 @@ Container 001 resizes to fit Container 002
 
 **Depth-Sorted Processing** (`layout/layout-propagation-manager.js`):
 
-The `LayoutPropagationManager` handles bottom-up propagation with depth-sorted processing:
+The `LayoutPropagationManager` handles bottom-up propagation with depth-sorted processing and explicit mode routing:
 
 1. All scheduled containers are sorted by depth (deepest first)
-2. Each container's layout is recalculated, then resized via `ContainerCrudManager.resizeContainer()`
+2. **Explicit mode routing**: Layout containers use `updateLayout()` (layout engine path); Hug containers use `resizeContainer()` directly (resize API path)
 3. Parent containers are collected for propagation
 4. **Synchronous propagation**: Parent layouts process in the same frame (not deferred via RAF)
 
@@ -380,7 +377,10 @@ if (deferredPropagations.size > 0 && this._propagationDepth < 2) {
 - Parent processes in same frame — no visual flicker from intermediate states
 - Recursion depth guard prevents infinite loops (falls back to RAF if depth > 2)
 
-**Key Architectural Rule**: `updateLayout()` performs a single resize via layout bounds. The hug-mode resize (`updateHugContainerSize()`) is NOT called after layout — layout bounds already produce the correct container size. This prevents double-resize conflicts that caused nested container misalignment.
+**Key Architectural Rules**:
+- `updateLayout()` performs a single resize via layout bounds. The hug-mode resize (`updateHugContainerSize()`) is NOT called after layout — layout bounds already produce the correct container size. This prevents double-resize conflicts that caused nested container misalignment.
+- **Per-axis fill check**: Container resize is per-axis — axes with fill children keep container size fixed, axes without fill auto-size to layout bounds. This replaced the previous binary check that blocked all resize when any child had fill on any axis.
+- **Pre-computed sizes**: `calculateLayoutBounds()` receives pre-computed sizes from the layout pass, eliminating redundant re-derivation of fill sizing.
 
 ---
 
@@ -417,16 +417,15 @@ const fillSizePerObject = (availableSpace && fillCount > 0) ?
 
 **Calculation**:
 ```javascript
-// layout-engine.js:284-294
+// layout-engine.js applySizingBehavior()
 if (sizeY === 'fill') {
     if (layoutAxis === 'y' && availableSpace !== null) {
         // Use layout axis fill calculation
         adjustedSize.y = Math.max(fillSizePerObject, 0.1);
     } else if (containerSize) {
-        // Fill based on container size minus padding
-        const paddingTop = (padding.top || 0);
-        const paddingBottom = (padding.bottom || 0);
-        const availableY = containerSize.y - paddingTop - paddingBottom;
+        // Fill based on container size minus padding (symmetric)
+        const paddingHeight = (padding.height || 0);
+        const availableY = containerSize.y - (paddingHeight * 2);
         adjustedSize.y = Math.max(availableY, 0.1);
     }
 }
@@ -434,8 +433,8 @@ if (sizeY === 'fill') {
 
 **Example**:
 - Container: 10 units tall (Y-axis)
-- Padding top: 0.5, bottom: 0.5
-- Available height: 10 - 0.5 - 0.5 = 9 units
+- Padding height: 0.5 (inset on both sides)
+- Available height: 10 - (0.5 × 2) = 9 units
 - Object with sizeY='fill': Height = 9 units
 
 **Result**: Object fills container height
@@ -476,29 +475,26 @@ objects.forEach((obj, index) => {
 
 **Example**:
 ```
-┌─────────────────────────┐
-│ top: 0.5                │
-│ left: 0.5 [Box] right:0.5│
-│ bottom: 0.5             │
-└─────────────────────────┘
+┌──────────────────────────┐
+│ height: 0.5 (Y inset)    │
+│ width:0.5 [Box] width:0.5│
+│ height: 0.5 (Y inset)    │
+└──────────────────────────┘
 ```
 
-**Code**:
+**Padding is symmetric** — `width: 0.5` means 0.5 on both ±X sides.
+
+**Code** (fill sizing):
 ```javascript
-// layout-engine.js:269-274
+// layout-engine.js applySizingBehavior()
 if (sizeX === 'fill' && containerSize) {
-    const paddingLeft = (padding.left || 0);
-    const paddingRight = (padding.right || 0);
-    const availableX = containerSize.x - paddingLeft - paddingRight;
+    const paddingWidth = (padding.width || 0);
+    const availableX = containerSize.x - (paddingWidth * 2);
     adjustedSize.x = Math.max(availableX, 0.1);
 }
 ```
 
-**Applied After Centering**:
-```javascript
-// layout-engine.js:108
-const finalPositions = this.applyPaddingToAxis(centeredPositions, axis, paddingOffset);
-```
+**Padding does NOT offset object positions** — objects stay centered, container expands around them. Padding affects perpendicular alignment boundaries and bounds calculation.
 
 ---
 
@@ -513,10 +509,10 @@ const finalPositions = this.applyPaddingToAxis(centeredPositions, axis, paddingO
 2. Calculate available space
 3. Distribute space among fill objects
 4. Position objects with gaps
-5. Center entire layout
-6. Apply padding
+5. Center entire layout (align + perpendicular alignment)
+6. Calculate bounds from pre-computed sizes (padding adds to bounds)
 
-**Code**: `layout/layout-engine.js:61` - `calculateLinearLayout()`
+**Code**: `layout/layout-engine.js` - `calculateLinearLayout()`
 
 ---
 

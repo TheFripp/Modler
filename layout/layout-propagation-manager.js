@@ -150,22 +150,22 @@ class LayoutPropagationManager {
         // OPTIMIZATION: Collect propagations for next frame instead of re-adding to current batch
         const deferredPropagations = new Set();
 
-        // Update each container's layout
+        // Update each container's layout — explicit mode routing (no fallback pattern)
         sorted.forEach(containerId => {
-            // Use centralized state machine to check layout or hug mode
             const containerMode = this.objectStateManager?.getContainerMode(containerId);
             if (containerMode !== 'layout' && containerMode !== 'hug') {
-                return; // Container doesn't have layout or hug enabled
+                return;
             }
 
             const container = sceneController.getObject(containerId);
 
-            // Trigger layout recalculation
-            // SINGLE FUNNEL: updateLayout() handles resize internally (SceneLayoutManager line 335)
-            const layoutResult = sceneController.updateLayout(containerId);
-
-            // Fallback: hug containers without autoLayout still need resize when children change
-            if (!layoutResult?.success && containerMode === 'hug') {
+            if (containerMode === 'layout') {
+                // Layout containers: use the layout engine path (handles resize internally)
+                sceneController.updateLayout(containerId);
+            } else {
+                // Hug containers: resize to fit children directly
+                // updateLayout() only works with autoLayout.enabled — hug may or may not have it.
+                // Use the resize API which is the natural hug path.
                 const containerCrudManager = this.getContainerCrudManager();
                 if (containerCrudManager) {
                     containerCrudManager.resizeContainer(container, {

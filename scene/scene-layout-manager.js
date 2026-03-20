@@ -136,9 +136,6 @@ class SceneLayoutManager {
         // Get container world position for coordinate conversion
         const containerWorldPosition = container.mesh.getWorldPosition(new THREE.Vector3());
 
-        // Use origin as layout anchor to center the layout properly
-        container.layoutAnchor = new THREE.Vector3(0, 0, 0);
-
         // Calculate the center of all children in container's local space
         const childCenters = { x: 0, y: 0, z: 0 };
         let count = 0;
@@ -275,9 +272,7 @@ class SceneLayoutManager {
             // Fill objects need the container size to calculate their dimensions
             const containerSize = this.getContainerSize(container);
 
-            // Pass the layout anchor if it exists (preserves original center when switching to layout mode)
-            const layoutAnchor = container.layoutAnchor || null;
-            const layoutResult = window.LayoutEngine.calculateLayout(children, container.autoLayout, containerSize, layoutAnchor, pushContext);
+            const layoutResult = window.LayoutEngine.calculateLayout(children, container.autoLayout, containerSize, null, pushContext);
 
             this.applyLayoutPositionsAndSizes(children, layoutResult.positions, layoutResult.sizes, container, pushContext);
 
@@ -314,18 +309,34 @@ class SceneLayoutManager {
             // Use bounds directly from LayoutEngine (architectural improvement)
             const layoutBounds = layoutResult.bounds;
 
-            // Resize container to match new layout bounds
-            // CRITICAL: Don't resize if any child has fill mode - container size is fixed when children fill
-            if (layoutBounds && layoutBounds.size && !this._hasChildWithFill(children) && !pushContext) {
-                const containerCrudManager = this.getContainerCrudManager();
-                if (containerCrudManager) {
-                    // UNIFIED API: Layout recalculated (via updateLayout)
-                    containerCrudManager.resizeContainer(container, {
-                        reason: 'layout-updated',
-                        layoutBounds: layoutBounds,
-                        pushContext: pushContext,
-                        immediate: true
-                    });
+            // Resize container to match new layout bounds (per-axis fill awareness)
+            // Axes with fill children keep container size fixed; axes without fill auto-size to bounds
+            if (layoutBounds && layoutBounds.size && !pushContext) {
+                const fillAxes = this._getAxesWithFillChildren(children);
+                const currentSize = this.getContainerSize(container);
+
+                // Build effective size: preserve container size on fill axes, use bounds on others
+                const effectiveSize = new THREE.Vector3(
+                    fillAxes.x ? currentSize.x : layoutBounds.size.x,
+                    fillAxes.y ? currentSize.y : layoutBounds.size.y,
+                    fillAxes.z ? currentSize.z : layoutBounds.size.z
+                );
+
+                // Only resize if effective size actually differs from current
+                const sizeChanged = Math.abs(effectiveSize.x - currentSize.x) > 0.001 ||
+                                    Math.abs(effectiveSize.y - currentSize.y) > 0.001 ||
+                                    Math.abs(effectiveSize.z - currentSize.z) > 0.001;
+
+                if (sizeChanged) {
+                    const containerCrudManager = this.getContainerCrudManager();
+                    if (containerCrudManager) {
+                        containerCrudManager.resizeContainer(container, {
+                            reason: 'layout-updated',
+                            layoutBounds: { ...layoutBounds, size: effectiveSize },
+                            pushContext: pushContext,
+                            immediate: true
+                        });
+                    }
                 }
             }
 
@@ -538,11 +549,22 @@ class SceneLayoutManager {
     /**
      * Check if any child has fill mode enabled on any axis
      */
-    _hasChildWithFill(children) {
-        return children.some(child => {
+    /**
+     * Get which axes have children with fill mode (per-axis granularity)
+     * @param {Array} children - Array of child object data
+     * @returns {Object} {x: boolean, y: boolean, z: boolean}
+     */
+    _getAxesWithFillChildren(children) {
+        const result = { x: false, y: false, z: false };
+        for (const child of children) {
             const lp = child.layoutProperties;
-            return lp && (lp.sizeX === 'fill' || lp.sizeY === 'fill' || lp.sizeZ === 'fill');
-        });
+            if (!lp) continue;
+            if (lp.sizeX === 'fill') result.x = true;
+            if (lp.sizeY === 'fill') result.y = true;
+            if (lp.sizeZ === 'fill') result.z = true;
+            if (result.x && result.y && result.z) break; // All axes filled, no need to continue
+        }
+        return result;
     }
 }
 

@@ -3,6 +3,24 @@ import * as THREE from 'three';
 // Pure layout calculation functions for 3D auto layout system
 // Follows V2 architecture: calculations separate from Three.js manipulation
 
+/**
+ * PADDING SEMANTICS
+ * =================
+ * Stored as {width, height, depth} — symmetric per axis.
+ * Each value = inset on ONE side; total inset per axis = value × 2.
+ *
+ * Axis mapping: width → X, height → Y, depth → Z
+ *
+ * Effect by operation:
+ *   Fill sizing          — Subtracts from available space (availableX = containerX - padding×2)
+ *   Object positioning   — Does NOT offset positions; objects stay centered
+ *   Perpendicular align  — Insets alignment boundaries (containerMin + padding, containerMax - padding)
+ *   Push space-between   — Offsets starting position (first object at containerMin + padding)
+ *   Bounds calculation   — Adds to container size (boundsSize + padding×2)
+ *   Fill distribution    — Reduces layout-axis space (containerAxis - fixedSize - gaps - padding×2)
+ *
+ * Invariant: padding is always symmetric (no per-side distinction).
+ */
 class LayoutEngine {
     /**
      * Calculate layout positions and sizes for objects in a container
@@ -141,8 +159,8 @@ class LayoutEngine {
             }
         }
 
-        // Calculate bounds for the final layout (pass layoutConfig to include padding in size)
-        const layoutBounds = this.calculateLayoutBounds(objects, finalPositions, layoutConfig, fullContainerSize);
+        // Calculate bounds for the final layout (pass pre-computed sizes to avoid re-derivation)
+        const layoutBounds = this.calculateLayoutBounds(objects, finalPositions, layoutConfig, fullContainerSize, finalSizes);
 
         return {
             positions: finalPositions,
@@ -228,8 +246,8 @@ class LayoutEngine {
             finalPositions = paddedPositions;
         }
 
-        // Calculate bounds for the final layout
-        const layoutBounds = this.calculateLayoutBounds(objects, finalPositions);
+        // Calculate bounds for the final layout (pass pre-computed sizes to avoid re-derivation)
+        const layoutBounds = this.calculateLayoutBounds(objects, finalPositions, null, null, objectSizes);
 
         return {
             positions: finalPositions,
@@ -688,9 +706,10 @@ class LayoutEngine {
      * @param {Array} positions - Array of calculated positions
      * @param {Object} layoutConfig - Layout configuration for sizing context
      * @param {THREE.Vector3} containerSize - Current container size for fill calculations
+     * @param {Array} precomputedSizes - Pre-computed sizes from layout calculation (avoids re-derivation)
      * @returns {Object} Bounds information {min: Vector3, max: Vector3, size: Vector3}
      */
-    static calculateLayoutBounds(objects, positions, layoutConfig = null, containerSize = null) {
+    static calculateLayoutBounds(objects, positions, layoutConfig = null, containerSize = null, precomputedSizes = null) {
         if (objects.length === 0 || positions.length === 0) {
             return {
                 min: new THREE.Vector3(0, 0, 0),
@@ -704,22 +723,28 @@ class LayoutEngine {
 
         objects.forEach((obj, index) => {
             const pos = positions[index];
-            let size = this.getObjectSize(obj);
 
-            // Apply sizing behavior if layout configuration is provided
-            if (layoutConfig && containerSize) {
-                const { direction, gap = 0, padding = {} } = layoutConfig;
-                const { fillCount } = this.categorizeObjects(objects, direction);
+            // Use pre-computed sizes when available (eliminates redundant re-derivation)
+            let size;
+            if (precomputedSizes && precomputedSizes[index]) {
+                size = precomputedSizes[index];
+            } else {
+                size = this.getObjectSize(obj);
 
-                let availableSpace = null;
-                if (fillCount > 0) {
-                    const { totalFixedSize } = this.categorizeObjects(objects, direction);
-                    const totalGaps = (objects.length - 1) * gap;
-                    const paddingTotal = this.getTotalPadding(direction, padding);
-                    availableSpace = Math.max(0, containerSize[direction] - totalFixedSize - totalGaps - paddingTotal);
+                // Fallback: apply sizing behavior if layout configuration provided but no pre-computed sizes
+                if (layoutConfig && containerSize) {
+                    const { direction, gap = 0, padding = {} } = layoutConfig;
+                    const { fillCount, totalFixedSize } = this.categorizeObjects(objects, direction);
+
+                    let availableSpace = null;
+                    if (fillCount > 0) {
+                        const totalGaps = (objects.length - 1) * gap;
+                        const paddingTotal = this.getTotalPadding(direction, padding);
+                        availableSpace = Math.max(0, containerSize[direction] - totalFixedSize - totalGaps - paddingTotal);
+                    }
+
+                    size = this.applySizingBehavior(obj, size, direction, availableSpace, fillCount, containerSize, padding);
                 }
-
-                size = this.applySizingBehavior(obj, size, direction, availableSpace, fillCount, containerSize, padding);
             }
 
             minX = Math.min(minX, pos.x - size.x / 2);
