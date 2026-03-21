@@ -69,9 +69,8 @@ function extractSerializableData(sceneObject) {
         tileMode: sceneObject.autoLayout.tileMode ? { ...sceneObject.autoLayout.tileMode } : undefined
     } : null;
 
-    // VALIDATION: Ensure isHug and autoLayout.enabled are mutually exclusive
-    // This prevents corrupted data from being saved
-    const isHug = autoLayout?.enabled ? false : (sceneObject.isHug || false);
+    // Use containerMode as canonical source of truth
+    const isHug = sceneObject.containerMode === 'hug';
 
     // Direct copy of all properties
     return {

@@ -274,17 +274,16 @@ class SceneDeserializer {
             }
         }
 
-        // Now update layouts ONLY for containers with autoLayout enabled
-        // This preserves manually-positioned children in containers without layout
-        const layoutContainers = sortedObjects.filter(obj =>
-            obj.isContainer &&
-            obj.autoLayout &&
-            typeof obj.autoLayout === 'object' &&
-            obj.autoLayout.enabled === true &&
-            obj.childrenOrder &&
-            Array.isArray(obj.childrenOrder) &&
-            obj.childrenOrder.length > 0
-        );
+        // Now update layouts ONLY for layout-mode containers
+        // This preserves manually-positioned children in hug/manual containers
+        const layoutContainers = sortedObjects.filter(obj => {
+            if (!obj.isContainer) return false;
+            const liveObj = this.sceneController.getObject(obj.id);
+            return liveObj?.containerMode === 'layout' &&
+                obj.childrenOrder &&
+                Array.isArray(obj.childrenOrder) &&
+                obj.childrenOrder.length > 0;
+        });
 
         for (const container of layoutContainers) {
             this.sceneController.updateLayout(container.id);
@@ -321,7 +320,7 @@ class SceneDeserializer {
         // Two cases:
         // 1. Parent has layout enabled → position will be recalculated by updateLayout()
         // 2. Parent has NO layout → restore saved local position
-        const parentHasLayout = parentObj.autoLayout?.enabled === true;
+        const parentHasLayout = parentObj.containerMode === 'layout';
 
         if (!parentHasLayout && objData.position) {
             // Case 2: Manual container - restore saved position
@@ -478,21 +477,10 @@ class SceneDeserializer {
                 layoutProperties: objData.layoutProperties
             });
 
-            // Restore container properties
+            // Sync legacy flags from containerMode (corrects SceneLifecycleManager's loose derivation)
             if (objData.isContainer && createdObject) {
-                // Set containerMode (canonical) and legacy flags
-                createdObject.containerMode = createdObject.containerMode || (
-                    objData.autoLayout?.enabled ? 'layout' :
-                    objData.isHug ? 'hug' :
-                    (objData.layoutMode ? 'layout' : 'hug')
-                );
-                createdObject.isHug = createdObject.containerMode === 'hug';
-                createdObject.sizingMode = createdObject.containerMode;
-                createdObject.layoutMode = objData.layoutMode || null;
-
-                createdObject.autoLayout = objData.autoLayout ||
-                    window.ObjectDataFormat.createDefaultAutoLayout();
-                createdObject.childrenOrder = objData.childrenOrder || [];
+                const modeUpdate = ObjectStateManager.buildContainerModeUpdate(createdObject.containerMode);
+                Object.assign(createdObject, modeUpdate);
             }
 
             // Restore other properties

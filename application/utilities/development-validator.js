@@ -265,7 +265,7 @@ class DevelopmentValidator {
                 const containerData = this.getObject(containerId);
 
                 // Check for layout update on non-layout container
-                if (containerData && !containerData.autoLayout?.enabled) {
+                if (containerData && containerData.containerMode !== 'layout') {
                     developmentValidator.recordViolation({
                         type: 'layout-violation',
                         message: 'updateLayout called on container without layout enabled',
@@ -275,7 +275,7 @@ class DevelopmentValidator {
                     console.warn(
                         `🚨 Layout Violation: updateLayout on non-layout container\n` +
                         `   Container: ${containerId}\n` +
-                        `   autoLayout.enabled: ${containerData.autoLayout?.enabled}\n` +
+                        `   containerMode: ${containerData.containerMode}\n` +
                         `   Only call updateLayout on containers with layout mode enabled`
                     );
                 }

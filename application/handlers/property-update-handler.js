@@ -1,6 +1,6 @@
 const logger = window.logger;
 // Property Update Handler - Property-panel driven layout system
-// Implements the corrected architecture from container-architecture-master.md
+// Single entry point: handlePropertyUpdate() routes all UI property changes to ObjectStateManager
 
 class PropertyUpdateHandler {
     constructor() {
@@ -20,10 +20,6 @@ class PropertyUpdateHandler {
     get containerCrudManager() {
         return window.modlerComponents?.containerCrudManager;
     }
-
-    // get unifiedContainerManager() {
-    //     return window.modlerComponents?.unifiedContainerManager;
-    // }
 
     /**
      * Convert dot-notation property path to nested object
@@ -77,7 +73,7 @@ class PropertyUpdateHandler {
         // Special handling for container layout properties
         // These need custom logic beyond simple state updates
         // Also catch property === 'autoLayout' (whole-object update from LayoutSection)
-        if (property === 'autoLayout' || property.startsWith('autoLayout.') || property === 'layoutMode') {
+        if (property === 'autoLayout' || property.startsWith('autoLayout.')) {
             return this.handleContainerLayoutPropertyChange(objectId, property, value);
         }
 
@@ -298,122 +294,6 @@ class PropertyUpdateHandler {
     }
 
     /**
-     * Check if a property change should trigger layout mode activation
-     */
-    isLayoutProperty(property) {
-        const layoutProperties = ['direction', 'gap', 'padding.width', 'padding.height', 'padding.depth'];
-        return layoutProperties.includes(property);
-    }
-
-    /**
-     * Check if a property is a container sizing property
-     */
-    isContainerSizingProperty(property) {
-        const sizingProperties = ['sizingMode', 'containerMode'];
-        return sizingProperties.includes(property);
-    }
-
-    /**
-     * Handle general property changes - routes to appropriate handler
-     */
-    handlePropertyChange(objectId, property, value) {
-        // CRITICAL FIX: Use the same SceneController instance as PropertyManager
-        const sceneController = window.modlerComponents?.sceneController || this.sceneController;
-        const objectData = sceneController?.getObject(objectId);
-        const isLayoutProp = this.isLayoutProperty(property);
-
-        // Check if this is a container layout property change
-        if (objectData && objectData.isContainer && isLayoutProp) {
-            return this.executeLayoutPropertyChangeCommand(objectId, property, value);
-        }
-
-        // For all other properties, wrap in UpdatePropertyCommand for undo support
-        // Get old value before making the change
-        const oldValue = this.getPropertyValue(objectData, property);
-
-        let success = false;
-
-        // Handle dimension property changes through centralized system
-        if (property.startsWith('dimensions.')) {
-            success = this.handleObjectDimensionChange(objectId, property, value);
-        }
-        // Handle transform property changes (position, rotation)
-        else if (property.startsWith('position.') || property.startsWith('rotation.')) {
-            success = this.handleObjectTransformChange(objectId, property, value);
-        }
-        // Handle material property changes
-        else if (property.startsWith('material.')) {
-            success = this.handleObjectMaterialChange(objectId, property, value);
-        }
-        // Handle container sizing property changes
-        else if (objectData && objectData.isContainer && this.isContainerSizingProperty(property)) {
-            success = this.handleContainerSizingChange(objectId, property, value);
-        }
-        // Handle other property changes here in the future
-        else {
-            success = true;
-        }
-
-        // Register as undoable command if the change was successful
-        if (success && oldValue !== value) {
-            const historyManager = window.modlerComponents?.historyManager;
-            if (historyManager) {
-                const command = new UpdatePropertyCommand(objectId, property, oldValue, value);
-                // ARCHITECTURAL FIX: Commands must go through executeCommand() for proper undo/redo
-                // The command's execute() is a no-op since the update already happened
-                historyManager.executeCommand(command);
-                logger.debug(`📝 Registered property change in history: ${property}`);
-            }
-        }
-
-        return success;
-    }
-
-    /**
-     * Get current property value from object data
-     */
-    getPropertyValue(objectData, property) {
-        if (!objectData) return undefined;
-
-        const parts = property.split('.');
-        let value = objectData;
-
-        for (const part of parts) {
-            if (value && typeof value === 'object' && part in value) {
-                value = value[part];
-            } else {
-                return undefined;
-            }
-        }
-
-        return value;
-    }
-
-    /**
-     * Check if object has fill enabled for specific axis
-     * DEPRECATED: Use objectStateManager.hasFillEnabled() instead
-     */
-    isAxisFilled(objectId, axis) {
-        // Use centralized state machine
-        return this.objectStateManager?.hasFillEnabled(objectId, axis) || false;
-    }
-
-    /**
-     * Check if object is in a layout-enabled container
-     * DEPRECATED: Use objectStateManager.isLayoutMode() instead
-     */
-    isInLayoutContainer(objectId) {
-        const sceneController = window.modlerComponents?.sceneController;
-        if (!sceneController) return false;
-
-        const objectData = sceneController.getObject(objectId);
-        if (!objectData || !objectData.parentContainer) return false;
-
-        // Use centralized state machine
-        return this.objectStateManager?.isLayoutMode(objectData.parentContainer) || false;
-    }
-
-    /**
      * Handle object dimension changes using ObjectStateManager
      */
     handleObjectDimensionChange(objectId, property, value) {
@@ -547,27 +427,26 @@ class PropertyUpdateHandler {
                 // Get old value for undo
                 const oldValue = objectData.containerMode || objectData.sizingMode;
 
-                // Update object data — set containerMode and keep legacy flags in sync
+                // Route through ObjectStateManager — single entry point for all state changes
                 const modeUpdate = ObjectStateManager.buildContainerModeUpdate(value);
-                Object.assign(objectData, modeUpdate);
+                this.objectStateManager.updateObject(objectId, modeUpdate, {
+                    source: 'property-panel',
+                    immediate: true
+                });
 
-                // Trigger container update with new sizing mode
+                // Trigger container resize for the new mode
                 if (objectData.mesh) {
-                    // UNIFIED API: User changed sizing mode from UI
-                    // resizeContainer returns false for manual/fixed mode (no resize needed) — that's expected
                     this.containerCrudManager.resizeContainer(objectData, {
                         reason: 'mode-changed',
                         immediate: true
                     });
 
                     // Register with history manager for undo/redo support
-                    // Mode was already applied via Object.assign above
                     if (oldValue !== value) {
                         const historyManager = window.modlerComponents?.historyManager;
                         if (historyManager) {
                             const command = new UpdatePropertyCommand(objectId, property, oldValue, value);
                             historyManager.executeCommand(command);
-                            logger.debug(`📝 Registered sizing mode change in history: ${property}`);
                         }
                     }
                     return true;
@@ -578,61 +457,6 @@ class PropertyUpdateHandler {
 
         } catch (error) {
             console.error('PropertyUpdateHandler sizing error:', error);
-            return false;
-        }
-    }
-
-    /**
-     * Execute layout property change as undoable command
-     * @param {number} objectId - Container ID
-     * @param {string} property - Property name (e.g., 'direction', 'gap')
-     * @param {*} newValue - New property value
-     * @returns {boolean} True if command was executed successfully
-     */
-    executeLayoutPropertyChangeCommand(objectId, property, newValue) {
-        try {
-            const sceneController = window.modlerComponents?.sceneController;
-            const historyManager = window.modlerComponents?.historyManager;
-
-            if (!sceneController) {
-                console.error('SceneController not available for layout property command');
-                return false;
-            }
-
-            // Get current value for undo
-            const objectData = sceneController.getObject(objectId);
-            if (!objectData || !objectData.isContainer) {
-                console.error('Invalid container for layout property command');
-                return false;
-            }
-
-            let oldValue = null;
-            if (property.startsWith('autoLayout.')) {
-                const nestedProperty = property.split('.').slice(1).join('.');
-                oldValue = this.getNestedProperty(objectData.autoLayout, nestedProperty);
-            } else if (property === 'direction') {
-                oldValue = objectData.autoLayout?.direction;
-            }
-
-            // Create and execute command
-            if (historyManager) {
-                const command = new UpdateLayoutPropertyCommand(objectId, property, newValue, oldValue);
-                const success = historyManager.executeCommand(command);
-
-                if (success) {
-                    return true;
-                } else {
-                    console.error('❌ Failed to execute layout property change command');
-                    return false;
-                }
-            } else {
-                // Fallback to direct execution without undo support
-                console.warn('HistoryManager not available, executing layout property change without undo support');
-                return this.handleContainerLayoutPropertyChange(objectId, property, newValue);
-            }
-
-        } catch (error) {
-            console.error('PropertyUpdateHandler layout command error:', error);
             return false;
         }
     }
@@ -746,16 +570,6 @@ class PropertyUpdateHandler {
         }
     }
 
-    /**
-     * Helper to get nested property value
-     * @param {Object} obj - Object to get property from
-     * @param {string} path - Dot-separated property path
-     * @returns {*} Property value
-     */
-    getNestedProperty(obj, path) {
-        if (!obj || !path) return undefined;
-        return path.split('.').reduce((current, key) => current?.[key], obj);
-    }
 }
 
 // Make PropertyUpdateHandler available globally
