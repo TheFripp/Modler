@@ -74,6 +74,15 @@ class DeleteObjectCommand extends BaseCommand {
                 this.selectionController.clearSelection();
             }
 
+            // Collect parent container IDs before deletion (for layout re-flow)
+            const affectedParents = new Set();
+            for (const objectId of this.objectIds) {
+                const objectData = this.sceneController.getObject(objectId);
+                if (objectData?.parentContainer) {
+                    affectedParents.add(objectData.parentContainer);
+                }
+            }
+
             // Delete objects from scene
             let deletedCount = 0;
             for (const objectId of this.objectIds) {
@@ -85,6 +94,13 @@ class DeleteObjectCommand extends BaseCommand {
             if (deletedCount === 0) {
                 console.warn('DeleteObjectCommand: No objects were successfully deleted');
                 return false;
+            }
+
+            // Trigger layout re-flow on parent containers (remaining children reposition)
+            for (const parentId of affectedParents) {
+                if (this.sceneController.getObject(parentId)) {
+                    this.sceneController.updateContainer(parentId, { reason: 'hierarchy-changed' });
+                }
             }
 
             // Phase 3: UI notification happens automatically via ObjectEventBus → MainAdapter
@@ -136,6 +152,31 @@ class DeleteObjectCommand extends BaseCommand {
                 return false;
             }
 
+            // Restore original childrenOrder for containers
+            // Children are added via push() during setParentContainer(), which may not
+            // preserve the original ordering — overwrite with snapshot order
+            for (const snapshot of sortedObjects) {
+                if (snapshot.isContainer && snapshot.childrenOrder?.length > 0) {
+                    const containerData = this.sceneController.getObject(snapshot.id);
+                    if (containerData) {
+                        containerData.childrenOrder = [...snapshot.childrenOrder];
+                    }
+                }
+            }
+
+            // Trigger layout re-flow on parent containers of restored objects
+            const affectedParents = new Set();
+            for (const snapshot of sortedObjects) {
+                if (snapshot.parentContainer) {
+                    affectedParents.add(snapshot.parentContainer);
+                }
+            }
+            for (const parentId of affectedParents) {
+                if (this.sceneController.getObject(parentId)) {
+                    this.sceneController.updateContainer(parentId, { reason: 'hierarchy-changed' });
+                }
+            }
+
             // Phase 3: UI notification happens automatically via ObjectEventBus → MainAdapter
 
             return true;
@@ -167,11 +208,12 @@ class DeleteObjectCommand extends BaseCommand {
             // Material data
             materialConfig: objectData.materialConfig ? { ...objectData.materialConfig } : null,
 
-            // Container-specific data (safe serialization)
-            layoutConfig: objectData.layoutConfig ? this.safeCloneObject(objectData.layoutConfig) : null,
+            // Container-specific data
+            containerMode: objectData.containerMode || null,
+            autoLayout: objectData.autoLayout ? this.safeCloneObject(objectData.autoLayout) : null,
 
             // Hierarchy data
-            childObjects: objectData.childObjects ? [...objectData.childObjects] : [],
+            childrenOrder: objectData.childrenOrder ? [...objectData.childrenOrder] : [],
 
             // Metadata (safe serialization)
             metadata: objectData.metadata ? this.safeCloneObject(objectData.metadata) : {},
@@ -331,54 +373,39 @@ class DeleteObjectCommand extends BaseCommand {
 
             // Create container geometry using centralized method with positioning
             const size = new THREE.Vector3(
-                snapshot.dimensions?.width || 2,
-                snapshot.dimensions?.height || 2,
-                snapshot.dimensions?.depth || 2
+                snapshot.dimensions?.x || snapshot.dimensions?.width || 2,
+                snapshot.dimensions?.y || snapshot.dimensions?.height || 2,
+                snapshot.dimensions?.z || snapshot.dimensions?.depth || 2
             );
 
             const transform = snapshot.meshData || { position: new THREE.Vector3(0, 0, 0) };
             const containerResult = containerCrudManager.createContainerGeometryAtPosition(size, transform);
-            if (!containerResult || !containerResult.mesh) {
+            if (!containerResult?.mesh) {
                 console.error('DeleteObjectCommand: Failed to create container geometry');
                 return false;
             }
 
-            const containerMesh = containerResult.mesh;
-
-            // Add to scene
-            const scene = window.modlerComponents?.sceneFoundation?.scene;
-            if (!scene) {
-                console.error('DeleteObjectCommand: Scene not available for container restoration');
-                return false;
-            }
-            scene.add(containerMesh);
-
-            // Create object data structure
-            const containerData = {
+            // Route through standard addObject pipeline (handles ObjectStateManager,
+            // ObjectEventBus, HierarchyManager, and support mesh creation)
+            const restoredContainer = this.sceneController.addObject(containerResult.mesh, null, {
                 id: snapshot.id,
                 name: snapshot.name,
                 type: snapshot.type,
-                mesh: containerMesh,
                 isContainer: true,
-                dimensions: snapshot.dimensions ? { ...snapshot.dimensions } : { width: size.x, height: size.y, depth: size.z },
-                position: snapshot.position || { x: containerMesh.position.x, y: containerMesh.position.y, z: containerMesh.position.z },
-                layoutConfig: snapshot.layoutConfig || { type: 'none' },
-                childObjects: snapshot.childObjects || [],
+                containerMode: snapshot.containerMode || 'hug',
+                autoLayout: snapshot.autoLayout || undefined,
                 selectable: snapshot.selectable !== false,
-                visible: snapshot.visible !== false,
-                metadata: snapshot.metadata || {}
-            };
+                parentContainer: snapshot.parentContainer || null
+            });
 
-            // Set mesh userData
-            containerMesh.userData.id = snapshot.id;
-            containerMesh.userData.type = snapshot.type;
-            containerMesh.userData.isContainer = true;
+            if (!restoredContainer) {
+                console.error('DeleteObjectCommand: Failed to restore container via addObject');
+                return false;
+            }
 
-            // Add to scene controller registry
-            this.sceneController.objects.set(snapshot.id, containerData);
-
-            console.log('DeleteObjectCommand: Successfully restored container:', snapshot.name);
-            return containerData;
+            // Restore additional properties not handled by addObject
+            this.restoreAllObjectProperties(restoredContainer, snapshot);
+            return restoredContainer;
 
         } catch (error) {
             console.error('DeleteObjectCommand: Error restoring container:', error);
@@ -410,15 +437,8 @@ class DeleteObjectCommand extends BaseCommand {
         }
 
         if (restoredObjectData) {
-            // Restore original ID and properties
-            this.sceneController.objects.delete(restoredObjectData.id);
-            restoredObjectData.id = snapshot.id;
-            restoredObjectData.name = snapshot.name;
-            this.sceneController.objects.set(snapshot.id, restoredObjectData);
-
-            // Restore all additional object properties
+            // Restore all additional object properties (ID and hierarchy already set via addObject)
             this.restoreAllObjectProperties(restoredObjectData, snapshot);
-
             return true;
         }
 
@@ -455,9 +475,11 @@ class DeleteObjectCommand extends BaseCommand {
                 geometry,
                 material,
                 {
+                    id: snapshot.id,
                     name: snapshot.name,
                     type: snapshot.type,
-                    position: { x: position.x, y: position.y, z: position.z }
+                    position: { x: position.x, y: position.y, z: position.z },
+                    parentContainer: snapshot.parentContainer || null
                 }
             );
 
@@ -502,9 +524,11 @@ class DeleteObjectCommand extends BaseCommand {
                 geometry,
                 material,
                 {
+                    id: snapshot.id,
                     name: snapshot.name,
                     type: snapshot.type,
-                    position: snapshot.position
+                    position: snapshot.position,
+                    parentContainer: snapshot.parentContainer || null
                 }
             );
 
@@ -646,23 +670,12 @@ class DeleteObjectCommand extends BaseCommand {
      * Restore all object properties from snapshot
      */
     restoreAllObjectProperties(restoredObjectData, snapshot) {
-        // Restore parent relationship
-        if (snapshot.parentContainer) {
-            restoredObjectData.parentContainer = snapshot.parentContainer;
-        }
+        // Note: parentContainer and hierarchy are now handled by addObject() via
+        // hierarchyManager.setParentContainer() — no manual assignment needed
 
         // Restore metadata
         if (snapshot.metadata) {
             restoredObjectData.metadata = snapshot.metadata;
-        }
-
-        // Restore additional properties
-        if (typeof snapshot.selectable !== 'undefined') {
-            restoredObjectData.selectable = snapshot.selectable;
-        }
-
-        if (typeof snapshot.visible !== 'undefined') {
-            restoredObjectData.visible = snapshot.visible;
         }
 
         // Restore material configuration
@@ -670,19 +683,9 @@ class DeleteObjectCommand extends BaseCommand {
             restoredObjectData.materialConfig = snapshot.materialConfig;
         }
 
-        // Restore layout configuration for containers
-        if (snapshot.isContainer && snapshot.layoutConfig) {
-            restoredObjectData.layoutConfig = this.safeCloneObject(snapshot.layoutConfig);
-        }
-
-        // Restore child objects list
-        if (snapshot.childObjects) {
-            restoredObjectData.childObjects = [...snapshot.childObjects];
-        }
-
         // Dimensions automatically restored via DimensionManager getter from geometry
 
-        // Most importantly, restore the exact mesh positioning and properties
+        // Restore the exact mesh positioning and properties
         if (restoredObjectData.mesh && snapshot.meshData) {
             restoredObjectData.mesh.position.copy(snapshot.meshData.position);
             restoredObjectData.mesh.rotation.copy(snapshot.meshData.rotation);
@@ -718,41 +721,7 @@ class DeleteObjectCommand extends BaseCommand {
                 Object.assign(restoredObjectData.mesh.userData, snapshot.meshData.userData);
             }
 
-            // CRITICAL FIX: Ensure restored objects have support meshes
-            // This matches the same pipeline as normal object creation
-            this.ensureSupportMeshes(restoredObjectData.mesh, snapshot);
-        }
-    }
-
-    /**
-     * Ensure restored objects have proper support meshes (selection wireframes, etc.)
-     * This matches the same support mesh creation that happens in SceneController.addObject
-     */
-    ensureSupportMeshes(mesh, snapshot) {
-        if (!mesh) return;
-
-        // Use the same SupportMeshFactory that SceneController uses
-        const supportMeshFactory = window.modlerComponents?.supportMeshFactory;
-        if (supportMeshFactory) {
-            // For containers, the wireframes are already created by LayoutGeometry as children
-            // For regular objects, we need to create support meshes
-            if (!snapshot.isContainer) {
-                // Create support meshes for regular objects (same as in SceneController.addObject)
-                supportMeshFactory.createObjectSupportMeshes(mesh);
-            } else {
-                // Containers should already have their wireframe children from LayoutGeometry.createContainerGeometry()
-                // But we might need additional support meshes for interaction
-                const hasWireframe = mesh.userData?.supportMeshes?.cadWireframe;
-                if (hasWireframe) {
-                    // Ensure container has proper support meshes for interaction
-                    supportMeshFactory.createObjectSupportMeshes(mesh);
-                } else {
-                    // Create all support meshes including wireframes as fallback
-                    supportMeshFactory.createObjectSupportMeshes(mesh);
-                }
-            }
-        } else {
-            console.warn('DeleteObjectCommand: SupportMeshFactory not available for restored object:', snapshot.name);
+            // Support meshes are created by addObject() via SupportMeshFactory — no manual creation needed
         }
     }
 

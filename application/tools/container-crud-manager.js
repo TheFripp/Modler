@@ -269,6 +269,9 @@ class ContainerCrudManager {
         // Finalize container
         this.finalizeContainerCreation(containerObject, bounds);
 
+        // Trigger layout engine so children are positioned according to autoLayout settings
+        sceneController.updateContainer(containerObject.id, { reason: 'container-created' });
+
         return containerObject;
     }
 
@@ -373,6 +376,7 @@ class ContainerCrudManager {
         if (!selectedObjects || selectedObjects.length < 2) {
             // Single object or empty — default to x
             if (containerObject.autoLayout) {
+                containerObject.autoLayout.enabled = true;
                 containerObject.autoLayout.direction = 'x';
             }
             return;
@@ -402,6 +406,7 @@ class ContainerCrudManager {
         }
 
         if (containerObject.autoLayout) {
+            containerObject.autoLayout.enabled = true;
             containerObject.autoLayout.direction = direction;
         }
     }
