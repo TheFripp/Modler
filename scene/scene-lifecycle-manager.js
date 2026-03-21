@@ -142,14 +142,13 @@ class SceneLifecycleManager {
                     resizeToLayoutBounds: sceneController.resizeToLayoutBounds ? sceneController.resizeToLayoutBounds.bind(sceneController) : null
                 } : {};
 
-                // NOTE: Position in options is treated as LOCAL to parent (not world)
-                // setParentContainer will handle hierarchy changes but won't convert coordinates
-                // because mesh.position was already set as local in configureMesh()
+                // Position already set as LOCAL in configureMesh() — skip coordinate conversion
                 const success = hierarchyManager.setParentContainer(
                     id,
                     objectData.parentContainer,
                     callbacks,
-                    false  // shouldUpdateLayout=false during creation
+                    false,  // shouldUpdateLayout=false during creation
+                    { skipCoordinateConversion: true }
                 );
 
                 if (!success) {

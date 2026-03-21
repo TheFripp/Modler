@@ -28,8 +28,8 @@ class SceneLayoutManager {
         this.containerCrudManager = null;
         this.objectStateManager = null;
 
-        // Hug update throttling
-        this.hugUpdatesEnabled = true;
+        // Guard: prevents hug resize during layout calculation (avoids double-resize conflicts)
+        this._layoutInProgress = false;
     }
 
     /**
@@ -262,9 +262,9 @@ class SceneLayoutManager {
             return { success: false, reason: 'LayoutEngine not available' };
         }
 
-        // Disable hug updates during layout to prevent intermediate updates
-        const wasHugEnabled = this.hugUpdatesEnabled;
-        this.hugUpdatesEnabled = false;
+        // Suppress hug updates during layout to prevent intermediate double-resize
+        const wasLayoutInProgress = this._layoutInProgress;
+        this._layoutInProgress = true;
 
         try {
             // Get container size for fill calculations
@@ -336,6 +336,18 @@ class SceneLayoutManager {
                             pushContext: pushContext,
                             immediate: true
                         });
+
+                        // Re-pass: container was resized, so gap/position calculations may need updating
+                        // (e.g., space-between gap depends on container size)
+                        const newContainerSize = this.getContainerSize(container);
+                        const repassResult = window.LayoutEngine.calculateLayout(children, container.autoLayout, newContainerSize, null, pushContext);
+                        this.applyLayoutPositionsAndSizes(children, repassResult.positions, repassResult.sizes, container, pushContext);
+
+                        if (repassResult.calculatedGap !== undefined) {
+                            container.calculatedGap = repassResult.calculatedGap;
+                            const osmObj = this.getObjectStateManager()?.getObject(container.id);
+                            if (osmObj) osmObj.calculatedGap = repassResult.calculatedGap;
+                        }
                     }
                 }
             }
@@ -343,14 +355,8 @@ class SceneLayoutManager {
             return { success: true, layoutBounds };
 
         } finally {
-            // Re-enable hug updates
-            this.hugUpdatesEnabled = wasHugEnabled;
-
-            // NOTE: updateHugContainerSize() is NOT called here.
-            // Layout bounds resize at line 335 already produces the correct container size.
-            // Calling hug resize after layout caused double-resize conflicts that broke
-            // nested container alignment (hug would shift container position and compensate
-            // children, conflicting with the layout-bounds resize).
+            // Restore previous state (supports nested updateLayout calls)
+            this._layoutInProgress = wasLayoutInProgress;
         }
     }
 
@@ -438,8 +444,8 @@ class SceneLayoutManager {
                         if (geomCenterOffset) obj.mesh.position.add(geomCenterOffset);
                     }
 
-                    // Update object data position to maintain consistency (world position)
-                    obj.position = obj.mesh.getWorldPosition(new THREE.Vector3());
+                    // Sync data-model position (always local, matches mesh.position)
+                    obj.position = { x: obj.mesh.position.x, y: obj.mesh.position.y, z: obj.mesh.position.z };
 
                 } else {
                     // Object not in container hierarchy - use world position (fallback)
@@ -450,7 +456,7 @@ class SceneLayoutManager {
                         const worldPos = layoutPosition[pushContext.axis] + containerPosition[pushContext.axis];
                         obj.mesh.position[pushContext.axis] = worldPos;
                         if (geomCenterOffset) obj.mesh.position[pushContext.axis] += geomCenterOffset[pushContext.axis];
-                        obj.position = obj.mesh.getWorldPosition(new THREE.Vector3());
+                        obj.position = { x: obj.mesh.position.x, y: obj.mesh.position.y, z: obj.mesh.position.z };
                     } else {
                         // Normal layout update - apply all positions
                         const worldPosition = new THREE.Vector3()
@@ -459,7 +465,7 @@ class SceneLayoutManager {
                         if (geomCenterOffset) worldPosition.add(geomCenterOffset);
 
                         obj.mesh.position.copy(worldPosition);
-                        obj.position = worldPosition.clone();
+                        obj.position = { x: obj.mesh.position.x, y: obj.mesh.position.y, z: obj.mesh.position.z };
                     }
                 }
             }
@@ -476,95 +482,13 @@ class SceneLayoutManager {
      * @param {string} containerId - ID of the container to update
      */
     updateHugContainerSize(containerId) {
-        if (!this.sceneController) return;
-
-        const containerData = this.sceneController.getObject(containerId);
-        if (!containerData || !containerData.isContainer || !containerData.mesh) {
-            return;
-        }
-
-        // Get all children
-        const children = this.sceneController.getChildObjects(containerId);
-        if (children.length === 0) {
-            return;
-        }
-
-        // Calculate bounding box that contains all children in LOCAL space (relative to container)
-        const bbox = new THREE.Box3();
-        children.forEach(child => {
-            if (child.mesh && child.mesh.geometry) {
-                // Get child's bounding box in its local space
-                child.mesh.geometry.computeBoundingBox();
-                const childBox = child.mesh.geometry.boundingBox.clone();
-
-                // Transform to child's world space
-                childBox.applyMatrix4(child.mesh.matrixWorld);
-
-                // Then transform to container's local space
-                const containerWorldMatrixInverse = containerData.mesh.matrixWorld.clone().invert();
-                childBox.applyMatrix4(containerWorldMatrixInverse);
-
-                bbox.union(childBox);
-            }
-        });
-
-        // Get the center of the bounding box in container's local space
-        const bboxCenter = bbox.getCenter(new THREE.Vector3());
-
-        // Calculate new dimensions
-        const newSize = bbox.getSize(new THREE.Vector3());
-
-        // CRITICAL: The container needs to move so that its center aligns with the bbox center
-        // This keeps the children in the same position relative to world space
-        containerData.mesh.position.add(bboxCenter);
-        containerData.mesh.updateMatrixWorld(true);
-
-        // Now update all children positions to compensate for the container movement
-        children.forEach(child => {
-            if (child.mesh) {
-                child.mesh.position.sub(bboxCenter);
-                child.mesh.updateMatrixWorld(true);
-                // Sync data-model position so subsequent layout reads are correct
-                child.position = child.mesh.getWorldPosition(new THREE.Vector3());
-            }
-        });
-
-        // Sync position changes through ObjectStateManager (emits events for UI sync)
-        const objectStateManager = this.getObjectStateManager();
-        if (objectStateManager) {
-            objectStateManager.updateObject(containerId, {
-                position: {
-                    x: containerData.mesh.position.x,
-                    y: containerData.mesh.position.y,
-                    z: containerData.mesh.position.z
-                }
-            }, { source: 'hug-resize', skipLayoutPropagation: true });
-
-            children.forEach(child => {
-                if (child.mesh && child.id) {
-                    objectStateManager.updateObject(child.id, {
-                        position: {
-                            x: child.position.x,
-                            y: child.position.y,
-                            z: child.position.z
-                        }
-                    }, { source: 'hug-resize', skipLayoutPropagation: true });
-                }
+        // UNIFIED: Single hug resize path via ContainerCrudManager
+        const containerCrudManager = this.getContainerCrudManager();
+        if (containerCrudManager) {
+            containerCrudManager.resizeContainer(containerId, {
+                reason: 'child-changed',
+                immediate: true
             });
-        }
-
-        // Update container geometry (now centered at origin in its local space)
-        const geometryUtils = window.GeometryUtils;
-        if (geometryUtils && containerData.mesh.geometry) {
-            geometryUtils.resizeGeometry(containerData.mesh.geometry, 'x', newSize.x, 'center');
-            geometryUtils.resizeGeometry(containerData.mesh.geometry, 'y', newSize.y, 'center');
-            geometryUtils.resizeGeometry(containerData.mesh.geometry, 'z', newSize.z, 'center');
-
-            // Update support meshes (selection box, wireframe)
-            const supportMeshFactory = window.modlerComponents?.supportMeshFactory;
-            if (supportMeshFactory) {
-                supportMeshFactory.updateSupportMeshGeometries(containerData.mesh, false);
-            }
         }
     }
     /**

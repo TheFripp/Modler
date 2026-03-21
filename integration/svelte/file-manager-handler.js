@@ -106,7 +106,9 @@ class FileManagerHandler {
             return;
         }
 
-        const { requestId, operation, params } = messageData;
+        // Unwrap nested data: CommandRouter passes {data: {requestId, operation, params}, sourceWindow}
+        const payload = messageData.data || messageData;
+        const { requestId, operation, params } = payload;
 
         try {
             let result;

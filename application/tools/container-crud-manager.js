@@ -187,8 +187,7 @@ class ContainerCrudManager {
             pushContext = null
         } = options;
 
-        // Detect container mode automatically
-        const mode = this.detectContainerMode(container);
+        const mode = this.objectStateManager?.getContainerMode(container.id) || 'manual';
 
         // Route to appropriate handler based on mode
         switch (mode) {
@@ -230,43 +229,19 @@ class ContainerCrudManager {
         return null;
     }
 
-    /**
-     * Detect container mode (hug/layout/fixed)
-     * @private
-     */
-    detectContainerMode(container) {
-        // Use centralized state machine
-        const mode = this.objectStateManager?.getContainerMode(container.id);
-
-        if (mode) {
-            return mode; // 'layout', 'hug', or 'manual'
-        }
-
-        // Fallback: check fixed mode explicitly (legacy)
-        if (container.containerMode === 'manual' || container.sizingMode === 'fixed') {
-            return 'manual';
-        }
-
-        // Default: hug mode (container wraps children)
-        return 'hug';
-    }
 
     /**
      * Resize container in hug mode (adapts to children)
      * @private
      */
     resizeForHugMode(container, { reason, immediate }) {
-        // SMART DEFAULT: Preserve position for child changes, reposition for structural changes
-        const preservePosition = (
-            reason === 'child-changed' ||       // BOTTOM-UP: child moved/resized
-            reason === 'child-transformed'      // BOTTOM-UP: child rotated/scaled
-        );
-
+        // Hug containers always recenter around children — that's what "hug" means.
+        // BoxGeometry is centered at origin, so the container must move to wrap children correctly.
         return this._resizeToFitChildren(
             container,
             null,           // newContainerSize - calculate from children
             immediate,      // immediateUpdate - bypass throttling if requested
-            preservePosition // preservePosition - smart default based on reason
+            false           // preservePosition - always recenter for hug
         );
     }
 
@@ -311,18 +286,6 @@ class ContainerCrudManager {
             .filter(mesh => mesh && mesh.geometry && mesh.geometry.type !== 'EdgesGeometry');
     }
 
-    /**
-     * Calculate bounds from child objects
-     */
-    calculateContainerBounds(containerData, childObjects, newContainerSize = null, immediateUpdate = false) {
-        if (window.LayoutEngine?.hasLayoutWithFill?.(containerData, childObjects) && newContainerSize) {
-            if (window.LayoutEngine?.resizeFillObjects) {
-                window.LayoutEngine.resizeFillObjects(containerData, childObjects, newContainerSize);
-            }
-        }
-        const childMeshes = this.getChildMeshesForBounds(childObjects);
-        return childMeshes.length === 0 ? null : PositionTransform.calculateObjectBounds(childMeshes, immediateUpdate);
-    }
 
     /**
      * Create auto layout container from selected objects
@@ -411,27 +374,13 @@ class ContainerCrudManager {
             return false;
         }
 
+        // preserveWorldPositions() already moved all meshes to containerObject.mesh
+        // with correct local positions. Now just update metadata via setParentContainer().
+        // (setParentContainer skips hierarchy changes when mesh is already a child)
         selectedObjects.forEach(obj => {
             const objectData = sceneController.getObjectByMesh(obj);
             if (objectData) {
-                if (!objectData.isContainer) {
-                    sceneController.setParentContainer(objectData.id, containerObject.id, false);
-                } else {
-                    // For containers, we need to preserve their position AND their children's positions
-                    // First, preserve the container's world position relative to its new parent
-                    if (!PositionTransform.preserveNestedContainerPosition(obj, containerObject.mesh)) {
-                        console.error('Failed to preserve nested container position during container creation');
-                        return;
-                    }
-
-                    // Set parent relationship after position is preserved
-                    sceneController.setParentContainer(objectData.id, containerObject.id, false);
-
-                    // Ensure container visibility
-                    if (obj.visible === false) {
-                        obj.visible = true;
-                    }
-                }
+                sceneController.setParentContainer(objectData.id, containerObject.id, false, { skipCoordinateConversion: true });
             }
         });
 
@@ -552,9 +501,7 @@ class ContainerCrudManager {
         } else {
             // Enable container
             objectData.isContainer = true;
-            objectData.containerMode = 'hug';
-            objectData.sizingMode = 'hug'; // Legacy compat
-            objectData.isHug = true; // Legacy compat
+            Object.assign(objectData, ObjectStateManager.buildContainerModeUpdate('hug'));
             // Object converted to container
             return true;
         }
@@ -583,7 +530,7 @@ class ContainerCrudManager {
             return false;
         }
 
-        sceneController.setParentContainer(objectData.id, containerData.id, false);
+        sceneController.setParentContainer(objectData.id, containerData.id, false, { skipCoordinateConversion: true });
         // UNIFIED API: Child added to container (re-center container around all children)
         this.resizeContainer(containerData, {
             reason: 'child-added',
@@ -638,14 +585,14 @@ class ContainerCrudManager {
         const childMesh = childContainerData.mesh;
         const parentMesh = parentContainerData.mesh;
 
-        // Use specialized nested container positioning
-        if (!PositionTransform.preserveNestedContainerPosition(childMesh, parentMesh)) {
+        // Preserve world position using proper matrix inverse conversion
+        if (!PositionTransform.preserveWorldPosition(childMesh, parentMesh)) {
             console.error('Failed to preserve nested container position');
             return false;
         }
 
-        // Update the data structure
-        sceneController.setParentContainer(childContainerData.id, parentContainerData.id, false);
+        // Update the data structure (skip coordinate conversion — already handled above)
+        sceneController.setParentContainer(childContainerData.id, parentContainerData.id, false, { skipCoordinateConversion: true });
 
         // UNIFIED API: Child container added to parent (re-center parent)
         this.resizeContainer(parentContainerData, {
@@ -785,9 +732,7 @@ class ContainerCrudManager {
             return false;
         }
         if (!containerData.containerMode) {
-            containerData.containerMode = 'hug';
-            containerData.sizingMode = 'hug'; // Legacy compat
-            containerData.isHug = true; // Legacy compat
+            Object.assign(containerData, ObjectStateManager.buildContainerModeUpdate('hug'));
         }
 
         // Apply throttling
@@ -804,18 +749,9 @@ class ContainerCrudManager {
         if (childObjects.length === 0) return false;
 
 
-        const bounds = this.calculateContainerBounds(containerData, childObjects, newContainerSize, immediateUpdate);
-        if (!bounds) return false;
-
-        /**
-         * SIMPLIFIED CONTAINER EXPANSION:
-         * Use LayoutEngine's unified bounds calculation instead of custom local bounds calculation
-         * This eliminates duplicate geometry logic and leverages the centralized bounds system
-         */
-
-        // Use LayoutEngine's unified bounds calculation for consistency
         // Use getChildMeshesForBounds to correctly handle container children (collision mesh)
         const childMeshes = this.getChildMeshesForBounds(childObjects);
+        if (childMeshes.length === 0) return false;
         const localBounds = window.LayoutEngine.calculateUnifiedBounds(childMeshes, {
             type: 'layout',
             useLocalTransform: true  // Apply child's local transform (position in container space)

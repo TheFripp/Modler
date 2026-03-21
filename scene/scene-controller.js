@@ -160,7 +160,7 @@ class SceneController {
 
                 // Check if parent container has hug mode enabled
                 const parentData = this.getObject(objectData.parentContainer);
-                if (!parentData || !parentData.isContainer || !(parentData.containerMode === 'hug' || parentData.isHug)) {
+                if (!parentData || !parentData.isContainer || parentData.containerMode !== 'hug') {
                     return;
                 }
 
@@ -687,7 +687,7 @@ class SceneController {
     /**
      * Set parent container (DELEGATED to SceneHierarchyManager)
      */
-    setParentContainer(objectId, parentId, updateLayout = true) {
+    setParentContainer(objectId, parentId, updateLayout = true, options = {}) {
         const manager = this.getHierarchyManager();
         if (!manager) return false;
 
@@ -708,7 +708,7 @@ class SceneController {
             }
         };
 
-        return manager.setParentContainer(objectId, parentId, callbacks, updateLayout);
+        return manager.setParentContainer(objectId, parentId, callbacks, updateLayout, options);
     }
 
     /**

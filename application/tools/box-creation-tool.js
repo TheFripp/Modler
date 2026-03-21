@@ -81,6 +81,33 @@ class BoxCreationTool extends BaseTool {
             return true;
         }
 
+        if (event.key === 'Tab' && this.state !== BoxCreationState.IDLE) {
+            // Capture object ID before finalization clears it
+            const objectId = this.creationObject?.userData?.id;
+
+            if (this.state === BoxCreationState.SETTING_HEIGHT) {
+                this.finalizeBox();
+            } else if (this.state === BoxCreationState.SETTING_CORNER_1 && this.startPosition) {
+                if (!this.currentPosition) {
+                    const groundHit = this.getGroundPlaneIntersection();
+                    if (groundHit) this.currentPosition = groundHit.point.clone();
+                }
+                if (this.currentPosition) {
+                    this.currentHeight = 1.0;
+                    this.state = BoxCreationState.SETTING_HEIGHT;
+                    this.finalizeBox();
+                }
+            }
+
+            // Record dimensions.x for Tab focus (using captured ID since finalizeBox clears creationObject)
+            if (objectId && window.inputFocusManager) {
+                window.inputFocusManager.recordManipulation(objectId, 'dimensions.x');
+            }
+
+            // Return false so KeyboardRouter Priority 4 handles the focus
+            return false;
+        }
+
         return false;
     }
 

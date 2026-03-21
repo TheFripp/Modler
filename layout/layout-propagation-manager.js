@@ -196,9 +196,12 @@ class LayoutPropagationManager {
         // intermediate child state, resulting in nested container misalignment.
         if (deferredPropagations.size > 0 && (this._propagationDepth || 0) < 2) {
             this._propagationDepth = (this._propagationDepth || 0) + 1;
-            deferredPropagations.forEach(id => this.scheduledLayoutUpdates.add(id));
-            this.processScheduledLayouts();
-            this._propagationDepth--;
+            try {
+                deferredPropagations.forEach(id => this.scheduledLayoutUpdates.add(id));
+                this.processScheduledLayouts();
+            } finally {
+                this._propagationDepth--;
+            }
         } else if (deferredPropagations.size > 0) {
             // Fallback for unexpected deep nesting — defer to next frame
             this.nextFramePropagations = new Set([...this.nextFramePropagations, ...deferredPropagations]);

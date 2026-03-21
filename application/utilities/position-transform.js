@@ -456,29 +456,9 @@ class PositionTransform {
      * @returns {boolean} Success status
      */
     static preserveNestedContainerPosition(containerMesh, targetParentMesh) {
-        if (!containerMesh || !targetParentMesh) {
-            console.error('PositionTransform: Invalid container or parent for nested positioning');
-            return false;
-        }
-
-        // Store world position before hierarchy changes
-        const worldPosition = containerMesh.getWorldPosition(new THREE.Vector3());
-
-        // Add to new parent (Three.js will handle the transform automatically)
-        targetParentMesh.add(containerMesh);
-
-        // Calculate the local position needed to maintain world position
-        const parentWorldPosition = targetParentMesh.getWorldPosition(new THREE.Vector3());
-        const localPosition = worldPosition.sub(parentWorldPosition);
-
-        // Set the local position to maintain world position
-        containerMesh.position.copy(localPosition);
-
-        // Ensure normal Three.js transform management
-        containerMesh.matrixAutoUpdate = true;
-        containerMesh.updateMatrixWorld();
-
-        return true;
+        // Delegate to preserveWorldPosition which uses proper matrix inverse
+        // (handles rotation and scale correctly, unlike simple subtraction)
+        return this.preserveWorldPosition(containerMesh, targetParentMesh);
     }
 
     /**

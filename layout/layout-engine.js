@@ -38,14 +38,7 @@ class LayoutEngine {
         const { direction, gap = 0, padding = {} } = layoutConfig;
 
         // Extract container size for the layout axis
-        let axisSize = null;
-        if (containerSize) {
-            switch (direction) {
-                case 'x': axisSize = containerSize.x; break;
-                case 'y': axisSize = containerSize.y; break;
-                case 'z': axisSize = containerSize.z; break;
-            }
-        }
+        const axisSize = containerSize && ['x', 'y', 'z'].includes(direction) ? containerSize[direction] : null;
 
         switch (direction) {
             case 'x':
@@ -126,16 +119,8 @@ class LayoutEngine {
             const size = objectSizes[index];
 
             // Position object center at current location plus half size
-            if (axis === 'x') {
-                position.x = currentPosition + size.x / 2;
-                currentPosition += size.x + dynamicGap;
-            } else if (axis === 'y') {
-                position.y = currentPosition + size.y / 2;
-                currentPosition += size.y + dynamicGap;
-            } else if (axis === 'z') {
-                position.z = currentPosition + size.z / 2;
-                currentPosition += size.z + dynamicGap;
-            }
+            position[axis] = currentPosition + size[axis] / 2;
+            currentPosition += size[axis] + dynamicGap;
 
             positions.push(position);
         });
@@ -229,13 +214,11 @@ class LayoutEngine {
             });
         }
 
-        // Apply padding and center around layout anchor for grid layouts
-        const paddedPositions = this.applyPadding(positions, padding);
-
-        // For grid layouts, we need to center the entire grid around the layout anchor
+        // Center the entire grid around the layout anchor
+        // Note: Grid padding only affects container sizing, not object positions (symmetric)
         let finalPositions;
         if (layoutAnchor) {
-            finalPositions = paddedPositions.map(pos => {
+            finalPositions = positions.map(pos => {
                 return new THREE.Vector3(
                     pos.x + layoutAnchor.x,
                     pos.y + layoutAnchor.y,
@@ -243,7 +226,7 @@ class LayoutEngine {
                 );
             });
         } else {
-            finalPositions = paddedPositions;
+            finalPositions = positions;
         }
 
         // Calculate bounds for the final layout (pass pre-computed sizes to avoid re-derivation)
@@ -309,64 +292,25 @@ class LayoutEngine {
             return baseSize;
         }
 
-        const { sizeX, sizeY, sizeZ } = obj.layoutProperties;
         const adjustedSize = baseSize.clone();
-
-        // Calculate fill size per object for layout axis
         const fillSizePerObject = (availableSpace && fillCount > 0) ? availableSpace / fillCount : baseSize[layoutAxis];
+        const AXIS_TO_PADDING = { x: 'width', y: 'height', z: 'depth' };
 
-        // Apply X-axis sizing behavior
-        if (sizeX === 'fill') {
-            if (layoutAxis === 'x' && availableSpace !== null) {
-                // Use layout axis fill calculation
-                adjustedSize.x = Math.max(fillSizePerObject, 0.1);
-            } else if (containerSize) {
-                // Fill based on container size minus padding (inset on both sides)
-                const paddingWidth = (padding.width || 0);
-                const availableX = containerSize.x - (paddingWidth * 2);
-                adjustedSize.x = Math.max(availableX, 0.1);
-            } else {
-                adjustedSize.x = baseSize.x;
+        ['x', 'y', 'z'].forEach(axis => {
+            const sizeProp = `size${axis.toUpperCase()}`;
+            const sizeMode = obj.layoutProperties[sizeProp];
+
+            if (sizeMode === 'fill') {
+                if (layoutAxis === axis && availableSpace !== null) {
+                    adjustedSize[axis] = Math.max(fillSizePerObject, 0.1);
+                } else if (containerSize) {
+                    const paddingVal = padding[AXIS_TO_PADDING[axis]] || 0;
+                    adjustedSize[axis] = Math.max(containerSize[axis] - paddingVal * 2, 0.1);
+                }
+                // else: keep baseSize (no container size available)
             }
-        } else if (sizeX === 'hug') {
-            adjustedSize.x = baseSize.x; // Natural size
-        }
-        // 'fixed' uses current size
-
-        // Apply Y-axis sizing behavior
-        if (sizeY === 'fill') {
-            if (layoutAxis === 'y' && availableSpace !== null) {
-                // Use layout axis fill calculation
-                adjustedSize.y = Math.max(fillSizePerObject, 0.1);
-            } else if (containerSize) {
-                // Fill based on container size minus padding (inset on both sides)
-                const paddingHeight = (padding.height || 0);
-                const availableY = containerSize.y - (paddingHeight * 2);
-                adjustedSize.y = Math.max(availableY, 0.1);
-            } else {
-                adjustedSize.y = baseSize.y;
-            }
-        } else if (sizeY === 'hug') {
-            adjustedSize.y = baseSize.y;
-        }
-
-        // Apply Z-axis sizing behavior
-        if (sizeZ === 'fill') {
-            if (layoutAxis === 'z' && availableSpace !== null) {
-                // Use layout axis fill calculation
-                adjustedSize.z = Math.max(fillSizePerObject, 0.1);
-            } else if (containerSize) {
-                // Fill based on container size minus padding (inset on both sides)
-                const paddingDepth = (padding.depth || 0);
-                const availableZ = containerSize.z - (paddingDepth * 2);
-                adjustedSize.z = Math.max(availableZ, 0.1);
-            } else {
-                adjustedSize.z = baseSize.z;
-            }
-        } else if (sizeZ === 'hug') {
-            adjustedSize.z = baseSize.z;
-        }
-
+            // 'hug' and 'fixed' keep baseSize — no action needed
+        });
 
         return adjustedSize;
     }
@@ -403,21 +347,81 @@ class LayoutEngine {
     }
 
     /**
-     * Check if object has fill behavior for the given axis
+     * Check if object has fill behavior for the given axis.
+     * Reads layoutProperties directly from the data object (pure calculation engine pattern).
+     * For ID-based checks, use ObjectStateManager.hasFillEnabled(id, axis) instead.
      * @param {Object} obj - Object data
      * @param {string} axis - Layout axis
      * @returns {boolean} True if object has fill behavior
      */
-    static objectHasFillBehavior(obj, axis, objectStateManager = null) {
-        // Prefer centralized state machine when available
-        if (objectStateManager && obj.id) {
-            return objectStateManager.hasFillEnabled(obj.id, axis);
-        }
-
-        // Fallback to direct access for performance (when called without state manager)
+    static objectHasFillBehavior(obj, axis) {
         if (!obj.layoutProperties) return false;
         const sizeProperty = axis === 'x' ? 'sizeX' : axis === 'y' ? 'sizeY' : 'sizeZ';
         return obj.layoutProperties[sizeProperty] === 'fill';
+    }
+
+    /**
+     * Calculate the minimum container size needed to fit all children on a given axis.
+     * Used by push tool to prevent shrinking containers smaller than their contents.
+     * Fill objects contribute only their minimum size (0.1), since they resize to fit.
+     *
+     * @param {Array} children - Array of child object data (with dimensions, layoutProperties)
+     * @param {string} axis - The axis being pushed ('x', 'y', 'z')
+     * @param {Object} layoutConfig - Container's autoLayout config (direction, gap, padding)
+     * @returns {number} Minimum container size on the given axis
+     */
+    static calculateMinimumContainerSize(children, axis, layoutConfig) {
+        if (!layoutConfig || !children || children.length === 0) return 0;
+
+        const direction = layoutConfig.direction;
+        const MIN_FILL_SIZE = 0.1;
+
+        // Categorize children by fill status on the push axis
+        const fillProp = `size${axis.toUpperCase()}`;
+        const fillChildren = [];
+        const nonFillChildren = [];
+        children.forEach(child => {
+            if (this.objectHasFillBehavior(child, axis)) {
+                fillChildren.push(child);
+            } else {
+                nonFillChildren.push(child);
+            }
+        });
+
+        // In space-between mode (no fill objects), gaps are flexible (can be zero)
+        const gap = fillChildren.length > 0 ? (layoutConfig.gap || 0) : 0;
+        const totalPadding = this.getTotalPadding(axis, layoutConfig.padding || {});
+        let minSize = totalPadding;
+
+        if (direction === axis) {
+            // Push axis matches layout direction: sum sizes along the axis
+            nonFillChildren.forEach(child => {
+                const size = this.getObjectSize(child);
+                minSize += size[axis];
+            });
+            minSize += fillChildren.length * MIN_FILL_SIZE;
+            if (children.length > 1) {
+                minSize += gap * (children.length - 1);
+            }
+        } else {
+            // Push axis perpendicular to layout direction: max child size on axis
+            let maxChildSize = 0;
+            nonFillChildren.forEach(child => {
+                const size = this.getObjectSize(child);
+                maxChildSize = Math.max(maxChildSize, size[axis]);
+            });
+            fillChildren.forEach(child => {
+                if (this.objectHasFillBehavior(child, axis)) {
+                    maxChildSize = Math.max(maxChildSize, MIN_FILL_SIZE);
+                } else {
+                    const size = this.getObjectSize(child);
+                    maxChildSize = Math.max(maxChildSize, size[axis]);
+                }
+            });
+            minSize += maxChildSize;
+        }
+
+        return minSize;
     }
 
     /**
@@ -427,34 +431,18 @@ class LayoutEngine {
      * @returns {number} Total padding (both sides of axis)
      */
     static getTotalPadding(axis, padding) {
-        const defaultPadding = { width: 0, height: 0, depth: 0 };
-        const p = { ...defaultPadding, ...padding };
-
-        switch (axis) {
-            case 'x': return p.width * 2;  // padding affects both -X and +X sides
-            case 'y': return p.height * 2; // padding affects both -Y and +Y sides
-            case 'z': return p.depth * 2;  // padding affects both -Z and +Z sides
-            default: return 0;
-        }
+        return this.getPaddingOffset(axis, padding) * 2;
     }
 
     /**
-     * Get padding offset for layout axis
+     * Get padding offset for layout axis (single-sided value)
      * @param {string} axis - Layout axis
      * @param {Object} padding - Padding configuration {width, height, depth}
-     * @returns {number} Padding offset for starting position (single-sided value)
+     * @returns {number} Padding offset for one side
      */
     static getPaddingOffset(axis, padding) {
-        const defaultPadding = { width: 0, height: 0, depth: 0 };
-        const p = { ...defaultPadding, ...padding };
-
-        // Since padding is inset and affects both sides equally, offset is just the single padding value
-        switch (axis) {
-            case 'x': return p.width;
-            case 'y': return p.height;
-            case 'z': return p.depth;
-            default: return 0;
-        }
+        const AXIS_TO_PADDING = { x: 'width', y: 'height', z: 'depth' };
+        return (padding && padding[AXIS_TO_PADDING[axis]]) || 0;
     }
     
     /**
@@ -473,26 +461,13 @@ class LayoutEngine {
     static alignLayoutPositions(positions, sizes, axis, layoutAnchor = null, pushContext = null, containerSize = null, padding = null, layoutConfig = null, fillCount = 0) {
         if (positions.length === 0 || sizes.length === 0) return positions;
 
-        // Calculate actual layout bounds
+        // Calculate actual layout bounds on the layout axis
         let min = Infinity, max = -Infinity;
         positions.forEach((pos, index) => {
             const size = sizes[index];
             if (!size) return;
-
-            let objMin, objMax;
-            if (axis === 'x') {
-                objMin = pos.x - size.x / 2;
-                objMax = pos.x + size.x / 2;
-            } else if (axis === 'y') {
-                objMin = pos.y - size.y / 2;
-                objMax = pos.y + size.y / 2;
-            } else if (axis === 'z') {
-                objMin = pos.z - size.z / 2;
-                objMax = pos.z + size.z / 2;
-            }
-
-            min = Math.min(min, objMin);
-            max = Math.max(max, objMax);
+            min = Math.min(min, pos[axis] - size[axis] / 2);
+            max = Math.max(max, pos[axis] + size[axis] / 2);
         });
 
         // Determine target position for layout axis
@@ -505,31 +480,20 @@ class LayoutEngine {
 
         if (usingSpaceBetween) {
             // Space-between: align first object to min edge (accounting for padding)
-            const containerAxisSize = axis === 'x' ? containerSize.x : axis === 'y' ? containerSize.y : containerSize.z;
-            const containerMin = -containerAxisSize / 2;
+            const containerMin = -containerSize[axis] / 2;
             const paddingOffset = padding ? this.getPaddingOffset(axis, padding) : 0;
-
-            // Position so first object's min edge aligns with container min + padding
             targetPosition = (containerMin + paddingOffset) - min;
         } else {
             // Normal centering (or use layoutAnchor if provided)
             const boundsCenter = (min + max) / 2;
-            let targetCenter = 0;
-            if (layoutAnchor) {
-                // Use layout anchor if provided (preserves position when switching layout modes)
-                if (axis === 'x') targetCenter = layoutAnchor.x;
-                else if (axis === 'y') targetCenter = layoutAnchor.y;
-                else if (axis === 'z') targetCenter = layoutAnchor.z;
-            }
+            const targetCenter = layoutAnchor ? layoutAnchor[axis] : 0;
             targetPosition = targetCenter - boundsCenter;
         }
 
         // Apply offset to all positions (layout axis)
         const axisAlignedPositions = positions.map(pos => {
             const alignedPos = pos.clone();
-            if (axis === 'x') alignedPos.x += targetPosition;
-            else if (axis === 'y') alignedPos.y += targetPosition;
-            else if (axis === 'z') alignedPos.z += targetPosition;
+            alignedPos[axis] += targetPosition;
             return alignedPos;
         });
 
@@ -608,99 +572,6 @@ class LayoutEngine {
     }
 
     /**
-     * Center layout positions along the layout axis using actual bounds calculation
-     * @param {Array} positions - Array of position vectors
-     * @param {Array} sizes - Array of size vectors corresponding to positions
-     * @param {string} axis - Layout axis
-     * @param {THREE.Vector3} layoutAnchor - Optional anchor point to center layout around (default: origin)
-     * @returns {Array} Centered positions
-     */
-    static centerLayoutPositions(positions, sizes, axis, layoutAnchor = null) {
-        if (positions.length === 0 || sizes.length === 0) return positions;
-
-        // Calculate actual layout bounds considering object sizes (not just positions)
-        let min = Infinity, max = -Infinity;
-
-        positions.forEach((pos, index) => {
-            const size = sizes[index];
-            if (!size) return;
-
-            // Calculate the actual bounds of this object
-            let objMin, objMax;
-            if (axis === 'x') {
-                objMin = pos.x - size.x / 2;
-                objMax = pos.x + size.x / 2;
-            } else if (axis === 'y') {
-                objMin = pos.y - size.y / 2;
-                objMax = pos.y + size.y / 2;
-            } else if (axis === 'z') {
-                objMin = pos.z - size.z / 2;
-                objMax = pos.z + size.z / 2;
-            }
-
-            min = Math.min(min, objMin);
-            max = Math.max(max, objMax);
-        });
-
-        // Calculate the center of the actual layout bounds
-        const boundsCenter = (min + max) / 2;
-
-        // Determine target center: use layoutAnchor if provided, otherwise origin
-        let targetCenter = 0;
-        if (layoutAnchor) {
-            if (axis === 'x') targetCenter = layoutAnchor.x;
-            else if (axis === 'y') targetCenter = layoutAnchor.y;
-            else if (axis === 'z') targetCenter = layoutAnchor.z;
-        }
-
-        // Debug: Layout centering with bounds-based calculation
-
-        // Calculate offset to center the layout bounds around the target center
-        const offset = targetCenter - boundsCenter;
-        return positions.map(pos => {
-            const centeredPos = pos.clone();
-            if (axis === 'x') centeredPos.x += offset;
-            else if (axis === 'y') centeredPos.y += offset;
-            else if (axis === 'z') centeredPos.z += offset;
-            return centeredPos;
-        });
-    }
-    
-    /**
-     * Apply padding offset to positions along a specific axis
-     * @param {Array} positions - Array of position vectors
-     * @param {string} axis - Layout axis ('x', 'y', 'z')
-     * @param {number} paddingOffset - Padding offset for the axis
-     * @returns {Array} Positions with padding offset applied
-     */
-    static applyPaddingToAxis(positions, axis, paddingOffset) {
-        if (paddingOffset === 0) return positions;
-
-        return positions.map(pos => {
-            const paddedPos = pos.clone();
-            if (axis === 'x') paddedPos.x += paddingOffset;
-            else if (axis === 'y') paddedPos.y += paddingOffset;
-            else if (axis === 'z') paddedPos.z += paddingOffset;
-            return paddedPos;
-        });
-    }
-
-    /**
-     * Apply padding to grid positions
-     * @param {Array} positions - Array of position vectors
-     * @param {Object} padding - Padding configuration {width, height, depth}
-     * @returns {Array} Positions with padding applied
-     */
-    static applyPadding(positions, padding) {
-        const defaultPadding = { width: 0, height: 0, depth: 0 };
-        const p = { ...defaultPadding, ...padding };
-
-        // Since padding is symmetric on both sides, no offset needed for grid layouts
-        // Grid layouts are already centered, padding only affects container sizing
-        return positions;
-    }
-    
-    /**
      * Calculate container bounds needed for all child objects
      * @param {Array} objects - Array of object data
      * @param {Array} positions - Array of calculated positions
@@ -774,57 +645,6 @@ class LayoutEngine {
         );
 
         return { min, max, size };
-    }
-
-    /**
-     * Calculate fill object sizes based on available container space
-     * @param {Array} objects - Array of object data
-     * @param {Object} layoutConfig - Layout configuration
-     * @param {THREE.Vector3} containerSize - Available container size
-     * @returns {Array} Array of calculated object sizes with fill applied
-     */
-    static calculateFillObjectSizes(objects, layoutConfig, containerSize) {
-        if (!objects || objects.length === 0) return [];
-
-        const { direction, gap = 0, padding = {} } = layoutConfig;
-        const { totalFixedSize, fillCount } = this.categorizeObjects(objects, direction);
-
-        // Calculate available space for fill objects
-        let availableSpace = containerSize[direction];
-        if (fillCount > 0) {
-            const totalGaps = (objects.length - 1) * gap;
-            const paddingTotal = this.getTotalPadding(direction, padding);
-            availableSpace = Math.max(0, availableSpace - totalFixedSize - totalGaps - paddingTotal);
-        }
-
-        // Calculate sizes for all objects
-        return objects.map(obj => {
-            const baseSize = this.getObjectSize(obj);
-            return this.applySizingBehavior(obj, baseSize, direction, availableSpace, fillCount, containerSize, padding);
-        });
-    }
-    
-    /**
-     * Get debug information for layout calculations
-     * @param {Array} objects - Array of object data
-     * @param {Object} layoutConfig - Layout configuration
-     * @returns {Object} Debug information
-     */
-    static getLayoutDebugInfo(objects, layoutConfig) {
-        const positions = this.calculateLayout(objects, layoutConfig);
-        const bounds = this.calculateLayoutBounds(objects, positions);
-
-        return {
-            objectCount: objects.length,
-            layoutConfig: { ...layoutConfig },
-            calculatedPositions: positions.map(p => ({ x: p.x, y: p.y, z: p.z })),
-            bounds: {
-                min: { x: bounds.min.x, y: bounds.min.y, z: bounds.min.z },
-                max: { x: bounds.max.x, y: bounds.max.y, z: bounds.max.z },
-                size: { x: bounds.size.x, y: bounds.size.y, z: bounds.size.z }
-            },
-            calculationTime: performance.now() // For performance monitoring
-        };
     }
 
     // ====== UNIFIED BOUNDS CALCULATION UTILITIES ======

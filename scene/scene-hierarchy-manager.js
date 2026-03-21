@@ -89,9 +89,11 @@ class SceneHierarchyManager {
      * @param {number} parentId - Parent container ID (null to remove from container)
      * @param {Object} callbacks - Callbacks for layout updates { updateLayout, updateHugContainerSize, resizeToLayoutBounds }
      * @param {boolean} shouldUpdateLayout - Whether to trigger layout updates (default: true)
+     * @param {Object} options - Additional options
+     * @param {boolean} options.skipCoordinateConversion - Skip world→local conversion (caller already handled positioning)
      * @returns {boolean} True if parent was successfully set
      */
-    setParentContainer(objectId, parentId, callbacks = {}, shouldUpdateLayout = true) {
+    setParentContainer(objectId, parentId, callbacks = {}, shouldUpdateLayout = true, options = {}) {
         const obj = this.objects.get(objectId);
         if (!obj) return false;
 
@@ -120,36 +122,31 @@ class SceneHierarchyManager {
             // Moving to a container
             const parentContainer = this.objects.get(parentId);
             if (parentContainer && parentContainer.mesh) {
-                // CRITICAL FIX: Only handle hierarchy if object is not already a child
-                // This prevents interference with ContainerManager's position calculations
+                // Only handle hierarchy if object is not already a child
                 if (mesh.parent !== parentContainer.mesh) {
-                    // Store current local position (might already be set correctly)
-                    const currentLocalPosition = mesh.position.clone();
+                    if (options.skipCoordinateConversion) {
+                        // Caller already handled positioning — just move in hierarchy
+                        if (mesh.parent) {
+                            mesh.parent.remove(mesh);
+                        }
+                        parentContainer.mesh.add(mesh);
+                    } else {
+                        // Get WORLD position before any hierarchy changes
+                        const worldPosition = mesh.getWorldPosition(new THREE.Vector3());
 
-                    // Check if mesh is currently at scene root (fresh creation)
-                    const isAtSceneRoot = mesh.parent === this.scene;
+                        if (mesh.parent) {
+                            mesh.parent.remove(mesh);
+                        }
+                        parentContainer.mesh.add(mesh);
+                        parentContainer.mesh.updateMatrixWorld(true);
 
-                    // Remove from current parent
-                    if (mesh.parent) {
-                        mesh.parent.remove(mesh);
+                        // Convert world → new parent local via matrix inverse
+                        const inverseParent = new THREE.Matrix4()
+                            .copy(parentContainer.mesh.matrixWorld)
+                            .invert();
+                        mesh.position.copy(worldPosition.applyMatrix4(inverseParent));
                     }
-
-                    // Add to container
-                    parentContainer.mesh.add(mesh);
-
-                    // Only convert coordinates if object was NOT fresh from creation
-                    // Fresh objects have position already set as local in configureMesh()
-                    if (!isAtSceneRoot) {
-                        // Object is being moved between parents - need coordinate conversion
-                        const worldPosition = currentLocalPosition; // Was world position at scene root
-                        const containerWorldMatrix = parentContainer.mesh.matrixWorld;
-                        const containerWorldMatrixInverse = new THREE.Matrix4().copy(containerWorldMatrix).invert();
-                        const localPosition = worldPosition.applyMatrix4(containerWorldMatrixInverse);
-                        mesh.position.copy(localPosition);
-                    }
-                    // else: mesh.position is already correct (was set as local in configureMesh)
                 }
-                // If already a child, skip hierarchy changes (ContainerManager handled it)
 
                 // Initialize or update childrenOrder array
                 if (!parentContainer.childrenOrder || !Array.isArray(parentContainer.childrenOrder)) {
@@ -390,7 +387,7 @@ class SceneHierarchyManager {
         const container = this.objects.get(containerId);
         if (!container) return;
 
-        if (container.containerMode === 'hug' || container.isHug) {
+        if (container.containerMode === 'hug') {
             callbacks.updateHugContainerSize(containerId);
         } else if (container.containerMode === 'layout' || (container.autoLayout?.enabled)) {
             // SINGLE FUNNEL: updateLayout() handles resize internally (SceneLayoutManager line 335)

@@ -707,7 +707,7 @@ class ObjectStateManager {
                         window.ObjectDataFormat.createDefaultAutoLayout();
 
                     // CRITICAL: If user manually sets gap, clear calculatedGap to use fixed gap
-                    if (object._changedProperties?.has('autoLayout') || object._changedProperties?.has('autoLayout.gap')) {
+                    if (object._changedProperties?.has('autoLayout')) {
                         sceneObject.calculatedGap = undefined;
                         object.calculatedGap = undefined;
                     }
@@ -736,14 +736,8 @@ class ObjectStateManager {
                     const skipLayoutUpdate = source === 'push-tool';
 
                     if (!skipLayoutUpdate && (autoLayoutChanged || autoLayoutPropertyChanged)) {
-                        // SINGLE FUNNEL: updateLayout() handles resize internally (SceneLayoutManager line 335)
+                        // SINGLE FUNNEL: updateLayout() handles resize + re-pass internally
                         this.sceneController.updateLayout(object.id);
-
-                        // When first switching TO layout mode, recalculate layout again
-                        // so space-between gap is computed with the correct container size
-                        if (autoLayoutChanged) {
-                            this.sceneController.updateLayout(object.id);
-                        }
                     }
 
                     // Container dimensions changed → recalculate own layout

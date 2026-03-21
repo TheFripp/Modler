@@ -508,6 +508,8 @@ class SupportMeshFactory {
         if (!supportMeshes || !mainMesh.geometry) return;
 
         // Update wireframes using GeometryFactory
+        // CRITICAL: computeBoundingSphere/computeBoundingBox must be called after geometry replacement
+        // to prevent frustum culling artifacts from stale bounding data
         if (supportMeshes.selectionWireframe) {
             const newEdgeGeometry = this.geometryFactory.createEdgeGeometry(mainMesh.geometry);
             if (supportMeshes.selectionWireframe.userData?.isFatLine) {
@@ -515,10 +517,14 @@ class SupportMeshFactory {
                 const newLineGeometry = new LineSegmentsGeometry().fromEdgesGeometry(newEdgeGeometry);
                 supportMeshes.selectionWireframe.geometry.dispose();
                 supportMeshes.selectionWireframe.geometry = newLineGeometry;
+                newLineGeometry.computeBoundingSphere();
+                newLineGeometry.computeBoundingBox();
                 newEdgeGeometry.dispose();
             } else {
                 this.geometryFactory.returnGeometry(supportMeshes.selectionWireframe.geometry, 'edge');
                 supportMeshes.selectionWireframe.geometry = newEdgeGeometry;
+                newEdgeGeometry.computeBoundingSphere();
+                newEdgeGeometry.computeBoundingBox();
             }
         }
 
@@ -526,12 +532,16 @@ class SupportMeshFactory {
             const newEdgeGeometry = this.geometryFactory.createEdgeGeometry(mainMesh.geometry);
             this.geometryFactory.returnGeometry(supportMeshes.hoverWireframe.geometry, 'edge');
             supportMeshes.hoverWireframe.geometry = newEdgeGeometry;
+            newEdgeGeometry.computeBoundingSphere();
+            newEdgeGeometry.computeBoundingBox();
         }
 
         if (supportMeshes.containerWireframe) {
             const newEdgeGeometry = this.geometryFactory.createEdgeGeometry(mainMesh.geometry);
             this.geometryFactory.returnGeometry(supportMeshes.containerWireframe.geometry, 'edge');
             supportMeshes.containerWireframe.geometry = newEdgeGeometry;
+            newEdgeGeometry.computeBoundingSphere();
+            newEdgeGeometry.computeBoundingBox();
         }
 
         // Update CAD wireframes
@@ -539,6 +549,8 @@ class SupportMeshFactory {
             const newEdgeGeometry = this.geometryFactory.createEdgeGeometry(mainMesh.geometry);
             this.geometryFactory.returnGeometry(supportMeshes.cadWireframe.geometry, 'edge');
             supportMeshes.cadWireframe.geometry = newEdgeGeometry;
+            newEdgeGeometry.computeBoundingSphere();
+            newEdgeGeometry.computeBoundingBox();
         }
 
         // Update container selection wireframe (fat LineSegments2)
@@ -547,6 +559,8 @@ class SupportMeshFactory {
             const newLineGeometry = new LineSegmentsGeometry().fromEdgesGeometry(newEdgeGeometry);
             supportMeshes.containerSelectionWireframe.geometry.dispose();
             supportMeshes.containerSelectionWireframe.geometry = newLineGeometry;
+            newLineGeometry.computeBoundingSphere();
+            newLineGeometry.computeBoundingBox();
             newEdgeGeometry.dispose();
         }
 
