@@ -1,22 +1,25 @@
 import * as THREE from 'three';
 /**
- * SceneLayoutManager - Container Layout and Sizing Operations
+ * SceneLayoutManager - Unified Container Layout Orchestrator
  *
- * Extracted from SceneController as part of Phase 5 refactoring.
- * Manages all container auto-layout functionality, hug sizing, and layout calculations.
+ * THE single entry point for all container layout updates across all modes.
+ * Every layout rule is coordinated through updateContainer() — no other system
+ * performs mode-routing or layout decision-making.
  *
  * Responsibilities:
+ * - updateContainer(): Unified entry point for layout/hug/manual modes
  * - Enable/disable auto-layout on containers
- * - Calculate and apply layout positions and sizes
- * - Hug container sizing (fit to children)
- * - Layout utility functions (center calculation, size extraction)
+ * - Calculate and apply layout positions and sizes (layout mode)
+ * - Hug container sizing — fit to children (hug mode)
+ * - calculatedGap persistence (THE single location)
+ * - Layout utility functions (center calculation, size extraction, child mesh filtering)
  *
  * Dependencies:
- * - LayoutEngine (window.LayoutEngine) - Layout calculation algorithm
+ * - LayoutEngine (window.LayoutEngine) - Pure layout calculations
  * - GeometryUtils (window.GeometryUtils) - Geometry manipulation
- * - ContainerCrudManager - Container resize operations
- * - ObjectStateManager - calculatedGap persistence
- * - ObjectEventBus - Layout property change notifications
+ * - ContainerCrudManager - Container geometry operations only (applyContainerGeometry)
+ * - ObjectStateManager - State queries (hasFillEnabled, getObject)
+ * - ObjectEventBus - calculatedGap change notifications
  * - SceneController - Object queries, dimension updates
  *
  * @class SceneLayoutManager
@@ -28,7 +31,7 @@ class SceneLayoutManager {
         this.containerCrudManager = null;
         this.objectStateManager = null;
 
-        // Guard: prevents hug resize during layout calculation (avoids double-resize conflicts)
+        // Guard: prevents recursive container updates (avoids double-resize conflicts)
         this._layoutInProgress = false;
     }
 
@@ -61,6 +64,245 @@ class SceneLayoutManager {
         return this.objectStateManager;
     }
 
+    // ====== UNIFIED ENTRY POINT ======
+
+    /**
+     * Update a container's layout — THE single entry point for all modes.
+     *
+     * All callers (LayoutPropagationManager, ObjectStateManager, SceneHierarchyManager,
+     * commands, tools) call this method. Mode-routing happens HERE and nowhere else.
+     *
+     * @param {number|string} containerId - Container object ID
+     * @param {Object} context - Optional context
+     * @param {Object} context.pushContext - Push tool context {axis, anchorMode}
+     * @returns {Object} Result {success: boolean, reason?: string, layoutBounds?: Object}
+     */
+    updateContainer(containerId, context = {}) {
+        if (!this.sceneController) {
+            return { success: false, reason: 'SceneController not initialized' };
+        }
+
+        const container = this.sceneController.getObject(containerId);
+        if (!container || !container.isContainer) {
+            return { success: false, reason: 'not a container' };
+        }
+
+        const mode = container.containerMode || 'manual';
+
+        // Clear calculatedGap when not in layout mode (THE single clearing location)
+        if (mode !== 'layout') {
+            container.calculatedGap = undefined;
+            const osmObj = this.getObjectStateManager()?.getObject(container.id);
+            if (osmObj) osmObj.calculatedGap = undefined;
+        }
+
+        switch (mode) {
+            case 'layout':
+                return this._updateLayoutContainer(container, context);
+            case 'hug':
+                return this._updateHugContainer(container, context);
+            case 'manual':
+                return { success: false, reason: 'manual mode' };
+            default:
+                return { success: false, reason: `unknown mode: ${mode}` };
+        }
+    }
+
+    // ====== LAYOUT MODE ======
+
+    /**
+     * Update a layout-mode container: calculate positions, apply, resize if needed.
+     * Uses LayoutEngine.calculateLayoutWithConvergence() to eliminate the re-pass pattern.
+     * @private
+     */
+    _updateLayoutContainer(container, context) {
+        const children = this.sceneController.getChildObjects(container.id);
+        if (children.length === 0) {
+            return { success: true, reason: 'no children' };
+        }
+
+        if (!window.LayoutEngine) {
+            return { success: false, reason: 'LayoutEngine not available' };
+        }
+
+        const wasLayoutInProgress = this._layoutInProgress;
+        this._layoutInProgress = true;
+
+        try {
+            const pushContext = context.pushContext || null;
+            const containerSize = this.getContainerSize(container);
+            const fillAxes = this._getAxesWithFillChildren(children);
+
+            // ONE call — convergence (re-pass) handled internally by LayoutEngine
+            const result = window.LayoutEngine.calculateLayoutWithConvergence(
+                children, container.autoLayout, containerSize, fillAxes, pushContext
+            );
+
+            // Apply positions and sizes to Three.js meshes
+            this.applyLayoutPositionsAndSizes(children, result.positions, result.sizes, container, pushContext);
+
+            // Persist calculatedGap (THE single write location)
+            this._persistCalculatedGap(container, result.calculatedGap, pushContext);
+
+            // Resize container geometry if needed (skip during push — push manages its own geometry)
+            if (result.containerResized && !pushContext) {
+                this._applyContainerResize(container, result.targetContainerSize);
+
+                // After geometry resize, re-apply positions with the actual new container size
+                // (geometry may have been clamped or adjusted by the factory)
+                const newContainerSize = this.getContainerSize(container);
+                const finalResult = window.LayoutEngine.calculateLayout(
+                    children, container.autoLayout, newContainerSize, null, pushContext
+                );
+                this.applyLayoutPositionsAndSizes(children, finalResult.positions, finalResult.sizes, container, pushContext);
+                this._persistCalculatedGap(container, finalResult.calculatedGap, pushContext);
+            }
+
+            return { success: true, layoutBounds: result.bounds };
+
+        } finally {
+            this._layoutInProgress = wasLayoutInProgress;
+        }
+    }
+
+    // ====== HUG MODE ======
+
+    /**
+     * Update a hug-mode container: resize to fit children tightly.
+     * Absorbs logic previously in ContainerCrudManager._resizeToFitChildren().
+     * @private
+     */
+    _updateHugContainer(container, context) {
+        if (this._layoutInProgress) {
+            return { success: false, reason: 'layout in progress' };
+        }
+
+        const children = this.sceneController.getChildObjects(container.id);
+        if (children.length === 0) {
+            return { success: true, reason: 'no children' };
+        }
+
+        if (!window.LayoutEngine) {
+            return { success: false, reason: 'LayoutEngine not available' };
+        }
+
+        const childMeshes = this.getChildMeshesForBounds(children);
+        if (childMeshes.length === 0) {
+            return { success: false, reason: 'no valid child meshes' };
+        }
+
+        const padding = container.autoLayout?.padding || {};
+        const bounds = window.LayoutEngine.calculateHugBounds(childMeshes, padding);
+
+        if (!bounds) {
+            return { success: false, reason: 'bounds calculation failed' };
+        }
+
+        // Hug containers recenter around children (container moves to wrap them)
+        const currentContainerPosition = container.mesh.position.clone();
+        const targetPosition = currentContainerPosition.clone().add(bounds.center);
+
+        // Apply geometry resize
+        const containerCrudManager = this.getContainerCrudManager();
+        if (!containerCrudManager) {
+            return { success: false, reason: 'ContainerCrudManager not available' };
+        }
+
+        const success = containerCrudManager.updateContainerGeometryWithFactories(
+            container, bounds.size, targetPosition, true
+        );
+
+        if (success) {
+            // Compensate child positions for container movement
+            const containerMovement = targetPosition.clone().sub(currentContainerPosition);
+            children.forEach(childObj => {
+                if (childObj.mesh) {
+                    childObj.mesh.position.sub(containerMovement);
+                    this.sceneController.updateObject(childObj.id, {
+                        position: childObj.mesh.position.clone()
+                    });
+                }
+            });
+        }
+
+        // Update container position
+        this.sceneController.updateObject(container.id, { position: targetPosition });
+
+        // Handle visibility after resize
+        containerCrudManager.handleContainerVisibilityAfterResize(container, true);
+
+        return { success: true };
+    }
+
+    // ====== calculatedGap PERSISTENCE (THE single location) ======
+
+    /**
+     * Persist calculatedGap on container, OSM copy, and notify UI.
+     * This is THE only place calculatedGap is written.
+     * @private
+     */
+    _persistCalculatedGap(container, gap, pushContext) {
+        if (gap === undefined) return;
+
+        // Set on SceneController's object
+        container.calculatedGap = gap;
+
+        // Set on ObjectStateManager's copy
+        const osmObj = this.getObjectStateManager()?.getObject(container.id);
+        if (osmObj) osmObj.calculatedGap = gap;
+
+        // Notify UI (skip during push to prevent property panel flickering)
+        if (!pushContext && window.objectEventBus && container.id) {
+            window.objectEventBus.emit(
+                window.objectEventBus.EVENT_TYPES.HIERARCHY,
+                container.id,
+                {
+                    type: 'layout-property-changed',
+                    property: 'calculatedGap',
+                    value: gap,
+                    source: 'layout-drag-update'
+                },
+                { immediate: true, source: 'SceneLayoutManager.updateContainer' }
+            );
+        }
+    }
+
+    // ====== CONTAINER GEOMETRY HELPERS ======
+
+    /**
+     * Apply container resize via ContainerCrudManager (geometry-only operation)
+     * @private
+     */
+    _applyContainerResize(container, targetSize) {
+        const containerCrudManager = this.getContainerCrudManager();
+        if (!containerCrudManager) return;
+
+        containerCrudManager.updateContainerGeometryWithFactories(
+            container, targetSize, container.mesh.position, false
+        );
+    }
+
+    /**
+     * Get child meshes suitable for bounds calculation.
+     * For container children, uses the collision mesh instead of the edge container.
+     * Moved from ContainerCrudManager — this is a layout concern.
+     */
+    getChildMeshesForBounds(childObjects) {
+        return childObjects
+            .map(child => {
+                if (child.isContainer && child.mesh) {
+                    const collisionMesh = child.mesh.children.find(grandchild =>
+                        grandchild.userData.isContainerCollision
+                    );
+                    if (collisionMesh) return collisionMesh;
+                }
+                return child.mesh;
+            })
+            .filter(mesh => mesh && mesh.geometry && mesh.geometry.type !== 'EdgesGeometry');
+    }
+
+    // ====== ENABLE/DISABLE AUTO-LAYOUT ======
+
     /**
      * Enable auto layout on a container
      * Initializes layout configuration and performs initial layout calculation
@@ -83,9 +325,8 @@ class SceneLayoutManager {
             return false;
         }
 
-        // CRITICAL FIX: Reset child positions to prepare for layout calculation
+        // Reset child positions to prepare for layout calculation
         // When layout is enabled on an existing container, children may be at preserved world positions
-        // Layout system expects children to start from container-relative positions near (0,0,0)
         this.resetChildPositionsForLayout(containerId);
 
         container.autoLayout = {
@@ -96,8 +337,7 @@ class SceneLayoutManager {
             ...layoutConfig
         };
 
-        // SINGLE FUNNEL: updateLayout() handles resize internally (line 335)
-        this.updateLayout(containerId);
+        this.updateContainer(containerId);
 
         return true;
     }
@@ -117,6 +357,8 @@ class SceneLayoutManager {
         return true;
     }
 
+    // ====== CHILD POSITION RESET ======
+
     /**
      * Reset child positions to prepare for layout calculation
      * Centers children along all axes so layout starts from container center
@@ -130,8 +372,6 @@ class SceneLayoutManager {
 
         const container = this.sceneController.getObject(containerId);
         if (!container || !container.mesh || !container.autoLayout) return;
-
-        const layoutDirection = container.autoLayout.direction;
 
         // Get container world position for coordinate conversion
         const containerWorldPosition = container.mesh.getWorldPosition(new THREE.Vector3());
@@ -158,13 +398,11 @@ class SceneLayoutManager {
         }
 
         // Convert each child to container-relative coordinates and center ALL axes
-        // This ensures the layout group is centered in the container
         childObjects.forEach((childData) => {
             if (childData.mesh) {
                 const worldPos = childData.mesh.getWorldPosition(new THREE.Vector3());
                 const relativePos = worldPos.clone().sub(containerWorldPosition);
 
-                // Center children on ALL axes (layout will redistribute them along layout axis)
                 relativePos.x -= childCenters.x;
                 relativePos.y -= childCenters.y;
                 relativePos.z -= childCenters.z;
@@ -174,6 +412,8 @@ class SceneLayoutManager {
             }
         });
     }
+
+    // ====== UTILITY METHODS ======
 
     /**
      * Calculate the size-weighted center position of multiple objects
@@ -189,27 +429,19 @@ class SceneLayoutManager {
         objectsData.forEach(objData => {
             if (!objData.mesh) return;
 
-            // Get object position in world space
             const position = objData.mesh.getWorldPosition(new THREE.Vector3());
-
-            // Calculate object size using LayoutEngine for consistency
             const size = window.LayoutEngine ?
                 window.LayoutEngine.getObjectSize(objData) :
                 new THREE.Vector3(1, 1, 1);
 
-            // Calculate volume as weight (width × height × depth)
             const volume = size.x * size.y * size.z;
-
-            // Add weighted position to sum
             weightedSum.add(position.clone().multiplyScalar(volume));
             totalWeight += volume;
         });
 
-        // Return size-weighted center
         if (totalWeight > 0) {
             return weightedSum.divideScalar(totalWeight);
         } else {
-            // Fallback to geometric center if no valid sizes
             const positions = objectsData.map(obj => obj.mesh.getWorldPosition(new THREE.Vector3()));
             const sum = positions.reduce((acc, pos) => acc.add(pos), new THREE.Vector3(0, 0, 0));
             return sum.divideScalar(positions.length);
@@ -223,7 +455,7 @@ class SceneLayoutManager {
      */
     getContainerSize(container) {
         if (!container || !container.mesh || !container.mesh.geometry) {
-            return new THREE.Vector3(1, 1, 1); // Default size
+            return new THREE.Vector3(1, 1, 1);
         }
 
         const dimensions = GeometryUtils.getGeometryDimensions(container.mesh.geometry);
@@ -231,134 +463,28 @@ class SceneLayoutManager {
             return new THREE.Vector3(dimensions.x, dimensions.y, dimensions.z);
         }
 
-        return new THREE.Vector3(1, 1, 1); // Fallback
+        return new THREE.Vector3(1, 1, 1);
+    }
+
+    // ====== BACKWARD-COMPATIBLE SHIMS ======
+
+    /**
+     * @deprecated Use updateContainer() instead
+     * Backward-compatible shim — delegates to updateContainer()
+     */
+    updateLayout(containerId, pushContext = null) {
+        return this.updateContainer(containerId, { pushContext });
     }
 
     /**
-     * Update layout for a container and its children
-     * @param {number} containerId - Container object ID
-     * @param {Object} pushContext - Optional push context for push operations
-     * @returns {Object} Layout result {success, reason, layoutBounds}
+     * @deprecated Use updateContainer() instead
+     * Backward-compatible shim — delegates to updateContainer()
      */
-    updateLayout(containerId, pushContext = null) {
-        if (!this.sceneController) {
-            return { success: false, reason: 'SceneController not initialized' };
-        }
-
-        const container = this.sceneController.getObject(containerId);
-
-        if (!container || container.containerMode !== 'layout') {
-            return { success: false, reason: 'container not in layout mode' };
-        }
-
-        // Get child objects of this container
-        const children = this.sceneController.getChildObjects(containerId);
-        if (children.length === 0) {
-            return { success: true, reason: 'no children' };
-        }
-
-        // Require LayoutEngine for layout calculations
-        if (!window.LayoutEngine) {
-            return { success: false, reason: 'LayoutEngine not available' };
-        }
-
-        // Suppress hug updates during layout to prevent intermediate double-resize
-        const wasLayoutInProgress = this._layoutInProgress;
-        this._layoutInProgress = true;
-
-        try {
-            // Get container size for fill calculations
-            // CRITICAL: Always pass containerSize when layout is enabled, even for hug containers
-            // Fill objects need the container size to calculate their dimensions
-            const containerSize = this.getContainerSize(container);
-
-            const layoutResult = window.LayoutEngine.calculateLayout(children, container.autoLayout, containerSize, null, pushContext);
-
-            this.applyLayoutPositionsAndSizes(children, layoutResult.positions, layoutResult.sizes, container, pushContext);
-
-            // Store calculated gap directly on container for display (no recursion)
-            if (layoutResult.calculatedGap !== undefined) {
-                container.calculatedGap = layoutResult.calculatedGap;
-
-                // CRITICAL: Also update ObjectStateManager's copy so it's included in serialization
-                const objectStateManager = this.getObjectStateManager();
-                if (objectStateManager) {
-                    const osmObject = objectStateManager.getObject(container.id);
-                    if (osmObject) {
-                        osmObject.calculatedGap = layoutResult.calculatedGap;
-                    }
-                }
-
-                // Notify UI directly via event bus (triggers PostMessage with updated calculatedGap)
-                // CRITICAL: Skip event emission during push operations to prevent property panel flickering
-                if (window.objectEventBus && container.id && !pushContext) {
-                    window.objectEventBus.emit(
-                        window.objectEventBus.EVENT_TYPES.HIERARCHY,
-                        container.id,
-                        {
-                            type: 'layout-property-changed',
-                            property: 'calculatedGap',
-                            value: layoutResult.calculatedGap,
-                            source: 'layout-drag-update' // Mark as preview operation for MainAdapter filtering
-                        },
-                        { immediate: true, source: 'SceneLayoutManager.updateLayout' }
-                    );
-                }
-            }
-
-            // Use bounds directly from LayoutEngine (architectural improvement)
-            const layoutBounds = layoutResult.bounds;
-
-            // Resize container to match new layout bounds (per-axis fill awareness)
-            // Axes with fill children keep container size fixed; axes without fill auto-size to bounds
-            if (layoutBounds && layoutBounds.size && !pushContext) {
-                const fillAxes = this._getAxesWithFillChildren(children);
-                const currentSize = this.getContainerSize(container);
-
-                // Build effective size: preserve container size on fill axes, use bounds on others
-                const effectiveSize = new THREE.Vector3(
-                    fillAxes.x ? currentSize.x : layoutBounds.size.x,
-                    fillAxes.y ? currentSize.y : layoutBounds.size.y,
-                    fillAxes.z ? currentSize.z : layoutBounds.size.z
-                );
-
-                // Only resize if effective size actually differs from current
-                const sizeChanged = Math.abs(effectiveSize.x - currentSize.x) > 0.001 ||
-                                    Math.abs(effectiveSize.y - currentSize.y) > 0.001 ||
-                                    Math.abs(effectiveSize.z - currentSize.z) > 0.001;
-
-                if (sizeChanged) {
-                    const containerCrudManager = this.getContainerCrudManager();
-                    if (containerCrudManager) {
-                        containerCrudManager.resizeContainer(container, {
-                            reason: 'layout-updated',
-                            layoutBounds: { ...layoutBounds, size: effectiveSize },
-                            pushContext: pushContext,
-                            immediate: true
-                        });
-
-                        // Re-pass: container was resized, so gap/position calculations may need updating
-                        // (e.g., space-between gap depends on container size)
-                        const newContainerSize = this.getContainerSize(container);
-                        const repassResult = window.LayoutEngine.calculateLayout(children, container.autoLayout, newContainerSize, null, pushContext);
-                        this.applyLayoutPositionsAndSizes(children, repassResult.positions, repassResult.sizes, container, pushContext);
-
-                        if (repassResult.calculatedGap !== undefined) {
-                            container.calculatedGap = repassResult.calculatedGap;
-                            const osmObj = this.getObjectStateManager()?.getObject(container.id);
-                            if (osmObj) osmObj.calculatedGap = repassResult.calculatedGap;
-                        }
-                    }
-                }
-            }
-
-            return { success: true, layoutBounds };
-
-        } finally {
-            // Restore previous state (supports nested updateLayout calls)
-            this._layoutInProgress = wasLayoutInProgress;
-        }
+    updateHugContainerSize(containerId) {
+        return this.updateContainer(containerId, {});
     }
+
+    // ====== APPLY POSITIONS TO THREE.JS ======
 
     /**
      * Apply calculated positions and sizes to objects
@@ -393,24 +519,16 @@ class SceneLayoutManager {
 
             // Apply fill-based sizing BEFORE positioning
             if (layoutSize && obj.layoutProperties) {
-                // Check each axis for fill behavior
                 ['x', 'y', 'z'].forEach(axis => {
-                    // Use centralized state machine
                     const fillEnabled = this.getObjectStateManager()?.hasFillEnabled(obj.id, axis);
 
                     if (fillEnabled) {
-                        // Only update if size has actually changed to avoid unnecessary geometry updates
                         const currentDim = obj.dimensions?.[axis] || 1;
                         const newDim = layoutSize[axis];
 
-                        // Validate dimension is a valid number
                         if (typeof newDim === 'number' && !isNaN(newDim) && newDim > 0) {
                             if (Math.abs(currentDim - newDim) > 0.001) {
-                                // Fill objects always resize symmetrically from center
-                                // Layout engine handles repositioning based on alignment
                                 const anchorMode = 'center';
-
-                                // Suppress events during push to prevent property panel flickering
                                 const suppressEvents = pushContext !== null;
                                 this.sceneController.updateObjectDimensions(obj.id, axis, newDim, anchorMode, suppressEvents);
                             }
@@ -419,32 +537,21 @@ class SceneLayoutManager {
                 });
             }
 
-            // Apply layout positions - layout engine calculates positions based on:
-            // - Alignment (perpendicular to layout axis)
-            // - Fill/fixed sizing (layout axis)
-            // - Gap distribution
+            // Apply layout positions
             {
-                // CRITICAL: During perpendicular push, only update the pushed axis
-                // Preserve layout axis positions to avoid objects snapping back
                 const layoutAxis = container.autoLayout?.direction || 'x';
                 const isPushingPerpendicular = pushContext && pushContext.axis !== layoutAxis;
 
-                // Normal layout update - apply positions
-                // CRITICAL FIX: Use local positions when objects are children of container
-                // Layout positions are already relative to container coordinate space
                 if (container && container.mesh && obj.mesh.parent === container.mesh) {
                     // Object is child of container - use layout position directly as local position
                     if (isPushingPerpendicular) {
-                        // Only update the pushed axis, preserve layout axis position
                         obj.mesh.position[pushContext.axis] = layoutPosition[pushContext.axis];
                         if (geomCenterOffset) obj.mesh.position[pushContext.axis] += geomCenterOffset[pushContext.axis];
                     } else {
-                        // Normal layout update - apply all positions
                         obj.mesh.position.copy(layoutPosition);
                         if (geomCenterOffset) obj.mesh.position.add(geomCenterOffset);
                     }
 
-                    // Sync data-model position (always local, matches mesh.position)
                     obj.position = { x: obj.mesh.position.x, y: obj.mesh.position.y, z: obj.mesh.position.z };
 
                 } else {
@@ -452,13 +559,11 @@ class SceneLayoutManager {
                     const containerPosition = container && container.mesh ? container.mesh.position : new THREE.Vector3(0, 0, 0);
 
                     if (isPushingPerpendicular) {
-                        // Only update the pushed axis
                         const worldPos = layoutPosition[pushContext.axis] + containerPosition[pushContext.axis];
                         obj.mesh.position[pushContext.axis] = worldPos;
                         if (geomCenterOffset) obj.mesh.position[pushContext.axis] += geomCenterOffset[pushContext.axis];
                         obj.position = { x: obj.mesh.position.x, y: obj.mesh.position.y, z: obj.mesh.position.z };
                     } else {
-                        // Normal layout update - apply all positions
                         const worldPosition = new THREE.Vector3()
                             .copy(layoutPosition)
                             .add(containerPosition);
@@ -469,31 +574,11 @@ class SceneLayoutManager {
                     }
                 }
             }
-            // During push: positions are NOT updated - objects stay where they are
-
-            // Transform change notification handled by mesh synchronizer
         });
     }
 
-    /**
-     * Update container size to hug its children
-     * Resizes container to fit all children with minimal padding
-     * UNIFIED API: Delegates to ContainerCrudManager for consistency
-     * @param {string} containerId - ID of the container to update
-     */
-    updateHugContainerSize(containerId) {
-        // UNIFIED: Single hug resize path via ContainerCrudManager
-        const containerCrudManager = this.getContainerCrudManager();
-        if (containerCrudManager) {
-            containerCrudManager.resizeContainer(containerId, {
-                reason: 'child-changed',
-                immediate: true
-            });
-        }
-    }
-    /**
-     * Check if any child has fill mode enabled on any axis
-     */
+    // ====== INTERNAL HELPERS ======
+
     /**
      * Get which axes have children with fill mode (per-axis granularity)
      * @param {Array} children - Array of child object data
@@ -507,7 +592,7 @@ class SceneLayoutManager {
             if (lp.sizeX === 'fill') result.x = true;
             if (lp.sizeY === 'fill') result.y = true;
             if (lp.sizeZ === 'fill') result.z = true;
-            if (result.x && result.y && result.z) break; // All axes filled, no need to continue
+            if (result.x && result.y && result.z) break;
         }
         return result;
     }

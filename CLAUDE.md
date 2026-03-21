@@ -92,10 +92,11 @@ CAD software for creative hobbyists. Rule-based parametric design with intellige
 
 ### Core Systems (Single Source of Truth)
 - **ObjectStateManager** (`/core/`) - ALL state changes, use updateObject() for everything
-- **LayoutPropagationManager** (`/layout/`) - Bottom-up layout propagation, depth caching, deferred updates
+- **LayoutPropagationManager** (`/layout/`) - Bottom-up layout propagation scheduling only (no mode routing)
+- **LayoutEngine** (`/layout/`) - Pure layout calculations: positioning, sizing, bounds, convergence
 - **SceneController** (`/scene/`) - 3D geometry coordinator, delegates to specialized scene managers
 - **SceneHierarchyManager** (`/scene/`) - Parent-child relationships, nesting validation, root ordering
-- **SceneLayoutManager** (`/scene/`) - Layout calculations, container sizing, fill/fixed/hug modes
+- **SceneLayoutManager** (`/scene/`) - THE single layout orchestrator: `updateContainer()` handles all modes (layout/hug/manual)
 - **SceneLifecycleManager** (`/scene/`) - Object creation, deletion, ID generation, support meshes
 - **ToolController** (`/application/`) - Tool activation/switching only
 - **BaseTool** (`/application/tools/base-tool.js`) - Base class for all tools: lazy component getters, default event handlers, hover management. New tools extend BaseTool and override only what they need.
@@ -110,7 +111,7 @@ CAD software for creative hobbyists. Rule-based parametric design with intellige
 
 ### Managers (Specialized Business Logic)
 - **PropertyUpdateHandler** (`/application/handlers/`) - Routes UI property changes → ObjectStateManager
-- **ContainerCrudManager** (`/application/tools/`) - Container create/delete/resize operations
+- **ContainerCrudManager** (`/application/tools/`) - Container create/delete, geometry-only resize operations
 - **VisualizationManager** (`/interaction/`) - Support meshes, highlights, visual effects
 - **HistoryManager** (`/application/managers/`) - Undo/redo command execution
 
@@ -119,7 +120,7 @@ CAD software for creative hobbyists. Rule-based parametric design with intellige
 - Reading object data? → `SceneController.getObject()`
 - Object creation/deletion? → `SceneController.addObject/removeObject()` (delegates to SceneLifecycleManager)
 - Parent-child relationships? → `SceneController` methods (delegate to SceneHierarchyManager)
-- Layout calculation? → `SceneController.updateLayout()` (delegates to SceneLayoutManager)
+- Layout/container update? → `SceneController.updateContainer()` (delegates to SceneLayoutManager, handles all modes)
 - Layout propagation? → Automatic via `ObjectStateManager.updateObject()` (delegates to LayoutPropagationManager)
 - UI property update? → `PropertyUpdateHandler` → `ObjectStateManager`
 - UI notification (3D → UI)? → Automatic via `ObjectEventBus` → `SimpleCommunication` → `postMessage`
@@ -168,6 +169,8 @@ CAD software for creative hobbyists. Rule-based parametric design with intellige
 ❌ **NEVER**:
 - Bypass ObjectStateManager for state changes
 - Call specialized managers directly (SceneHierarchyManager, SceneLayoutManager, SceneLifecycleManager, LayoutPropagationManager)
+- Do layout mode-routing outside SceneLayoutManager — always call `sceneController.updateContainer()`, never branch on layout/hug yourself
+- Set `calculatedGap` outside SceneLayoutManager._persistCalculatedGap() — it is managed in ONE place
 - Set `isHug`, `sizingMode`, or `layoutMode` directly — use `ObjectStateManager.buildContainerModeUpdate(mode)` instead
 - Check `autoLayout?.enabled`, `isHug`, `sizingMode`, or any legacy flag for mode detection — use `containerMode === 'layout'`/`'hug'`/`'manual'` or `getContainerMode(id)` / `isLayoutMode(id)` / `isHugMode(id)`
 - Use visual transforms instead of CAD geometry

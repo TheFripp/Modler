@@ -21,7 +21,7 @@ class SceneController {
         // Unified state management system
         this.objectStateManager = null;
 
-        // Hug container update control
+        // Hug container update control (kept for backward compat — SceneLayoutManager._layoutInProgress is the canonical guard)
         this.hugUpdatesEnabled = true;
         
         // Setup CAD lighting - balanced illumination to show face differences clearly
@@ -135,40 +135,35 @@ class SceneController {
     }
 
     /**
-     * Subscribe to geometry change events to update hug containers
+     * Subscribe to geometry change events to update parent containers.
+     * Uses updateContainer() which handles both layout and hug modes.
      */
     subscribeToGeometryEvents() {
         const eventBus = window.objectEventBus;
         if (!eventBus) {
-            console.warn('SceneController: ObjectEventBus not available, hug containers will not auto-update');
+            console.warn('SceneController: ObjectEventBus not available, containers will not auto-update');
             return;
         }
 
         eventBus.subscribe(eventBus.EVENT_TYPES.GEOMETRY, (event) => {
             try {
-                // Skip if hug updates are temporarily disabled (e.g., during layout calculation)
-                if (!this.hugUpdatesEnabled) {
-                    return;
-                }
+                if (!this.hugUpdatesEnabled) return;
 
                 const { objectId } = event;
                 const objectData = this.getObject(objectId);
+                if (!objectData || !objectData.parentContainer) return;
 
-                if (!objectData || !objectData.parentContainer) {
-                    return;
-                }
-
-                // Check if parent container has hug mode enabled
                 const parentData = this.getObject(objectData.parentContainer);
-                if (!parentData || !parentData.isContainer || parentData.containerMode !== 'hug') {
-                    return;
-                }
+                if (!parentData || !parentData.isContainer) return;
 
-                // Recalculate container size based on children
-                this.updateHugContainerSize(parentData.id);
+                // Only hug containers auto-update from geometry events
+                // Layout containers are updated via LayoutPropagationManager
+                if (parentData.containerMode !== 'hug') return;
+
+                this.updateContainer(parentData.id);
 
             } catch (error) {
-                console.error('SceneController: Error handling geometry event for hug container:', error);
+                console.error('SceneController: Error handling geometry event for container:', error);
             }
         }, { subscriberId: 'SceneController_HugContainerUpdate' });
     }
@@ -606,9 +601,24 @@ class SceneController {
      * Layout updates are typically triggered automatically via LayoutPropagationManager
      * after dimension changes. Only call this directly during push tool operations.
      */
-    updateLayout(containerId, pushContext = null) {
+    /**
+     * Update container layout — THE single entry point for all container modes.
+     * Delegates to SceneLayoutManager.updateContainer() which handles mode routing.
+     *
+     * @param {number|string} containerId - Container object ID
+     * @param {Object} context - Optional context {pushContext, ...}
+     * @returns {Object} Result {success, reason?, layoutBounds?}
+     */
+    updateContainer(containerId, context = {}) {
         const manager = this.getLayoutManager();
-        return manager ? manager.updateLayout(containerId, pushContext) : { success: false, reason: 'LayoutManager not available' };
+        return manager ? manager.updateContainer(containerId, context) : { success: false, reason: 'LayoutManager not available' };
+    }
+
+    /**
+     * @deprecated Use updateContainer() instead
+     */
+    updateLayout(containerId, pushContext = null) {
+        return this.updateContainer(containerId, { pushContext });
     }
     
     /**
@@ -692,20 +702,12 @@ class SceneController {
         if (!manager) return false;
 
         // Build callbacks object for layout updates
+        // UNIFIED: Single callback — SceneLayoutManager handles mode routing
         const callbacks = {
-            updateLayout: (containerId) => this.updateLayout(containerId),
-            updateHugContainerSize: (containerId) => this.updateHugContainerSize(containerId),
-            resizeToLayoutBounds: (container, layoutBounds) => {
-                const containerCrudManager = this.getContainerCrudManager();
-                if (containerCrudManager) {
-                    // UNIFIED API: Hierarchy change triggered layout update
-                    containerCrudManager.resizeContainer(container, {
-                        reason: 'layout-updated',
-                        layoutBounds: layoutBounds,
-                        immediate: true
-                    });
-                }
-            }
+            updateContainer: (containerId) => this.updateContainer(containerId),
+            // Backward-compatible shims (SceneHierarchyManager may still reference these)
+            updateLayout: (containerId) => this.updateContainer(containerId),
+            updateHugContainerSize: (containerId) => this.updateContainer(containerId)
         };
 
         return manager.setParentContainer(objectId, parentId, callbacks, updateLayout, options);
@@ -863,14 +865,7 @@ class SceneController {
 
         // Update parent containers if this object is a child
         if (obj.parentContainer) {
-            const containerCrudManager = window.modlerComponents?.containerCrudManager;
-            if (containerCrudManager) {
-                // UNIFIED API: Transform changed (final update after drag/modification)
-                containerCrudManager.resizeContainer(obj.parentContainer, {
-                    reason: 'child-transformed',
-                    immediate: true  // Real-time update after transform
-                });
-            }
+            this.updateContainer(obj.parentContainer);
         }
 
         // Update support meshes (wireframes, highlights, etc.) but suppress container wireframes during container context

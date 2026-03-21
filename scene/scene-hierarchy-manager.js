@@ -381,16 +381,18 @@ class SceneHierarchyManager {
         }
     }
     /**
-     * Trigger layout update on a container based on its mode (hug or layout)
+     * Trigger layout update on a container (mode-agnostic).
+     * SceneLayoutManager.updateContainer() handles mode routing internally.
      */
     _triggerContainerLayoutUpdate(containerId, callbacks) {
         const container = this.objects.get(containerId);
         if (!container) return;
 
-        if (container.containerMode === 'hug') {
-            callbacks.updateHugContainerSize(containerId);
-        } else if (container.containerMode === 'layout') {
-            // SINGLE FUNNEL: updateLayout() handles resize internally (SceneLayoutManager line 335)
+        // UNIFIED: Single callback — no mode routing here
+        if (callbacks.updateContainer) {
+            callbacks.updateContainer(containerId);
+        } else if (callbacks.updateLayout) {
+            // Backward compat fallback
             callbacks.updateLayout(containerId);
         }
     }

@@ -171,41 +171,30 @@ class ContainerCrudManager {
      *     immediate: true
      * });
      */
+    /**
+     * Resize container — delegates to SceneLayoutManager.updateContainer().
+     *
+     * This method is a backward-compatible shim. All mode-routing now lives
+     * in SceneLayoutManager.updateContainer(). External callers should migrate
+     * to sceneController.updateContainer() over time.
+     *
+     * @param {Object|string|number} containerOrId - Container object or ID
+     * @param {Object} options - Options (reason, layoutBounds, etc.) — ignored by updateContainer
+     * @returns {boolean} Success status
+     */
     resizeContainer(containerOrId, options = {}) {
-        // Resolve container from ID or object
         const container = this.resolveContainer(containerOrId);
         if (!container) {
             console.warn('resizeContainer: Invalid container provided');
             return false;
         }
 
-        // Extract context
-        const {
-            reason = 'child-changed',  // Default reason
-            layoutBounds = null,
-            immediate = false,
-            pushContext = null
-        } = options;
-
-        const mode = this.objectStateManager?.getContainerMode(container.id) || 'manual';
-
-        // Route to appropriate handler based on mode
-        switch (mode) {
-            case 'layout':
-                return this.resizeForLayoutMode(container, { layoutBounds, pushContext, immediate });
-
-            case 'hug':
-                return this.resizeForHugMode(container, { reason, immediate });
-
-            case 'manual':
-            case 'fixed':
-                // Manual/fixed containers don't auto-resize
-                return false;
-
-            default:
-                console.warn('resizeContainer: Unknown container mode', mode);
-                return false;
+        const sceneController = window.modlerComponents?.sceneController;
+        if (sceneController) {
+            const result = sceneController.updateContainer(container.id, options);
+            return result?.success || false;
         }
+        return false;
     }
 
     /**
@@ -213,12 +202,10 @@ class ContainerCrudManager {
      * @private
      */
     resolveContainer(containerOrId) {
-        // Already a container object
         if (containerOrId && typeof containerOrId === 'object' && containerOrId.mesh) {
             return containerOrId;
         }
 
-        // Container ID - resolve from SceneController
         if (typeof containerOrId === 'string' || typeof containerOrId === 'number') {
             const sceneController = window.modlerComponents?.sceneController;
             if (sceneController) {
@@ -227,42 +214,6 @@ class ContainerCrudManager {
         }
 
         return null;
-    }
-
-
-    /**
-     * Resize container in hug mode (adapts to children)
-     * @private
-     */
-    resizeForHugMode(container, { reason, immediate }) {
-        // Hug containers always recenter around children — that's what "hug" means.
-        // BoxGeometry is centered at origin, so the container must move to wrap children correctly.
-        return this._resizeToFitChildren(
-            container,
-            null,           // newContainerSize - calculate from children
-            immediate,      // immediateUpdate - bypass throttling if requested
-            false           // preservePosition - always recenter for hug
-        );
-    }
-
-    /**
-     * Resize container in layout mode (uses pre-calculated bounds)
-     * @private
-     */
-    resizeForLayoutMode(container, { layoutBounds, pushContext, immediate }) {
-        // If no bounds provided, delegate to updateLayout which handles resize internally
-        // SINGLE FUNNEL: updateLayout() calls resizeContainer() at SceneLayoutManager line 335
-        if (!layoutBounds) {
-            const sceneController = window.modlerComponents?.sceneController;
-            if (sceneController) {
-                const layoutResult = sceneController.updateLayout(container.id);
-                return layoutResult?.success || false;
-            }
-            return false;
-        }
-
-        // Bounds provided explicitly — apply them directly
-        return this._resizeToLayoutBounds(container, layoutBounds, pushContext);
     }
 
     // ========================================================================
@@ -693,154 +644,9 @@ class ContainerCrudManager {
      * @param {boolean} immediateUpdate - If true, bypass throttling
      * @param {boolean} preservePosition - If true, resize WITHOUT repositioning (BOTTOM-UP)
      */
-    _resizeToFitChildren(containerData, newContainerSize = null, immediateUpdate = false, preservePosition = false) {
-        const validation = this.validateContainer(containerData, 'resizeContainerToFitChildren');
-        if (!validation.success) return false;
-
-        const sceneController = validation.sceneController;
-
-        // Check sizing mode constraints
-        if (containerData.containerMode === 'manual' && !newContainerSize) {
-            return false;
-        }
-        if (!containerData.containerMode) {
-            Object.assign(containerData, ObjectStateManager.buildContainerModeUpdate('hug'));
-        }
-
-        // Apply throttling
-        if (!immediateUpdate) {
-            const lastResize = this.lastResizeTime.get(containerData.id);
-            const now = Date.now();
-            if (lastResize && (now - lastResize) < this.throttleDelay) {
-                return false;
-            }
-            this.lastResizeTime.set(containerData.id, now);
-        }
-
-        const childObjects = sceneController.getChildObjects(containerData.id);
-        if (childObjects.length === 0) return false;
-
-
-        // Use getChildMeshesForBounds to correctly handle container children (collision mesh)
-        const childMeshes = this.getChildMeshesForBounds(childObjects);
-        if (childMeshes.length === 0) return false;
-        const localBounds = window.LayoutEngine.calculateUnifiedBounds(childMeshes, {
-            type: 'layout',
-            useLocalTransform: true  // Apply child's local transform (position in container space)
-        });
-
-        if (!localBounds) {
-            console.error('Failed to calculate unified bounds for container children');
-            return false;
-        }
-
-        // ARCHITECTURE FIX: Conditional repositioning based on workflow
-        const currentContainerPosition = containerData.mesh.position.clone();
-        let targetPosition;
-        let shouldRepositionChildren;
-
-        if (preservePosition) {
-            // BOTTOM-UP WORKFLOW: Keep container where it is, only change size
-            // Use case: Child object moved/resized, container adapts
-            targetPosition = currentContainerPosition.clone();
-            shouldRepositionChildren = false;
-
-        } else {
-            // TOP-DOWN WORKFLOW: Reposition container to center around children
-            // Use case: Container creation, object added/removed
-            targetPosition = currentContainerPosition.clone().add(localBounds.center);
-            shouldRepositionChildren = true;
-        }
-
-        const success = this.updateContainerGeometryWithFactories(
-            containerData,
-            localBounds.size,
-            targetPosition,
-            !preservePosition  // Only reposition geometry if NOT preserving position
-        );
-
-        if (success && shouldRepositionChildren) {
-            // Calculate the offset that the container moved
-            const containerMovement = targetPosition.clone().sub(currentContainerPosition);
-
-            // Compensate child object positions so they don't move in world space
-            // Since children are in container's local space, we need to subtract the container movement
-            childObjects.forEach(childObj => {
-                if (childObj.mesh) {
-                    // Move child in opposite direction to compensate for container movement
-                    childObj.mesh.position.sub(containerMovement);
-
-                    // Update the child object data to reflect the new position
-                    sceneController.updateObject(childObj.id, {
-                        position: childObj.mesh.position.clone()
-                    });
-                }
-            });
-        }
-
-        // Update container position
-        sceneController.updateObject(containerData.id, { position: targetPosition });
-        this.handleContainerVisibilityAfterResize(containerData, immediateUpdate);
-
-        return success;
-    }
-
-    /**
-     * INTERNAL: Resize container to match layout-calculated bounds
-     * DO NOT call directly - use resizeContainer() instead
-     */
-    _resizeToLayoutBounds(containerData, layoutBounds, pushContext = null) {
-        const validation = this.validateContainer(containerData, 'resizeContainerToLayoutBounds');
-        if (!validation.success) return false;
-
-        if (!layoutBounds || !layoutBounds.size) {
-            console.error('resizeContainerToLayoutBounds: layoutBounds is required');
-            return false;
-        }
-
-        // Calculate new position if pushing (container grows from pushed edge)
-        let newPosition = containerData.mesh.position.clone();
-
-        if (pushContext && pushContext.isPush) {
-            // Read fresh dimensions from geometry (cached dimensions may be stale)
-            let oldSize = containerData.dimensions;
-            const geom = containerData.mesh?.geometry;
-            if (geom) {
-                geom.computeBoundingBox();
-                const box = geom.boundingBox;
-                if (box) {
-                    oldSize = { x: box.max.x - box.min.x, y: box.max.y - box.min.y, z: box.max.z - box.min.z };
-                }
-            }
-            const newSize = layoutBounds.size;
-            const axis = pushContext.axis;
-            const anchorMode = pushContext.anchorMode;
-
-            // Calculate size delta
-            const sizeDelta = newSize[axis] - oldSize[axis];
-
-            // Adjust position based on anchor mode:
-            // - 'min' anchor: growing from max edge (right/top/back) -> shift position in positive direction
-            // - 'max' anchor: growing from min edge (left/bottom/front) -> shift position in negative direction
-            if (anchorMode === 'min') {
-                // Anchor at min edge, grow toward max -> shift by +delta/2
-                newPosition[axis] += sizeDelta / 2;
-            } else if (anchorMode === 'max') {
-                // Anchor at max edge, grow toward min -> shift by -delta/2
-                newPosition[axis] -= sizeDelta / 2;
-            }
-
-        }
-
-        const success = this.updateContainerGeometryWithFactories(
-            containerData,
-            layoutBounds.size,
-            newPosition,
-            false // shouldReposition = false
-        );
-
-        return success;
-    }
+    // _resizeToFitChildren and _resizeToLayoutBounds removed —
+    // logic absorbed into SceneLayoutManager._updateHugContainer() and
+    // SceneLayoutManager._updateLayoutContainer() respectively
 
     /**
      * Resize container geometry without repositioning

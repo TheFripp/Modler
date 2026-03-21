@@ -701,6 +701,11 @@ class ObjectStateManager {
                 // childrenOrder is owned by SceneController — CommandRouter writes it directly
                 // No sync needed here
 
+                // Sync container mode so SceneLayoutManager gate checks match OSM
+                if (object.isContainer && object.containerMode) {
+                    sceneObject.containerMode = object.containerMode;
+                }
+
                 // SCHEMA-FIRST: Always sync autoLayout for containers, use schema defaults if needed
                 if (object.isContainer) {
                     sceneObject.autoLayout = object.autoLayout ||
@@ -720,61 +725,32 @@ class ObjectStateManager {
             }
 
             // Update container layout if needed (TOP-DOWN PROPAGATION)
+            // UNIFIED: SceneLayoutManager.updateContainer() handles all mode routing
             const autoLayoutChanged = object._changedProperties?.has('autoLayout');
-            // Check if any autoLayout sub-property changed (gap, padding, direction, etc.)
             const autoLayoutPropertyChanged = Array.from(object._changedProperties || []).some(prop =>
                 prop.startsWith('autoLayout.')
             );
-            const isLayoutMode = object.containerMode === 'layout';
+            const dimensionChanged = object._changedProperties?.has('dimensions');
 
             if (object.isContainer && sceneObject) {
-                if (isLayoutMode) {
-                    // LAYOUT MODE: Container size is ground truth
+                const skipLayoutUpdate = source === 'push-tool';
 
-                    // SPECIAL CASE: Skip layout update if source is 'push-tool'
-                    // Push directly manipulates geometry, positions should not change
-                    const skipLayoutUpdate = source === 'push-tool';
-
-                    if (!skipLayoutUpdate && (autoLayoutChanged || autoLayoutPropertyChanged)) {
-                        // SINGLE FUNNEL: updateLayout() handles resize + re-pass internally
-                        this.sceneController.updateLayout(object.id);
-                    }
-
-                    // Container dimensions changed → recalculate own layout
-                    // Fill children need resizing, gap calculations need updating
-                    // (mirrors push-tool.js behavior for container dimension changes)
-                    const dimensionChanged = object._changedProperties?.has('dimensions');
-                    if (!skipLayoutUpdate && dimensionChanged && !autoLayoutChanged) {
-                        this.sceneController.updateLayout(object.id);
-                    }
-
-                } else if (autoLayoutChanged || autoLayoutPropertyChanged) {
-                    // HUG MODE (or switching FROM layout mode to hug)
-                    // Clear calculatedGap when layout is disabled
-                    if (autoLayoutChanged && sceneObject.calculatedGap !== undefined) {
+                // Trigger container update for any layout-relevant change
+                const needsUpdate = autoLayoutChanged || autoLayoutPropertyChanged || dimensionChanged;
+                if (!skipLayoutUpdate && needsUpdate) {
+                    // Clear calculatedGap when user explicitly sets gap (data-model concern)
+                    if (autoLayoutChanged) {
                         sceneObject.calculatedGap = undefined;
                         object.calculatedGap = undefined;
                     }
 
-                    // Update layout and resize container to fit children
-                    const layoutResult = this.sceneController.updateLayout(object.id);
-
-                    if (layoutResult && layoutResult.success) {
-                        const containerCrudManager = this.getContainerCrudManager();
-                        if (containerCrudManager) {
-                            // UNIFIED API: Hug mode layout property changed
-                            containerCrudManager.resizeContainer(sceneObject, {
-                                reason: 'layout-updated',
-                                layoutBounds: layoutResult.layoutBounds,
-                                immediate: true
-                            });
-                        }
-                    }
+                    // SINGLE CALL: updateContainer handles layout/hug/manual routing internally
+                    this.sceneController.updateContainer(object.id);
                 }
 
                 // Show padding visualization if padding is set
                 const visualEffects = this.getVisualEffects();
-                if (visualEffects && object.autoLayout.padding) {
+                if (visualEffects && object.autoLayout?.padding) {
                     visualEffects.showPaddingVisualization(sceneObject.mesh, object.autoLayout.padding);
                 } else if (visualEffects) {
                     visualEffects.hidePaddingVisualization(sceneObject.mesh);
@@ -785,18 +761,12 @@ class ObjectStateManager {
             }
 
             // CHILD LAYOUT PROPERTIES CHANGED: Trigger parent container layout update
-            // This handles fill/hug/fixed mode changes on child objects
             const layoutPropertiesChanged = object._changedProperties?.has('layoutProperties') ||
                 Array.from(object._changedProperties || []).some(prop => prop.startsWith('layoutProperties.'));
 
             if (layoutPropertiesChanged && object.parentContainer && !object.isContainer) {
-                // Child's layoutProperties changed (e.g., sizeX changed from 'fixed' to 'fill')
-                // Need to recalculate parent container's layout to resize child accordingly
-                const parentObject = this.sceneController.getObject(object.parentContainer);
-
-                if (parentObject && this.isLayoutMode(parentObject.id)) {
-                    this.sceneController.updateLayout(object.parentContainer);
-                }
+                // Child sizing changed → parent needs to recalculate layout
+                this.sceneController.updateContainer(object.parentContainer);
             }
         });
     }

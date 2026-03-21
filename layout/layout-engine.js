@@ -647,6 +647,102 @@ class LayoutEngine {
         return { min, max, size };
     }
 
+    // ====== HUG BOUNDS CALCULATION ======
+
+    /**
+     * Calculate bounds for hug-mode containers (fit container tightly around children).
+     * Replaces ad-hoc bounds calculation that was previously in ContainerCrudManager.
+     *
+     * @param {Array} childMeshes - Array of child THREE.js mesh objects (use getChildMeshesForBounds)
+     * @param {Object} padding - Padding configuration {width, height, depth}
+     * @returns {Object} Bounds object {min: Vector3, max: Vector3, size: Vector3, center: Vector3}
+     */
+    static calculateHugBounds(childMeshes, padding = {}) {
+        if (!childMeshes || childMeshes.length === 0) {
+            return this._getEmptyBounds();
+        }
+
+        // Calculate local-space bounds (children positioned in container space)
+        const bounds = this._calculateSelectionBounds(childMeshes, false, true);
+
+        // Add padding to bounds size (symmetric per axis, same as layout bounds padding)
+        const AXIS_TO_PADDING = { x: 'width', y: 'height', z: 'depth' };
+        ['x', 'y', 'z'].forEach(axis => {
+            const paddingVal = (padding[AXIS_TO_PADDING[axis]] || 0) * 2;
+            bounds.size[axis] += paddingVal;
+        });
+
+        return bounds;
+    }
+
+    // ====== CONVERGENT LAYOUT CALCULATION ======
+
+    /**
+     * Calculate layout with container resize convergence (eliminates the re-pass pattern).
+     *
+     * The problem: space-between gap depends on container size, but container size depends
+     * on layout bounds. This method internalizes the two-pass calculation:
+     *   Pass 1: Calculate layout with current container size
+     *   Pass 2: If container would resize, recalculate with new container size
+     *
+     * @param {Array} objects - Array of child object data
+     * @param {Object} layoutConfig - Container's autoLayout config
+     * @param {THREE.Vector3} containerSize - Current container size
+     * @param {Object} fillAxes - Per-axis fill detection {x: bool, y: bool, z: bool}
+     * @param {Object} pushContext - Optional push context {axis, anchorMode}
+     * @returns {Object} Converged result:
+     *   {positions, sizes, bounds, calculatedGap, targetContainerSize, containerResized}
+     */
+    static calculateLayoutWithConvergence(objects, layoutConfig, containerSize, fillAxes = {}, pushContext = null) {
+        if (!objects || objects.length === 0) {
+            return {
+                positions: [], sizes: [], bounds: null,
+                calculatedGap: undefined, targetContainerSize: containerSize, containerResized: false
+            };
+        }
+
+        // Pass 1: Calculate layout with current container size
+        const pass1 = this.calculateLayout(objects, layoutConfig, containerSize, null, pushContext);
+
+        // Determine effective container size: keep current on fill axes, use bounds on others
+        const bounds = pass1.bounds;
+        if (!bounds || !bounds.size) {
+            return {
+                ...pass1,
+                targetContainerSize: containerSize,
+                containerResized: false
+            };
+        }
+
+        const effectiveSize = new THREE.Vector3(
+            fillAxes.x ? containerSize.x : bounds.size.x,
+            fillAxes.y ? containerSize.y : bounds.size.y,
+            fillAxes.z ? containerSize.z : bounds.size.z
+        );
+
+        // Check if container size actually changed
+        const sizeChanged = Math.abs(effectiveSize.x - containerSize.x) > 0.001 ||
+                            Math.abs(effectiveSize.y - containerSize.y) > 0.001 ||
+                            Math.abs(effectiveSize.z - containerSize.z) > 0.001;
+
+        if (!sizeChanged) {
+            return {
+                ...pass1,
+                targetContainerSize: containerSize,
+                containerResized: false
+            };
+        }
+
+        // Pass 2: Recalculate with the effective (post-resize) container size
+        const pass2 = this.calculateLayout(objects, layoutConfig, effectiveSize, null, pushContext);
+
+        return {
+            ...pass2,
+            targetContainerSize: effectiveSize,
+            containerResized: true
+        };
+    }
+
     // ====== UNIFIED BOUNDS CALCULATION UTILITIES ======
 
     /**

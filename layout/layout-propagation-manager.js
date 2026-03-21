@@ -1,8 +1,8 @@
 /**
  * Layout Propagation Manager
  *
- * Extracted from ObjectStateManager for better separation of concerns.
- * Handles bottom-up and deferred hierarchical layout propagation.
+ * Scheduling-only system for bottom-up hierarchical layout propagation.
+ * Does NOT perform mode-routing — always delegates to SceneLayoutManager.updateContainer().
  *
  * Responsibilities:
  * - Schedule parent layout updates when children change
@@ -10,16 +10,14 @@
  * - Manage depth caching for performance
  * - Defer grandparent propagations to avoid re-processing
  *
- * Version: 1.0.0
- * Part of: Phase 4 - State Management Clarification
- * Extracted from: object-state-manager.js (lines 862-1023)
+ * Version: 2.0.0
+ * Part of: Layout Architecture Simplification (March 2026)
  */
 
 class LayoutPropagationManager {
     constructor() {
         // Dependencies (lazy-loaded)
         this.sceneController = null;
-        this.containerCrudManager = null;
         this.objectStateManager = null;
 
         // Scheduled layout updates (Set of container IDs)
@@ -45,30 +43,25 @@ class LayoutPropagationManager {
 
     /**
      * Initialize with dependencies
+     * @param {Object} sceneController - SceneController instance
+     * @param {Object} _containerCrudManager - Unused (kept for backward compat)
+     * @param {Object} objectStateManager - ObjectStateManager instance
      */
-    initialize(sceneController, containerCrudManager, objectStateManager = null) {
+    initialize(sceneController, _containerCrudManager = null, objectStateManager = null) {
         this.sceneController = sceneController;
-        this.containerCrudManager = containerCrudManager;
         this.objectStateManager = objectStateManager || window.modlerComponents?.objectStateManager;
 
         console.log('✅ LayoutPropagationManager initialized');
     }
 
     /**
-     * Get dependencies on demand (for testing/flexibility)
+     * Get SceneController on demand (for testing/flexibility)
      */
     getSceneController() {
         if (!this.sceneController) {
             this.sceneController = window.modlerComponents?.sceneController;
         }
         return this.sceneController;
-    }
-
-    getContainerCrudManager() {
-        if (!this.containerCrudManager) {
-            this.containerCrudManager = window.modlerComponents?.containerCrudManager;
-        }
-        return this.containerCrudManager;
     }
 
     /**
@@ -150,7 +143,7 @@ class LayoutPropagationManager {
         // OPTIMIZATION: Collect propagations for next frame instead of re-adding to current batch
         const deferredPropagations = new Set();
 
-        // Update each container's layout — explicit mode routing (no fallback pattern)
+        // Update each container — SceneLayoutManager handles mode routing via updateContainer()
         sorted.forEach(containerId => {
             const containerMode = this.objectStateManager?.getContainerMode(containerId);
             if (containerMode !== 'layout' && containerMode !== 'hug') {
@@ -159,21 +152,8 @@ class LayoutPropagationManager {
 
             const container = sceneController.getObject(containerId);
 
-            if (containerMode === 'layout') {
-                // Layout containers: use the layout engine path (handles resize internally)
-                sceneController.updateLayout(containerId);
-            } else {
-                // Hug containers: resize to fit children directly
-                // updateLayout() only works with autoLayout.enabled — hug may or may not have it.
-                // Use the resize API which is the natural hug path.
-                const containerCrudManager = this.getContainerCrudManager();
-                if (containerCrudManager) {
-                    containerCrudManager.resizeContainer(container, {
-                        reason: 'child-changed',
-                        immediate: true
-                    });
-                }
-            }
+            // UNIFIED: Single call — SceneLayoutManager routes by mode internally
+            sceneController.updateContainer(containerId);
 
             this.stats.layoutsProcessed++;
 
