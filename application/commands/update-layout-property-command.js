@@ -140,7 +140,7 @@ class UpdateLayoutPropertyCommand extends BaseCommand {
 
             // Step 3: Apply layout if it was enabled
             if (layoutNowEnabled) {
-                const layoutResult = sceneController.updateContainerLayout(this.containerId);
+                const layoutResult = sceneController.updateContainer(this.containerId);
                 if (!layoutResult || !layoutResult.success) {
                     console.warn('UpdateLayoutPropertyCommand: Layout update failed during undo');
                 }
@@ -199,7 +199,7 @@ class UpdateLayoutPropertyCommand extends BaseCommand {
 
             // Apply layout if enabled
             if (layoutNowEnabled) {
-                const layoutResult = sceneController.updateContainerLayout(this.containerId);
+                const layoutResult = sceneController.updateContainer(this.containerId);
                 if (!layoutResult || !layoutResult.success) {
                     console.warn('UpdateLayoutPropertyCommand: Layout update failed during redo');
                 }

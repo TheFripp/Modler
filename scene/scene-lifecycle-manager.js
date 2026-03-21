@@ -137,10 +137,7 @@ class SceneLifecycleManager {
                 // Get callback references for layout updates from SceneController
                 const sceneController = window.modlerComponents?.sceneController;
                 const callbacks = sceneController ? {
-                    updateContainer: sceneController.updateContainer ? sceneController.updateContainer.bind(sceneController) : () => {},
-                    // Backward compat shims
-                    updateLayout: sceneController.updateLayout ? sceneController.updateLayout.bind(sceneController) : () => {},
-                    updateHugContainerSize: sceneController.updateHugContainerSize ? sceneController.updateHugContainerSize.bind(sceneController) : () => {}
+                    updateContainer: sceneController.updateContainer.bind(sceneController)
                 } : {};
 
                 // Position already set as LOCAL in configureMesh() — skip coordinate conversion

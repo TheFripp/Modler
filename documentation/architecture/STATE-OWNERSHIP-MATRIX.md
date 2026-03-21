@@ -162,7 +162,7 @@ sceneHierarchyManager.setParentContainer(objectId, newParentId); // Don't!
 ```javascript
 // ✅ CORRECT: Via SceneController
 sceneController.enableAutoLayout(containerId, layoutConfig);
-sceneController.updateLayout(containerId);
+sceneController.updateContainer(containerId);
 
 // ❌ WRONG: Direct call
 sceneLayoutManager.updateLayout(containerId); // Don't!
@@ -207,7 +207,7 @@ sceneLifecycleManager.addObject(geometry, material, options); // Don't!
 | **Get children** | SceneController | `getChildObjects(id)` | Delegates to hierarchy |
 | **Change parent** | SceneController | `setParentContainer(id, parentId)` | Delegates to hierarchy |
 | **Enable layout** | SceneController | `enableAutoLayout(id, config)` | Delegates to layout |
-| **Update layout** | SceneController | `updateLayout(id)` | Delegates to layout |
+| **Update container** | SceneController | `updateContainer(id, context)` | Unified entry for all container modes |
 | **Trigger propagation** | ObjectStateManager | Automatic via `updateObject` | Delegates to propagation |
 | **Emit UI event** | ObjectEventBus | `emit(type, id, data, metadata)` | Via ObjectStateManager |
 
@@ -235,7 +235,7 @@ objectStateManager.updateObject(objectId, updates, 'dimension-input');
 
 // 4. LayoutPropagationManager:
 //    - Processes scheduled updates bottom-up
-//    - Calls sceneController.updateLayout() for each parent
+//    - Calls sceneController.updateContainer() for each parent
 
 // 5. SceneLayoutManager:
 //    - Calculates new layout
@@ -297,7 +297,7 @@ sceneController.enableAutoLayout(containerId, {
 // SceneController → SceneLayoutManager enables layout
 
 // 4. Layout updates automatically
-// SceneLayoutManager.updateLayout() positions children
+// SceneController.updateContainer() positions children via SceneLayoutManager
 ```
 
 **Key Point**: SceneController facade provides clean API
@@ -356,7 +356,7 @@ layoutPropagationManager.scheduleParentLayoutUpdate(id);
 
 // ✅ CORRECT: Via coordinators
 sceneController.addObject(geo, mat, opts);
-sceneController.updateLayout(id);
+sceneController.updateContainer(id);
 objectStateManager.updateObject(id, updates); // Auto-propagates
 ```
 

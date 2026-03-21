@@ -227,9 +227,9 @@ class PropertyUpdateHandler {
                 }, { source: 'property-panel', immediate: true });
 
                 // Trigger layout update if enabled with valid direction
-                // SINGLE FUNNEL: updateLayout() handles resize internally (SceneLayoutManager line 335)
+                // SINGLE FUNNEL: updateContainer() handles resize internally (SceneLayoutManager)
                 if (fullAutoLayout.enabled && fullAutoLayout.direction && fullAutoLayout.direction !== '') {
-                    sceneController.updateLayout(containerId);
+                    sceneController.updateContainer(containerId);
                     this.containerCrudManager.showContainer(containerId, true);
                 }
                 return true;
@@ -272,9 +272,9 @@ class PropertyUpdateHandler {
             }, { source: 'property-panel', immediate: true });
 
             // Only proceed with layout if enabled and has valid direction
-            // SINGLE FUNNEL: updateLayout() handles resize internally (SceneLayoutManager line 335)
+            // SINGLE FUNNEL: updateContainer() handles resize internally (SceneLayoutManager)
             if (updatedAutoLayout.enabled && updatedAutoLayout.direction && updatedAutoLayout.direction !== '') {
-                const layoutResult = sceneController.updateLayout(containerId);
+                const layoutResult = sceneController.updateContainer(containerId);
 
                 if (layoutResult && layoutResult.success) {
                     this.containerCrudManager.showContainer(containerId, true);
@@ -546,7 +546,7 @@ class PropertyUpdateHandler {
 
             // Trigger layout update on parent container to apply the fill change
             if (obj.parentContainer) {
-                const layoutResult = this.sceneController.updateLayout(obj.parentContainer);
+                const layoutResult = this.sceneController.updateContainer(obj.parentContainer);
 
                 // CRITICAL FIX: Force UI refresh after fill toggle
                 // When dimensions don't change (hug container), layout doesn't emit events

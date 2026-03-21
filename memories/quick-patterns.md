@@ -200,14 +200,8 @@ ObjectStateManager.updateObject(containerId, {
 const LayoutEngine = window.LayoutEngine;
 
 // Calculate bounds for all children
-const layoutResult = sceneController.updateLayout(containerId);
-
-// UNIFIED API: Resize container to layout bounds
-containerCrudManager.resizeContainer(containerId, {
-    reason: 'layout-updated',
-    layoutBounds: layoutResult.layoutBounds,
-    immediate: true
-});
+// Unified API: single entry point for all container modes (layout/hug/manual)
+sceneController.updateContainer(containerId);
 ```
 
 ---
@@ -809,8 +803,7 @@ const success = geometryUtils.resizeGeometry(
 
 // 2. Let layout engine recalculate child positions/sizes
 const sceneController = window.modlerComponents.sceneController;
-const pushContext = { axis: axis }; // Minimal context
-sceneController.updateLayout(containerId, pushContext);
+sceneController.updateContainer(containerId, { pushContext: { axis: axis } });
 
 // Layout engine will:
 // - Resize fill objects on their fill axes (always use 'center' anchor)

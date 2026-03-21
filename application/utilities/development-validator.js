@@ -252,35 +252,35 @@ class DevelopmentValidator {
     }
 
     /**
-     * Monitor layout updates
+     * Monitor container updates
      */
     monitorLayoutUpdates() {
         setTimeout(() => {
             const sceneController = window.modlerComponents?.sceneController;
             if (!sceneController) return;
 
-            const originalUpdateLayout = sceneController.updateLayout;
+            const originalUpdateContainer = sceneController.updateContainer;
 
-            sceneController.updateLayout = function(containerId, pushContext) {
+            sceneController.updateContainer = function(containerId, context) {
                 const containerData = this.getObject(containerId);
 
-                // Check for layout update on non-layout container
-                if (containerData && containerData.containerMode !== 'layout') {
+                // Check for updateContainer called on non-container object
+                if (containerData && !containerData.isContainer) {
                     developmentValidator.recordViolation({
                         type: 'layout-violation',
-                        message: 'updateLayout called on container without layout enabled',
+                        message: 'updateContainer called on non-container object',
                         containerId,
                         containerData
                     });
                     console.warn(
-                        `🚨 Layout Violation: updateLayout on non-layout container\n` +
-                        `   Container: ${containerId}\n` +
-                        `   containerMode: ${containerData.containerMode}\n` +
-                        `   Only call updateLayout on containers with layout mode enabled`
+                        `🚨 Layout Violation: updateContainer on non-container object\n` +
+                        `   Object: ${containerId}\n` +
+                        `   type: ${containerData.type}\n` +
+                        `   Only call updateContainer on container objects`
                     );
                 }
 
-                return originalUpdateLayout.call(this, containerId, pushContext);
+                return originalUpdateContainer.call(this, containerId, context);
             };
         }, 300);
     }

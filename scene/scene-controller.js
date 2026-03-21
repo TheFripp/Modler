@@ -183,16 +183,6 @@ class SceneController {
     }
 
     /**
-     * Update container size to hug its children (DELEGATED to SceneLayoutManager)
-     */
-    updateHugContainerSize(containerId) {
-        const manager = this.getLayoutManager();
-        if (manager) {
-            manager.updateHugContainerSize(containerId);
-        }
-    }
-
-    /**
      * Add object to scene (DELEGATED to SceneLifecycleManager)
      *
      * Creates a new 3D object, adds it to the scene, generates metadata, and syncs to ObjectStateManager.
@@ -565,44 +555,8 @@ class SceneController {
     }
     
     /**
-     * Update layout (DELEGATED to SceneLayoutManager)
-     *
-     * Calculates and applies layout for a container using LayoutEngine.
-     * Positions and sizes children based on layout mode (vertical, horizontal, grid) and sizing (fixed, fill, hug).
-     *
-     * @param {number} containerId - Container ID to update layout for
-     * @param {Object|null} [pushContext=null] - Push tool context for drag operations
-     * @param {number} [pushContext.draggedObjectId] - Object being dragged
-     * @param {Object} [pushContext.draggedDimensions] - Temporary dimensions during drag
-     * @returns {Object} - Layout result
-     * @returns {boolean} .success - Whether layout succeeded
-     * @returns {number} [.calculatedGap] - Calculated gap value (for fill mode)
-     * @returns {string} [.reason] - Error reason if failed
-     *
-     * @example
-     * // Standard layout update (triggered by dimension change)
-     * sceneController.updateLayout(containerId);
-     *
-     * @example
-     * // Layout during push tool drag (preview mode)
-     * sceneController.updateLayout(containerId, {
-     *     draggedObjectId: objectId,
-     *     draggedDimensions: { x: newWidth, y: newHeight, z: newDepth }
-     * });
-     *
-     * @delegation This method delegates to SceneLayoutManager, which:
-     * - Retrieves layout configuration (mode, gap, padding)
-     * - Collects children with layoutProperties (sizeX, sizeY, sizeZ)
-     * - Calls LayoutEngine to calculate positions and sizes
-     * - Applies calculated values via GeometryUtils
-     * - Emits hierarchy events with calculatedGap for UI sync
-     *
-     * @architectural-note
-     * Layout updates are typically triggered automatically via LayoutPropagationManager
-     * after dimension changes. Only call this directly during push tool operations.
-     */
     /**
-     * Update container layout — THE single entry point for all container modes.
+     * Update container — THE single entry point for all container modes.
      * Delegates to SceneLayoutManager.updateContainer() which handles mode routing.
      *
      * @param {number|string} containerId - Container object ID
@@ -614,13 +568,6 @@ class SceneController {
         return manager ? manager.updateContainer(containerId, context) : { success: false, reason: 'LayoutManager not available' };
     }
 
-    /**
-     * @deprecated Use updateContainer() instead
-     */
-    updateLayout(containerId, pushContext = null) {
-        return this.updateContainer(containerId, { pushContext });
-    }
-    
     /**
      * Get container size (DELEGATED to SceneLayoutManager)
      */

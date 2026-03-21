@@ -229,7 +229,7 @@ All measurements taken using Performance API in Chrome DevTools:
 3. **Record Layout Calculation**
    ```javascript
    performance.mark('layout-start');
-   sceneController.updateLayout('container-id');
+   sceneController.updateContainer('container-id');
    performance.mark('layout-end');
    performance.measure('layout-update', 'layout-start', 'layout-end');
    console.log(performance.getEntriesByName('layout-update')[0].duration);

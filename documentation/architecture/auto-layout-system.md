@@ -132,7 +132,7 @@ User enables layout on Container 001
   ↓
 2. Container stores layoutConfig in autoLayout property
   ↓
-3. SceneController.updateLayout(containerId)
+3. SceneController.updateContainer(containerId)
   ↓
 4. LayoutEngine.calculateLayout(children, layoutConfig, containerSize)
   ↓
@@ -223,7 +223,7 @@ resizeContainerToLayoutBounds(container, layoutBounds)
 - `layout/layout-engine.js:14` - calculateLayout()
 - `layout/layout-engine.js:61` - calculateLinearLayout()
 - `layout/layout-engine.js:252` - applySizingBehavior()
-- `scene/scene-controller.js:523` - updateLayout()
+- `scene/scene-controller.js` - updateContainer()
 - `application/tools/container-crud-manager.js:649` - resizeContainerToLayoutBounds()
 
 ---
@@ -304,7 +304,7 @@ Container 001 direction changes (x → y)
   ↓
 1. ObjectStateManager.updateObject(containerId, { autoLayout: { direction: 'y' } })
   ↓
-2. SceneController.updateLayout(containerId)
+2. SceneController.updateContainer(containerId)
   ↓
 3. LayoutEngine calculates new positions based on Y-axis
   ↓
@@ -320,7 +320,7 @@ Container 001 direction changes (x → y)
 // Update container layout if needed (TOP-DOWN PROPAGATION)
 const autoLayoutChanged = object._changedProperties?.has('autoLayout');
 if (object.isContainer && sceneObject && (object.autoLayout?.enabled || autoLayoutChanged)) {
-    const layoutResult = this.sceneController.updateLayout(object.id);
+    const layoutResult = this.sceneController.updateContainer(object.id);
 
     // Resize container to fit the laid out objects
     if (layoutResult?.success && layoutResult.layoutBounds) {
@@ -357,7 +357,7 @@ Container 001 resizes to fit Container 002
 The `LayoutPropagationManager` handles bottom-up propagation with depth-sorted processing and explicit mode routing:
 
 1. All scheduled containers are sorted by depth (deepest first)
-2. **Explicit mode routing**: Layout containers use `updateLayout()` (layout engine path); Hug containers use `resizeContainer()` directly (resize API path)
+2. **Unified mode routing**: All container modes (layout/hug/manual) go through `updateContainer()`, which routes internally based on container mode
 3. Parent containers are collected for propagation
 4. **Synchronous propagation**: Parent layouts process in the same frame (not deferred via RAF)
 
@@ -378,7 +378,7 @@ if (deferredPropagations.size > 0 && this._propagationDepth < 2) {
 - Recursion depth guard prevents infinite loops (falls back to RAF if depth > 2)
 
 **Key Architectural Rules**:
-- `updateLayout()` performs a single resize via layout bounds. The hug-mode resize (`updateHugContainerSize()`) is NOT called after layout — layout bounds already produce the correct container size. This prevents double-resize conflicts that caused nested container misalignment.
+- `updateContainer()` is the single entry point for all container modes. Layout containers resize via layout bounds; hug containers resize to fit children; manual containers handle expansion. This unified API prevents double-resize conflicts that caused nested container misalignment.
 - **Per-axis fill check**: Container resize is per-axis — axes with fill children keep container size fixed, axes without fill auto-size to layout bounds. This replaced the previous binary check that blocked all resize when any child had fill on any axis.
 - **Pre-computed sizes**: `calculateLayoutBounds()` receives pre-computed sizes from the layout pass, eliminating redundant re-derivation of fill sizing.
 
@@ -666,7 +666,7 @@ sceneController.enableAutoLayout(containerId, {
 
 ```javascript
 // Print layout bounds
-const layoutResult = sceneController.updateLayout(containerId);
+const layoutResult = sceneController.updateContainer(containerId);
 console.log('Layout bounds:', layoutResult.layoutBounds);
 // { size: { x: 5, y: 2, z: 1 }, center: { x: 0, y: 0, z: 0 } }
 ```

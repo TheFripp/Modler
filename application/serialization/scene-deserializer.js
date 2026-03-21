@@ -286,7 +286,7 @@ class SceneDeserializer {
         });
 
         for (const container of layoutContainers) {
-            this.sceneController.updateLayout(container.id);
+            this.sceneController.updateContainer(container.id);
         }
 
         // Restore root children order

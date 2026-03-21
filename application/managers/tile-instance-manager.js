@@ -84,7 +84,7 @@ class TileInstanceManager {
 
         // Trigger layout recalculation
         if (this.sceneController) {
-            this.sceneController.updateLayout(containerId);
+            this.sceneController.updateContainer(containerId);
         }
     }
 

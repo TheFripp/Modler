@@ -522,22 +522,6 @@ class SceneLayoutManager {
 
     // ====== BACKWARD-COMPATIBLE SHIMS ======
 
-    /**
-     * @deprecated Use updateContainer() instead
-     * Backward-compatible shim — delegates to updateContainer()
-     */
-    updateLayout(containerId, pushContext = null) {
-        return this.updateContainer(containerId, { pushContext });
-    }
-
-    /**
-     * @deprecated Use updateContainer() instead
-     * Backward-compatible shim — delegates to updateContainer()
-     */
-    updateHugContainerSize(containerId) {
-        return this.updateContainer(containerId, {});
-    }
-
     // ====== APPLY POSITIONS TO THREE.JS ======
 
     /**

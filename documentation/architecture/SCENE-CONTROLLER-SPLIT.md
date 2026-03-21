@@ -88,9 +88,9 @@ class SceneLifecycleManager {
 **Key Methods**:
 - `enableAutoLayout(containerId, layoutConfig)` - Activate layout system
 - `disableAutoLayout(containerId)` - Deactivate layout
-- `updateLayout(containerId, pushContext)` - Recalculate and apply layout
+- `updateLayout(containerId, pushContext)` - Recalculate and apply layout (internal; public API is `sceneController.updateContainer()`)
 - `applyLayoutPositionsAndSizes(children, positions, sizes, container, pushContext)` - Apply results
-- `updateHugContainerSize(containerId)` - Fit container to children
+- Hug container sizing handled internally via `updateContainer()` routing
 - `getContainerSize(container)` - Calculate effective container dimensions
 - `calculateObjectsCenter(objects)` - Compute geometric center
 
@@ -298,8 +298,8 @@ User Action (BoxCreationTool)
 User Action (PropertyPanel change)
   → PropertyUpdateHandler
     → ObjectStateManager.updateObject()
-      → SceneController.updateLayout()
-        → SceneLayoutManager.updateLayout()
+      → SceneController.updateContainer()
+        → SceneLayoutManager (internal routing by mode)
           → LayoutEngine.calculateLayout()
           → SceneLayoutManager.applyLayoutPositionsAndSizes()
             → ObjectStateManager.updateObject() for each child
@@ -332,7 +332,7 @@ User Action (Drag object into container)
 // Before and After - Same code works
 const objectData = sceneController.addObject(geometry, material, options);
 sceneController.setParent(childId, parentId);
-sceneController.updateLayout(containerId);
+sceneController.updateContainer(containerId);
 ```
 
 ### For New Features

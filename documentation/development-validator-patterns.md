@@ -199,24 +199,24 @@ objectStateManager.updateObject(objectId, {
 
 ### 7. **Layout Update Violations**
 
-#### ❌ Layout Update on Non-Layout Container
+#### ❌ Layout Update on Non-Container Object
 ```javascript
-// WRONG - Container doesn't have layout enabled
-const container = sceneController.getObject(containerId);
-// container.autoLayout.enabled = false
-sceneController.updateLayout(containerId);  // ❌ Violation
+// WRONG - Object is not a container
+const object = sceneController.getObject(objectId);
+// object.isContainer = false
+sceneController.updateContainer(objectId);  // ❌ Violation
 ```
 
-#### ✅ Correct - Check Layout State First
+#### ✅ Correct - Use Unified Container API
 ```javascript
-// RIGHT - Verify layout is enabled
+// RIGHT - updateContainer() handles all modes (layout/hug/manual)
 const container = sceneController.getObject(containerId);
-if (container.autoLayout?.enabled) {
-    sceneController.updateLayout(containerId);
+if (container.isContainer) {
+    sceneController.updateContainer(containerId);
 }
 ```
 
-**Why**: Layout updates on non-layout containers waste CPU and cause unexpected behavior.
+**Why**: `updateContainer()` internally routes based on container mode. Calling it on non-containers wastes CPU.
 
 ---
 

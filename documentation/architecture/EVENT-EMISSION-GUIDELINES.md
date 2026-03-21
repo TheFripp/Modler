@@ -87,7 +87,7 @@ Some systems **legitimately** manipulate geometry directly:
 - `updateObjectDimensions()` - Applies dimension changes to geometry
 - `updateObjectPosition()` - Applies position changes
 - `updateObjectRotation()` - Applies rotation changes
-- `updateLayout()` - Applies layout calculations
+- `updateContainer()` - Applies layout/hug/manual container updates
 
 **Why**: SceneController is the single source of truth for 3D geometry.
 
@@ -228,7 +228,7 @@ propertyUpdateRouter.routeUpdate(objectId, 'dimensions.x', 10);
 6. ObjectStateManager.updateSceneController() → SceneController applies geometry
 7. GeometryUtils.updateGeometry() → Rebuilds mesh geometry
 8. LayoutPropagationManager.scheduleParentLayoutUpdate() → Triggers parent container layout
-9. SceneController.updateLayout() → Recalculates container positions
+9. SceneController.updateContainer() → Recalculates container positions
 10. ObjectEventBus.emit('object:geometry', {objectId, changes})
 11. MainAdapter receives event → buildMessage('STATE_CHANGED')
 12. postMessage → UI

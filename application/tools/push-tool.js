@@ -282,7 +282,7 @@ class PushTool extends BaseTool {
 
         // Run initial layout to position children in new layout mode
         // Pass pushContext to skip container resize block (preserve current dimensions)
-        sceneController.updateLayout(objectData.id, { axis: pushAxis });
+        sceneController.updateContainer(objectData.id, { pushContext: { axis: pushAxis } });
     }
 
     /**
@@ -333,7 +333,7 @@ class PushTool extends BaseTool {
 
         // Run layout to apply fill sizing
         // Pass pushContext to skip container resize block (preserve gaps on other axes)
-        sceneController.updateLayout(objectData.id, { axis });
+        sceneController.updateContainer(objectData.id, { pushContext: { axis } });
     }
 
     /**
@@ -368,7 +368,7 @@ class PushTool extends BaseTool {
         }, 'push-tool');
 
         // Trigger hug resize to wrap around children
-        sceneController.updateHugContainerSize(parentData.id);
+        sceneController.updateContainer(parentData.id);
     }
 
     /**
@@ -585,10 +585,9 @@ class PushTool extends BaseTool {
         const objectData = sceneController.getObjectByMesh(this.pushedObject);
         if (!objectData) return;
 
-        // If pushed object IS a container in layout mode, recalculate its layout
-        if (objectData.isContainer && this.objectStateManager?.isLayoutMode(objectData.id)) {
-            const pushContext = { axis: this.pushAxis };
-            sceneController.updateLayout(objectData.id, pushContext);
+        // If pushed object IS a container, recalculate its layout (mode routing handled internally)
+        if (objectData.isContainer) {
+            sceneController.updateContainer(objectData.id, { pushContext: { axis: this.pushAxis } });
         }
 
         // If pushed object is a child INSIDE a container, resize the parent
@@ -703,9 +702,9 @@ class PushTool extends BaseTool {
             if (sceneController && pushedObject.userData?.id) {
                 const objectData = sceneController.getObjectByMesh(pushedObject);
 
-                // If this is a hug container, update its size (using centralized state machine)
-                if (this.objectStateManager?.isHugMode(objectData?.id)) {
-                    sceneController.updateHugContainerSize(objectData.id);
+                // If this is a container, update it (mode routing handled internally)
+                if (objectData?.isContainer) {
+                    sceneController.updateContainer(objectData.id);
                 }
 
                 // If object is inside a container, trigger final parent update for ALL modes

@@ -65,7 +65,7 @@ const children = sceneController.getChildObjects(containerId);
 ✅ **Internal 3D operations** (within SceneController or managers it owns)
 ```javascript
 // During layout calculation
-sceneController.updateLayout(containerId);
+sceneController.updateContainer(containerId);
 
 // Direct geometry manipulation
 sceneController.updateObjectDimensions(objectId, 'x', newValue, 'center');
@@ -295,7 +295,7 @@ objectStateManager.updateObject(containerId, {
 
 // Inside ObjectStateManager.propagateChanges():
 sceneObject.autoLayout.direction = 'y'; // Update SceneController
-sceneController.updateLayout(containerId); // Trigger recalculation
+sceneController.updateContainer(containerId); // Trigger recalculation
 ```
 
 **Why**: Layout config belongs with the container object, but layout execution is SceneController's responsibility.
@@ -316,8 +316,7 @@ if (child.parentContainer) {
 
 // Later, in next frame:
 layoutPropagationManager.processScheduledLayouts();
-  → sceneController.updateLayout(parentId);
-  → containerCrudManager.resizeContainerToLayoutBounds();
+  → sceneController.updateContainer(parentId);
 ```
 
 **Why**: Separates layout propagation logic from core state management.
@@ -388,7 +387,7 @@ objectStateManager.updateObject(objectId, {
 | Update from UI | ObjectStateManager | `updateObject(id, {dimensions: {x: 10}})` |
 | Update from tool | ObjectStateManager | `updateObject(id, updates, 'tool-name')` |
 | Internal geometry | SceneController | `updateObjectDimensions(id, 'x', 10)` |
-| Layout calculation | SceneController | `updateLayout(containerId)` |
+| Layout calculation | SceneController | `updateContainer(containerId)` |
 | Add to scene | SceneController | `addObject(geometry, material)` |
 | Remove from scene | SceneController | `removeObject(id)` |
 | Change hierarchy | SceneController | `setParentContainer(id, parentId)` |

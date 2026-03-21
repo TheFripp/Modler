@@ -454,7 +454,7 @@ user.pressCmdF()
 // Layout Activation Flow (5 function calls max)
 user.changePanelProperty()
   → PropertyUpdateHandler.handlePropertyChange()
-  → SceneController.updateLayout(containerId)
+  → SceneController.updateContainer(containerId)
   → LayoutEngine.calculateLayout(children, config)
   → ContainerManager.resizeContainerToLayoutBounds()
 ```

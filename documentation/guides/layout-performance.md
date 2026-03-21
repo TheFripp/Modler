@@ -143,7 +143,7 @@ processScheduledLayouts() {
     updatesWithDepth.forEach(({ containerId }) => {
         const container = this.sceneController.getObject(containerId);
         if (container?.autoLayout?.enabled) {
-            this.sceneController.updateLayout(containerId);
+            this.sceneController.updateContainer(containerId);
         }
     });
 }
@@ -357,7 +357,7 @@ for (const child of children) {
 // Re-enable and trigger single layout
 container.autoLayout.enabled = wasEnabled;
 if (wasEnabled) {
-    sceneController.updateLayout(containerId);
+    sceneController.updateContainer(containerId);
 }
 ```
 
@@ -569,7 +569,7 @@ Use Chrome DevTools Performance tab:
 2. Record while making layout changes
 3. Look for:
    - `calculateLayout` function calls
-   - `updateLayout` function calls
+   - `updateContainer` function calls
    - `resizeContainerToLayoutBounds` function calls
 4. Check if layout time < 16.67ms per frame
 
@@ -604,7 +604,7 @@ for (let i = 0; i < 50; i++) {
 
 // Measure layout time
 const start = performance.now();
-sceneController.updateLayout(containerId);
+sceneController.updateContainer(containerId);
 const end = performance.now();
 console.log(`Layout 50 children: ${(end - start).toFixed(2)}ms`);
 // Expected: < 5ms

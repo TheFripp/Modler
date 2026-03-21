@@ -137,7 +137,7 @@ SceneController.updateObjectDimensions('objectId', 'x', 10, 'center')
   ↓
   ↓ [Triggers parent layout if object in container]
   ↓
-SceneController.updateLayout(parentContainerId)
+SceneController.updateContainer(parentContainerId)
   ↓
 LayoutEngine.calculateLayout(children, config, containerSize)
   ↓ [5-pass calculation: categorize, gaps, sizes, positions, bounds]
@@ -300,7 +300,7 @@ PropertyUpdateHandler.handleContainerLayoutPropertyChange()
   ↓ [Updates containerData.autoLayout.direction = 'y']
   ↓ [Disables isHug mode if enabled]
   ↓
-SceneController.updateLayout(containerId)
+SceneController.updateContainer(containerId)
   ↓ [Resets child positions via resetChildPositionsForLayout()]
   ↓
 LayoutEngine.calculateLayout(children, {direction: 'y'}, containerSize)

@@ -67,19 +67,19 @@ class PushFaceCommand extends BaseCommand {
             // Restore geometry to old dimensions and position
             this.restoreGeometryState(objectData.mesh, this.oldDimensions, this.oldPosition);
 
-            // Recalculate hug size after geometry is restored
+            // Recalculate container after geometry is restored
             if (this.hugTransitionState) {
-                sceneController.updateHugContainerSize(this.hugTransitionState.containerId);
+                sceneController.updateContainer(this.hugTransitionState.containerId);
             }
 
-            // Recalculate layout after fill state restored
+            // Recalculate container after fill state restored
             if (this.fillTransitionState) {
-                sceneController.updateLayout(this.fillTransitionState.containerId);
+                sceneController.updateContainer(this.fillTransitionState.containerId);
             }
 
-            // Recalculate layout after parent restored to layout mode
+            // Recalculate container after parent restored to layout mode
             if (this.parentHugTransitionState) {
-                sceneController.updateLayout(this.parentHugTransitionState.containerId);
+                sceneController.updateContainer(this.parentHugTransitionState.containerId);
             }
 
             logger.info(`↩️ Undid push: ${this.objectId}`);
@@ -124,19 +124,19 @@ class PushFaceCommand extends BaseCommand {
             // Restore geometry to new dimensions and position
             this.restoreGeometryState(objectData.mesh, this.newDimensions, this.newPosition);
 
-            // Recalculate layout after geometry is restored
+            // Recalculate container after geometry is restored
             if (this.hugTransitionState) {
-                sceneController.updateLayout(this.hugTransitionState.containerId);
+                sceneController.updateContainer(this.hugTransitionState.containerId);
             }
 
-            // Recalculate layout after fill state re-applied
+            // Recalculate container after fill state re-applied
             if (this.fillTransitionState) {
-                sceneController.updateLayout(this.fillTransitionState.containerId);
+                sceneController.updateContainer(this.fillTransitionState.containerId);
             }
 
-            // Recalculate hug after parent re-applied to hug mode
+            // Recalculate container after parent re-applied to hug mode
             if (this.parentHugTransitionState) {
-                sceneController.updateHugContainerSize(this.parentHugTransitionState.containerId);
+                sceneController.updateContainer(this.parentHugTransitionState.containerId);
             }
 
             logger.info(`↪️ Redid push: ${this.objectId}`);

@@ -137,10 +137,8 @@ class DuplicateObjectCommand extends BaseCommand {
                     // Insert duplicate right after source
                     parentContainer.childrenOrder.splice(sourceIndex + 1, 0, this.duplicatedObjectId);
 
-                    // Trigger layout update if container has auto-layout
-                    if (parentContainer.containerMode === 'layout') {
-                        sceneController.updateLayout(parentContainer.id);
-                    }
+                    // Trigger container update (mode routing handled by SceneLayoutManager)
+                    sceneController.updateContainer(parentContainer.id, { reason: 'hierarchy-changed' });
                 }
             }
         }
@@ -294,15 +292,8 @@ class DuplicateObjectCommand extends BaseCommand {
             logger.info(`  Updated childrenOrder: [${newChildrenOrder.join(', ')}]`);
         }
 
-        // Trigger layout update on the new container if it has auto-layout
-        // NOTE: If container was moved (Cmd+drag), Phase 1 already positioned children correctly
-        // Layout engine will reposition them according to layout rules if enabled
-        if (duplicatedContainer.containerMode === 'layout') {
-            logger.info(`  Running layout update (autoLayout enabled)`);
-            sceneController.updateLayout(duplicatedContainer.id);
-        } else {
-            logger.info(`  Skipping layout update (autoLayout disabled or manual mode)`);
-        }
+        // Trigger container update (mode routing handled by SceneLayoutManager)
+        sceneController.updateContainer(duplicatedContainer.id, { reason: 'hierarchy-changed' });
 
         logger.info(`=== CONTAINER DUPLICATION COMPLETE ===`);
 
@@ -314,9 +305,7 @@ class DuplicateObjectCommand extends BaseCommand {
                 if (sourceIndex !== -1) {
                     parentContainer.childrenOrder.splice(sourceIndex + 1, 0, this.duplicatedObjectId);
 
-                    if (parentContainer.containerMode === 'layout') {
-                        sceneController.updateLayout(parentContainer.id);
-                    }
+                    sceneController.updateContainer(parentContainer.id, { reason: 'hierarchy-changed' });
                 }
             }
         }
@@ -389,9 +378,7 @@ class DuplicateObjectCommand extends BaseCommand {
             // Trigger layout update if was in a container
             if (parentContainerId) {
                 const parentContainer = sceneController.getObject(parentContainerId);
-                if (parentContainer?.containerMode === 'layout') {
-                    sceneController.updateLayout(parentContainerId);
-                }
+                sceneController.updateContainer(parentContainerId, { reason: 'hierarchy-changed' });
             }
 
             logger.info(`↩️ Undid duplicate: removed ${this.duplicatedObjectId}`);
@@ -453,9 +440,7 @@ class DuplicateObjectCommand extends BaseCommand {
                     if (sourceIndex !== -1) {
                         parentContainer.childrenOrder.splice(sourceIndex + 1, 0, this.duplicatedObjectId);
 
-                        if (parentContainer.containerMode === 'layout') {
-                            sceneController.updateLayout(parentContainer.id);
-                        }
+                        sceneController.updateContainer(parentContainer.id, { reason: 'hierarchy-changed' });
                     }
                 }
             }

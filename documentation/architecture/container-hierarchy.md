@@ -192,7 +192,7 @@ setParent(objectId, parentId, updateLayout = true) {
     if (parentId && updateLayout) {
         const container = this.objects.get(parentId);
         if (container?.autoLayout?.enabled) {
-            this.updateLayout(parentId);
+            this.updateContainer(parentId);
         }
     }
 }
@@ -250,7 +250,7 @@ removeObject(id) {
     if (parentId) {
         const parent = this.objects.get(parentId);
         if (parent?.autoLayout?.enabled) {
-            this.updateLayout(parentId);
+            this.updateContainer(parentId);
         }
     }
 

@@ -59,7 +59,7 @@ Push Tool: Modify container geometry
     geometryUtils.resizeGeometry(mesh.geometry, axis, newSize, anchorMode)
     ↓
 Push Tool: Trigger layout recalculation
-    sceneController.updateLayout(containerId, { axis })
+    sceneController.updateContainer(containerId, { pushContext: { axis } })
     ↓
 Layout Engine: Recalculate everything
     ├─ Resize fill objects on their fill axes (symmetric, 'center' anchor)
@@ -116,11 +116,10 @@ const success = geometryUtils.resizeGeometry(
 
 #### Layout Recalculation
 ```javascript
-// Push tool calls with minimal context
-const pushContext = { axis: this.pushAxis };
-sceneController.updateLayout(containerId, pushContext);
+// Push tool calls unified API with push context
+sceneController.updateContainer(containerId, { pushContext: { axis: this.pushAxis } });
 
-// Layout engine uses this to know:
+// Layout engine uses pushContext to know:
 // - Which axis is being pushed (for space-between detection)
 // - To suppress UI events during drag (prevent flickering)
 ```
@@ -237,9 +236,8 @@ geometryUtils.resizeGeometry(
     anchorMode
 );
 
-// Trigger layout recalculation
-const pushContext = { axis: this.pushAxis };
-sceneController.updateLayout(containerId, pushContext);
+// Trigger layout recalculation via unified container API
+sceneController.updateContainer(containerId, { pushContext: { axis: this.pushAxis } });
 
 // Done! Layout engine handles all child updates
 ```
