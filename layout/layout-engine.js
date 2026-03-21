@@ -72,6 +72,14 @@ class LayoutEngine {
      * @param {Object} layoutConfig - Layout configuration
      * @param {Object} pushContext - Optional push context with {axis, anchorMode} for anchor-aware positioning
      * @returns {Array} Array of positions
+     *
+     * START/END CONVENTION:
+     *   Objects are positioned sequentially from start (lowest coordinate) to end (highest coordinate).
+     *   First child in array = start position, last child = end position.
+     *     X axis: start = left (-x),   end = right (+x)
+     *     Y axis: start = bottom (-y), end = top (+y)
+     *     Z axis: start = back (-z),   end = front (+z)
+     *   When reversed=true, the first child in the array maps to the end position instead.
      */
     static calculateLinearLayout(objects, axis, gap, padding, axisSize = null, fullContainerSize = null, layoutAnchor = null, layoutConfig = null, pushContext = null) {
         const positions = [];

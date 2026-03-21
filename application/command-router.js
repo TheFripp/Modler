@@ -201,6 +201,23 @@ class CommandRouter {
                 this.delegateSettingsGet(`handleGet${methodSuffix}Settings`, data);
             });
         }
+        // ═══════════════════════════════════════════════════════════
+        // EXPORT/IMPORT OPERATIONS
+        // ═══════════════════════════════════════════════════════════
+        this.handlers.set('export-scene', this.handleExportScene.bind(this));
+        this.handlers.set('import-scene', this.handleImportScene.bind(this));
+        this.handlers.set('export-object', this.handleExportObject.bind(this));
+        this.handlers.set('import-object', this.handleImportObject.bind(this));
+
+        // ═══════════════════════════════════════════════════════════
+        // YARD OPERATIONS (Material Library)
+        // ═══════════════════════════════════════════════════════════
+        this.handlers.set('yard-get-library', this.handleYardGetLibrary.bind(this));
+        this.handlers.set('yard-add-item', this.handleYardAddItem.bind(this));
+        this.handlers.set('yard-update-item', this.handleYardUpdateItem.bind(this));
+        this.handlers.set('yard-remove-item', this.handleYardRemoveItem.bind(this));
+        this.handlers.set('yard-place-item', this.handleYardPlaceItem.bind(this));
+
         console.log(`✅ CommandRouter: Registered ${this.handlers.size} action handlers`);
     }
 
@@ -598,39 +615,39 @@ class CommandRouter {
             return;
         }
 
+        // Capture old parent before move (needed to re-layout after child removal)
+        const obj = this.sceneController.getObject(objectId);
+        const oldParentId = obj?.parentContainer;
+
         // Step 1: Move to new parent (suppress layout — Step 2 will trigger it)
-        if (targetParentId) {
-            this.sceneController.setParentContainer(objectId, targetParentId, false);
-        } else {
-            this.sceneController.setParentContainer(objectId, null, false);
-        }
+        this.sceneController.setParentContainer(objectId, targetParentId || null, false);
 
         // Step 2: Reorder within new parent → triggers layout once
         if (targetId && position) {
             this.reorderChildByPosition(objectId, targetId, position, targetParentId);
+        }
+
+        // Step 3: Re-layout old parent (remaining children need repositioning)
+        if (oldParentId && oldParentId !== targetParentId) {
+            this.sceneController.updateContainer(oldParentId, { reason: 'hierarchy-changed' });
         }
     }
 
     handleDeleteObject(data) {
         const { objectId, objectIds } = data;
 
-        if (!this.sceneController) {
-            console.error('CommandRouter: SceneController not available');
+        if (!this.historyManager) {
+            console.error('CommandRouter: HistoryManager not available for delete');
             return;
         }
 
-        // Clear selection before deletion to prevent phantom objects in UI
-        if (this.selectionController) {
-            this.selectionController.clearSelection();
-        }
+        // Normalize to array
+        const idsToDelete = (objectIds && Array.isArray(objectIds)) ? objectIds : objectId ? [objectId] : [];
+        if (idsToDelete.length === 0) return;
 
-        if (objectIds && Array.isArray(objectIds)) {
-            // Delete multiple objects
-            objectIds.forEach(id => this.sceneController.removeObject(id));
-        } else if (objectId) {
-            // Delete single object
-            this.sceneController.removeObject(objectId);
-        }
+        // Route through DeleteObjectCommand for undo support + parent layout update
+        const deleteCommand = new DeleteObjectCommand(idsToDelete);
+        this.historyManager.executeCommand(deleteCommand);
     }
 
     handleDuplicateObject(data) {
@@ -731,6 +748,152 @@ class CommandRouter {
         const settingsHandler = window.modlerComponents?.settingsHandler;
         if (!settingsHandler) return;
         settingsHandler[method](data.sourceWindow);
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // EXPORT/IMPORT HANDLERS
+    // ═══════════════════════════════════════════════════════════════
+
+    handleExportScene(data) {
+        const exportImportManager = window.modlerComponents?.exportImportManager;
+        if (!exportImportManager) return;
+        exportImportManager.exportScene({ fileName: data?.fileName });
+    }
+
+    async handleImportScene(data) {
+        const exportImportManager = window.modlerComponents?.exportImportManager;
+        if (!exportImportManager) return;
+
+        const result = await exportImportManager.importScene();
+        if (result.success && data?.sourceWindow) {
+            data.sourceWindow.postMessage({
+                type: 'scene-imported',
+                fileId: result.fileId,
+                name: result.name
+            }, '*');
+        }
+    }
+
+    handleExportObject(data) {
+        const exportImportManager = window.modlerComponents?.exportImportManager;
+        if (!exportImportManager || !data?.objectId) return;
+        exportImportManager.exportObject(data.objectId);
+    }
+
+    async handleImportObject(data) {
+        const exportImportManager = window.modlerComponents?.exportImportManager;
+        if (!exportImportManager) return;
+
+        const result = await exportImportManager.importObject();
+        if (result.success && data?.sourceWindow) {
+            data.sourceWindow.postMessage({
+                type: 'object-imported',
+                rootId: result.rootId
+            }, '*');
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // YARD HANDLERS
+    // ═══════════════════════════════════════════════════════════════
+
+    handleYardGetLibrary(data) {
+        const yardManager = window.modlerComponents?.yardManager;
+        if (!yardManager) return;
+
+        const libraryData = yardManager.getLibraryData();
+
+        // Send response to the requesting iframe
+        if (data.sourceWindow) {
+            try {
+                data.sourceWindow.postMessage({
+                    type: 'yard-library-response',
+                    data: libraryData
+                }, '*');
+            } catch (e) { /* sourceWindow may be closed */ }
+        } else if (window.simpleCommunication) {
+            window.simpleCommunication.sendToAllIframes({
+                type: 'yard-library-response',
+                data: libraryData
+            });
+        }
+    }
+
+    handleYardAddItem(data) {
+        const yardManager = window.modlerComponents?.yardManager;
+        if (!yardManager) return;
+
+        const itemData = data.data?.item || data.item;
+        if (!itemData) return;
+
+        yardManager.addItem(itemData);
+        this._broadcastYardUpdate();
+    }
+
+    handleYardUpdateItem(data) {
+        const yardManager = window.modlerComponents?.yardManager;
+        if (!yardManager) return;
+
+        const itemId = data.data?.itemId || data.itemId;
+        const updates = data.data?.updates || data.updates;
+        if (!itemId || !updates) return;
+
+        yardManager.updateItem(itemId, updates);
+        this._broadcastYardUpdate();
+    }
+
+    handleYardRemoveItem(data) {
+        const yardManager = window.modlerComponents?.yardManager;
+        if (!yardManager) return;
+
+        const itemId = data.data?.itemId || data.itemId;
+        if (!itemId) return;
+
+        yardManager.removeItem(itemId);
+        this._broadcastYardUpdate();
+    }
+
+    handleYardPlaceItem(data) {
+        const yardManager = window.modlerComponents?.yardManager;
+        if (!yardManager || !this.sceneController || !this.historyManager) return;
+
+        const itemId = data.data?.itemId || data.itemId;
+        if (!itemId) return;
+
+        const item = yardManager.getItem(itemId);
+        if (!item) return;
+
+        const dim = item.dimensions;
+        const geometry = new THREE.BoxGeometry(dim.x, dim.y, dim.z);
+
+        const colorHex = item.material?.color || '#888888';
+        const color = parseInt(colorHex.replace('#', ''), 16);
+        const material = new THREE.MeshLambertMaterial({
+            color,
+            opacity: item.material?.opacity ?? 1,
+            transparent: item.material?.transparent ?? false
+        });
+
+        const command = new CreateObjectCommand(geometry, material, {
+            name: item.name,
+            type: 'box',
+            position: { x: 0, y: dim.y / 2, z: 0 },
+            dimensions: { x: dim.x, y: dim.y, z: dim.z },
+            yardItemId: item.id,
+            yardFixed: item.fixedDimensions
+        });
+
+        this.historyManager.executeCommand(command);
+    }
+
+    _broadcastYardUpdate() {
+        const yardManager = window.modlerComponents?.yardManager;
+        if (!yardManager || !window.simpleCommunication) return;
+
+        window.simpleCommunication.sendToAllIframes({
+            type: 'yard-library-updated',
+            data: yardManager.getLibraryData()
+        });
     }
 
     /**
