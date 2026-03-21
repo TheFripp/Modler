@@ -292,11 +292,11 @@
 		activeDropZone = null;
 	}
 
-	function handleDragOver(event, objectIndex, parentId = null) {
+	function handleDragOver(event, objectIndex, parentId = null, object = null) {
 		if (!draggedObject) return;
 		event.preventDefault();
 		event.dataTransfer.dropEffect = 'move';
-		activeDropZone = calcDropZone(event, objectIndex, parentId);
+		activeDropZone = calcDropZone(event, objectIndex, parentId, object);
 	}
 
 	function handleDrop(event) {
@@ -312,15 +312,19 @@
 		activeDropZone = null;
 	}
 
-	// Drop indicator helpers
-	function showDropBefore(index: number, parentId: number | null): boolean {
-		return !!activeDropZone && !!draggedObject &&
-			activeDropZone.parentId === parentId && activeDropZone.index === index;
-	}
+	// Container highlight during drag — derived from active drop zone
+	$: dragOverContainerId = (draggedObject && activeDropZone) ? activeDropZone.containerId : null;
 
-	function showDropAfter(index: number, parentId: number | null, siblingCount: number): boolean {
-		return index === siblingCount - 1 && !!activeDropZone && !!draggedObject &&
-			activeDropZone.parentId === parentId && activeDropZone.index === index + 1;
+	// Drop indicator — box-shadow on the hovered item (no separate divs needed)
+	function dropIndicatorStyle(index: number, parentId: number | null): string {
+		if (!activeDropZone || !draggedObject) return '';
+		if (activeDropZone.parentId !== parentId) return '';
+		if (activeDropZone.targetIndex !== index) return '';
+		if (activeDropZone.position === 'before')
+			return 'box-shadow: 0 -2px 0 0 rgb(59,130,246); z-index: 1;';
+		if (activeDropZone.position === 'after')
+			return 'box-shadow: 0 2px 0 0 rgb(59,130,246); z-index: 1;';
+		return '';
 	}
 </script>
 
@@ -329,17 +333,13 @@
 		class="relative"
 		class:opacity-0={!isLoaded}
 		class:translate-y-[-10px]={!isLoaded}
-		style="transition: opacity 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) {index * 30}ms, transform 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) {index * 30}ms;"
+		style="transition: opacity 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) {index * 30}ms, transform 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) {index * 30}ms; {dropIndicatorStyle(index, parentId)}"
 		draggable="true"
 		ondragstart={(e) => handleDragStart(e, object)}
 		ondragend={handleDragEnd}
-		ondragover={(e) => handleDragOver(e, index, parentId)}
+		ondragover={(e) => handleDragOver(e, index, parentId, object)}
 		ondrop={handleDrop}
 	>
-		<!-- Drop indicator: before this item -->
-		{#if showDropBefore(index, parentId)}
-			<div class="absolute top-0 right-2 h-0.5 bg-blue-500 z-10" style="left: {depth * 16 + 24}px"></div>
-		{/if}
 
 		{#if editingObjectId === object.id}
 			<!-- Rename input mode -->
@@ -395,7 +395,8 @@
 					'flex items-center gap-1.5 h-8 pr-2 transition-colors cursor-default',
 					'text-foreground/70 hover:text-foreground hover:bg-white/5',
 					isObjectHighlighted(object, $selectedObjects) && 'bg-white/[0.06]',
-					$hoveredObjectId === object.id && !isObjectHighlighted(object, $selectedObjects) && 'bg-white/[0.04]'
+					$hoveredObjectId === object.id && !isObjectHighlighted(object, $selectedObjects) && 'bg-white/[0.04]',
+					dragOverContainerId === object.id && 'bg-blue-500/10'
 				)}
 				style="padding-left: {depth * 16 + 8}px"
 				onclick={(e) => handleObjectClick(e, object)}
@@ -459,16 +460,27 @@
 			</div>
 		{/if}
 
-		<!-- Drop indicator: after last item in this group -->
-		{#if showDropAfter(index, parentId, siblingCount)}
-			<div class="absolute bottom-0 right-2 h-0.5 bg-blue-500 z-10" style="left: {depth * 16 + 24}px"></div>
-		{/if}
 	</div>
 
-	{#if object.isContainer && expandedContainers.has(object.id) && object.children && object.children.length > 0 && !object.autoLayout?.tileMode?.enabled}
-		{#each object.children as child, childIndex}
-			{@render TreeItem(child, depth + 1, childIndex, object.id, object.children.length)}
-		{/each}
+	{#if object.isContainer && expandedContainers.has(object.id) && !object.autoLayout?.tileMode?.enabled}
+		{#if !object.children || object.children.length === 0}
+			<!-- Empty container drop zone -->
+			<div
+				class={cn(
+					"h-6 flex items-center text-xs text-foreground/20 italic",
+					dragOverContainerId === object.id && 'bg-blue-500/10'
+				)}
+				style="padding-left: {(depth + 1) * 16 + 32}px"
+				ondragover={(e) => handleDragOver(e, 0, object.id, null)}
+				ondrop={handleDrop}
+			>
+				empty
+			</div>
+		{:else}
+			{#each object.children as child, childIndex}
+				{@render TreeItem(child, depth + 1, childIndex, object.id, object.children.length)}
+			{/each}
+		{/if}
 	{/if}
 {/snippet}
 

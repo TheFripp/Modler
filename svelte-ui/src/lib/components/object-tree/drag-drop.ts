@@ -21,15 +21,19 @@ export interface TreeObject {
 export interface DropZone {
 	parentId: number | null;
 	index: number;
+	containerId: number | null; // Which container the drop targets (for highlighting)
+	targetIndex: number; // Which item is being hovered
+	position: 'before' | 'after' | 'into'; // Which half of the hovered item
 }
 
 export interface DropAction {
-	type: 'reorder-children' | 'move-and-reorder';
+	type: 'reorder-children' | 'move-and-reorder' | 'move-to-container';
 	objectId: number;
-	targetId: number;
-	position: 'before' | 'after';
+	targetId?: number;
+	position?: 'before' | 'after';
 	parentId?: number | null;
 	targetParentId?: number | null;
+	targetContainerId?: number | null;
 }
 
 // --- Tree search ---
@@ -113,8 +117,23 @@ export function resolveDrop(
 		objectList = treeStructure;
 	} else {
 		const container = findObjectInTree(parentId, treeStructure);
-		if (!container || !container.children) return null;
-		objectList = container.children;
+		if (!container) return null;
+		objectList = container.children || [];
+	}
+
+	// Empty container: just move into it
+	if (objectList.length === 0 && parentId !== null) {
+		if (draggedObject.isContainer) {
+			const targetContainer = findObjectInTree(parentId, treeStructure);
+			if (targetContainer && !isValidContainerNesting(draggedObject, targetContainer, flatObjects)) {
+				return null;
+			}
+		}
+		return {
+			type: 'move-to-container',
+			objectId: draggedObject.id,
+			targetContainerId: parentId
+		};
 	}
 
 	let targetObject: TreeObject;
@@ -129,6 +148,9 @@ export function resolveDrop(
 	}
 
 	if (!targetObject) return null;
+
+	// No-op if target is the dragged object itself
+	if (targetObject.id === draggedObject.id) return null;
 
 	// Cross-level move (different parents)
 	if (draggedObject.parentContainer !== targetObject.parentContainer) {
@@ -183,20 +205,36 @@ export function createInvisibleDragImage(event: DragEvent): void {
 
 /**
  * Calculate drop zone from drag-over Y position.
- * Top half → before this item, bottom half → after.
+ * Containers use three zones: top 25% = before, middle 50% = into, bottom 25% = after.
+ * Regular objects use two zones: top 50% = before, bottom 50% = after.
  */
 export function calcDropZone(
 	event: DragEvent,
 	objectIndex: number,
-	parentId: number | null
+	parentId: number | null,
+	object?: TreeObject | null
 ): DropZone {
 	const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
 	const y = event.clientY - rect.top;
 	const height = rect.height;
 
+	// Containers: three-zone (top 25% = before, middle 50% = into, bottom 25% = after)
+	if (object?.isContainer) {
+		if (y < height * 0.25) {
+			return { parentId, index: objectIndex, containerId: parentId, targetIndex: objectIndex, position: 'before' };
+		} else if (y > height * 0.75) {
+			return { parentId, index: objectIndex + 1, containerId: parentId, targetIndex: objectIndex, position: 'after' };
+		} else {
+			// Drop INTO this container (append to end of children)
+			const childCount = object.children?.length || 0;
+			return { parentId: object.id, index: childCount, containerId: object.id, targetIndex: objectIndex, position: 'into' };
+		}
+	}
+
+	// Regular objects: two-zone (top 50% = before, bottom 50% = after)
 	if (y < height * 0.5) {
-		return { parentId, index: objectIndex };
+		return { parentId, index: objectIndex, containerId: parentId, targetIndex: objectIndex, position: 'before' };
 	} else {
-		return { parentId, index: objectIndex + 1 };
+		return { parentId, index: objectIndex + 1, containerId: parentId, targetIndex: objectIndex, position: 'after' };
 	}
 }

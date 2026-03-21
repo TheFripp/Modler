@@ -258,7 +258,7 @@ class MoveTool extends BaseTool {
                         z: newPosition.z
                     };
                     // Trigger UI update only (skip SceneController and event propagation)
-                    this.objectStateManager.updateUISystems([object]);
+                    this.objectStateManager.refreshSelectionUI([{ object }]);
                 }
             }
             return;

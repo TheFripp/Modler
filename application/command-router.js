@@ -481,6 +481,9 @@ class CommandRouter {
 
     // Reorder child based on drop position relative to target
     reorderChildByPosition(objectId, targetId, position, parentId) {
+        // No-op if dragging onto self
+        if (objectId === targetId) return;
+
         // Get children list from parent (or root)
         const children = parentId ?
             this.sceneController.getChildObjects(parentId) :
