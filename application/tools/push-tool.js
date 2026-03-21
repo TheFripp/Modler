@@ -281,7 +281,8 @@ class PushTool extends BaseTool {
         });
 
         // Run initial layout to position children in new layout mode
-        sceneController.updateLayout(objectData.id);
+        // Pass pushContext to skip container resize block (preserve current dimensions)
+        sceneController.updateLayout(objectData.id, { axis: pushAxis });
     }
 
     /**
@@ -331,7 +332,8 @@ class PushTool extends BaseTool {
         });
 
         // Run layout to apply fill sizing
-        sceneController.updateLayout(objectData.id);
+        // Pass pushContext to skip container resize block (preserve gaps on other axes)
+        sceneController.updateLayout(objectData.id, { axis });
     }
 
     /**
@@ -485,13 +487,30 @@ class PushTool extends BaseTool {
             if (this.objectStateManager?.isLayoutMode(parent?.id) && parent.autoLayout.alignment) {
                 const alignment = parent.autoLayout.alignment[this.pushAxis];
 
-                // If center-aligned on this axis: use 'center' mode for symmetric expansion
-                // If edge-aligned: use normal behavior (pushed face moves, opposite stays)
-                if (alignment === 'center') {
-                    anchorMode = 'center';
+                // Alignment determines which edge stays fixed during resize:
+                // Min-edge aligned → keep min face fixed, max face moves
+                // Max-edge aligned → keep max face fixed, min face moves
+                // Center aligned → symmetric resize from center
+                switch (alignment) {
+                    case 'left':
+                    case 'bottom':
+                    case 'back':
+                        anchorMode = 'min';
+                        break;
+                    case 'right':
+                    case 'top':
+                    case 'front':
+                        anchorMode = 'max';
+                        break;
+                    case 'center':
+                        anchorMode = 'center';
+                        break;
                 }
             }
         }
+
+        // Store resolved anchor mode for property panel context forwarding
+        this.anchorMode = anchorMode;
 
         // UNIFIED APPROACH: Use vertex manipulation for both containers and objects
         // Layout engine handles all child positioning/sizing based on container size
@@ -642,11 +661,13 @@ class PushTool extends BaseTool {
                     pushedObject.geometry.attributes.position.needsUpdate = true;
                 }
 
-                // Adjust mesh position to compensate (in world space)
-                const worldOffset = geometryCenter.clone().applyMatrix4(
-                    new THREE.Matrix4().extractRotation(pushedObject.matrixWorld)
+                // Adjust mesh position to compensate (in parent-local space)
+                // Use mesh's OWN rotation to convert geometry-local → parent-local
+                // (matrixWorld would include parent rotation, which is wrong for local position)
+                const localOffset = geometryCenter.clone().applyMatrix4(
+                    new THREE.Matrix4().extractRotation(pushedObject.matrix)
                 );
-                pushedObject.position.add(worldOffset);
+                pushedObject.position.add(localOffset);
 
                 // CRITICAL: Adjust children positions to compensate for container movement
                 // Children already have correct alignment from real-time adjustments during push
@@ -709,7 +730,7 @@ class PushTool extends BaseTool {
                 window.inputFocusManager.recordManipulation(
                     pushedObject.userData.id,
                     `dimensions.${this.pushAxis}`,
-                    { pushDirection: this.pushDirection, pushAxis: this.pushAxis }
+                    { pushDirection: this.pushDirection, pushAxis: this.pushAxis, anchorMode: this.anchorMode }
                 );
             }
         }
@@ -832,109 +853,13 @@ class PushTool extends BaseTool {
     }
 
     /**
-     * Calculate minimum container size to fit all children
-     * CRITICAL: Only considers non-fill objects, since fill objects resize to fit
+     * Calculate minimum container size to fit all children.
+     * Delegates to LayoutEngine.calculateMinimumContainerSize() for canonical sizing logic.
      */
     calculateMinimumContainerSize(children, axis, autoLayout) {
         const layoutEngine = window.LayoutEngine;
-        if (!layoutEngine || !autoLayout) {
-            return 0;
-        }
-
-        // Calculate the minimum size needed along the layout axis
-        const direction = autoLayout.direction;
-        const paddingValue = autoLayout.padding || 0;
-
-        // CRITICAL: In space-between mode (no fill objects), gaps are flexible (can be zero)
-        // Only use fixed gap when there are fill objects
-        const sizeProperty = `size${axis.toUpperCase()}`;
-        const hasFillObjects = children.some(child =>
-            child.layoutProperties?.[sizeProperty] === 'fill'
-        );
-        const gap = hasFillObjects ? (autoLayout.gap || 0) : 0;
-
-        // CRITICAL FIX: Padding might be an object {top, right, bottom, left} or a number
-        // For the given axis, we need to extract the appropriate padding values
-        let paddingStart = 0;
-        let paddingEnd = 0;
-
-        if (typeof paddingValue === 'object' && paddingValue !== null) {
-            // Padding is an object - extract values based on axis
-            if (axis === 'x') {
-                paddingStart = paddingValue.left || 0;
-                paddingEnd = paddingValue.right || 0;
-            } else if (axis === 'y') {
-                paddingStart = paddingValue.bottom || 0;
-                paddingEnd = paddingValue.top || 0;
-            } else if (axis === 'z') {
-                paddingStart = paddingValue.front || 0;
-                paddingEnd = paddingValue.back || 0;
-            }
-        } else if (typeof paddingValue === 'number') {
-            // Padding is a single number - use for both sides
-            paddingStart = paddingValue;
-            paddingEnd = paddingValue;
-        }
-
-        const totalPadding = paddingStart + paddingEnd;
-        let minSize = totalPadding; // Start with padding on both sides
-
-        // Filter children into fill and non-fill groups using centralized state machine
-        const nonFillChildren = children.filter(child => {
-            return this.objectStateManager?.getChildSizeMode(child.id, axis) !== 'fill';
-        });
-        const fillChildren = children.filter(child => {
-            return this.objectStateManager?.getChildSizeMode(child.id, axis) === 'fill';
-        });
-
-        if (direction === axis) {
-            // Layout direction matches push axis
-
-            // Sum all non-fill child sizes (actual space needed)
-            nonFillChildren.forEach((child, index) => {
-                const childDims = child.dimensions || { x: 1, y: 1, z: 1 };
-                minSize += childDims[axis];
-            });
-
-            // CRITICAL FIX: Add minimum size for fill objects (0.1 units each)
-            // Fill objects don't contribute their current size to minimum,
-            // but they still need their enforced minimum space (matches layout-engine.js behavior)
-            const MIN_FILL_SIZE = 0.1;
-            minSize += fillChildren.length * MIN_FILL_SIZE;
-
-            // Add gaps between ALL children (including fill objects)
-            if (children.length > 1) {
-                minSize += gap * (children.length - 1);
-            }
-        } else {
-            // Layout direction perpendicular to push axis
-
-            // Find maximum non-fill child size on this axis
-            let maxChildSize = 0;
-            nonFillChildren.forEach(child => {
-                const childDims = child.dimensions || { x: 1, y: 1, z: 1 };
-                maxChildSize = Math.max(maxChildSize, childDims[axis]);
-            });
-
-            // Check fill objects ONLY if they're NOT filled on the push axis
-            // If they're filled on push axis, they'll shrink with container
-            fillChildren.forEach(child => {
-                // Use centralized state machine to check if filled on push axis
-                const isFillOnPushAxis = this.objectStateManager?.hasFillEnabled(child.id, axis);
-                if (!isFillOnPushAxis) {
-                    const childDims = child.dimensions || { x: 1, y: 1, z: 1 };
-                    maxChildSize = Math.max(maxChildSize, childDims[axis]);
-                }
-                // If filled on push axis, use minimum (0.1)
-                else {
-                    maxChildSize = Math.max(maxChildSize, 0.1);
-                }
-            });
-
-            minSize += maxChildSize;
-        }
-
-        return minSize;
+        if (!layoutEngine || !autoLayout) return 0;
+        return layoutEngine.calculateMinimumContainerSize(children, axis, autoLayout);
     }
 
     /**
@@ -955,6 +880,7 @@ class PushTool extends BaseTool {
         this.hugTransitionState = null;
         this.fillTransitionState = null;
         this.parentHugTransitionState = null;
+        this.anchorMode = null;
     }
 
     /**

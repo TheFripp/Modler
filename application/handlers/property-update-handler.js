@@ -130,16 +130,33 @@ class PropertyUpdateHandler {
                         const newDim = value;
                         const dimChange = newDim - currentDim;
 
-                        // Calculate position offset to keep opposite face stationary
-                        // pushDirection: 1 = pushed in positive direction, -1 = negative
-                        const pushDirection = lastManipulation.context.pushDirection;
-                        const positionOffset = (dimChange / 2) * pushDirection;
+                        // Calculate position offset based on anchor mode
+                        // anchorMode determines which edge stays fixed during resize
+                        const anchorMode = lastManipulation.context.anchorMode;
+                        let positionOffset;
 
-                        // Add position update to keep opposite face fixed
-                        if (!updates.position) {
-                            updates.position = { ...obj.position };
+                        if (anchorMode === 'center') {
+                            // Symmetric resize: no position change needed
+                            positionOffset = 0;
+                        } else if (anchorMode === 'min') {
+                            // Min face fixed: center shifts toward max
+                            positionOffset = dimChange / 2;
+                        } else if (anchorMode === 'max') {
+                            // Max face fixed: center shifts toward min
+                            positionOffset = -dimChange / 2;
+                        } else {
+                            // Fallback: original pushDirection-based behavior
+                            const pushDirection = lastManipulation.context.pushDirection;
+                            positionOffset = (dimChange / 2) * pushDirection;
                         }
-                        updates.position[axis] = obj.position[axis] + positionOffset;
+
+                        // Add position update to keep aligned edge fixed
+                        if (positionOffset !== 0) {
+                            if (!updates.position) {
+                                updates.position = { ...obj.position };
+                            }
+                            updates.position[axis] = obj.position[axis] + positionOffset;
+                        }
                     }
                 }
             }
