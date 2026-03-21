@@ -794,7 +794,7 @@ class ObjectStateManager {
                 // Need to recalculate parent container's layout to resize child accordingly
                 const parentObject = this.sceneController.getObject(object.parentContainer);
 
-                if (parentObject && parentObject?.autoLayout?.enabled) {
+                if (parentObject && this.isLayoutMode(parentObject.id)) {
                     this.sceneController.updateLayout(object.parentContainer);
                 }
             }

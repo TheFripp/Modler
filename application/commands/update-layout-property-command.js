@@ -13,10 +13,11 @@ class UpdateLayoutPropertyCommand extends BaseCommand {
         // Store original layout state for complex undo scenarios
         this.originalLayoutState = null;
         this.newLayoutState = null;
+        this.originalContainerMode = null;
+        this.newContainerMode = null;
 
         // Store child positions before layout changes (for undo)
         this.childPositionSnapshots = new Map();
-        this.wasLayoutEnabled = false;
     }
 
     /**
@@ -41,7 +42,7 @@ class UpdateLayoutPropertyCommand extends BaseCommand {
 
             // Store original layout state before change
             this.originalLayoutState = JSON.parse(JSON.stringify(containerData.autoLayout || {}));
-            this.wasLayoutEnabled = containerData.autoLayout?.enabled || false;
+            this.originalContainerMode = containerData.containerMode;
 
             // CRITICAL: Capture child positions BEFORE layout activation
             // This allows proper restoration when undoing layout mode
@@ -67,6 +68,7 @@ class UpdateLayoutPropertyCommand extends BaseCommand {
                 // Store new layout state after change
                 const updatedContainerData = sceneController.getObject(this.containerId);
                 this.newLayoutState = JSON.parse(JSON.stringify(updatedContainerData.autoLayout || {}));
+                this.newContainerMode = updatedContainerData.containerMode;
 
                 console.log(`✅ UpdateLayoutPropertyCommand executed: ${this.description}`, {
                     property: this.property,
@@ -106,13 +108,16 @@ class UpdateLayoutPropertyCommand extends BaseCommand {
                 return false;
             }
 
-            // Step 1: Restore original layout state
+            // Step 1: Restore original layout state and container mode
             if (this.originalLayoutState) {
                 containerData.autoLayout = JSON.parse(JSON.stringify(this.originalLayoutState));
             }
+            if (this.originalContainerMode) {
+                Object.assign(containerData, ObjectStateManager.buildContainerModeUpdate(this.originalContainerMode));
+            }
 
             // Step 2: Restore child positions if layout is being disabled
-            const layoutNowEnabled = containerData.autoLayout?.enabled || false;
+            const layoutNowEnabled = containerData.containerMode === 'layout';
 
             if (!layoutNowEnabled && this.childPositionSnapshots.size > 0) {
                 // Layout is being disabled - restore manual positions
@@ -181,13 +186,16 @@ class UpdateLayoutPropertyCommand extends BaseCommand {
                 return false;
             }
 
-            // Restore the new layout state (from execute)
+            // Restore the new layout state and container mode (from execute)
             if (this.newLayoutState) {
                 containerData.autoLayout = JSON.parse(JSON.stringify(this.newLayoutState));
             }
+            if (this.newContainerMode) {
+                Object.assign(containerData, ObjectStateManager.buildContainerModeUpdate(this.newContainerMode));
+            }
 
             // Check if layout is now enabled
-            const layoutNowEnabled = containerData.autoLayout?.enabled || false;
+            const layoutNowEnabled = containerData.containerMode === 'layout';
 
             // Apply layout if enabled
             if (layoutNowEnabled) {

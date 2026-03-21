@@ -1,27 +1,61 @@
 # Container Properties - Schema Documentation
 
 ## Overview
-This document defines the canonical properties for container objects to prevent inconsistencies.
+This document defines the canonical properties for container objects.
 
-## Container Sizing Modes (Mutually Exclusive)
+## Container Mode System
 
-### 1. Hug Mode (`isHug: true`)
-- **Purpose**: Container automatically resizes to fit children
-- **Behavior**:
-  - Wraps tightly around child objects
-  - Size adjusts dynamically when children change
-  - No fill objects allowed (children determine container size)
-- **State**: `isHug: true`, `autoLayout.enabled: false`
+### Single Source of Truth: `containerMode`
 
-### 2. Layout Mode (`autoLayout.enabled: true`)
-- **Purpose**: Fixed-size container with automatic child layout
-- **Behavior**:
-  - Container has fixed dimensions
-  - Children positioned automatically along layout axis
-  - Fill objects can expand to use available space
-- **State**: `isHug: false`, `autoLayout.enabled: true`
+Every container has a single `containerMode` property that determines its behavior:
 
-**CRITICAL**: Hug mode and Layout mode are **mutually exclusive**. When one is enabled, the other must be disabled.
+| Mode | Value | Behavior |
+|------|-------|----------|
+| **Manual** | `'manual'` | No automatic sizing or layout. Container is fixed. |
+| **Layout** | `'layout'` | Fixed-size container with automatic child distribution along an axis. Fill objects can expand. |
+| **Hug** | `'hug'` | Container automatically resizes to wrap its children tightly. |
+
+### Reading Container Mode
+
+```javascript
+// Preferred: via ObjectStateManager helpers
+objectStateManager.getContainerMode(id)   // → 'manual' | 'layout' | 'hug'
+objectStateManager.isLayoutMode(id)        // → boolean
+objectStateManager.isHugMode(id)           // → boolean
+
+// Also valid: direct property check on data objects
+if (containerData.containerMode === 'layout') { ... }
+```
+
+### Writing Container Mode
+
+Always use `buildContainerModeUpdate()` — never set `containerMode`, `isHug`, or `sizingMode` directly:
+
+```javascript
+// Via ObjectStateManager.updateObject (preferred)
+objectStateManager.updateObject(containerId, {
+    containerMode: 'layout'  // applyUpdates() auto-routes through buildContainerModeUpdate()
+});
+
+// Via spread into update objects
+const updates = {
+    ...ObjectStateManager.buildContainerModeUpdate('hug'),
+    // other properties...
+};
+
+// Direct assignment on data objects (when not going through OSM)
+Object.assign(containerData, ObjectStateManager.buildContainerModeUpdate('layout'));
+```
+
+### Legacy Flags (Serialization Only)
+
+These flags exist for backward compatibility with old save files. They are kept in sync by `buildContainerModeUpdate()` on writes and read only by `getContainerMode()` as fallback for old data:
+
+- `isHug` — boolean, `true` when mode is `'hug'`
+- `sizingMode` — string, mirrors `containerMode`
+- `autoLayout.enabled` — boolean, read during deserialization only
+
+**NEVER** check these flags in runtime code. Use `containerMode` or the OSM helpers.
 
 ## Core Container Properties
 
@@ -29,16 +63,19 @@ This document defines the canonical properties for container objects to prevent 
 ```javascript
 {
   isContainer: boolean,          // Identifies object as container
-  isHug: boolean,                // Hug mode enabled/disabled
-  layoutMode: string|null,       // Legacy property, use autoLayout instead
+  containerMode: 'manual'|'layout'|'hug',  // Canonical mode (single source of truth)
   autoLayout: {
-    enabled: boolean,            // Layout mode enabled/disabled
     direction: 'x'|'y'|'z'|null, // Layout axis
     gap: number,                 // Space between children
     padding: {                   // Inset from container edges
-      width: number,
-      height: number,
-      depth: number
+      width: number,             // X-axis padding
+      height: number,            // Y-axis padding
+      depth: number              // Z-axis padding
+    },
+    alignment: {                 // Perpendicular axis alignment
+      horizontal: 'left'|'center'|'right',
+      vertical: 'top'|'center'|'bottom',
+      depth: 'back'|'center'|'front'
     }
   },
   calculatedGap: number|undefined // Dynamic gap in space-between mode
@@ -58,50 +95,43 @@ This document defines the canonical properties for container objects to prevent 
 
 ## State Transitions
 
-### Enabling Layout Mode
-When `autoLayout.direction` is set to a non-null value:
-1. `autoLayout.enabled` → `true`
-2. `isHug` → `false`
+### Enabling Layout Mode (e.g., push tool hug→layout)
+1. `containerMode` → `'layout'` (via `buildContainerModeUpdate('layout')`)
+2. `autoLayout.direction` set to push axis
 3. Container size becomes fixed
 4. Children can use fill sizing
 
-### Disabling Layout Mode
-When `autoLayout.direction` is set to `null`:
-1. `autoLayout.enabled` → `false`
-2. `isHug` → `true`
-3. Container auto-resizes to children
-4. Child positions preserved
+### Disabling Layout Mode (e.g., child push → parent hug)
+1. `containerMode` → `'hug'` (via `buildContainerModeUpdate('hug')`)
+2. Container auto-resizes to children
+3. Child positions preserved
+
+### Manual Mode
+1. `containerMode` → `'manual'` (via `buildContainerModeUpdate('manual')`)
+2. No automatic sizing or layout
+3. Children positioned manually
 
 ## Fill Object Behavior
 
 ### Requirements for Fill Objects
-- Parent container MUST have `autoLayout.enabled: true`
-- Parent container MUST have `isHug: false`
+- Parent container MUST be in layout mode (`containerMode === 'layout'`)
 - Container size must be passed to layout engine
 
 ### Fill Calculation
 Fill objects expand to fill available space:
 ```
-availableSpace = containerSize - fixedObjectSizes - gaps - padding
+availableSpace = containerSize - fixedObjectSizes - gaps - padding×2
 fillSize = availableSpace / fillObjectCount
 ```
 
-## Common Issues & Solutions
-
-### Issue: Fill objects not resizing
-**Cause**: Container has `isHug: true` AND `autoLayout.enabled: true`
-**Solution**: These modes are mutually exclusive. Disable `isHug` when enabling layout mode.
-
-### Issue: Container state confusion
-**Cause**: Properties not synchronized when mode changes
-**Solution**: Always update both `isHug` and `autoLayout.enabled` together.
-
 ## Implementation Files
-- **Schema**: `/application/serialization/object-data-format.js`
+- **Mode API**: `/core/object-state-manager.js` (`getContainerMode`, `isLayoutMode`, `isHugMode`, `buildContainerModeUpdate`)
+- **Layout Engine**: `/layout/layout-engine.js` (pure calculation, static methods)
+- **Layout Coordinator**: `/scene/scene-layout-manager.js` (applies LayoutEngine results to scene)
+- **Container Operations**: `/application/tools/container-crud-manager.js` (`resizeContainer`)
 - **Mode Switching**: `/application/handlers/property-update-handler.js`
-- **Layout Calculation**: `/layout/layout-engine.js`
-- **Container Creation**: `/application/tools/container-crud-manager.js`
-- **Fill Application**: `/scene/scene-controller.js` (`applyLayoutPositionsAndSizes`)
+- **Schema**: `/application/serialization/object-data-format.js`
 
 ## Version History
-- **v1.0.0** (2025-10-02): Initial documentation, added `isHug` and `layoutProperties` to schema
+- **v1.0.0** (2025-10-02): Initial documentation
+- **v2.0.0** (2026-03-21): Rewritten for canonical `containerMode` system. Removed legacy `isHug`/`autoLayout.enabled` patterns from runtime docs.

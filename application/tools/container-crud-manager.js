@@ -685,33 +685,6 @@ class ContainerCrudManager {
     }
     
     /**
-     * Update container bounds based on current child positions (used during real-time dragging)
-     * @param {string} containerId - Container ID to update
-     * @returns {boolean} Success status
-     */
-    updateContainerBounds(containerId) {
-        const sceneController = window.modlerComponents?.sceneController;
-        if (!sceneController) {
-            console.error('updateContainerBounds: SceneController not available');
-            return false;
-        }
-
-        if (!containerId) {
-            console.error('updateContainerBounds: Container ID is required');
-            return false;
-        }
-        const containerData = sceneController.getObject(containerId);
-
-        if (!containerData || !containerData.isContainer) {
-            console.error('updateContainerBounds: Invalid container ID or object is not a container');
-            return false;
-        }
-        
-        // Use the simplified resize method for real-time updates
-        return this._resizeToFitChildren(containerData);
-    }
-    
-    /**
      * INTERNAL: Resize container to fit its child objects with fill-aware layout support
      * DO NOT call directly - use resizeContainer() instead
      *
@@ -727,8 +700,7 @@ class ContainerCrudManager {
         const sceneController = validation.sceneController;
 
         // Check sizing mode constraints
-        const mode = containerData.containerMode || containerData.sizingMode;
-        if (mode === 'fixed' && !newContainerSize) {
+        if (containerData.containerMode === 'manual' && !newContainerSize) {
             return false;
         }
         if (!containerData.containerMode) {

@@ -325,7 +325,7 @@ class ContainerVisualizer extends ObjectVisualizer {
         if (!objectData || !objectData.isContainer || !objectData.autoLayout) return;
 
         // Only show if layout is enabled and has non-zero padding
-        if (!objectData.autoLayout.enabled || !this.hasNonZeroPadding(objectData)) return;
+        if (objectData.containerMode !== 'layout' || !this.hasNonZeroPadding(objectData)) return;
 
         const visualEffects = window.modlerComponents?.visualEffects;
         if (visualEffects && typeof visualEffects.showPaddingVisualization === 'function') {

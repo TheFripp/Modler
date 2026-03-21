@@ -28,7 +28,7 @@ class UpdatePropertyCommand extends BaseCommand {
                     // Check if in layout mode
                     if (this.parentContainer) {
                         const parent = sceneController.getObject(this.parentContainer);
-                        this.wasInLayoutMode = parent?.autoLayout?.enabled || false;
+                        this.wasInLayoutMode = parent?.containerMode === 'layout';
                     } else {
                         this.wasInLayoutMode = false;
                     }
@@ -63,7 +63,7 @@ class UpdatePropertyCommand extends BaseCommand {
                     let currentlyInLayoutMode = false;
                     if (currentParent) {
                         const parent = sceneController.getObject(currentParent);
-                        currentlyInLayoutMode = parent?.autoLayout?.enabled || false;
+                        currentlyInLayoutMode = parent?.containerMode === 'layout';
                     }
 
                     // Skip position/rotation restore if now in layout mode
@@ -112,7 +112,7 @@ class UpdatePropertyCommand extends BaseCommand {
                     let currentlyInLayoutMode = false;
                     if (objectData.parentContainer) {
                         const parent = sceneController.getObject(objectData.parentContainer);
-                        currentlyInLayoutMode = parent?.autoLayout?.enabled || false;
+                        currentlyInLayoutMode = parent?.containerMode === 'layout';
                     }
 
                     // Skip position/rotation restore if in layout mode

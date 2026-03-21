@@ -247,8 +247,8 @@ class SceneLayoutManager {
 
         const container = this.sceneController.getObject(containerId);
 
-        if (!container || !container.autoLayout || !container.autoLayout.enabled) {
-            return { success: false, reason: 'container or autoLayout not ready' };
+        if (!container || container.containerMode !== 'layout') {
+            return { success: false, reason: 'container not in layout mode' };
         }
 
         // Get child objects of this container

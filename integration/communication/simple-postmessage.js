@@ -211,7 +211,7 @@ class SimpleCommunication {
         }
 
         const parent = this.sceneController.getObject(sceneObject.parentContainer);
-        return parent && (parent.containerMode === 'layout' || (parent.autoLayout && parent.autoLayout.enabled));
+        return parent && parent.containerMode === 'layout';
     }
 
     /**
@@ -232,11 +232,9 @@ class SimpleCommunication {
 
     /**
      * Compute whether object is in layout mode
-     * DEFINITION: Layout mode active when container AND autoLayout.enabled
      */
     computeIsInLayoutMode(sceneObject) {
-        return sceneObject && sceneObject.isContainer &&
-               (sceneObject.containerMode === 'layout' || (sceneObject.autoLayout && sceneObject.autoLayout.enabled));
+        return sceneObject && sceneObject.isContainer && sceneObject.containerMode === 'layout';
     }
 
     // ═══════════════════════════════════════════════════════════════

@@ -342,28 +342,12 @@ class BaseFaceToolBehavior {
      */
     isContainerInHugMode(object) {
         if (!object) return false;
-
         const sceneController = window.modlerComponents?.sceneController;
         if (!sceneController) return false;
-
         const objectData = sceneController.getObjectByMesh(object);
-        if (!objectData || !objectData.isContainer) {
-            // Not a container - face highlights are OK for regular objects
-            return false;
-        }
-
-        // If autoLayout is enabled, container is in layout mode (not hug)
-        // This catches the case where containerMode is stale
-        if (objectData.autoLayout?.enabled) return false;
-
-        const mode = objectData.containerMode;
-        if (mode) {
-            return mode === 'hug';
-        }
-
-        // Legacy fallback — check for explicit hug indicators, default to NOT hug
-        if (objectData.isHug === true) return true;
-        return false;
+        if (!objectData?.isContainer) return false;
+        const osm = window.modlerComponents?.objectStateManager;
+        return osm?.isHugMode(objectData.id) || false;
     }
 
     /**

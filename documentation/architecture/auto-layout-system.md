@@ -115,7 +115,7 @@ When wrapping objects in a container via Ctrl+F, `ContainerCrudManager.detectAnd
 
 - Calculates spread (max - min) of child centers along each axis
 - Axis with greatest spread becomes the direction (default: `x`)
-- Direction is pre-set but `autoLayout.enabled` stays `false` (container stays in hug mode)
+- Direction is pre-set but container stays in hug mode (`containerMode: 'hug'`)
 
 This direction becomes active when layout mode is later enabled (via property panel or push tool transition).
 

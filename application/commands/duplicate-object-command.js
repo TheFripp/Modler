@@ -138,7 +138,7 @@ class DuplicateObjectCommand extends BaseCommand {
                     parentContainer.childrenOrder.splice(sourceIndex + 1, 0, this.duplicatedObjectId);
 
                     // Trigger layout update if container has auto-layout
-                    if (parentContainer.autoLayout?.enabled) {
+                    if (parentContainer.containerMode === 'layout') {
                         sceneController.updateLayout(parentContainer.id);
                     }
                 }
@@ -297,7 +297,7 @@ class DuplicateObjectCommand extends BaseCommand {
         // Trigger layout update on the new container if it has auto-layout
         // NOTE: If container was moved (Cmd+drag), Phase 1 already positioned children correctly
         // Layout engine will reposition them according to layout rules if enabled
-        if (duplicatedContainer.autoLayout?.enabled) {
+        if (duplicatedContainer.containerMode === 'layout') {
             logger.info(`  Running layout update (autoLayout enabled)`);
             sceneController.updateLayout(duplicatedContainer.id);
         } else {
@@ -314,7 +314,7 @@ class DuplicateObjectCommand extends BaseCommand {
                 if (sourceIndex !== -1) {
                     parentContainer.childrenOrder.splice(sourceIndex + 1, 0, this.duplicatedObjectId);
 
-                    if (parentContainer.autoLayout?.enabled) {
+                    if (parentContainer.containerMode === 'layout') {
                         sceneController.updateLayout(parentContainer.id);
                     }
                 }
@@ -389,7 +389,7 @@ class DuplicateObjectCommand extends BaseCommand {
             // Trigger layout update if was in a container
             if (parentContainerId) {
                 const parentContainer = sceneController.getObject(parentContainerId);
-                if (parentContainer?.autoLayout?.enabled) {
+                if (parentContainer?.containerMode === 'layout') {
                     sceneController.updateLayout(parentContainerId);
                 }
             }
@@ -453,7 +453,7 @@ class DuplicateObjectCommand extends BaseCommand {
                     if (sourceIndex !== -1) {
                         parentContainer.childrenOrder.splice(sourceIndex + 1, 0, this.duplicatedObjectId);
 
-                        if (parentContainer.autoLayout?.enabled) {
+                        if (parentContainer.containerMode === 'layout') {
                             sceneController.updateLayout(parentContainer.id);
                         }
                     }
