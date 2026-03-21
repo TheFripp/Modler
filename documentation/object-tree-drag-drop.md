@@ -1,5 +1,5 @@
 # Object Tree Drag & Drop Reordering System
-**Version**: 4.0.0
+**Version**: 4.1.0
 **Status**: Current (2026-03-21)
 **Currency**: Active - Core feature for layout containers
 
@@ -16,8 +16,8 @@ Drag-and-drop reordering system for objects in the ObjectTree (left panel). Allo
 ObjectTree (UI)
     ↓ postMessage({ type: 'reorder-children', objectId, targetId, position, parentId })
 SimpleCommunication → CommandRouter.handleReorderChildren()
-    ↓ ObjectStateManager.updateObject(parentId, { childrenOrder }) — proper event propagation
-    ↓ triggers layout recalculation for layout/hug containers via getContainerMode()
+    ↓ applyChildrenOrder(): writes to SceneController, emits HIERARCHY, triggers layout
+    ↓ layout recalculation for layout/hug containers via getContainerMode()
 SimpleCommunication receives event
     ↓ sends 'hierarchy-changed' to all iframes
 ObjectTree rebuilds tree with new ordering
@@ -28,8 +28,9 @@ ObjectTree rebuilds tree with new ordering
 ObjectTree (UI)
     ↓ postMessage({ type: 'move-and-reorder', objectId, targetParentId, targetId, position })
 SimpleCommunication → CommandRouter.handleMoveAndReorder()
-    ↓ Step 1: sceneController.moveObjectToContainer() or moveObjectToRoot()
-    ↓ Step 2: reorderChildByPosition() (immediate, no setTimeout)
+    ↓ Step 1: setParentContainer(objectId, parentId, false) — layout suppressed
+    ↓ Step 2: reorderChildByPosition() → applyChildrenOrder() → updateContainer()
+    ↓ Single layout trigger for all modes (layout/hug/manual)
     ↓ emits HIERARCHY event
 ObjectTree rebuilds tree
 ```
@@ -38,9 +39,10 @@ ObjectTree rebuilds tree
 
 **1. ObjectTree.svelte** (`/svelte-ui/src/lib/components/ObjectTree.svelte`)
 - Handles drag events (dragstart, dragover, drop)
-- Shows visual drop indicator via inset box-shadow on the hovered item wrapper
+- Drop indicator: absolutely positioned `<div>` with `bg-blue-500` inside `relative` wrapper, left edge indented to `depth * 16 + 8` px
+- Indicator normalization: "before item N" (N>0) maps to "after item N-1" to prevent duplicate lines
 - State: `activeDropZone = { parentId, index, containerId, targetIndex, position }`
-- `dropIndicatorStyle(index, parentId)` returns inset box-shadow CSS for top/bottom indicator
+- Reactive `$: dropIndicator` declaration drives indicator visibility (explicit Svelte dependency tracking)
 - Container three-zone detection: top 25% = before, middle 50% = into, bottom 25% = after
 - Regular objects: top 50% = before, bottom 50% = after
 - Same-parent: sends `reorder-children` message
@@ -57,8 +59,7 @@ ObjectTree rebuilds tree
 - `move-and-reorder` → `handleMoveAndReorder()` (atomic move + reorder)
 - `move-to-container` → `handleMoveToContainer()`
 - `move-to-root` → `handleMoveToRoot()`
-- Routes `childrenOrder` updates through `ObjectStateManager.updateObject()` (proper event propagation)
-- Uses `objectStateManager.getContainerMode()` to determine if layout recalculation is needed
+- Shared `applyChildrenOrder(parentId, childrenOrder)`: writes to SceneController (owner), emits HIERARCHY event, triggers `updateContainer()` with `{ reason: 'hierarchy-changed' }` for all modes
 
 **3. SceneHierarchyManager** (`/scene/scene-hierarchy-manager.js`)
 - `getChildObjects(containerId)`: Returns children ordered by `childrenOrder` array
@@ -83,9 +84,20 @@ ObjectTree rebuilds tree
 
 ### childrenOrder Ownership
 - **SceneController owns childrenOrder** — it lives on container objects in the objects Map
-- CommandRouter updates via `ObjectStateManager.updateObject(parentId, { childrenOrder })` during reorder
+- CommandRouter writes directly via `applyChildrenOrder()` during reorder
 - SceneHierarchyManager maintains it during `setParentContainer()` (add/remove from parent)
 - Layout recalculation uses `objectStateManager.getContainerMode()` (not `autoLayout?.enabled`)
+
+### containerMode Sync
+- **OSM → SC sync**: `updateSceneController()` syncs `containerMode` to SceneController objects
+- **SceneLayoutManager gate**: `updateContainer()` routes by `containerMode` — layout, hug, or manual
+- Without this sync, mode changes via property panel wouldn't propagate to the layout gate
+
+### Container Resize on Drag-Drop
+All three container modes respond to hierarchy changes via `updateContainer({ reason: 'hierarchy-changed' })`:
+- **Layout**: Full layout recalculation — positions children, resizes container on non-fill axes
+- **Hug**: Resize to fit all children with padding
+- **Manual**: One-shot expand-to-fit — grows container if children extend beyond bounds, never shrinks
 
 ## Message Formats
 
@@ -107,26 +119,30 @@ ObjectTree rebuilds tree
 
 ## Drop Zone Architecture
 
-Each item calculates its own drop zone based on cursor Y position within its bounds. The visual indicator is an **inset box-shadow** on the hovered item's wrapper div (immune to overflow clipping from parent containers).
+Each item calculates its own drop zone based on cursor Y position within its bounds. The visual indicator is an **absolutely positioned div** (`bg-blue-500`, `z-10`, `pointer-events-none`) inside the item's `relative` wrapper.
 
 ```
 ┌─────────────────────┐
-│▓▓ blue inset top ▓▓▓│  ← cursor in top half → "before" indicator
+│▓▓ blue line top ▓▓▓▓│  ← cursor in top half → "before" indicator
 │   List Item 1       │
-│▓▓ blue inset bot ▓▓▓│  ← cursor in bottom half → "after" indicator
+│▓▓ blue line bot ▓▓▓▓│  ← cursor in bottom half → "after" indicator
 └─────────────────────┘
 ```
 
+**Indicator normalization**: To prevent duplicate lines at the boundary between two items, "before item N" (N>0) is normalized to "after item N-1". Only the first item can show a "before" indicator.
+
+**Depth-aware indentation**: The indicator line's left edge is set to `depth * 16 + 8` px — matching the content indentation of items at that hierarchy level. This visually communicates which parent level the drop target belongs to (e.g., root items start at 8px, first-level children at 24px).
+
 **Regular objects** — two-zone:
-- Top 50% → `position: 'before'` (inset shadow at top edge)
-- Bottom 50% → `position: 'after'` (inset shadow at bottom edge)
+- Top 50% → `position: 'before'`
+- Bottom 50% → `position: 'after'`
 
 **Containers** — three-zone:
 - Top 25% → `position: 'before'`
 - Middle 50% → `position: 'into'` (container highlight, no line indicator)
 - Bottom 25% → `position: 'after'`
 
-**Why inset box-shadow?** The ObjectTree sits inside `overflow-hidden` (left-panel tab content) and `overflow-y-auto` (tree scroller). Regular outset box-shadows are clipped by these overflow containers. Inset shadows render inside the element and cannot be clipped.
+**Why absolute divs?** Previous approaches (outset box-shadow, inset box-shadow) failed due to overflow clipping by `overflow-hidden`/`overflow-y-auto` ancestors and CSS paint order issues where child backgrounds covered parent shadows. Absolute divs with `z-10` are immune to both problems.
 
 ## Validation Rules
 

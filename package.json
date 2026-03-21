@@ -12,14 +12,21 @@
     "preview": "npm run build && npm start",
     "setup": "npm install && cd svelte-ui && npm install",
     "clean": "rm -rf svelte-ui/.svelte-kit svelte-ui/build node_modules svelte-ui/node_modules",
-    "health-check": "node scripts/health-check.js"
+    "health-check": "node scripts/health-check.js",
+    "lint": "eslint application/ core/ scene/ layout/ interaction/ integration/",
+    "lint:fix": "eslint --fix application/ core/ scene/ layout/ interaction/ integration/",
+    "format": "prettier --write 'application/**/*.js' 'core/**/*.js' 'scene/**/*.js' 'layout/**/*.js' 'interaction/**/*.js' 'integration/**/*.js'",
+    "format:check": "prettier --check 'application/**/*.js' 'core/**/*.js' 'scene/**/*.js' 'layout/**/*.js' 'interaction/**/*.js' 'integration/**/*.js'"
   },
   "engines": {
     "node": ">=16.0.0"
   },
   "devDependencies": {
     "concurrently": "^8.2.2",
+    "eslint": "^10.0.3",
+    "globals": "^17.4.0",
     "http-server": "^14.1.1",
+    "prettier": "^3.8.1",
     "vite": "^8.0.1"
   },
   "keywords": [

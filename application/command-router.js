@@ -546,10 +546,8 @@ class CommandRouter {
             );
         }
 
-        const mode = this.objectStateManager?.getContainerMode(parentId);
-        if (mode === 'layout' || mode === 'hug') {
-            this.sceneController.updateLayout(parentId);
-        }
+        // UNIFIED: Let updateContainer() handle mode routing (layout/hug/manual)
+        this.sceneController.updateContainer(parentId, { reason: 'hierarchy-changed' });
     }
 
     // Move child to specific index
@@ -600,14 +598,14 @@ class CommandRouter {
             return;
         }
 
-        // Step 1: Move to new parent
+        // Step 1: Move to new parent (suppress layout — Step 2 will trigger it)
         if (targetParentId) {
-            this.sceneController.moveObjectToContainer(objectId, targetParentId);
+            this.sceneController.setParentContainer(objectId, targetParentId, false);
         } else {
-            this.sceneController.moveObjectToRoot(objectId);
+            this.sceneController.setParentContainer(objectId, null, false);
         }
 
-        // Step 2: Reorder within new parent (immediate, no setTimeout needed)
+        // Step 2: Reorder within new parent → triggers layout once
         if (targetId && position) {
             this.reorderChildByPosition(objectId, targetId, position, targetParentId);
         }

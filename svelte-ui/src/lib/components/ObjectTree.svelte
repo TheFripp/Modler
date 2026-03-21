@@ -315,17 +315,17 @@
 	// Container highlight during drag — derived from active drop zone
 	$: dragOverContainerId = (draggedObject && activeDropZone) ? activeDropZone.containerId : null;
 
-	// Drop indicator — inset box-shadow on the hovered item (immune to overflow clipping)
-	function dropIndicatorStyle(index: number, parentId: number | null): string {
-		if (!activeDropZone || !draggedObject) return '';
-		if (activeDropZone.parentId !== parentId) return '';
-		if (activeDropZone.targetIndex !== index) return '';
-		if (activeDropZone.position === 'before')
-			return 'box-shadow: inset 0 2px 0 0 rgb(59,130,246);';
-		if (activeDropZone.position === 'after')
-			return 'box-shadow: inset 0 -2px 0 0 rgb(59,130,246);';
-		return '';
-	}
+	// Drop indicator — reactive, normalized to avoid duplicate lines between items.
+	// "before item N" (N>0) becomes "after item N-1" so only one line shows per gap.
+	$: dropIndicator = (() => {
+		if (!activeDropZone || !draggedObject || activeDropZone.position === 'into') return null;
+		let { parentId, targetIndex, position } = activeDropZone;
+		if (position === 'before' && targetIndex > 0) {
+			targetIndex = targetIndex - 1;
+			position = 'after';
+		}
+		return { parentId, targetIndex, position };
+	})();
 </script>
 
 {#snippet TreeItem(object, depth = 0, index = 0, parentId = null, siblingCount = 0)}
@@ -333,13 +333,21 @@
 		class="relative"
 		class:opacity-0={!isLoaded}
 		class:translate-y-[-10px]={!isLoaded}
-		style="transition: opacity 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) {index * 30}ms, transform 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) {index * 30}ms; {dropIndicatorStyle(index, parentId)}"
+		style="transition: opacity 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) {index * 30}ms, transform 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) {index * 30}ms;"
 		draggable="true"
 		ondragstart={(e) => handleDragStart(e, object)}
 		ondragend={handleDragEnd}
 		ondragover={(e) => handleDragOver(e, index, parentId, object)}
 		ondrop={handleDrop}
 	>
+		<!-- Drop indicator lines — absolute within this relative wrapper -->
+		{#if dropIndicator && dropIndicator.parentId === parentId && dropIndicator.targetIndex === index}
+			{#if dropIndicator.position === 'before'}
+				<div class="absolute top-0 right-1 h-0.5 bg-blue-500 rounded-full pointer-events-none z-10" style="left: {depth * 16 + 8}px"></div>
+			{:else if dropIndicator.position === 'after'}
+				<div class="absolute bottom-0 right-1 h-0.5 bg-blue-500 rounded-full pointer-events-none z-10" style="left: {depth * 16 + 8}px"></div>
+			{/if}
+		{/if}
 
 		{#if editingObjectId === object.id}
 			<!-- Rename input mode -->

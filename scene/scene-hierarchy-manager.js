@@ -224,7 +224,7 @@ class SceneHierarchyManager {
         mesh.updateMatrixWorld(true);
 
         // Trigger layout updates if requested and callbacks provided
-        if (shouldUpdateLayout && callbacks.updateLayout && callbacks.updateHugContainerSize) {
+        if (shouldUpdateLayout && callbacks.updateContainer) {
             if (parentId) {
                 this._triggerContainerLayoutUpdate(parentId, callbacks);
             }
@@ -388,12 +388,9 @@ class SceneHierarchyManager {
         const container = this.objects.get(containerId);
         if (!container) return;
 
-        // UNIFIED: Single callback — no mode routing here
+        // UNIFIED: Single callback with hierarchy context (enables manual expand-to-fit)
         if (callbacks.updateContainer) {
-            callbacks.updateContainer(containerId);
-        } else if (callbacks.updateLayout) {
-            // Backward compat fallback
-            callbacks.updateLayout(containerId);
+            callbacks.updateContainer(containerId, { reason: 'hierarchy-changed' });
         }
     }
 }

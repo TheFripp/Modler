@@ -704,10 +704,7 @@ class SceneController {
         // Build callbacks object for layout updates
         // UNIFIED: Single callback — SceneLayoutManager handles mode routing
         const callbacks = {
-            updateContainer: (containerId) => this.updateContainer(containerId),
-            // Backward-compatible shims (SceneHierarchyManager may still reference these)
-            updateLayout: (containerId) => this.updateContainer(containerId),
-            updateHugContainerSize: (containerId) => this.updateContainer(containerId)
+            updateContainer: (containerId, context) => this.updateContainer(containerId, context)
         };
 
         return manager.setParentContainer(objectId, parentId, callbacks, updateLayout, options);

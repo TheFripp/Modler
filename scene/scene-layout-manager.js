@@ -102,7 +102,7 @@ class SceneLayoutManager {
             case 'hug':
                 return this._updateHugContainer(container, context);
             case 'manual':
-                return { success: false, reason: 'manual mode' };
+                return this._updateManualContainer(container, context);
             default:
                 return { success: false, reason: `unknown mode: ${mode}` };
         }
@@ -232,6 +232,60 @@ class SceneLayoutManager {
         containerCrudManager.handleContainerVisibilityAfterResize(container, true);
 
         return { success: true };
+    }
+
+    // ====== MANUAL MODE ======
+
+    /**
+     * Update a manual-mode container: expand to fit children on hierarchy changes.
+     * One-shot expand only (never shrinks, never recenters). Only acts on hierarchy
+     * changes (child added/moved), not on every child dimension change.
+     * @private
+     */
+    _updateManualContainer(container, context) {
+        if (context.reason !== 'hierarchy-changed') {
+            return { success: false, reason: 'manual mode - no hierarchy change' };
+        }
+
+        const children = this.sceneController.getChildObjects(container.id);
+        if (children.length === 0) {
+            return { success: true, reason: 'no children' };
+        }
+
+        const childMeshes = this.getChildMeshesForBounds(children);
+        if (childMeshes.length === 0) {
+            return { success: false, reason: 'no valid child meshes' };
+        }
+
+        // Calculate bounds of all children in container-local space (no padding for manual)
+        const bounds = window.LayoutEngine.calculateHugBounds(childMeshes, {});
+        if (!bounds) {
+            return { success: false, reason: 'bounds calculation failed' };
+        }
+
+        // Container is centered at origin in local space: extends -size/2 to +size/2.
+        // Required half-extent = max distance from origin to any child edge.
+        const currentSize = this.getContainerSize(container);
+        const neededHalfX = Math.max(Math.abs(bounds.min.x), Math.abs(bounds.max.x));
+        const neededHalfY = Math.max(Math.abs(bounds.min.y), Math.abs(bounds.max.y));
+        const neededHalfZ = Math.max(Math.abs(bounds.min.z), Math.abs(bounds.max.z));
+
+        // Expand only — never shrink below current size
+        const expandedSize = new THREE.Vector3(
+            Math.max(currentSize.x, neededHalfX * 2),
+            Math.max(currentSize.y, neededHalfY * 2),
+            Math.max(currentSize.z, neededHalfZ * 2)
+        );
+
+        const grew = expandedSize.x > currentSize.x + 0.001 ||
+                      expandedSize.y > currentSize.y + 0.001 ||
+                      expandedSize.z > currentSize.z + 0.001;
+
+        if (grew) {
+            this._applyContainerResize(container, expandedSize);
+        }
+
+        return { success: true, expanded: grew };
     }
 
     // ====== calculatedGap PERSISTENCE (THE single location) ======
