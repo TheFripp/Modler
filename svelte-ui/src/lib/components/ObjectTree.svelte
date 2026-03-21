@@ -315,15 +315,15 @@
 	// Container highlight during drag — derived from active drop zone
 	$: dragOverContainerId = (draggedObject && activeDropZone) ? activeDropZone.containerId : null;
 
-	// Drop indicator — box-shadow on the hovered item (no separate divs needed)
+	// Drop indicator — inset box-shadow on the hovered item (immune to overflow clipping)
 	function dropIndicatorStyle(index: number, parentId: number | null): string {
 		if (!activeDropZone || !draggedObject) return '';
 		if (activeDropZone.parentId !== parentId) return '';
 		if (activeDropZone.targetIndex !== index) return '';
 		if (activeDropZone.position === 'before')
-			return 'box-shadow: 0 -2px 0 0 rgb(59,130,246); z-index: 1;';
+			return 'box-shadow: inset 0 2px 0 0 rgb(59,130,246);';
 		if (activeDropZone.position === 'after')
-			return 'box-shadow: 0 2px 0 0 rgb(59,130,246); z-index: 1;';
+			return 'box-shadow: inset 0 -2px 0 0 rgb(59,130,246);';
 		return '';
 	}
 </script>

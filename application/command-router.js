@@ -513,27 +513,10 @@ class CommandRouter {
         // Insert at new position
         currentOrder.splice(newIndex, 0, objectId);
 
-        // Update childrenOrder directly on SceneController (single source of truth)
+        // childrenOrder is SceneController-owned — write directly, then notify UI
         if (parentId) {
-            const container = this.sceneController.getObject(parentId);
-            if (container) {
-                container.childrenOrder = currentOrder;
-                // Emit hierarchy event for UI sync
-                if (window.objectEventBus) {
-                    window.objectEventBus.emit(
-                        window.objectEventBus.EVENT_TYPES.HIERARCHY,
-                        parentId,
-                        { type: 'children-reordered', childrenOrder: currentOrder },
-                        { source: 'CommandRouter.reorderChildByPosition' }
-                    );
-                }
-                // Trigger layout recalculation if container has auto-layout
-                if (container.autoLayout?.enabled) {
-                    this.sceneController.updateLayout(parentId);
-                }
-            }
+            this.applyChildrenOrder(parentId, currentOrder);
         } else {
-            // Root level order
             this.sceneController.setRootOrder(currentOrder);
         }
     }
@@ -541,23 +524,31 @@ class CommandRouter {
     // Update children order array
     updateChildrenOrder(parentId, childrenOrder) {
         if (parentId) {
-            const container = this.sceneController.getObject(parentId);
-            if (container) {
-                container.childrenOrder = childrenOrder;
-                if (window.objectEventBus) {
-                    window.objectEventBus.emit(
-                        window.objectEventBus.EVENT_TYPES.HIERARCHY,
-                        parentId,
-                        { type: 'children-reordered', childrenOrder: childrenOrder },
-                        { source: 'CommandRouter.updateChildrenOrder' }
-                    );
-                }
-                if (container.autoLayout?.enabled) {
-                    this.sceneController.updateLayout(parentId);
-                }
-            }
+            this.applyChildrenOrder(parentId, childrenOrder);
         } else {
             this.sceneController.setRootOrder(childrenOrder);
+        }
+    }
+
+    // Shared: write childrenOrder to SceneController, emit event, trigger layout if needed
+    applyChildrenOrder(parentId, childrenOrder) {
+        const container = this.sceneController.getObject(parentId);
+        if (!container) return;
+
+        container.childrenOrder = childrenOrder;
+
+        if (window.objectEventBus) {
+            window.objectEventBus.emit(
+                window.objectEventBus.EVENT_TYPES.HIERARCHY,
+                parentId,
+                { type: 'children-reordered', childrenOrder },
+                { source: 'CommandRouter.applyChildrenOrder' }
+            );
+        }
+
+        const mode = this.objectStateManager?.getContainerMode(parentId);
+        if (mode === 'layout' || mode === 'hug') {
+            this.sceneController.updateLayout(parentId);
         }
     }
 

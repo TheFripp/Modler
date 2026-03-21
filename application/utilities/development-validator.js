@@ -413,7 +413,7 @@ class DevelopmentValidator {
 
         // Check if PostMessage is being called directly (not through PropertyPanelSync)
         const isFromPropertyPanelSync = stack.includes('PropertyPanelSync');
-        const isFromMainIntegration = stack.includes('main-integration') || stack.includes('updateUISystems');
+        const isFromMainIntegration = stack.includes('main-integration') || stack.includes('refreshSelectionUI');
         const isFromPanelCommunication = stack.includes('PanelCommunication');
         const isWhitelisted = isFromPropertyPanelSync || isFromMainIntegration || isFromPanelCommunication;
 

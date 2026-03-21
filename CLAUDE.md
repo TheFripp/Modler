@@ -55,7 +55,7 @@ CAD software for creative hobbyists. Rule-based parametric design with intellige
 ### Container Mode System
 - **`containerMode`**: Single canonical property on every container: `'manual' | 'layout' | 'hug'`
 - **`ObjectStateManager.buildContainerModeUpdate(mode)`**: Static helper that returns update object keeping legacy flags (`isHug`, `sizingMode`) in sync
-- **`getContainerMode(id)`**: Reads `containerMode` first, falls back to legacy flags for old saved data
+- **`getContainerMode(id)`**: Reads `containerMode` first, falls back to legacy flags for old saved data. **Always use this** (or `isLayoutMode(id)`, `isHugMode(id)`) — never check `autoLayout?.enabled` or other legacy flags directly
 - **Legacy flags** (`isHug`, `sizingMode`, `layoutMode`): Still present for backward compat, kept in sync on writes. Do NOT set them directly — use `buildContainerModeUpdate()`
 - **Why**: Replaced 5 overlapping flags with one enum. Eliminates mutual-exclusivity bugs and priority-chain confusion.
 
@@ -168,6 +168,7 @@ CAD software for creative hobbyists. Rule-based parametric design with intellige
 - Bypass ObjectStateManager for state changes
 - Call specialized managers directly (SceneHierarchyManager, SceneLayoutManager, SceneLifecycleManager, LayoutPropagationManager)
 - Set `isHug`, `sizingMode`, or `layoutMode` directly — use `ObjectStateManager.buildContainerModeUpdate(mode)` instead
+- Check `autoLayout?.enabled` or legacy flags for mode detection — use `getContainerMode(id)` / `isLayoutMode(id)` / `isHugMode(id)`
 - Use visual transforms instead of CAD geometry
 - Call `window.postMessage` directly from Main (ObjectEventBus → SimpleCommunication is automatic)
 - Recreate support meshes (show/hide only)
