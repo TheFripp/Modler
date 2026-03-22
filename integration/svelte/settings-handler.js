@@ -188,6 +188,15 @@ class SettingsHandler {
         const unit = settings['unit.current'];
         if (unit) {
             unitConverter.setUserUnit(unit);
+
+            // Broadcast to all UI iframes via postMessage (CustomEvents don't cross iframe boundaries)
+            const simpleCommunication = window.simpleCommunication;
+            if (simpleCommunication) {
+                simpleCommunication.sendToAllIframes({
+                    type: 'unit-changed',
+                    data: { unit }
+                });
+            }
         }
     }
 
@@ -200,8 +209,13 @@ class SettingsHandler {
             currentUnit: unitConverter ? unitConverter.userUnit : 'm'
         };
 
-        if (this.panelCommunication) {
-            this.panelCommunication.sendSettingsResponse('unit-settings', currentSettings);
+        // Broadcast to ALL iframes (not just left panel) so property panel gets initial unit
+        const simpleCommunication = window.simpleCommunication;
+        if (simpleCommunication) {
+            simpleCommunication.sendToAllIframes({
+                type: 'unit-settings-response',
+                settings: currentSettings
+            });
         }
     }
 
