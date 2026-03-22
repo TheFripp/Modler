@@ -53,50 +53,24 @@ class PropertyController {
 
 	constructor() {
 		this.setupConstraints();
-
-		// Initialize format converter integration
-		this.formatConverter = null;
-		this.initializeFormatConverter();
-	}
-
-	private formatConverter: any;
-
-	private initializeFormatConverter() {
-		// Access format converter from global scope (browser only)
-		if (typeof window !== 'undefined') {
-			// First try local window
-			this.formatConverter = (window as any).propertyFormatConverter || null;
-
-			// If not found and we're in an iframe, try parent window
-			if (!this.formatConverter && window !== window.parent) {
-				try {
-					this.formatConverter = (window.parent as any).propertyFormatConverter || null;
-				} catch (error) {
-					// Cross-origin access blocked, continue with local fallback
-				}
-			}
-
-			if (!this.formatConverter) {
-				// PropertyFormatConverter not available - using basic validation only (logging removed to reduce console noise)
-			}
-		}
 	}
 
 	private setupConstraints() {
-		// Position constraints
-		this.constraints.set('position.x', { step: 0.1 });
-		this.constraints.set('position.y', { step: 0.1 });
-		this.constraints.set('position.z', { step: 0.1 });
+		// Position constraints (no step — UI handles stepping via getUnitStep)
+		this.constraints.set('position.x', {});
+		this.constraints.set('position.y', {});
+		this.constraints.set('position.z', {});
 
-		// Rotation constraints - no min/max limits to allow continuous multi-rotation
-		this.constraints.set('rotation.x', { step: 1 });
-		this.constraints.set('rotation.y', { step: 1 });
-		this.constraints.set('rotation.z', { step: 1 });
+		// Rotation constraints - 1 degree step in radians, no min/max for continuous rotation
+		const degreeInRadians = Math.PI / 180;
+		this.constraints.set('rotation.x', { step: degreeInRadians });
+		this.constraints.set('rotation.y', { step: degreeInRadians });
+		this.constraints.set('rotation.z', { step: degreeInRadians });
 
-		// Dimension constraints
-		this.constraints.set('dimensions.x', { step: 0.1, min: 0.1 });
-		this.constraints.set('dimensions.y', { step: 0.1, min: 0.1 });
-		this.constraints.set('dimensions.z', { step: 0.1, min: 0.1 });
+		// Dimension constraints (no step — UI handles stepping; min 0.001m = 1mm)
+		this.constraints.set('dimensions.x', { min: 0.001 });
+		this.constraints.set('dimensions.y', { min: 0.001 });
+		this.constraints.set('dimensions.z', { min: 0.001 });
 
 		// Material constraints
 		this.constraints.set('material.color', { type: 'color' });
@@ -122,12 +96,12 @@ class PropertyController {
 			type: 'string',
 			allowedValues: ['x', 'y', 'z']
 		});
-		this.constraints.set('autoLayout.gap', { step: 0.1, min: 0 });
+		this.constraints.set('autoLayout.gap', { min: 0 });
 
-		// Padding constraints (inset padding on width/height/depth axes)
-		this.constraints.set('autoLayout.padding.width', { step: 0.1, min: 0 });
-		this.constraints.set('autoLayout.padding.height', { step: 0.1, min: 0 });
-		this.constraints.set('autoLayout.padding.depth', { step: 0.1, min: 0 });
+		// Padding constraints (no step — UI handles stepping via getUnitStep)
+		this.constraints.set('autoLayout.padding.width', { min: 0 });
+		this.constraints.set('autoLayout.padding.height', { min: 0 });
+		this.constraints.set('autoLayout.padding.depth', { min: 0 });
 
 		// Tile mode constraints
 		this.constraints.set('autoLayout.tileMode.repeat', { step: 1, min: 2, max: 20 });
@@ -158,18 +132,9 @@ class PropertyController {
 	}
 
 	/**
-	 * Validate a property value against constraints with PropertyFormatConverter integration
+	 * Validate a property value against constraints (min/max/step/type)
 	 */
 	private validateValue(property: PropertyPath, value: any, skipStepRounding: boolean = false): { valid: boolean; value: any; error?: string } {
-		// First, use PropertyFormatConverter for type conversion and basic validation
-		if (this.formatConverter) {
-			const formatResult = this.formatConverter.convertToInternal(property, value);
-			if (!formatResult.isValid) {
-				return { valid: false, value: formatResult.value, error: formatResult.error };
-			}
-			value = formatResult.value; // Use converted value for further validation
-		}
-
 		const constraints = this.constraints.get(property);
 		if (!constraints) return { valid: true, value };
 
