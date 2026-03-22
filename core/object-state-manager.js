@@ -660,6 +660,20 @@ class ObjectStateManager {
         if (syncFunction && typeof syncFunction === 'function') {
             syncFunction(serializedSelection);
         }
+
+        // Iframe postMessage fallback (needed for cross-origin iframe mode during drag)
+        // The selectionChanged() check in the Svelte store prevents duplicate updates
+        const simpleCommunication = window.simpleCommunication;
+        if (simpleCommunication) {
+            simpleCommunication.sendToAllIframes({
+                type: 'selection-changed',
+                data: {
+                    selectedObjectIds: serializedSelection.map(obj => obj.id),
+                    selectedObjects: serializedSelection,
+                    containerContext: null
+                }
+            });
+        }
     }
 
     /**

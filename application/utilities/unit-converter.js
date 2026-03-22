@@ -48,9 +48,9 @@ class UnitConverter {
             'cm': 1,    // 1.2 cm
             'm': 1,     // 1.2 m
             'km': 1,    // 1.2 km
-            'in': 3,    // 1.234 in
-            'ft': 3,    // 1.234 ft
-            'yd': 3,    // 1.234 yd
+            'in': 1,    // 1.2 in
+            'ft': 2,    // 1.23 ft
+            'yd': 2,    // 1.09 yd
             'mil': 0,   // 12 mil (whole numbers)
         };
 

@@ -34,13 +34,23 @@
 
 	let currentUnit = 'm';
 
-	const units = [
-		{ value: 'm', label: 'Meters (m)' },
-		{ value: 'cm', label: 'Centimeters (cm)' },
-		{ value: 'mm', label: 'Millimeters (mm)' },
-		{ value: 'in', label: 'Inches (in)' },
-		{ value: 'ft', label: 'Feet (ft)' }
-	];
+	const unitSystems = {
+		metric: [
+			{ value: 'm', label: 'Meters (m)' },
+			{ value: 'cm', label: 'Centimeters (cm)' },
+			{ value: 'mm', label: 'Millimeters (mm)' }
+		],
+		imperial: [
+			{ value: 'in', label: 'Inches (in)' },
+			{ value: 'ft', label: 'Feet (ft)' },
+			{ value: 'yd', label: 'Yards (yd)' }
+		]
+	};
+
+	const systemDefaults: Record<string, string> = { metric: 'm', imperial: 'in' };
+
+	$: unitSystem = ['in', 'ft', 'yd'].includes(currentUnit) ? 'imperial' : 'metric';
+	$: availableUnits = unitSystems[unitSystem as keyof typeof unitSystems];
 
 	function updateVisualSettings(category: 'object' | 'container', property: string, value: any) {
 		visualSettings[category][property] = value;
@@ -75,6 +85,11 @@
 		if (window.parent && window.parent !== window) {
 			window.parent.postMessage({ type: 'visual-settings-changed', settings: { 'visual.wireframe.lineWidth': value } }, '*');
 		}
+	}
+
+	function selectSystem(system: string) {
+		const defaultUnit = systemDefaults[system];
+		selectUnit(defaultUnit);
 	}
 
 	function selectUnit(unit: string) {
@@ -274,13 +289,25 @@
 			/>
 
 			<SectionHeader label="Units" align="left" class="pt-2" />
+			<!-- System toggle -->
+			<div class="flex h-8 rounded-md overflow-hidden border border-[#2E2E2E]/50">
+				<button
+					class="flex-1 text-xs transition-colors {unitSystem === 'metric' ? 'bg-[#3a3a3a] text-white' : 'bg-[#212121]/50 text-[#888]'}"
+					onclick={() => selectSystem('metric')}
+				>Metric</button>
+				<button
+					class="flex-1 text-xs transition-colors {unitSystem === 'imperial' ? 'bg-[#3a3a3a] text-white' : 'bg-[#212121]/50 text-[#888]'}"
+					onclick={() => selectSystem('imperial')}
+				>Imperial</button>
+			</div>
+			<!-- Unit selector within system -->
 			<select
 				bind:value={currentUnit}
 				onchange={() => selectUnit(currentUnit)}
 				class="w-full h-8 px-3 pr-8 bg-[#212121]/50 border border-[#2E2E2E]/50 rounded-md text-xs text-foreground focus:outline-none focus:border-[#6b7280] transition-colors appearance-none"
 				style="background-image: url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20width%3D%2210%22%20height%3D%225%22%20viewBox%3D%220%200%2010%205%22%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%3E%3Cpath%20fill%3D%22%23999%22%20d%3D%22M0%200l5%205%205-5z%22/%3E%3C/svg%3E'); background-repeat: no-repeat; background-position: right 0.75rem center; background-size: 8px 4px;"
 			>
-				{#each units as unit}
+				{#each availableUnits as unit}
 					<option value={unit.value}>{unit.label}</option>
 				{/each}
 			</select>

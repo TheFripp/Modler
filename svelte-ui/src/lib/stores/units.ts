@@ -21,9 +21,9 @@ const UNIT_PRECISION: Record<Unit, number> = {
 	mm: 0,   // integer — "25 mm"
 	cm: 1,   // "12.5 cm"
 	m: 1,    // "1.2 m"
-	in: 3,   // "1.234 in"
-	ft: 3,   // "1.234 ft"
-	yd: 3,   // "1.094 yd"
+	in: 1,   // "1.2 in"
+	ft: 2,   // "1.23 ft"
+	yd: 2,   // "1.09 yd"
 	mil: 0   // integer — "984 mil"
 };
 
