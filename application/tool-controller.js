@@ -108,10 +108,10 @@ class ToolController {
     }
 
     /**
-     * Get snap enabled state from InputController
+     * Get snap enabled state from SnapController
      */
     getSnapEnabled() {
-        return this.inputController?.snapEnabled || false;
+        return window.modlerComponents?.snapController?.getEnabled() || false;
     }
     
     /**

@@ -96,7 +96,14 @@ class SnapController {
     getEnabled() {
         return this.isEnabled;
     }
-    
+
+    /**
+     * Toggle snapping on/off. Called from CommandRouter via toolbar button.
+     */
+    toggle() {
+        this.setEnabled(!this.isEnabled);
+    }
+
     /**
      * Register snap behavior for a specific tool
      */
@@ -991,13 +998,18 @@ class SnapController {
     }
     
     /**
-     * Notify UI about snap state changes
+     * Notify UI about snap state changes via ObjectEventBus → SimpleCommunication → iframe
      */
     notifySnapStateChange() {
-        // Update snap button UI state
-        const snapButton = document.getElementById('snap-toggle');
-        if (snapButton) {
-            snapButton.classList.toggle('active', this.isEnabled);
+        if (window.objectEventBus) {
+            window.objectEventBus.emit(
+                window.objectEventBus.EVENT_TYPES.TOOL_STATE,
+                null,
+                {
+                    toolState: { snapEnabled: this.isEnabled }
+                },
+                { source: 'snap-controller', immediate: true }
+            );
         }
     }
     
