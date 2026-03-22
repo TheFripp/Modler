@@ -121,7 +121,7 @@ class SnapController {
      * Update snap detection based on current mouse position and active tool
      * Now with performance optimization - only run when needed
      */
-    updateSnapDetection(activeToolName, selectedObjects = [], travelAxis = null, geometricConstraints = null) {
+    updateSnapDetection(activeToolName, selectedObjects = [], travelAxis = null, geometricConstraints = null, sourceWorldPos = null) {
         // Early return if snapping disabled - CRITICAL for performance
         if (!this.isEnabled) {
             this.clearCurrentSnapPoint();
@@ -173,7 +173,7 @@ class SnapController {
 
 
         // Find closest snap point within threshold
-        const snapPoint = this.findClosestSnapPoint(mouseNDC, toolBehavior.snapPointTypes, selectedObjects, travelAxis, geometricConstraints);
+        const snapPoint = this.findClosestSnapPoint(mouseNDC, toolBehavior.snapPointTypes, selectedObjects, travelAxis, geometricConstraints, sourceWorldPos);
 
         // Only log when we actually find snap points
         if (snapPoint) {
@@ -188,8 +188,12 @@ class SnapController {
     /**
      * Find the closest snap point to the mouse cursor with optional travel axis filtering
      */
-    findClosestSnapPoint(mouseNDC, allowedTypes, selectedObjects, travelAxis = null, geometricConstraints = null) {
-        const mousePixel = this.ndcToPixel(mouseNDC);
+    findClosestSnapPoint(mouseNDC, allowedTypes, selectedObjects, travelAxis = null, geometricConstraints = null, sourceWorldPos = null) {
+        // Use dragged anchor's screen position when provided (anchor-to-anchor snap),
+        // otherwise fall back to mouse cursor position
+        const referencePixel = sourceWorldPos
+            ? this.worldToPixel(sourceWorldPos)
+            : this.ndcToPixel(mouseNDC);
         let closestSnapPoint = null;
         let closestDistance = this.snapThreshold;
         
@@ -202,7 +206,7 @@ class SnapController {
                 const corners = this.getVisibleObjectCorners(object);
 
                 for (const corner of corners) {
-                    const distance = this.getScreenDistance(corner.screenPos, mousePixel);
+                    const distance = this.getScreenDistance(corner.screenPos, referencePixel);
 
                     // Give corners priority by reducing their effective distance
                     const adjustedDistance = distance * 0.7; // 30% distance advantage over edges
@@ -234,7 +238,7 @@ class SnapController {
                     const startScreen = this.worldToPixel(edge.start);
                     const endScreen = this.worldToPixel(edge.end);
 
-                    const distance = this.getDistanceToLineSegment(mousePixel, startScreen, endScreen);
+                    const distance = this.getDistanceToLineSegment(referencePixel, startScreen, endScreen);
 
                     if (distance < closestDistance) {
                         const candidateSnapPoint = {
@@ -312,27 +316,30 @@ class SnapController {
      * Get objects that should be checked for snap points
      */
     getObjectsForSnapping(selectedObjects) {
-        // Check all scene objects except selected ones, ALL containers, and floor
         const objectsToCheck = [];
+        const sceneController = window.modlerComponents?.sceneController;
+        if (!sceneController) return objectsToCheck;
 
-        this.scene.traverse((child) => {
-            if (child.isMesh && child.geometry && child.visible) {
-                // Check if it's a floor object
-                const isFloor = this.isFloorObject(child);
-                const isSelected = selectedObjects.includes(child);
-                const isContainerRelated = this.isContainerRelatedMesh(child);
+        // Whitelist approach: only include registered CAD objects
+        // This inherently excludes support meshes, gizmos, grid lines, floor plane
+        for (const [id, objectData] of sceneController.objects) {
+            const mesh = objectData.mesh;
+            if (!mesh || !mesh.visible) continue;
 
-                if (isFloor) {
-                    // Floor object excluded from snapping
-                } else if (isSelected) {
-                    // Selected/manipulated object excluded from snapping to prevent self-snapping
-                } else if (isContainerRelated) {
-                    // ALL container-related meshes excluded from snapping
-                } else {
-                    objectsToCheck.push(child);
-                }
+            // Skip floor/grid objects
+            if (objectData.type === 'grid' || objectData.category === 'system') continue;
+
+            // Skip selected objects (prevent self-snapping)
+            if (selectedObjects.includes(mesh)) continue;
+
+            // Skip containers
+            if (objectData.isContainer) continue;
+
+            if (mesh.isMesh && mesh.geometry) {
+                objectsToCheck.push(mesh);
             }
-        });
+        }
+
         return objectsToCheck;
     }
 
