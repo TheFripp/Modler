@@ -34,7 +34,7 @@ class RotationTool extends BaseTool {
     }
 
     // --- Constants ---
-    static SENSITIVITY = 180; // degrees per full screen width
+    static SENSITIVITY = 360; // degrees per full screen width
     static SHIFT_SNAP = 15;   // degrees
 
     // --- Hover ---
@@ -49,24 +49,47 @@ class RotationTool extends BaseTool {
         // Alt key measurement mode
         if (isAltPressed && this.handleMeasurementMode(isAltPressed, hit)) return;
 
+        // Screen-space anchor detection on selected object (BEFORE face detection)
+        // Works even when cursor is in empty space near a corner — same pipeline as move tool
+        let screenAnchor = null;
+        const selectedObjects = this.selectionController.getSelectedObjects();
+        if (selectedObjects.length === 1 && this.toolGizmoManager && this.inputController) {
+            screenAnchor = this.toolGizmoManager.findNearestAnchorPoint(
+                selectedObjects[0], this.inputController.mouse, this.inputController.canvas,
+                { threshold: 20 }
+            );
+        }
+
         // Face detection and highlight
         const detected = this.faceToolBehavior.handleFaceDetection(hit);
+
         if (detected) {
             const hoverState = this.faceToolBehavior.getHoverState();
             if (hoverState.hit) {
                 const worldNormal = this.faceToolBehavior.getWorldFaceNormal(hoverState.hit);
                 const gizmoRadius = this.getGizmoRadius(hoverState.object);
-                const anchor = this.findNearestAnchor(hoverState.object, worldNormal, hoverState.hit.point);
-                const gizmoPos = anchor || hoverState.hit.point;
+
+                // Face-constrained anchor with edge midpoints (centralized pipeline)
+                const faceAnchor = this.toolGizmoManager?.findNearestAnchorPoint(
+                    hoverState.object, this.inputController.mouse, this.inputController.canvas,
+                    { threshold: 20, includeEdgeMidpoints: true, faceNormal: worldNormal }
+                );
+
+                // Prefer face anchor > screen anchor > hit point
+                const anchor = faceAnchor || screenAnchor;
+                const gizmoPos = anchor ? anchor.worldPos : hoverState.hit.point;
                 this.toolGizmoManager?.showRotationArc(gizmoPos, worldNormal, gizmoRadius);
 
-                // Show circle at anchor point (same indicator as move tool corners)
-                if (anchor && this.toolGizmoManager) {
-                    this.toolGizmoManager.showAnchorPoint(anchor);
+                if (anchor) {
+                    this.toolGizmoManager?.showAnchorPoint(anchor.worldPos);
                 } else {
                     this.toolGizmoManager?.hide('circle');
                 }
             }
+        } else if (screenAnchor) {
+            // Off-face but near a corner: show anchor circle only
+            this.toolGizmoManager?.showAnchorPoint(screenAnchor.worldPos);
+            this.toolGizmoManager?.hide('rotation-arc');
         } else {
             this.toolGizmoManager?.hide('rotation-arc');
             this.toolGizmoManager?.hide('circle');
@@ -137,9 +160,12 @@ class RotationTool extends BaseTool {
         // Store starting position
         this.startPosition = targetObject.position.clone();
 
-        // Find pivot (anchor point)
-        this.pivotPoint = this.findNearestAnchor(targetObject, worldNormal, hoverState.hit.point)
-            || hoverState.hit.point.clone();
+        // Find pivot (anchor point) via centralized pipeline
+        const anchorResult = this.toolGizmoManager?.findNearestAnchorPoint(
+            targetObject, this.inputController?.mouse, this.inputController?.canvas,
+            { threshold: 20, includeEdgeMidpoints: true, faceNormal: worldNormal }
+        );
+        this.pivotPoint = anchorResult ? anchorResult.worldPos.clone() : hoverState.hit.point.clone();
 
         this.currentAngle = 0;
         this.lastMouseX = this.inputController?.mouse?.x ?? 0;
@@ -321,87 +347,6 @@ class RotationTool extends BaseTool {
         if (ax >= ay && ax >= az) return 'x';
         if (ay >= ax && ay >= az) return 'y';
         return 'z';
-    }
-
-    /**
-     * Find the nearest anchor point (corner or edge midpoint) on the hovered face.
-     * Projects candidates to screen space and picks the closest to the mouse.
-     * @param {THREE.Object3D} object - The mesh being hovered
-     * @param {THREE.Vector3} faceNormal - World-space face normal
-     * @param {THREE.Vector3} hitPoint - World-space hit point
-     * @returns {THREE.Vector3|null} World-space anchor point, or null
-     */
-    findNearestAnchor(object, faceNormal, hitPoint) {
-        if (!object) return null;
-
-        // For containers, use the interactive mesh (BoxGeometry) for reliable bbox
-        const geomSource = object.userData?.supportMeshes?.interactiveMesh || object;
-        if (!geomSource.geometry) return null;
-
-        geomSource.geometry.computeBoundingBox();
-        const bbox = geomSource.geometry.boundingBox;
-        if (!bbox) return null;
-
-        const min = bbox.min;
-        const max = bbox.max;
-        const axis = this.getDominantAxis(faceNormal);
-
-        // Determine which side of the axis the face is on
-        const sign = Math.sign(faceNormal[axis]);
-        const faceValue = sign > 0 ? max[axis] : min[axis];
-
-        // Build the 4 corners + 4 edge midpoints on this face (in local space)
-        const candidates = [];
-        const axes = ['x', 'y', 'z'].filter(a => a !== axis);
-        const a0 = axes[0], a1 = axes[1];
-
-        // 4 corners
-        const corners = [
-            [min[a0], min[a1]],
-            [max[a0], min[a1]],
-            [min[a0], max[a1]],
-            [max[a0], max[a1]]
-        ];
-        for (const [v0, v1] of corners) {
-            const pt = new THREE.Vector3();
-            pt[axis] = faceValue;
-            pt[a0] = v0;
-            pt[a1] = v1;
-            candidates.push(pt);
-        }
-
-        // 4 edge midpoints
-        const mid0 = (min[a0] + max[a0]) / 2;
-        const mid1 = (min[a1] + max[a1]) / 2;
-        const edgeMids = [
-            [mid0, min[a1]],
-            [mid0, max[a1]],
-            [min[a0], mid1],
-            [max[a0], mid1]
-        ];
-        for (const [v0, v1] of edgeMids) {
-            const pt = new THREE.Vector3();
-            pt[axis] = faceValue;
-            pt[a0] = v0;
-            pt[a1] = v1;
-            candidates.push(pt);
-        }
-
-        // Transform candidates to world space (use same object that provided the bbox)
-        const worldCandidates = candidates.map(pt => pt.applyMatrix4(geomSource.matrixWorld));
-
-        // Find closest to hit point (simple 3D distance — works well since we're on the same face)
-        let bestDist = Infinity;
-        let bestPoint = null;
-        for (const wpt of worldCandidates) {
-            const dist = wpt.distanceTo(hitPoint);
-            if (dist < bestDist) {
-                bestDist = dist;
-                bestPoint = wpt;
-            }
-        }
-
-        return bestPoint;
     }
 
     // --- Lifecycle ---

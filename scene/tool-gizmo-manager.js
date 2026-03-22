@@ -81,15 +81,17 @@ class ToolGizmoManager {
         const group = new THREE.Group();
         group.visible = false;
 
-        // Circle as line segments in XY plane, unit radius
+        // Circle as line segments in XY plane, radius 0.3
+        // Radius baked into geometry so group scales at same factor as other gizmos
         const segments = 32;
+        const r = 0.3;
         const positions = [];
         for (let i = 0; i < segments; i++) {
             const a0 = (i / segments) * Math.PI * 2;
             const a1 = ((i + 1) / segments) * Math.PI * 2;
             positions.push(
-                Math.cos(a0), Math.sin(a0), 0,
-                Math.cos(a1), Math.sin(a1), 0
+                Math.cos(a0) * r, Math.sin(a0) * r, 0,
+                Math.cos(a1) * r, Math.sin(a1) * r, 0
             );
         }
 
@@ -112,26 +114,50 @@ class ToolGizmoManager {
         const group = new THREE.Group();
         group.visible = false;
 
-        // Ring — 64 line segments forming a circle, unit radius
-        const segments = 64;
-        const ringPositions = [];
+        // Arc — ~300° from 30° to 330°, gap at top indicates rotation direction
+        const segments = 54;
+        const startAngle = (30 * Math.PI) / 180;
+        const endAngle = (330 * Math.PI) / 180;
+        const arcSpan = endAngle - startAngle;
+
+        const arcPositions = [];
         for (let i = 0; i < segments; i++) {
-            const a0 = (i / segments) * Math.PI * 2;
-            const a1 = ((i + 1) / segments) * Math.PI * 2;
-            ringPositions.push(
+            const a0 = startAngle + (i / segments) * arcSpan;
+            const a1 = startAngle + ((i + 1) / segments) * arcSpan;
+            arcPositions.push(
                 Math.cos(a0), Math.sin(a0), 0,
                 Math.cos(a1), Math.sin(a1), 0
             );
         }
 
-        const ringGeometry = new LineSegmentsGeometry();
-        ringGeometry.setPositions(ringPositions);
+        // Arrowhead at arc end (330°), tangent to arc
+        const tipX = Math.cos(endAngle);
+        const tipY = Math.sin(endAngle);
+        // Tangent at tip: (-sin θ, cos θ) — counterclockwise direction
+        const tanX = -Math.sin(endAngle);
+        const tanY = Math.cos(endAngle);
+        // Radial normal at tip: (cos θ, sin θ)
+        const normX = Math.cos(endAngle);
+        const normY = Math.sin(endAngle);
 
-        const ring = new LineSegments2(ringGeometry, this._material);
-        ring.renderOrder = 1000;
-        ring.raycast = () => {};
-        ring.computeLineDistances();
-        group.add(ring);
+        const headLength = 0.15;
+        const headWidth = 0.08;
+        // Step back along negative tangent for wing base
+        const baseX = tipX - tanX * headLength;
+        const baseY = tipY - tanY * headLength;
+        arcPositions.push(
+            baseX + normX * headWidth, baseY + normY * headWidth, 0,  tipX, tipY, 0,
+            tipX, tipY, 0,  baseX - normX * headWidth, baseY - normY * headWidth, 0
+        );
+
+        const arcGeometry = new LineSegmentsGeometry();
+        arcGeometry.setPositions(arcPositions);
+
+        const arc = new LineSegments2(arcGeometry, this._material);
+        arc.renderOrder = 1000;
+        arc.raycast = () => {};
+        arc.computeLineDistances();
+        group.add(arc);
 
         // Pivot crosshair — 3 perpendicular line segments at origin
         // Placed in a sub-group so it can be independently scaled for screen-space sizing
@@ -199,7 +225,7 @@ class ToolGizmoManager {
     showCircle(position, normal) {
         this._circleGroup.visible = true;
         this._circleGroup.position.copy(position);
-        this._circleGroup.scale.setScalar(this._getScreenSpaceScale(position) * 0.3);
+        this._circleGroup.scale.setScalar(this._getScreenSpaceScale(position));
         if (normal) {
             this._orientToNormal(this._circleGroup, normal);
         } else {
@@ -211,7 +237,7 @@ class ToolGizmoManager {
     updateCircle(position, normal) {
         if (!this._circleGroup.visible) return;
         this._circleGroup.position.copy(position);
-        this._circleGroup.scale.setScalar(this._getScreenSpaceScale(position) * 0.3);
+        this._circleGroup.scale.setScalar(this._getScreenSpaceScale(position));
         if (normal) {
             this._orientToNormal(this._circleGroup, normal);
         } else {
@@ -273,72 +299,54 @@ class ToolGizmoManager {
     }
 
     // --- Anchor point detection ---
-    // Centralized corner/anchor detection for any tool.
-    // Returns visible box corners within a screen-space pixel radius.
+    // Centralized anchor detection for any tool.
+    // Returns visible corners (and optionally edge midpoints) within a screen-space pixel radius.
 
     /**
-     * Find the nearest visible corner of an object within screen-space threshold.
-     * Only returns corners on camera-facing surfaces.
-     * @param {THREE.Object3D} object - Mesh to detect corners on
-     * @param {THREE.Vector2} mouseNDC - Mouse position in NDC (-1 to 1)
-     * @param {HTMLCanvasElement} canvas - Renderer canvas for pixel conversion
-     * @param {number} threshold - Screen-space pixel radius (default 16)
-     * @returns {{ worldPos: THREE.Vector3, screenPos: THREE.Vector2, index: number }|null}
+     * Backward-compat wrapper — calls findNearestAnchorPoint with corners only.
      */
     findNearestVisibleCorner(object, mouseNDC, canvas, threshold = 16) {
-        if (!object?.geometry || !this.camera) return null;
+        return this.findNearestAnchorPoint(object, mouseNDC, canvas, { threshold });
+    }
 
-        const geometry = object.geometry;
+    /**
+     * Find the nearest anchor point (corner or edge midpoint) on an object.
+     * Supports camera-visibility mode and face-constrained mode.
+     * @param {THREE.Object3D} object - Mesh to detect anchors on
+     * @param {THREE.Vector2} mouseNDC - Mouse position in NDC (-1 to 1)
+     * @param {HTMLCanvasElement} canvas - Renderer canvas for pixel conversion
+     * @param {Object} options
+     * @param {number} [options.threshold=16] - Screen-space pixel radius
+     * @param {boolean} [options.includeEdgeMidpoints=false] - Include edge midpoints as candidates
+     * @param {THREE.Vector3} [options.faceNormal=null] - Constrain to a specific face
+     * @returns {{ worldPos: THREE.Vector3, screenPos: THREE.Vector2, index: number }|null}
+     */
+    findNearestAnchorPoint(object, mouseNDC, canvas, options = {}) {
+        const { threshold = 16, includeEdgeMidpoints = false, faceNormal = null } = options;
+
+        // Handle containers (use interactiveMesh for reliable bbox)
+        const geomSource = object?.userData?.supportMeshes?.interactiveMesh || object;
+        if (!geomSource?.geometry || !this.camera) return null;
+
+        const geometry = geomSource.geometry;
         geometry.computeBoundingBox();
         const box = geometry.boundingBox;
         if (!box) return null;
 
-        // Camera direction in object's local space for face visibility
-        const objectCenter = object.getWorldPosition(this._tempVector.set(0, 0, 0));
-        const cameraDir = objectCenter.clone().sub(this.camera.position).normalize();
-        const invMatrix = new THREE.Matrix4().copy(object.matrixWorld).invert();
-        const localCameraDir = cameraDir.transformDirection(invMatrix);
+        // Build candidate list based on mode
+        const candidates = faceNormal
+            ? this._getFaceCandidates(box, faceNormal, includeEdgeMidpoints)
+            : this._getVisibleCandidates(box, geomSource, includeEdgeMidpoints);
 
-        // Which faces are visible (outward normal dot camera dir < 0)
-        const vf = {
-            pX: localCameraDir.x < 0, nX: localCameraDir.x > 0,
-            pY: localCameraDir.y < 0, nY: localCameraDir.y > 0,
-            pZ: localCameraDir.z < 0, nZ: localCameraDir.z > 0
-        };
-
-        // Each corner's 3 adjacent faces: [xFace, yFace, zFace]
-        const cornerVisible = [
-            vf.nX || vf.nY || vf.nZ,  // 0: min,min,min
-            vf.pX || vf.nY || vf.nZ,  // 1: max,min,min
-            vf.nX || vf.pY || vf.nZ,  // 2: min,max,min
-            vf.pX || vf.pY || vf.nZ,  // 3: max,max,min
-            vf.nX || vf.nY || vf.pZ,  // 4: min,min,max
-            vf.pX || vf.nY || vf.pZ,  // 5: max,min,max
-            vf.nX || vf.pY || vf.pZ,  // 6: min,max,max
-            vf.pX || vf.pY || vf.pZ   // 7: max,max,max
-        ];
-
-        const corners = [
-            new THREE.Vector3(box.min.x, box.min.y, box.min.z),
-            new THREE.Vector3(box.max.x, box.min.y, box.min.z),
-            new THREE.Vector3(box.min.x, box.max.y, box.min.z),
-            new THREE.Vector3(box.max.x, box.max.y, box.min.z),
-            new THREE.Vector3(box.min.x, box.min.y, box.max.z),
-            new THREE.Vector3(box.max.x, box.min.y, box.max.z),
-            new THREE.Vector3(box.min.x, box.max.y, box.max.z),
-            new THREE.Vector3(box.max.x, box.max.y, box.max.z)
-        ];
-
+        // Project to screen space and find nearest
         const rect = canvas.getBoundingClientRect();
         const mousePixel = window.CameraMathUtils.ndcToPixel(mouseNDC.x, mouseNDC.y, rect.width, rect.height);
 
         let nearest = null;
         let nearestDist = threshold;
 
-        for (let i = 0; i < 8; i++) {
-            if (!cornerVisible[i]) continue;
-
-            const worldPos = corners[i].applyMatrix4(object.matrixWorld);
+        for (let i = 0; i < candidates.length; i++) {
+            const worldPos = candidates[i].applyMatrix4(geomSource.matrixWorld);
             const screenNDC = window.CameraMathUtils.worldToScreenNDC(worldPos, this.camera);
             const screenPixel = window.CameraMathUtils.ndcToPixel(screenNDC.x, screenNDC.y, rect.width, rect.height);
 
@@ -353,6 +361,119 @@ class ToolGizmoManager {
         }
 
         return nearest;
+    }
+
+    /**
+     * Get visible candidates based on camera direction.
+     * @private
+     */
+    _getVisibleCandidates(box, geomSource, includeEdgeMidpoints) {
+        // Camera direction in object's local space
+        const objectCenter = geomSource.getWorldPosition(this._tempVector.set(0, 0, 0));
+        const cameraDir = objectCenter.clone().sub(this.camera.position).normalize();
+        const invMatrix = new THREE.Matrix4().copy(geomSource.matrixWorld).invert();
+        const localCameraDir = cameraDir.transformDirection(invMatrix);
+
+        // Which faces are visible (outward normal dot camera dir < 0)
+        const vf = {
+            pX: localCameraDir.x < 0, nX: localCameraDir.x > 0,
+            pY: localCameraDir.y < 0, nY: localCameraDir.y > 0,
+            pZ: localCameraDir.z < 0, nZ: localCameraDir.z > 0
+        };
+
+        // Corner visibility (visible if any adjacent face is visible)
+        const cornerVisible = [
+            vf.nX || vf.nY || vf.nZ,  // 0: min,min,min
+            vf.pX || vf.nY || vf.nZ,  // 1: max,min,min
+            vf.nX || vf.pY || vf.nZ,  // 2: min,max,min
+            vf.pX || vf.pY || vf.nZ,  // 3: max,max,min
+            vf.nX || vf.nY || vf.pZ,  // 4: min,min,max
+            vf.pX || vf.nY || vf.pZ,  // 5: max,min,max
+            vf.nX || vf.pY || vf.pZ,  // 6: min,max,max
+            vf.pX || vf.pY || vf.pZ   // 7: max,max,max
+        ];
+
+        const candidates = [];
+        const corners = [
+            new THREE.Vector3(box.min.x, box.min.y, box.min.z),
+            new THREE.Vector3(box.max.x, box.min.y, box.min.z),
+            new THREE.Vector3(box.min.x, box.max.y, box.min.z),
+            new THREE.Vector3(box.max.x, box.max.y, box.min.z),
+            new THREE.Vector3(box.min.x, box.min.y, box.max.z),
+            new THREE.Vector3(box.max.x, box.min.y, box.max.z),
+            new THREE.Vector3(box.min.x, box.max.y, box.max.z),
+            new THREE.Vector3(box.max.x, box.max.y, box.max.z)
+        ];
+
+        for (let i = 0; i < 8; i++) {
+            if (cornerVisible[i]) candidates.push(corners[i]);
+        }
+
+        if (includeEdgeMidpoints) {
+            // 12 edges: [cornerA, cornerB, adjacentFace1, adjacentFace2]
+            const edges = [
+                [0,1,'nY','nZ'], [0,4,'nY','nX'], [1,5,'nY','pX'], [4,5,'nY','pZ'],
+                [2,3,'pY','nZ'], [2,6,'pY','nX'], [3,7,'pY','pX'], [6,7,'pY','pZ'],
+                [0,2,'nX','nZ'], [1,3,'pX','nZ'], [4,6,'nX','pZ'], [5,7,'pX','pZ']
+            ];
+            for (const [a, b, f1, f2] of edges) {
+                if (vf[f1] || vf[f2]) {
+                    candidates.push(corners[a].clone().add(corners[b]).multiplyScalar(0.5));
+                }
+            }
+        }
+
+        return candidates;
+    }
+
+    /**
+     * Get candidates constrained to a specific face.
+     * @private
+     */
+    _getFaceCandidates(box, faceNormal, includeEdgeMidpoints) {
+        const min = box.min;
+        const max = box.max;
+
+        // Determine face from dominant axis of normal
+        const ax = Math.abs(faceNormal.x), ay = Math.abs(faceNormal.y), az = Math.abs(faceNormal.z);
+        let axis, sign;
+        if (ax >= ay && ax >= az) { axis = 'x'; sign = Math.sign(faceNormal.x); }
+        else if (ay >= ax && ay >= az) { axis = 'y'; sign = Math.sign(faceNormal.y); }
+        else { axis = 'z'; sign = Math.sign(faceNormal.z); }
+
+        const faceValue = sign > 0 ? max[axis] : min[axis];
+        const axes = ['x', 'y', 'z'].filter(a => a !== axis);
+        const a0 = axes[0], a1 = axes[1];
+
+        const candidates = [];
+
+        // 4 face corners
+        const faceCorners = [
+            [min[a0], min[a1]], [max[a0], min[a1]],
+            [min[a0], max[a1]], [max[a0], max[a1]]
+        ];
+        for (const [v0, v1] of faceCorners) {
+            const pt = new THREE.Vector3();
+            pt[axis] = faceValue; pt[a0] = v0; pt[a1] = v1;
+            candidates.push(pt);
+        }
+
+        if (includeEdgeMidpoints) {
+            // 4 edge midpoints on this face
+            const mid0 = (min[a0] + max[a0]) / 2;
+            const mid1 = (min[a1] + max[a1]) / 2;
+            const mids = [
+                [mid0, min[a1]], [mid0, max[a1]],
+                [min[a0], mid1], [max[a0], mid1]
+            ];
+            for (const [v0, v1] of mids) {
+                const pt = new THREE.Vector3();
+                pt[axis] = faceValue; pt[a0] = v0; pt[a1] = v1;
+                candidates.push(pt);
+            }
+        }
+
+        return candidates;
     }
 
     /**
