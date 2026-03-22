@@ -12,8 +12,8 @@ class SnapController {
         this.camera = camera;
         this.inputController = inputController;
 
-        // Centralized snap state
-        this.isEnabled = false; // Default off
+        // Centralized snap state — persisted across sessions
+        this.isEnabled = localStorage.getItem('modler-snap-enabled') === 'true';
         this.snapThreshold = 16; // 16px screen space proximity for easier targeting
         this.currentSnapPoint = null;
         this.activeSnapType = null; // 'corner', 'edge', 'face'
@@ -63,6 +63,7 @@ class SnapController {
      */
     setEnabled(enabled) {
         this.isEnabled = enabled;
+        localStorage.setItem('modler-snap-enabled', enabled ? 'true' : 'false');
 
         // Control all registered snap systems
         this.registeredSnapSystems.forEach((system, name) => {
@@ -168,10 +169,6 @@ class SnapController {
         // Get current mouse position from InputController
         const mouseNDC = this.inputController.mouse;
 
-        // Get objects to check
-        const objectsToCheck = this.getObjectsForSnapping(selectedObjects);
-
-
         // Find closest snap point within threshold
         const snapPoint = this.findClosestSnapPoint(mouseNDC, toolBehavior.snapPointTypes, selectedObjects, travelAxis, geometricConstraints, sourceWorldPos);
 
@@ -229,29 +226,31 @@ class SnapController {
                 }
             }
             
-            // Check edges with line-to-point distance for better hit detection
+            // Check edges — snap to closest point along visible edges
             if (allowedTypes.includes('edge')) {
                 const edges = this.getVisibleObjectEdges(object, travelAxis);
 
                 for (const edge of edges) {
-                    // Calculate distance from mouse to the edge line in screen space
                     const startScreen = this.worldToPixel(edge.start);
                     const endScreen = this.worldToPixel(edge.end);
 
-                    const distance = this.getDistanceToLineSegment(referencePixel, startScreen, endScreen);
+                    const { distance, t } = this.getDistanceAndParamToLineSegment(referencePixel, startScreen, endScreen);
 
                     if (distance < closestDistance) {
+                        // Compute the actual closest world point on the edge
+                        const worldPos = edge.start.clone().lerp(edge.end, t);
+                        const screenPos = this.worldToPixel(worldPos);
+
                         const candidateSnapPoint = {
                             type: 'edge',
-                            worldPos: edge.worldPos, // Use midpoint for visualization
-                            screenPos: edge.screenPos,
+                            worldPos,
+                            screenPos,
                             object: object,
                             distance: distance,
                             edgeStart: edge.start,
                             edgeEnd: edge.end
                         };
 
-                        // Apply geometric constraints if provided
                         if (this.isValidSnapPoint(candidateSnapPoint, geometricConstraints)) {
                             closestDistance = distance;
                             closestSnapPoint = candidateSnapPoint;
@@ -603,63 +602,79 @@ class SnapController {
     }
     
     /**
-     * Get visible corner points of an object using precise geometry analysis
+     * Get visible corner points and edge midpoints using camera-facing visibility.
+     * Uses same algorithm as ToolGizmoManager._getVisibleCandidates().
      */
     getVisibleObjectCorners(object) {
         if (!object.geometry) return [];
 
-        const corners = [];
         const geometry = object.geometry;
-
-        // Get bounding box corners - use actual geometry vertices for precision
         geometry.computeBoundingBox();
         const box = geometry.boundingBox;
-
         if (!box) return [];
 
-        // All 8 corners of the bounding box
-        const boxCorners = [
-            new THREE.Vector3(box.min.x, box.min.y, box.min.z), // 0: min corner
-            new THREE.Vector3(box.max.x, box.min.y, box.min.z), // 1: +X
-            new THREE.Vector3(box.min.x, box.max.y, box.min.z), // 2: +Y
-            new THREE.Vector3(box.max.x, box.max.y, box.min.z), // 3: +XY
-            new THREE.Vector3(box.min.x, box.min.y, box.max.z), // 4: +Z
-            new THREE.Vector3(box.max.x, box.min.y, box.max.z), // 5: +XZ
-            new THREE.Vector3(box.min.x, box.max.y, box.max.z), // 6: +YZ
-            new THREE.Vector3(box.max.x, box.max.y, box.max.z)  // 7: max corner
+        // Camera direction in object's local space
+        const objectCenter = object.getWorldPosition(new THREE.Vector3());
+        const cameraDir = objectCenter.clone().sub(this.camera.position).normalize();
+        const invMatrix = new THREE.Matrix4().copy(object.matrixWorld).invert();
+        const localCameraDir = cameraDir.transformDirection(invMatrix);
+
+        // Which faces are visible (outward normal dot camera dir < 0)
+        const vf = {
+            pX: localCameraDir.x < 0, nX: localCameraDir.x > 0,
+            pY: localCameraDir.y < 0, nY: localCameraDir.y > 0,
+            pZ: localCameraDir.z < 0, nZ: localCameraDir.z > 0
+        };
+
+        // Corner visibility (visible if any adjacent face is visible)
+        const cornerVisible = [
+            vf.nX || vf.nY || vf.nZ,  // 0: min,min,min
+            vf.pX || vf.nY || vf.nZ,  // 1: max,min,min
+            vf.nX || vf.pY || vf.nZ,  // 2: min,max,min
+            vf.pX || vf.pY || vf.nZ,  // 3: max,max,min
+            vf.nX || vf.nY || vf.pZ,  // 4: min,min,max
+            vf.pX || vf.nY || vf.pZ,  // 5: max,min,max
+            vf.nX || vf.pY || vf.pZ,  // 6: min,max,max
+            vf.pX || vf.pY || vf.pZ   // 7: max,max,max
         ];
 
-        for (let i = 0; i < boxCorners.length; i++) {
-            const corner = boxCorners[i];
+        const boxCorners = [
+            new THREE.Vector3(box.min.x, box.min.y, box.min.z),
+            new THREE.Vector3(box.max.x, box.min.y, box.min.z),
+            new THREE.Vector3(box.min.x, box.max.y, box.min.z),
+            new THREE.Vector3(box.max.x, box.max.y, box.min.z),
+            new THREE.Vector3(box.min.x, box.min.y, box.max.z),
+            new THREE.Vector3(box.max.x, box.min.y, box.max.z),
+            new THREE.Vector3(box.min.x, box.max.y, box.max.z),
+            new THREE.Vector3(box.max.x, box.max.y, box.max.z)
+        ];
 
-            // Transform to world space with proper matrix application
-            const worldPos = corner.clone().applyMatrix4(object.matrixWorld);
+        const results = [];
 
-            // Improved visibility check: corner must be in camera's view frustum
+        // Add visible corners
+        for (let i = 0; i < 8; i++) {
+            if (!cornerVisible[i]) continue;
+            const worldPos = boxCorners[i].clone().applyMatrix4(object.matrixWorld);
             const screenPos = this.worldToPixel(worldPos);
-            const canvas = this.inputController.canvas;
+            results.push({ worldPos, screenPos, index: i });
+        }
 
-            // Check if corner is within screen bounds (with margin for edge cases)
-            const inScreenBounds = screenPos.x >= -20 && screenPos.x <= canvas.width + 20 &&
-                                   screenPos.y >= -20 && screenPos.y <= canvas.height + 20;
-
-            if (inScreenBounds) {
-                // Additional check: ensure corner is not behind the camera
-                const cameraToCorner = worldPos.clone().sub(this.camera.position);
-                const distance = cameraToCorner.length();
-
-                // Don't include corners that are too close or too far
-                if (distance > this.camera.near && distance < this.camera.far) {
-                    corners.push({
-                        worldPos: worldPos.clone(), // Ensure clean copy
-                        screenPos: screenPos,
-                        index: i // Include corner index for debugging
-                    });
-                }
+        // Add edge midpoints for visible edges (edge visible if either adjacent face is visible)
+        const edges = [
+            [0,1,'nY','nZ'], [0,4,'nY','nX'], [1,5,'nY','pX'], [4,5,'nY','pZ'],
+            [2,3,'pY','nZ'], [2,6,'pY','nX'], [3,7,'pY','pX'], [6,7,'pY','pZ'],
+            [0,2,'nX','nZ'], [1,3,'pX','nZ'], [4,6,'nX','pZ'], [5,7,'pX','pZ']
+        ];
+        for (const [a, b, f1, f2] of edges) {
+            if (vf[f1] || vf[f2]) {
+                const midLocal = boxCorners[a].clone().add(boxCorners[b]).multiplyScalar(0.5);
+                const worldPos = midLocal.applyMatrix4(object.matrixWorld);
+                const screenPos = this.worldToPixel(worldPos);
+                results.push({ worldPos, screenPos, index: `mid_${a}_${b}` });
             }
         }
 
-        return corners;
+        return results;
     }
     
     /**
@@ -701,63 +716,27 @@ class SnapController {
         const edges = [];
 
         try {
-            // For complex geometries, use angle-based edge detection
-            const edgesGeometry = new THREE.EdgesGeometry(object.geometry, 15); // 15 degree threshold
+            const edgesGeometry = new THREE.EdgesGeometry(object.geometry, 15);
             const positionAttribute = edgesGeometry.getAttribute('position');
 
-            // Process edge pairs (every 2 vertices form an edge)
             for (let i = 0; i < positionAttribute.count; i += 2) {
-                const start = new THREE.Vector3();
-                const end = new THREE.Vector3();
+                const start = new THREE.Vector3().fromBufferAttribute(positionAttribute, i);
+                const end = new THREE.Vector3().fromBufferAttribute(positionAttribute, i + 1);
 
-                start.fromBufferAttribute(positionAttribute, i);
-                end.fromBufferAttribute(positionAttribute, i + 1);
-
-                // Transform to world space
                 const worldStart = start.clone().applyMatrix4(object.matrixWorld);
                 const worldEnd = end.clone().applyMatrix4(object.matrixWorld);
-                const worldMidpoint = worldStart.clone().lerp(worldEnd, 0.5);
 
-                // Check if edge has reasonable length
-                const edgeLength = worldStart.distanceTo(worldEnd);
-                if (edgeLength < 0.01) continue;
+                if (worldStart.distanceTo(worldEnd) < 0.01) continue;
 
-                // VISIBILITY CHECK: Check if edge has at least one visible adjacent face
-                const camera = this.inputController.camera;
-                const hasVisibleFace = this.edgeHasVisibleFace(object, start, end, camera);
+                const hasVisibleFace = this.edgeHasVisibleFace(object, start, end, this.camera);
                 if (!hasVisibleFace) continue;
 
-                // Convert to screen space
-                const startScreen = this.worldToPixel(worldStart);
-                const endScreen = this.worldToPixel(worldEnd);
-                const screenPos = this.worldToPixel(worldMidpoint);
-
-                // Check if edge is on screen
-                const canvas = this.inputController.canvas;
-                const isOnScreen = (startScreen.x >= -100 && startScreen.x <= canvas.width + 100 &&
-                                   startScreen.y >= -100 && startScreen.y <= canvas.height + 100) ||
-                                  (endScreen.x >= -100 && endScreen.x <= canvas.width + 100 &&
-                                   endScreen.y >= -100 && endScreen.y <= canvas.height + 100);
-
-                if (isOnScreen) {
-                    // Filter edges based on travel axis if provided
-                    let includeEdge = true;
-
-                    if (travelAxis) {
-                        const edgeDirection = worldEnd.clone().sub(worldStart).normalize();
-                        const dotProduct = Math.abs(edgeDirection.dot(travelAxis));
-                        includeEdge = dotProduct < 0.3; // Only perpendicular edges
-                    }
-
-                    if (includeEdge) {
-                        edges.push({
-                            worldPos: worldMidpoint,
-                            screenPos: screenPos,
-                            start: worldStart,
-                            end: worldEnd
-                        });
-                    }
+                if (travelAxis) {
+                    const edgeDirection = worldEnd.clone().sub(worldStart).normalize();
+                    if (Math.abs(edgeDirection.dot(travelAxis)) >= 0.3) continue;
                 }
+
+                edges.push({ start: worldStart, end: worldEnd });
             }
 
             // Clean up the temporary geometry
@@ -772,7 +751,8 @@ class SnapController {
     }
 
     /**
-     * Fallback method: Get bounding box edges when geometry processing fails
+     * Get bounding box edges with camera-facing visibility filtering.
+     * Only returns edges where at least one adjacent face points toward the camera.
      */
     getBoundingBoxEdges(object, travelAxis = null) {
         const edges = [];
@@ -780,61 +760,52 @@ class SnapController {
 
         geometry.computeBoundingBox();
         const box = geometry.boundingBox;
-
         if (!box) return edges;
 
-        // Define the 12 edges of a bounding box
-        const boxEdges = [
-            // Bottom face edges (4 edges)
-            [new THREE.Vector3(box.min.x, box.min.y, box.min.z), new THREE.Vector3(box.max.x, box.min.y, box.min.z)],
-            [new THREE.Vector3(box.max.x, box.min.y, box.min.z), new THREE.Vector3(box.max.x, box.min.y, box.max.z)],
-            [new THREE.Vector3(box.max.x, box.min.y, box.max.z), new THREE.Vector3(box.min.x, box.min.y, box.max.z)],
-            [new THREE.Vector3(box.min.x, box.min.y, box.max.z), new THREE.Vector3(box.min.x, box.min.y, box.min.z)],
-            // Top face edges (4 edges)
-            [new THREE.Vector3(box.min.x, box.max.y, box.min.z), new THREE.Vector3(box.max.x, box.max.y, box.min.z)],
-            [new THREE.Vector3(box.max.x, box.max.y, box.min.z), new THREE.Vector3(box.max.x, box.max.y, box.max.z)],
-            [new THREE.Vector3(box.max.x, box.max.y, box.max.z), new THREE.Vector3(box.min.x, box.max.y, box.max.z)],
-            [new THREE.Vector3(box.min.x, box.max.y, box.max.z), new THREE.Vector3(box.min.x, box.max.y, box.min.z)],
-            // Vertical edges (4 edges)
-            [new THREE.Vector3(box.min.x, box.min.y, box.min.z), new THREE.Vector3(box.min.x, box.max.y, box.min.z)],
-            [new THREE.Vector3(box.max.x, box.min.y, box.min.z), new THREE.Vector3(box.max.x, box.max.y, box.min.z)],
-            [new THREE.Vector3(box.max.x, box.min.y, box.max.z), new THREE.Vector3(box.max.x, box.max.y, box.max.z)],
-            [new THREE.Vector3(box.min.x, box.min.y, box.max.z), new THREE.Vector3(box.min.x, box.max.y, box.max.z)]
+        // Camera direction in object's local space (same as getVisibleObjectCorners)
+        const objectCenter = object.getWorldPosition(new THREE.Vector3());
+        const cameraDir = objectCenter.clone().sub(this.camera.position).normalize();
+        const invMatrix = new THREE.Matrix4().copy(object.matrixWorld).invert();
+        const localCameraDir = cameraDir.transformDirection(invMatrix);
+
+        const vf = {
+            pX: localCameraDir.x < 0, nX: localCameraDir.x > 0,
+            pY: localCameraDir.y < 0, nY: localCameraDir.y > 0,
+            pZ: localCameraDir.z < 0, nZ: localCameraDir.z > 0
+        };
+
+        const c = [
+            new THREE.Vector3(box.min.x, box.min.y, box.min.z), // 0
+            new THREE.Vector3(box.max.x, box.min.y, box.min.z), // 1
+            new THREE.Vector3(box.min.x, box.max.y, box.min.z), // 2
+            new THREE.Vector3(box.max.x, box.max.y, box.min.z), // 3
+            new THREE.Vector3(box.min.x, box.min.y, box.max.z), // 4
+            new THREE.Vector3(box.max.x, box.min.y, box.max.z), // 5
+            new THREE.Vector3(box.min.x, box.max.y, box.max.z), // 6
+            new THREE.Vector3(box.max.x, box.max.y, box.max.z)  // 7
         ];
 
-        for (const [start, end] of boxEdges) {
-            const worldStart = start.clone().applyMatrix4(object.matrixWorld);
-            const worldEnd = end.clone().applyMatrix4(object.matrixWorld);
-            const worldMidpoint = worldStart.clone().lerp(worldEnd, 0.5);
+        // 12 edges with their two adjacent faces
+        const edgeDefs = [
+            [0,1,'nY','nZ'], [1,5,'nY','pX'], [5,4,'nY','pZ'], [4,0,'nY','nX'],
+            [2,3,'pY','nZ'], [3,7,'pY','pX'], [7,6,'pY','pZ'], [6,2,'pY','nX'],
+            [0,2,'nX','nZ'], [1,3,'pX','nZ'], [5,7,'pX','pZ'], [4,6,'nX','pZ']
+        ];
 
-            const startScreen = this.worldToPixel(worldStart);
-            const endScreen = this.worldToPixel(worldEnd);
-            const screenPos = this.worldToPixel(worldMidpoint);
+        for (const [a, b, f1, f2] of edgeDefs) {
+            // Only include if at least one adjacent face is visible
+            if (!vf[f1] && !vf[f2]) continue;
 
-            const canvas = this.inputController.canvas;
-            const isOnScreen = (startScreen.x >= -100 && startScreen.x <= canvas.width + 100 &&
-                               startScreen.y >= -100 && startScreen.y <= canvas.height + 100) ||
-                              (endScreen.x >= -100 && endScreen.x <= canvas.width + 100 &&
-                               endScreen.y >= -100 && endScreen.y <= canvas.height + 100);
+            const worldStart = c[a].clone().applyMatrix4(object.matrixWorld);
+            const worldEnd = c[b].clone().applyMatrix4(object.matrixWorld);
 
-            if (isOnScreen) {
-                let includeEdge = true;
-
-                if (travelAxis) {
-                    const edgeDirection = worldEnd.clone().sub(worldStart).normalize();
-                    const dotProduct = Math.abs(edgeDirection.dot(travelAxis));
-                    includeEdge = dotProduct < 0.3;
-                }
-
-                if (includeEdge) {
-                    edges.push({
-                        worldPos: worldMidpoint,
-                        screenPos: screenPos,
-                        start: worldStart,
-                        end: worldEnd
-                    });
-                }
+            // Travel axis filter
+            if (travelAxis) {
+                const edgeDirection = worldEnd.clone().sub(worldStart).normalize();
+                if (Math.abs(edgeDirection.dot(travelAxis)) >= 0.3) continue;
             }
+
+            edges.push({ start: worldStart, end: worldEnd });
         }
 
         return edges;
@@ -897,38 +868,38 @@ class SnapController {
     }
 
     /**
-     * Calculate distance from point to line segment in screen space with enhanced precision
+     * Calculate distance from point to line segment in screen space.
+     * Returns scaled distance only (legacy, used by getTriangulatedEdges callers).
      */
     getDistanceToLineSegment(point, lineStart, lineEnd) {
-        const A = point.x - lineStart.x;
-        const B = point.y - lineStart.y;
+        const { distance } = this.getDistanceAndParamToLineSegment(point, lineStart, lineEnd);
+        return distance;
+    }
+
+    /**
+     * Calculate distance and parametric t from point to line segment in screen space.
+     * t is clamped [0,1] — the position along the edge of the closest point.
+     */
+    getDistanceAndParamToLineSegment(point, lineStart, lineEnd) {
         const C = lineEnd.x - lineStart.x;
         const D = lineEnd.y - lineStart.y;
-
-        const dot = A * C + B * D;
         const lenSq = C * C + D * D;
 
         if (lenSq < 0.01) {
-            // Line segment is too short, treat as point
-            return this.getScreenDistance(point, lineStart);
+            return { distance: this.getScreenDistance(point, lineStart), t: 0 };
         }
 
-        let param = dot / lenSq;
-
-        // Enhanced clamping: allow slight extension beyond line segment for easier hitting
-        const tolerance = 0.1; // 10% extension on each side
-        if (param < -tolerance) param = -tolerance;
-        else if (param > 1 + tolerance) param = 1 + tolerance;
+        const A = point.x - lineStart.x;
+        const B = point.y - lineStart.y;
+        const t = Math.max(0, Math.min(1, (A * C + B * D) / lenSq));
 
         const closestPoint = {
-            x: lineStart.x + param * C,
-            y: lineStart.y + param * D
+            x: lineStart.x + t * C,
+            y: lineStart.y + t * D
         };
 
-        const distance = this.getScreenDistance(point, closestPoint);
-
-        // Apply distance scaling for edges - make edges slightly easier to hit
-        return distance * 0.85; // Reduce effective distance by 15% for edges
+        const distance = this.getScreenDistance(point, closestPoint) * 0.85;
+        return { distance, t };
     }
     
     /**

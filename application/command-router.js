@@ -735,6 +735,12 @@ class CommandRouter {
 
         // Send initial hierarchy to the newly ready panel
         window.simpleCommunication.sendInitialHierarchySync(window.stateSerializer);
+
+        // Send persisted snap state so UI reflects saved preference
+        const snapController = window.modlerComponents?.snapController;
+        if (snapController) {
+            snapController.notifySnapStateChange();
+        }
     }
 
     // Settings delegation helpers
