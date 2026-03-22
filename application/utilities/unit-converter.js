@@ -44,7 +44,7 @@ class UnitConverter {
 
         // Display precision per unit (decimal places)
         this.unitPrecision = {
-            'mm': 1,    // 1.2 mm
+            'mm': 0,    // 25 mm (integer)
             'cm': 1,    // 1.2 cm
             'm': 1,     // 1.2 m
             'km': 1,    // 1.2 km
