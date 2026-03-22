@@ -191,57 +191,47 @@ class SnapController {
         const referencePixel = sourceWorldPos
             ? this.worldToPixel(sourceWorldPos)
             : this.ndcToPixel(mouseNDC);
-        let closestSnapPoint = null;
-        let closestDistance = this.snapThreshold;
-        
-        // Get all objects to check for snap points
+
         const objectsToCheck = this.getObjectsForSnapping(selectedObjects);
-        
+
+        // Two-pass priority: corners/midpoints always beat edges
+        let bestCorner = null;
+        let bestCornerDist = this.snapThreshold;
+        let bestEdge = null;
+        let bestEdgeDist = this.snapThreshold;
+
         for (const object of objectsToCheck) {
-            // Check corners - only visible ones for better accuracy
+            // Pass 1: Corners + edge midpoints (discrete snap points)
             if (allowedTypes.includes('corner')) {
-                const corners = this.getVisibleObjectCorners(object);
-
-                for (const corner of corners) {
+                for (const corner of this.getVisibleObjectCorners(object)) {
                     const distance = this.getScreenDistance(corner.screenPos, referencePixel);
-
-                    // Give corners priority by reducing their effective distance
-                    const adjustedDistance = distance * 0.7; // 30% distance advantage over edges
-
-                    if (adjustedDistance < closestDistance) {
-                        const candidateSnapPoint = {
+                    if (distance < bestCornerDist) {
+                        const candidate = {
                             type: 'corner',
                             worldPos: corner.worldPos,
                             screenPos: corner.screenPos,
                             object: object,
-                            distance: distance // Store real distance for display
+                            distance: distance
                         };
-
-                        // Apply geometric constraints if provided
-                        if (this.isValidSnapPoint(candidateSnapPoint, geometricConstraints)) {
-                            closestDistance = adjustedDistance;
-                            closestSnapPoint = candidateSnapPoint;
+                        if (this.isValidSnapPoint(candidate, geometricConstraints)) {
+                            bestCornerDist = distance;
+                            bestCorner = candidate;
                         }
                     }
                 }
             }
-            
-            // Check edges — snap to closest point along visible edges
-            if (allowedTypes.includes('edge')) {
-                const edges = this.getVisibleObjectEdges(object, travelAxis);
 
-                for (const edge of edges) {
+            // Pass 2: Edge sliding (closest point along edge)
+            if (allowedTypes.includes('edge')) {
+                for (const edge of this.getVisibleObjectEdges(object, travelAxis)) {
                     const startScreen = this.worldToPixel(edge.start);
                     const endScreen = this.worldToPixel(edge.end);
-
                     const { distance, t } = this.getDistanceAndParamToLineSegment(referencePixel, startScreen, endScreen);
 
-                    if (distance < closestDistance) {
-                        // Compute the actual closest world point on the edge
+                    if (distance < bestEdgeDist) {
                         const worldPos = edge.start.clone().lerp(edge.end, t);
                         const screenPos = this.worldToPixel(worldPos);
-
-                        const candidateSnapPoint = {
+                        const candidate = {
                             type: 'edge',
                             worldPos,
                             screenPos,
@@ -250,37 +240,18 @@ class SnapController {
                             edgeStart: edge.start,
                             edgeEnd: edge.end
                         };
-
-                        if (this.isValidSnapPoint(candidateSnapPoint, geometricConstraints)) {
-                            closestDistance = distance;
-                            closestSnapPoint = candidateSnapPoint;
+                        if (this.isValidSnapPoint(candidate, geometricConstraints)) {
+                            bestEdgeDist = distance;
+                            bestEdge = candidate;
                         }
                     }
                 }
             }
             
-            // DISABLED: Face snapping conflicts with corner/edge precision
-            // Faces always win with 0.0 distance due to raycasting returning exact mouse intersection
-            // if (allowedTypes.includes('face')) {
-            //     const facePoint = this.getFaceSnapPoint(object, mouseNDC);
-            //     if (facePoint) {
-            //         const distance = this.getScreenDistance(facePoint.screenPos, mousePixel);
-            //         if (distance < closestDistance) {
-            //             closestDistance = distance;
-            //             closestSnapPoint = {
-            //                 type: 'face',
-            //                 worldPos: facePoint.worldPos,
-            //                 screenPos: facePoint.screenPos,
-            //                 object: object,
-            //                 distance: distance,
-            //                 face: facePoint.face
-            //             };
-            //         }
-            //     }
-            // }
         }
-        
-        return closestSnapPoint;
+
+        // Corners always win if found; edges only fill in when no corner is near
+        return bestCorner || bestEdge;
     }
 
     /**
@@ -840,21 +811,22 @@ class SnapController {
     worldToPixel(worldPos) {
         const canvas = this.inputController.canvas;
         const vector = worldPos.clone().project(this.camera);
-        
+
+        // Use clientWidth/clientHeight (CSS pixels) to match mouse event coordinates
         return {
-            x: (vector.x + 1) * canvas.width / 2,
-            y: (-vector.y + 1) * canvas.height / 2
+            x: (vector.x + 1) * canvas.clientWidth / 2,
+            y: (-vector.y + 1) * canvas.clientHeight / 2
         };
     }
-    
+
     /**
      * Convert NDC to pixel coordinates
      */
     ndcToPixel(ndc) {
         const canvas = this.inputController.canvas;
         return {
-            x: (ndc.x + 1) * canvas.width / 2,
-            y: (-ndc.y + 1) * canvas.height / 2
+            x: (ndc.x + 1) * canvas.clientWidth / 2,
+            y: (-ndc.y + 1) * canvas.clientHeight / 2
         };
     }
     
@@ -898,7 +870,7 @@ class SnapController {
             y: lineStart.y + t * D
         };
 
-        const distance = this.getScreenDistance(point, closestPoint) * 0.85;
+        const distance = this.getScreenDistance(point, closestPoint);
         return { distance, t };
     }
     
