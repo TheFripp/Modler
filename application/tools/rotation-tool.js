@@ -27,6 +27,10 @@ class RotationTool extends BaseTool {
         this.lastMouseX = 0;            // NDC x at last frame
         this.dragFaceNormal = null;     // world-space normal of hovered face
 
+        // Screen-anchor-only state (gizmo visible but no face hover)
+        this.screenAnchor = null;           // { worldPos } from findNearestAnchorPoint
+        this.screenAnchorNormal = null;     // face normal for screen-anchor-only rotation
+
         // Reusable math objects
         this._tempQuat = new THREE.Quaternion();
         this._tempVec = new THREE.Vector3();
@@ -64,10 +68,12 @@ class RotationTool extends BaseTool {
         const detected = this.faceToolBehavior.handleFaceDetection(hit);
 
         if (detected) {
+            // Face detected — clear screen-anchor-only state
+            this.screenAnchor = null;
+            this.screenAnchorNormal = null;
             const hoverState = this.faceToolBehavior.getHoverState();
             if (hoverState.hit) {
                 const worldNormal = this.faceToolBehavior.getWorldFaceNormal(hoverState.hit);
-                const gizmoRadius = this.getGizmoRadius(hoverState.object);
 
                 // Face-constrained anchor with edge midpoints (centralized pipeline)
                 const faceAnchor = this.toolGizmoManager?.findNearestAnchorPoint(
@@ -78,7 +84,7 @@ class RotationTool extends BaseTool {
                 // Prefer face anchor > screen anchor > hit point
                 const anchor = faceAnchor || screenAnchor;
                 const gizmoPos = anchor ? anchor.worldPos : hoverState.hit.point;
-                this.toolGizmoManager?.showRotationArc(gizmoPos, worldNormal, gizmoRadius);
+                this.toolGizmoManager?.showRotationArc(gizmoPos, worldNormal);
 
                 if (anchor) {
                     this.toolGizmoManager?.showAnchorPoint(anchor.worldPos);
@@ -87,24 +93,39 @@ class RotationTool extends BaseTool {
                 }
             }
         } else if (screenAnchor) {
-            // Off-face but near a corner: show anchor circle only
+            // Off-face but near a corner: show anchor circle + rotation arc aligned to most visible face
             this.toolGizmoManager?.showAnchorPoint(screenAnchor.worldPos);
-            this.toolGizmoManager?.hide('rotation-arc');
+            const faceNormal = this.toolGizmoManager?.getMostVisibleFaceNormal(selectedObjects[0]);
+            this.toolGizmoManager?.showRotationArc(screenAnchor.worldPos, faceNormal);
+            // Track for hasActiveHighlight() — gizmo is visible, tool should claim input
+            this.screenAnchor = screenAnchor;
+            this.screenAnchorNormal = faceNormal;
         } else {
             this.toolGizmoManager?.hide('rotation-arc');
             this.toolGizmoManager?.hide('circle');
+            this.screenAnchor = null;
+            this.screenAnchorNormal = null;
         }
     }
 
     // --- Mouse events ---
 
     onMouseDown(hit, event) {
-        const callbacks = BaseFaceToolEventHandler.createOperationCallbacks({
-            isActiveCheck: () => this.isRotating,
-            startCallback: (h) => this.startRotation(h),
-            operationName: 'rotation'
-        });
-        return this.eventHandler.handleMouseDown(hit, event, callbacks);
+        if (event.button !== 0 || this.isRotating) return false;
+
+        // Normal face-hover path
+        if (this.faceToolBehavior.hasValidFaceHover(hit)) {
+            this.startRotation(hit);
+            return true;
+        }
+
+        // Screen-anchor-only path (gizmo visible near corner, no face hover)
+        if (this.screenAnchor && this.screenAnchorNormal) {
+            this.startRotation(hit);
+            return true;
+        }
+
+        return false;
     }
 
     onMouseUp(hit, event) {
@@ -126,6 +147,7 @@ class RotationTool extends BaseTool {
     }
 
     hasActiveHighlight() {
+        if (this.screenAnchor) return true;
         return this.faceToolBehavior.hasActiveHighlight();
     }
 
@@ -133,15 +155,36 @@ class RotationTool extends BaseTool {
 
     startRotation(hit) {
         const hoverState = this.faceToolBehavior.getHoverState();
-        if (!hoverState.object || !hoverState.hit) return;
 
-        const targetObject = hoverState.object;
+        // Determine target object: face hover takes priority, then screen-anchor-only
+        let targetObject, worldNormal, pivotPoint;
+
+        if (hoverState.object && hoverState.hit) {
+            // Normal case: face hover
+            targetObject = hoverState.object;
+            worldNormal = this.faceToolBehavior.getWorldFaceNormal(hoverState.hit);
+
+            const anchorResult = this.toolGizmoManager?.findNearestAnchorPoint(
+                targetObject, this.inputController?.mouse, this.inputController?.canvas,
+                { threshold: 20, includeEdgeMidpoints: true, faceNormal: worldNormal }
+            );
+            pivotPoint = anchorResult ? anchorResult.worldPos.clone() : hoverState.hit.point.clone();
+        } else if (this.screenAnchor && this.screenAnchorNormal) {
+            // Screen-anchor-only case: gizmo visible near corner but no face hover
+            const selectedObjects = this.selectionController.getSelectedObjects();
+            if (selectedObjects.length !== 1) return;
+            targetObject = selectedObjects[0];
+            worldNormal = this.screenAnchorNormal;
+            pivotPoint = this.screenAnchor.worldPos.clone();
+        } else {
+            return;
+        }
+
         const sceneController = this.sceneController;
         const objectData = sceneController?.getObjectByMesh(targetObject);
         if (!objectData) return;
 
         // Determine rotation axis from face normal
-        const worldNormal = this.faceToolBehavior.getWorldFaceNormal(hoverState.hit);
         const axis = this.getDominantAxis(worldNormal);
 
         this.isRotating = true;
@@ -160,15 +203,13 @@ class RotationTool extends BaseTool {
         // Store starting position
         this.startPosition = targetObject.position.clone();
 
-        // Find pivot (anchor point) via centralized pipeline
-        const anchorResult = this.toolGizmoManager?.findNearestAnchorPoint(
-            targetObject, this.inputController?.mouse, this.inputController?.canvas,
-            { threshold: 20, includeEdgeMidpoints: true, faceNormal: worldNormal }
-        );
-        this.pivotPoint = anchorResult ? anchorResult.worldPos.clone() : hoverState.hit.point.clone();
+        this.pivotPoint = pivotPoint;
 
         this.currentAngle = 0;
         this.lastMouseX = this.inputController?.mouse?.x ?? 0;
+
+        // Capture pointer so drag continues outside canvas
+        this.inputController?.capturePointer();
 
         // Hide face highlight and corner circle during drag, keep rotation arc
         this.faceToolBehavior.clearHover();
@@ -256,6 +297,8 @@ class RotationTool extends BaseTool {
     }
 
     endRotation() {
+        this.inputController?.releasePointer();
+
         if (!this.isRotating || !this.rotateObject) {
             this.isRotating = false;
             return;
@@ -309,31 +352,14 @@ class RotationTool extends BaseTool {
         this.startPosition = null;
         this.currentAngle = 0;
         this.dragFaceNormal = null;
+        this.screenAnchor = null;
+        this.screenAnchorNormal = null;
 
         this.toolGizmoManager?.hide('rotation-arc');
         this.toolGizmoManager?.hide('circle');
     }
 
     // --- Helpers ---
-
-    /**
-     * Calculate an appropriate gizmo radius based on the object's size.
-     * Uses the smallest face dimension to make the ring proportional.
-     */
-    getGizmoRadius(object) {
-        if (!object) return 0.15;
-        const geomSource = object.userData?.supportMeshes?.interactiveMesh || object;
-        if (!geomSource.geometry) return 0.15;
-        geomSource.geometry.computeBoundingBox();
-        const box = geomSource.geometry.boundingBox;
-        if (!box) return 0.15;
-        const sx = box.max.x - box.min.x;
-        const sy = box.max.y - box.min.y;
-        const sz = box.max.z - box.min.z;
-        // Use ~10% of the smallest dimension, clamped
-        const minDim = Math.min(sx, sy, sz);
-        return Math.max(0.01, Math.min(minDim * 0.1, 0.5));
-    }
 
     /**
      * Get the dominant axis from a world-space normal vector.
