@@ -392,6 +392,13 @@ LayoutPropagationManager.scheduleParentLayoutUpdate(objectId)
 Container resizes to fit new child dimensions
 ```
 
+**Tab Numeric Input (after push)**:
+When the user presses Tab after a push to enter a numeric value, PropertyUpdateHandler
+reads the push context from `inputFocusManager.getLastManipulated()` and calculates a
+position offset to keep the anchored face fixed. **Critical**: position must be read from
+`obj.mesh.position` (live Three.js value), NOT `obj.position` (stale creation-time value),
+because the push tool recenters geometry and adjusts mesh.position on drag end.
+
 **Latency During Drag**:
 - Dimension update: <10ms (fast, no layout)
 - UI refresh: <5ms

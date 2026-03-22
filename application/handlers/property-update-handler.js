@@ -147,11 +147,13 @@ class PropertyUpdateHandler {
                         }
 
                         // Add position update to keep aligned edge fixed
+                        // Read from mesh.position (live) not obj.position (stale creation-time value)
                         if (positionOffset !== 0) {
+                            const meshPos = obj.mesh.position;
                             if (!updates.position) {
-                                updates.position = { ...obj.position };
+                                updates.position = { x: meshPos.x, y: meshPos.y, z: meshPos.z };
                             }
-                            updates.position[axis] = obj.position[axis] + positionOffset;
+                            updates.position[axis] = meshPos[axis] + positionOffset;
                         }
                     }
                 }
@@ -351,9 +353,9 @@ class PropertyUpdateHandler {
             if (property.startsWith('rotation.')) {
                 const axis = property.split('.')[1];
                 if (['x', 'y', 'z'].includes(axis)) {
-                    // Convert degrees to radians for internal storage
+                    // Pass degrees directly — SceneController.updateObjectRotation() converts to radians
                     updates.rotation = {
-                        [axis]: value * Math.PI / 180
+                        [axis]: value
                     };
                 }
             }
