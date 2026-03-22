@@ -21,6 +21,7 @@ class BaseTool {
     get containerCrudManager() { return window.modlerComponents?.containerCrudManager; }
     get measurementTool() { return window.modlerComponents?.measurementTool; }
     get configurationManager() { return window.modlerComponents?.configurationManager; }
+    get toolGizmoManager() { return window.modlerComponents?.toolGizmoManager; }
 
     // --- Default event handlers ---
 

@@ -1,3 +1,4 @@
+import * as THREE from 'three';
 /**
  * Move Tool
  * Handles object movement with face highlighting and drag operations using centralized SelectionController
@@ -97,11 +98,25 @@ class MoveTool extends BaseTool {
         // Check if we should show highlight for this object
         if (!this.shouldShowFaceHighlight(hit)) {
             this.faceToolBehavior.clearHover();
+            this.toolGizmoManager?.hide('arrow');
             return;
         }
 
         // Use shared face detection behavior
-        this.faceToolBehavior.handleFaceDetection(hit);
+        const faceDetected = this.faceToolBehavior.handleFaceDetection(hit);
+
+        // Show arrow gizmo at face center alongside the face highlight
+        if (faceDetected) {
+            const hoverState = this.faceToolBehavior.getHoverState();
+            const faceHighlight = hoverState.object?.userData?.supportMeshes?.faceHighlight;
+            if (faceHighlight && hoverState.hit) {
+                const worldPos = faceHighlight.getWorldPosition(new THREE.Vector3());
+                const worldNormal = this.faceToolBehavior.getWorldFaceNormal(hoverState.hit);
+                this.toolGizmoManager?.showArrow(worldPos, worldNormal);
+            }
+        } else {
+            this.toolGizmoManager?.hide('arrow');
+        }
     }
     
     /**
@@ -411,7 +426,15 @@ class MoveTool extends BaseTool {
             this.duplicationMode.enter(targetObject, this.dragStartPosition);
         }
 
-        // Clear the highlight since we're now dragging
+        // Store arrow gizmo offset in object local space so it moves with the object
+        if (this.toolGizmoManager?._arrowGroup.visible) {
+            const arrowWorldPos = this.toolGizmoManager._arrowGroup.position.clone();
+            this._arrowLocalOffset = arrowWorldPos.sub(targetObject.getWorldPosition(new THREE.Vector3()));
+        } else {
+            this._arrowLocalOffset = null;
+        }
+
+        // Clear the highlight since we're now dragging (arrow gizmo stays visible)
         this.faceToolBehavior.clearHover();
 
         // Enable interactive mesh visibility for face-based tool interaction (objects only, not containers)
@@ -460,6 +483,11 @@ class MoveTool extends BaseTool {
         const objectWorldPos = this.dragParentMesh
             ? this.dragObject.getWorldPosition(new THREE.Vector3())
             : this.dragObject.position;
+
+        // Update arrow gizmo — maintain local offset so it moves with the object
+        if (this._arrowLocalOffset && this.toolGizmoManager?._arrowGroup.visible) {
+            this.toolGizmoManager.updateArrow(objectWorldPos.clone().add(this._arrowLocalOffset));
+        }
 
         // Use global dragging system for axis-constrained movement along face normal
         const worldMovement = window.CameraMathUtils.screenDeltaToAxisMovement(
@@ -562,14 +590,19 @@ class MoveTool extends BaseTool {
     updateContainerDuringDrag() {
         const sceneController = this.sceneController;
         if (!sceneController || !this.dragObject) return;
-        
+
         const objectData = sceneController.getObjectByMesh(this.dragObject);
         if (!objectData || !objectData.parentContainer) return;
-        
+
         // Get the container
         const container = sceneController.getObject(objectData.parentContainer);
         if (!container) return;
-        
+
+        // Skip real-time hug updates during drag — hug recenter modifies the
+        // dragged child's position, creating a feedback loop with the move delta.
+        // Final hug update runs in updateParentContainerAfterDrag() after drag ends.
+        if (container.containerMode === 'hug') return;
+
         // Trigger container resize calculation
         const containerCrudManager = this.containerCrudManager;
         if (containerCrudManager) {
@@ -716,9 +749,11 @@ class MoveTool extends BaseTool {
         this.dragHitPoint = null;
         this.dragParentMesh = null;
         this.dragStartWorldPos = null;
+        this._arrowLocalOffset = null;
 
         MovementUtils.unregisterFileOperation('move-tool-drag');
 
+        this.toolGizmoManager?.hideAll();
         this.faceToolBehavior.clearHover();
 
         if (!draggedObject) {
@@ -790,6 +825,8 @@ class MoveTool extends BaseTool {
     }
 
     deactivate() {
+        this.toolGizmoManager?.hideAll();
+
         const deactivationCallbacks = BaseFaceToolEventHandler.createDeactivationCallbacks({
             isActiveCheck: () => this.isDragging,
             endCallback: () => this.endFaceDrag()

@@ -151,6 +151,11 @@ function initializeScene() {
         modlerV2Components.sceneFoundation.canvas
     );
 
+    modlerV2Components.toolGizmoManager = new ToolGizmoManager(
+        modlerV2Components.sceneFoundation.scene,
+        modlerV2Components.sceneFoundation.camera
+    );
+
     // Layout propagation manager (Phase 4 Refactoring)
     modlerV2Components.layoutPropagationManager = new LayoutPropagationManager();
     modlerV2Components.layoutPropagationManager.initialize(
@@ -227,9 +232,20 @@ function initializeApplication() {
     // Initialize ObjectSerializer for consistent object serialization
     modlerV2Components.objectSerializer = new ObjectSerializer();
 
+    // Initialize Yard (material library)
+    modlerV2Components.yardManager = new YardManager();
+
+    // Initialize context menu (right-click on 3D objects)
+    if (window.ContextMenu) {
+        modlerV2Components.contextMenu = new ContextMenu();
+    }
+
     // Initialize File System for scene save/load
     modlerV2Components.fileManager = new FileManager();
     modlerV2Components.fileManager.startAutoSave(); // Start 30-second auto-save
+
+    // Initialize Export/Import Manager for file sharing
+    modlerV2Components.exportImportManager = new ExportImportManager();
 
     // FileManagerHandler initialized in main-integration.js (follows SettingsHandler pattern)
 
