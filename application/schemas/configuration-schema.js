@@ -233,6 +233,23 @@ const CONFIGURATION_SCHEMA = {
         description: 'Snap indicator render order'
     },
 
+    // Tool gizmos (arrows, circles, rotation indicators)
+    'visual.gizmo.color': {
+        type: 'string',
+        default: '#ff6600',
+        constraint: CONSTRAINT_TYPES.COLOR,
+        description: 'Tool gizmo color for arrows, circles, and rotation indicators'
+    },
+
+    'visual.gizmo.lineWidth': {
+        type: 'number',
+        default: 2,
+        constraint: CONSTRAINT_TYPES.MIN_MAX,
+        min: 1,
+        max: 10,
+        description: 'Tool gizmo line width in screen pixels'
+    },
+
     // Measurement tool
     'visual.measurement.color': {
         type: 'string',

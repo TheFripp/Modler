@@ -134,7 +134,8 @@ class MaterialManager {
             LAYOUT_GUIDE: 'layout-guide',
             HOVER_EFFECT: 'hover-effect',
             SELECTION_EDGE_FAT: 'selection-edge-fat',
-            CONTAINER_WIREFRAME_FAT: 'container-wireframe-fat'
+            CONTAINER_WIREFRAME_FAT: 'container-wireframe-fat',
+            TOOL_GIZMO: 'tool-gizmo'
         };
 
         // Performance metrics
@@ -263,6 +264,15 @@ class MaterialManager {
         this.registerConfigCallback('visual.cad.wireframe.opacity', (newValue) => {
             this.updateMaterialsOfType(this.materialTypes.CAD_WIREFRAME, 'opacity', newValue);
             this.invalidateCacheForType(this.materialTypes.CAD_WIREFRAME);
+        });
+
+        // Tool gizmo materials
+        this.registerConfigCallback('visual.gizmo.color', (newValue) => {
+            this.updateMaterialsOfType(this.materialTypes.TOOL_GIZMO, 'color', newValue);
+        });
+
+        this.registerConfigCallback('visual.gizmo.lineWidth', (newValue) => {
+            this.updateMaterialsOfType(this.materialTypes.TOOL_GIZMO, 'linewidth', newValue);
         });
 
         // Configuration callbacks registered
@@ -556,6 +566,55 @@ class MaterialManager {
         material.renderOrder = 9999;
 
         return this.cacheMaterial(key, material, this.materialTypes.CONTAINER_WIREFRAME_FAT);
+    }
+
+    /**
+     * Create LineMaterial for tool gizmos (arrows, circles, rotation arcs)
+     * Uses screen-space pixel widths, renders on top, shared across all gizmo types
+     */
+    createToolGizmoLineMaterial(options = {}) {
+        const configManager = this.getConfigManager();
+
+        const config = {
+            color: options.color || configManager?.get('visual.gizmo.color') || '#ff6600',
+            lineWidth: options.lineWidth || configManager?.get('visual.gizmo.lineWidth') || 2,
+            opacity: options.opacity ?? 0.9,
+            ...options
+        };
+
+        const key = this.generateMaterialKey(this.materialTypes.TOOL_GIZMO, config);
+        const cached = this.getMaterialFromCache(key);
+        if (cached) return cached;
+
+        let colorHex;
+        if (typeof config.color === 'string') {
+            colorHex = parseInt(config.color.replace('#', ''), 16);
+        } else if (typeof config.color === 'number') {
+            colorHex = config.color;
+        } else {
+            colorHex = 0xff6600;
+        }
+
+        const material = new LineMaterial({
+            color: colorHex,
+            linewidth: config.lineWidth,
+            transparent: true,
+            opacity: config.opacity,
+            depthTest: false,
+            depthWrite: false,
+            worldUnits: false
+        });
+
+        const renderer = window.modlerComponents?.sceneFoundation?.renderer;
+        if (renderer) {
+            const size = new THREE.Vector2();
+            renderer.getSize(size);
+            material.resolution.copy(size);
+        }
+
+        material.renderOrder = 1000;
+
+        return this.cacheMaterial(key, material, this.materialTypes.TOOL_GIZMO);
     }
 
     /**

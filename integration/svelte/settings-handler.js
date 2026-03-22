@@ -114,6 +114,10 @@ class SettingsHandler {
                 wireframe: {
                     color: configurationManager.get('visual.cad.wireframe.color') || '#888888'
                 }
+            },
+            gizmo: {
+                color: configurationManager.get('visual.gizmo.color') || '#ff6600',
+                lineWidth: configurationManager.get('visual.gizmo.lineWidth') || 2
             }
         };
 

@@ -32,6 +32,11 @@
 		measurementColor: '#ff0000'
 	};
 
+	let gizmoSettings = {
+		color: '#ff6600',
+		lineWidth: 2
+	};
+
 	let currentUnit = 'm';
 
 	const unitSystems = {
@@ -109,6 +114,14 @@
 		}
 	}
 
+	function updateGizmoSettings(property: string, value: any) {
+		gizmoSettings[property] = value;
+		const configPath = property === 'color' ? 'visual.gizmo.color' : 'visual.gizmo.lineWidth';
+		if (window.parent && window.parent !== window) {
+			window.parent.postMessage({ type: 'visual-settings-changed', settings: { [configPath]: value } }, '*');
+		}
+	}
+
 	function updateToolSettings(property: string, value: any) {
 		toolSettings[property] = value;
 		const configPath = `visual.measurement.${property === 'measurementColor' ? 'color' : property}`;
@@ -135,6 +148,12 @@
 					faceHighlightOpacity: (settings.containers?.faceHighlightOpacity || 0.3) * 100
 				}
 			};
+			if (settings.gizmo) {
+				gizmoSettings = {
+					color: settings.gizmo.color || '#ff6600',
+					lineWidth: settings.gizmo.lineWidth || 2
+				};
+			}
 		} else if (event.data.type === 'scene-settings-response') {
 			const settings = event.data.settings;
 			sceneSettings = {
@@ -265,6 +284,31 @@
 				label="Color"
 				value={toolSettings.measurementColor}
 				onchange={(value) => updateToolSettings('measurementColor', value)}
+			/>
+		</div>
+
+		<!-- Tool Gizmos -->
+		<div class="space-y-2 mt-8">
+			<SectionHeader label="Tool Gizmos" align="left" />
+			<ColorInput
+				label="Color"
+				value={gizmoSettings.color}
+				onchange={(value) => updateGizmoSettings('color', value)}
+			/>
+			<InlineInput
+				label="Line Width"
+				type="number"
+				value={gizmoSettings.lineWidth}
+				objectId={null}
+				property="visual.gizmo.lineWidth"
+				min={1}
+				max={10}
+				step={0.5}
+				suffix="px"
+				onchange={(event) => {
+					const numValue = parseFloat((event.target as HTMLInputElement).value);
+					updateGizmoSettings('lineWidth', numValue);
+				}}
 			/>
 		</div>
 	</PropertyGroup>

@@ -2,7 +2,7 @@ import * as THREE from 'three';
 /**
  * Move Tool
  * Handles object movement with face highlighting and drag operations using centralized SelectionController
- * Features: Face-constrained dragging, axis-constrained snapping, container-aware updates
+ * Features: Face-constrained dragging, corner-point dragging (camera-plane), snapping, container-aware updates
  * Extends BaseTool — component getters, lifecycle inherited
  */
 
@@ -41,6 +41,15 @@ class MoveTool extends BaseTool {
         this.lastPositionUpdateTime = 0;
         this.positionUpdateThrottle = 16; // ~60fps max rate
         this.pendingPositionUpdate = null;
+
+        // Corner drag state
+        this.nearestCorner = null;          // { worldPos, screenPos, index } - hovered corner
+        this.cornerHoverObject = null;      // Mesh whose corner is being hovered
+        this.isCornerDragging = false;      // Distinguishes corner vs face drag
+        this.dragCornerOffset = null;       // Vector3: local-space offset from object origin to dragged corner
+        this.dragPlane = null;              // THREE.Plane for camera-perpendicular movement
+        this.dragStartMouseWorldPos = null; // World position of mouse on drag plane at start
+        this.cornerThreshold = 20;         // Screen pixels proximity for corner detection
     }
     
     /**
@@ -83,39 +92,89 @@ class MoveTool extends BaseTool {
     }
 
     /**
+     * Detect nearest visible corner of a selected object.
+     * Delegates to centralized ToolGizmoManager.findNearestVisibleCorner().
+     */
+    detectNearestCorner(targetObject) {
+        const gizmo = this.toolGizmoManager;
+        const inputController = this.inputController;
+        if (!gizmo || !inputController) { this.clearCornerHover(); return; }
+
+        const nearest = gizmo.findNearestVisibleCorner(
+            targetObject, inputController.mouse, inputController.canvas, this.cornerThreshold
+        );
+
+        if (nearest) {
+            this.nearestCorner = nearest;
+            this.cornerHoverObject = targetObject;
+            gizmo.showAnchorPoint(nearest.worldPos);
+            this.toolGizmoManager?.hide('arrow');
+        } else {
+            this.clearCornerHover();
+        }
+    }
+
+    /**
+     * Clear corner hover state and hide circle gizmo
+     */
+    clearCornerHover() {
+        if (this.nearestCorner) {
+            this.nearestCorner = null;
+            this.cornerHoverObject = null;
+            this.toolGizmoManager?.hide('circle');
+        }
+    }
+
+    /**
      * Handle mouse hover events - show face highlighting for selected objects and handle dragging
      */
     onHover(hit, isAltPressed) {
         // Handle dragging movement during hover
-        if (this.isDragging && this.dragObject && this.dragFaceNormal) {
-            this.updateDragMovement();
+        if (this.isDragging && this.dragObject) {
+            if (this.isCornerDragging) {
+                this.updateCornerDragMovement();
+            } else if (this.dragFaceNormal) {
+                this.updateDragMovement();
+            }
             return;
         }
 
         // Handle Alt-key measurement mode
         if (this.handleMeasurementMode(isAltPressed, hit)) return;
 
-        // Check if we should show highlight for this object
+        // Corner detection runs on selected objects, independent of raycast hit.
+        // Checks screen-space proximity to visible corners even when cursor is outside the object.
+        let cornerDetected = false;
+        const selectedObjects = this.selectionController.getSelectedObjects();
+        if (selectedObjects.length === 1) {
+            this.detectNearestCorner(selectedObjects[0]);
+            cornerDetected = !!this.nearestCorner;
+        } else {
+            this.clearCornerHover();
+        }
+
+        // Face highlighting (separate from corner detection)
         if (!this.shouldShowFaceHighlight(hit)) {
             this.faceToolBehavior.clearHover();
-            this.toolGizmoManager?.hide('arrow');
+            if (!cornerDetected) this.toolGizmoManager?.hide('arrow');
             return;
         }
 
-        // Use shared face detection behavior
         const faceDetected = this.faceToolBehavior.handleFaceDetection(hit);
 
-        // Show arrow gizmo at face center alongside the face highlight
-        if (faceDetected) {
-            const hoverState = this.faceToolBehavior.getHoverState();
-            const faceHighlight = hoverState.object?.userData?.supportMeshes?.faceHighlight;
-            if (faceHighlight && hoverState.hit) {
-                const worldPos = faceHighlight.getWorldPosition(new THREE.Vector3());
-                const worldNormal = this.faceToolBehavior.getWorldFaceNormal(hoverState.hit);
-                this.toolGizmoManager?.showArrow(worldPos, worldNormal);
+        // Show arrow gizmo at face center (only if no corner detected — corner circle takes priority)
+        if (!cornerDetected) {
+            if (faceDetected) {
+                const hoverState = this.faceToolBehavior.getHoverState();
+                const faceHighlight = hoverState.object?.userData?.supportMeshes?.faceHighlight;
+                if (faceHighlight && hoverState.hit) {
+                    const worldPos = faceHighlight.getWorldPosition(new THREE.Vector3());
+                    const worldNormal = this.faceToolBehavior.getWorldFaceNormal(hoverState.hit);
+                    this.toolGizmoManager?.showArrow(worldPos, worldNormal);
+                }
+            } else {
+                this.toolGizmoManager?.hide('arrow');
             }
-        } else {
-            this.toolGizmoManager?.hide('arrow');
         }
     }
     
@@ -130,6 +189,14 @@ class MoveTool extends BaseTool {
         // Don't start new drag if already dragging
         if (this.isDragging) return false;
 
+        // Corner drag — works even without a direct hit (mouse near corner in empty space)
+        if (this.nearestCorner && this.cornerHoverObject) {
+            if (this.selectionController.isSelected(this.cornerHoverObject)) {
+                this.startCornerDrag(hit);
+                return true;
+            }
+        }
+
         // VALIDATION APPROACH: Only drag if hitting a SELECTED object
         // SelectionController already applied container-first logic during onClick
         // InputController raycast already filters out children when parent container is selected
@@ -140,7 +207,7 @@ class MoveTool extends BaseTool {
             const isSelected = hitObject && this.selectionController.isSelected(hitObject);
 
             if (isSelected) {
-                // Selected object - start drag
+                // Selected object - start face drag
                 const sceneController = this.sceneController;
                 const objectData = sceneController?.getObjectByMesh(hitObject);
                 const isContainer = objectData?.isContainer;
@@ -427,8 +494,8 @@ class MoveTool extends BaseTool {
         }
 
         // Store arrow gizmo offset in object local space so it moves with the object
-        if (this.toolGizmoManager?._arrowGroup.visible) {
-            const arrowWorldPos = this.toolGizmoManager._arrowGroup.position.clone();
+        if (this.toolGizmoManager?.isArrowVisible()) {
+            const arrowWorldPos = this.toolGizmoManager.getArrowPosition();
             this._arrowLocalOffset = arrowWorldPos.sub(targetObject.getWorldPosition(new THREE.Vector3()));
         } else {
             this._arrowLocalOffset = null;
@@ -446,7 +513,99 @@ class MoveTool extends BaseTool {
         }
 
     }
-    
+
+    /**
+     * Start corner-based dragging — free movement on camera-perpendicular plane
+     */
+    startCornerDrag(hit) {
+        const camera = window.modlerComponents?.sceneFoundation?.camera;
+        const inputController = this.inputController;
+        if (!camera || !inputController || !this.nearestCorner) return false;
+
+        // Resolve target object (same container logic as startFaceDrag)
+        let targetObject = this.cornerHoverObject || this.faceToolBehavior.getTargetObject(hit);
+
+        const sceneController = this.sceneController;
+        const selectedObjects = this.selectionController.getSelectedObjects();
+
+        if (sceneController && selectedObjects.length > 0) {
+            const objectData = sceneController.getObjectByMesh(targetObject);
+
+            // Defensive: if child's parent container is selected, use container
+            if (objectData && objectData.parentContainer) {
+                const parentContainer = sceneController.getObject(objectData.parentContainer);
+                if (parentContainer && selectedObjects.includes(parentContainer.mesh)) {
+                    targetObject = parentContainer.mesh;
+                }
+                if (this.objectStateManager?.isLayoutMode(objectData?.parentContainer)) {
+                    const isDraggingChild = targetObject === objectData.mesh;
+                    if (isDraggingChild) return false;
+                }
+            }
+        }
+
+        this.isDragging = true;
+        this.isCornerDragging = true;
+        this.dragObject = targetObject;
+        this.dragStartPosition = targetObject.position.clone();
+        this.dragFaceNormal = null; // Not axis-constrained
+
+        // Cache parent mesh for coordinate conversion
+        const scene = window.modlerComponents?.sceneFoundation?.scene;
+        this.dragParentMesh = targetObject.parent && targetObject.parent !== scene
+            ? targetObject.parent : null;
+
+        this.dragStartWorldPos = this.dragParentMesh
+            ? targetObject.getWorldPosition(new THREE.Vector3())
+            : this.dragStartPosition.clone();
+
+        // Compute corner offset in local space (corner position relative to object origin)
+        const cornerWorldPos = this.nearestCorner.worldPos.clone();
+        const objectWorldPos = targetObject.getWorldPosition(new THREE.Vector3());
+        // Store offset in world space for snap calculations
+        this.dragCornerOffset = cornerWorldPos.clone().sub(objectWorldPos);
+
+        // Create drag plane perpendicular to camera at the corner position
+        this.dragPlane = window.CameraMathUtils.createDragPlane(cornerWorldPos, camera);
+
+        // Get initial mouse position on the drag plane
+        this.dragStartMouseWorldPos = window.CameraMathUtils.screenToWorldOnPlane(
+            inputController.mouse, this.dragPlane, camera
+        );
+        if (!this.dragStartMouseWorldPos) {
+            this.isDragging = false;
+            this.isCornerDragging = false;
+            return false;
+        }
+
+        MovementUtils.registerFileOperation('move-tool-corner-drag');
+
+        this.lastMovementDelta = undefined;
+        this.cumulativeMovement = { x: 0, y: 0, z: 0 };
+        this.lastMousePos = inputController.mouse.clone();
+
+        // Store hit point for snap offset (use corner world pos)
+        this.dragHitPoint = cornerWorldPos.clone();
+
+        // Request snap detection
+        const snapController = this.snapController;
+        if (snapController) {
+            snapController.requestSnapDetection();
+        }
+
+        // Check duplication mode
+        if (this.isCommandKeyPressed()) {
+            this.duplicationMode.enter(targetObject, this.dragStartPosition);
+        }
+
+        // Hide arrow, keep circle visible at corner
+        this.toolGizmoManager?.hide('arrow');
+        this._arrowLocalOffset = null;
+        this.faceToolBehavior.clearHover();
+
+        return true;
+    }
+
     /**
      * Update object position during drag - Uses global CameraMathUtils for proper cursor following
      */
@@ -485,7 +644,7 @@ class MoveTool extends BaseTool {
             : this.dragObject.position;
 
         // Update arrow gizmo — maintain local offset so it moves with the object
-        if (this._arrowLocalOffset && this.toolGizmoManager?._arrowGroup.visible) {
+        if (this._arrowLocalOffset && this.toolGizmoManager?.isArrowVisible()) {
             this.toolGizmoManager.updateArrow(objectWorldPos.clone().add(this._arrowLocalOffset));
         }
 
@@ -582,6 +741,95 @@ class MoveTool extends BaseTool {
         
         // Update last mouse position for next frame
         this.lastMousePos = currentMouseNDC.clone();
+    }
+
+    /**
+     * Update object position during corner drag — free movement on camera-perpendicular plane
+     */
+    updateCornerDragMovement() {
+        const inputController = this.inputController;
+        const camera = window.modlerComponents?.sceneFoundation?.camera;
+
+        if (!inputController || !camera || !this.dragPlane || !this.dragStartMouseWorldPos) return;
+
+        // Check duplication mode toggle
+        const isCommandPressed = this.isCommandKeyPressed();
+        if (isCommandPressed && !this.duplicationMode.isActive) {
+            this.duplicationMode.enter(this.dragObject, this.dragStartPosition);
+        } else if (!isCommandPressed && this.duplicationMode.isActive) {
+            this.duplicationMode.exit();
+        }
+        if (this.duplicationMode.isActive) {
+            this.duplicationMode.updateMeasurement(this.dragObject);
+        }
+
+        // Raycast current mouse onto drag plane for exact cursor-following
+        const currentMouseWorldPos = window.CameraMathUtils.screenToWorldOnPlane(
+            inputController.mouse, this.dragPlane, camera
+        );
+        if (!currentMouseWorldPos) return;
+
+        // World-space delta from drag start
+        const worldDelta = currentMouseWorldPos.clone().sub(this.dragStartMouseWorldPos);
+
+        if (worldDelta.length() < 0.0001) return;
+
+        // Convert to local space if in container
+        let localDelta = worldDelta;
+        if (this.dragParentMesh) {
+            const parentInverse = new THREE.Matrix4().copy(this.dragParentMesh.matrixWorld).invert();
+            localDelta = worldDelta.clone().transformDirection(parentInverse);
+        }
+
+        // Track cumulative movement (absolute delta from start, not incremental)
+        this.cumulativeMovement.x = Math.abs(localDelta.x);
+        this.cumulativeMovement.y = Math.abs(localDelta.y);
+        this.cumulativeMovement.z = Math.abs(localDelta.z);
+
+        // Calculate potential new position
+        const potentialPosition = this.dragStartPosition.clone().add(localDelta);
+
+        // Compute where the dragged corner would be in world space
+        const draggedCornerWorldPos = this.dragStartWorldPos.clone()
+            .add(this.dragCornerOffset)
+            .add(worldDelta);
+
+        // Snap check — null travelAxis includes all edges/corners
+        const snapController = this.snapController;
+        if (snapController && snapController.getEnabled()) {
+            snapController.updateSnapDetection('move', [this.dragObject], null);
+            const currentSnapPoint = snapController.getCurrentSnapPoint();
+            if (currentSnapPoint) {
+                // Snap: position object so the dragged corner lands at the snap point
+                const snappedObjectWorldPos = currentSnapPoint.worldPos.clone().sub(this.dragCornerOffset);
+
+                if (this.dragParentMesh) {
+                    const parentInverse = new THREE.Matrix4().copy(this.dragParentMesh.matrixWorld).invert();
+                    const snappedLocalPos = snappedObjectWorldPos.applyMatrix4(parentInverse);
+                    this.updateObjectPosition(snappedLocalPos);
+                } else {
+                    this.updateObjectPosition(snappedObjectWorldPos);
+                }
+
+                // Update circle to snap target position
+                this.toolGizmoManager?.updateCircle(currentSnapPoint.worldPos, null);
+            } else {
+                this.updateObjectPosition(potentialPosition);
+                this.toolGizmoManager?.updateCircle(draggedCornerWorldPos, null);
+            }
+        } else {
+            this.updateObjectPosition(potentialPosition);
+            this.toolGizmoManager?.updateCircle(draggedCornerWorldPos, null);
+        }
+
+        // Container resize during drag
+        const sceneController = this.sceneController;
+        if (sceneController) {
+            const objectData = sceneController.getObjectByMesh(this.dragObject);
+            if (objectData && objectData.parentContainer) {
+                this.updateContainerDuringDrag();
+            }
+        }
     }
 
     /**
@@ -751,7 +999,16 @@ class MoveTool extends BaseTool {
         this.dragStartWorldPos = null;
         this._arrowLocalOffset = null;
 
-        MovementUtils.unregisterFileOperation('move-tool-drag');
+        // Clear corner drag state
+        const wasCornerDrag = this.isCornerDragging;
+        this.isCornerDragging = false;
+        this.dragCornerOffset = null;
+        this.dragPlane = null;
+        this.dragStartMouseWorldPos = null;
+        this.nearestCorner = null;
+        this.cornerHoverObject = null;
+
+        MovementUtils.unregisterFileOperation(wasCornerDrag ? 'move-tool-corner-drag' : 'move-tool-drag');
 
         this.toolGizmoManager?.hideAll();
         this.faceToolBehavior.clearHover();
@@ -855,6 +1112,9 @@ class MoveTool extends BaseTool {
             this.clearHover();
         }
 
+        // Clear corner hover when selection changes
+        this.clearCornerHover();
+
         // If new objects are selected and we're the active tool, check for immediate face highlighting
         if (selectedObjects.length > 0) {
             this.checkForFaceHighlight();
@@ -874,6 +1134,7 @@ class MoveTool extends BaseTool {
      * (rules config in BaseFaceToolBehavior handles this — move tool doesn't block hug containers)
      */
     hasActiveHighlight() {
+        if (this.nearestCorner) return true;
         if (this.faceToolBehavior.hasActiveHighlight()) return true;
 
         // Allow dragging selected containers even without explicit face highlight

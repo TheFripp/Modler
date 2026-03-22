@@ -153,7 +153,8 @@ function initializeScene() {
 
     modlerV2Components.toolGizmoManager = new ToolGizmoManager(
         modlerV2Components.sceneFoundation.scene,
-        modlerV2Components.sceneFoundation.camera
+        modlerV2Components.sceneFoundation.camera,
+        modlerV2Components.materialManager
     );
 
     // Layout propagation manager (Phase 4 Refactoring)
@@ -322,6 +323,7 @@ function initializeApplication() {
         ['select', SelectTool],
         ['move', MoveTool],
         ['push', PushTool],
+        ['rotate', RotationTool],
         ['box-creation', BoxCreationTool],
         ['tile', TileTool],
         ['measure', MeasureToolAdapter]
