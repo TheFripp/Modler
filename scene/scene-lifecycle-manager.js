@@ -95,12 +95,8 @@ class SceneLifecycleManager {
         }
 
         // Generate unique ID (use provided ID for deserialization, generate new for creation)
-        const id = options.id || this.nextId++;
-
-        // If using a restored ID, ensure nextId counter stays above it
-        if (options.id && options.id >= this.nextId) {
-            this.nextId = options.id + 1;
-        }
+        // UUIDs ensure global uniqueness across scenes, users, and future cloud storage
+        const id = options.id || crypto.randomUUID();
 
         // Set up object metadata
         const objectData = this.createObjectMetadata(id, mesh, options);
@@ -229,8 +225,14 @@ class SceneLifecycleManager {
             supportMeshFactory.cleanupSupportMeshes(objectData.mesh);
         }
 
-        // Remove from scene
-        this.scene.remove(objectData.mesh);
+        // Remove from scene (use removeFromParent to handle both scene-level
+        // and container-parented meshes — setParentContainer reparents meshes
+        // to the container mesh, so this.scene.remove() won't find them)
+        if (objectData.mesh.parent) {
+            objectData.mesh.parent.remove(objectData.mesh);
+        } else {
+            this.scene.remove(objectData.mesh);
+        }
 
         // Clean up geometry and material
         if (objectData.mesh.geometry) {
@@ -359,19 +361,22 @@ class SceneLifecycleManager {
             },
             parentContainer: options.parentContainer || null,
 
-            containerMode: options.containerMode || (options.isContainer ? (options.sizingMode || 'hug') : null),
-            // LEGACY flags - kept in sync for backward compat
-            isHug: options.containerMode === 'hug' || options.sizingMode === 'hug' || options.isHug || false,
-            sizingMode: options.containerMode || options.sizingMode || null,
+            containerMode: options.containerMode || (options.isContainer ? 'hug' : null),
+            // Legacy flags derived from containerMode via buildContainerModeUpdate()
+            isHug: (options.containerMode || (options.isContainer ? 'hug' : null)) === 'hug',
+            sizingMode: options.containerMode || (options.isContainer ? 'hug' : null),
             childrenOrder: options.childrenOrder || [],
-            layoutMode: options.layoutMode || null,
 
             layoutProperties: options.layoutProperties || {
                 sizeX: options.sizeX || 'fixed',
                 sizeY: options.sizeY || 'fixed',
                 sizeZ: options.sizeZ || 'fixed',
                 fixedSize: options.fixedSize || null
-            }
+            },
+
+            // Yard (material library) metadata
+            yardItemId: options.yardItemId || null,
+            yardFixed: options.yardFixed || null
         };
 
         Object.defineProperty(metadata, 'dimensions', {
@@ -396,6 +401,8 @@ class SceneLifecycleManager {
         mesh.userData.id = objectData.id;
         mesh.userData.type = objectData.type;
         mesh.userData.isContainer = objectData.isContainer || false;
+        mesh.userData.yardItemId = objectData.yardItemId || null;
+        mesh.userData.yardFixed = objectData.yardFixed || null;
 
         // No shadows - keep it simple
         mesh.castShadow = false;
@@ -572,7 +579,7 @@ class SceneLifecycleManager {
                 this.nextContainerNumber++;
                 return containerName;
             default:
-                return `Object ${this.nextId}`;
+                return `Object ${this.nextBoxNumber}`;
         }
     }
 
