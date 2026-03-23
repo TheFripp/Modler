@@ -153,6 +153,7 @@ class CommandRouter {
         this.handlers.set('create-container', this.handleCreateContainer.bind(this));
         this.handlers.set('create-layout-container', this.handleCreateContainer.bind(this)); // Alias
         this.handlers.set('wrap-selection-in-container', this.handleWrapSelectionInContainer.bind(this));
+        this.handlers.set('create-tiled-container', this.handleCreateTiledContainer.bind(this));
 
         // ═══════════════════════════════════════════════════════════
         // TOOL OPERATIONS
@@ -684,6 +685,28 @@ class CommandRouter {
             return;
         }
         this.toolController.createLayoutContainer();
+    }
+
+    handleCreateTiledContainer(data) {
+        const tileTool = this.toolController?.tools?.get('tile');
+        if (!tileTool?.createTiledContainer) {
+            console.error('CommandRouter: TileTool not available');
+            return;
+        }
+
+        // Ensure tile tool has a target (the object to tile)
+        if (!tileTool.targetObject) {
+            const obj = this.sceneController?.getObject(data.objectId);
+            if (obj?.mesh) {
+                tileTool.targetObject = obj.mesh;
+            }
+        }
+
+        tileTool.createTiledContainer({
+            axis: data.axis,
+            repeat: data.repeat ?? 3,
+            gap: data.gap ?? 0
+        });
     }
 
     handleActivateTool(data) {

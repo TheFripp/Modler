@@ -18,10 +18,18 @@ class TileInstanceManager {
         this.objectStateManager = window.modlerComponents?.objectStateManager;
         this.objectEventBus = window.objectEventBus;
 
-        // Listen for hierarchy changes (autoLayout property changes emit HIERARCHY events)
         if (this.objectEventBus) {
+            // Listen for hierarchy changes (autoLayout property changes emit HIERARCHY events)
             this.objectEventBus.subscribe(this.objectEventBus.EVENT_TYPES.HIERARCHY, (event) => {
                 this.handleHierarchyChange(event);
+            });
+
+            // Listen for geometry/material changes to sync across tile instances
+            this.objectEventBus.subscribe(this.objectEventBus.EVENT_TYPES.GEOMETRY, (event) => {
+                this.handleInstanceChange(event);
+            });
+            this.objectEventBus.subscribe(this.objectEventBus.EVENT_TYPES.MATERIAL, (event) => {
+                this.handleInstanceChange(event);
             });
         }
     }
@@ -51,6 +59,67 @@ class TileInstanceManager {
             this.trackedRepeats = new Map();
         }
         this.trackedRepeats.set(objectId, currentRepeat);
+    }
+
+    /**
+     * Handle geometry/material changes — sync across all tile instances
+     */
+    handleInstanceChange(event) {
+        const { objectId, changeData } = event;
+
+        // Skip changes originating from tile sync (prevent infinite loop)
+        if (changeData?.source === 'tile-sync') return;
+
+        if (!this.sceneController || !this.objectStateManager) return;
+
+        const changedObj = this.sceneController.getObject(objectId);
+        if (!changedObj || !changedObj.parentContainer) return;
+
+        // Check if parent is a tiled container
+        const container = this.sceneController.getObject(changedObj.parentContainer);
+        if (!container?.autoLayout?.tileMode?.enabled) return;
+
+        // Get all sibling children
+        const siblings = this.sceneController.getAllObjects()
+            .filter(obj => obj.parentContainer === changedObj.parentContainer && obj.id !== objectId);
+
+        if (siblings.length === 0) return;
+
+        // Sync geometry and material from changed object to all siblings
+        for (const sibling of siblings) {
+            const updates = {};
+
+            // Sync dimensions (geometry)
+            if (changedObj.dimensions) {
+                // Clone geometry from changed object
+                sibling.mesh.geometry.dispose();
+                sibling.mesh.geometry = changedObj.mesh.geometry.clone();
+                updates.dimensions = { ...changedObj.dimensions };
+            }
+
+            // Sync material
+            if (changedObj.mesh.material) {
+                const srcMat = changedObj.mesh.material;
+                sibling.mesh.material.color.copy(srcMat.color);
+                sibling.mesh.material.opacity = srcMat.opacity;
+                sibling.mesh.material.transparent = srcMat.transparent;
+                updates.material = {
+                    color: '#' + srcMat.color.getHexString(),
+                    opacity: srcMat.opacity,
+                    transparent: srcMat.transparent
+                };
+            }
+
+            if (Object.keys(updates).length > 0) {
+                this.objectStateManager.updateObject(sibling.id, updates, {
+                    source: 'tile-sync',
+                    immediate: true
+                });
+            }
+        }
+
+        // Recalculate layout (dimensions may have changed)
+        this.sceneController.updateContainer(changedObj.parentContainer);
     }
 
     /**
@@ -117,13 +186,8 @@ class TileInstanceManager {
     removeInstances(children, count) {
         if (!this.sceneController || count <= 0) return;
 
-        // Sort children to ensure consistent removal (by ID or creation order)
-        const sortedChildren = children.sort((a, b) => {
-            if (typeof a.id === 'number' && typeof b.id === 'number') {
-                return b.id - a.id; // Remove highest IDs first (newest)
-            }
-            return 0;
-        });
+        // Sort children to ensure consistent removal (newest first via childrenOrder position)
+        const sortedChildren = [...children].reverse();
 
         // Remove from the end, but keep at least the first child (master)
         const toRemove = sortedChildren.slice(0, Math.min(count, children.length - 1));
