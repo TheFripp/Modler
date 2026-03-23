@@ -186,24 +186,9 @@ class DuplicateObjectCommand extends BaseCommand {
             isContainer: true,
             selectable: true,
             containerMode: sourceContainer.containerMode || 'hug',
-            autoLayout: sourceContainer.autoLayout ? {
-                enabled: sourceContainer.autoLayout.enabled,
-                mode: sourceContainer.autoLayout.mode,
-                direction: sourceContainer.autoLayout.direction,
-                gap: sourceContainer.autoLayout.gap,
-                padding: { ...sourceContainer.autoLayout.padding },
-                alignment: sourceContainer.autoLayout.alignment,
-                sizing: sourceContainer.autoLayout.sizing ? { ...sourceContainer.autoLayout.sizing } : undefined,
-                tileMode: sourceContainer.autoLayout.tileMode ? { ...sourceContainer.autoLayout.tileMode } : undefined
-            } : {
-                enabled: false,
-                mode: 'manual',
-                direction: 'horizontal',
-                gap: 10,
-                padding: { top: 10, right: 10, bottom: 10, left: 10 },
-                alignment: 'start',
-                sizing: { fill: 'hug' }
-            }
+            autoLayout: sourceContainer.autoLayout
+                ? JSON.parse(JSON.stringify(sourceContainer.autoLayout))
+                : window.ObjectDataFormat.createDefaultAutoLayout()
         };
 
         // Extract container rotation (radians → degrees for addObject pipeline)

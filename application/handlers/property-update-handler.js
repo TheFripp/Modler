@@ -194,18 +194,13 @@ class PropertyUpdateHandler {
 
             // Step 3: PropertyUpdateHandler → handle layout enable/disable
             // Create a copy of autoLayout to modify
-            const updatedAutoLayout = objectData.autoLayout ? { ...objectData.autoLayout } : {
-                enabled: false,
-                direction: null,
-                gap: 0,
-                padding: { width: 0, height: 0, depth: 0 },
-                alignment: { x: 'center', y: 'center', z: 'center' },
-                reversed: false
-            };
+            const updatedAutoLayout = objectData.autoLayout
+                ? { ...objectData.autoLayout }
+                : window.ObjectDataFormat.createDefaultAutoLayout();
 
             // If direction is null, disable layout mode (preserve positions)
             if (newValue === null) {
-                updatedAutoLayout.enabled = false;
+                updatedAutoLayout.enabled = false; // Serialization compat — containerMode (set below) is the runtime authority
                 updatedAutoLayout.direction = null;
 
                 // Persist via ObjectStateManager
@@ -221,24 +216,24 @@ class PropertyUpdateHandler {
             // Handle full autoLayout object replacement (sent by LayoutSection via updateThreeJSProperty)
             if (property === 'autoLayout' && typeof newValue === 'object') {
                 const fullAutoLayout = { ...updatedAutoLayout, ...newValue };
-                const mode = fullAutoLayout.enabled ? 'layout' : 'manual';
+                const currentMode = this.objectStateManager.getContainerMode(containerId);
+                const mode = ObjectStateManager.resolveAutoLayoutMode(currentMode);
 
                 this.objectStateManager.updateObject(containerId, {
                     autoLayout: fullAutoLayout,
                     ...ObjectStateManager.buildContainerModeUpdate(mode)
                 }, { source: 'property-panel', immediate: true });
 
-                // Trigger layout update if enabled with valid direction
-                // SINGLE FUNNEL: updateContainer() handles resize internally (SceneLayoutManager)
-                if (fullAutoLayout.enabled && fullAutoLayout.direction && fullAutoLayout.direction !== '') {
+                // Trigger layout update for layout-capable containers
+                if (this.objectStateManager.isLayoutCapableMode(containerId)) {
                     sceneController.updateContainer(containerId);
                     this.containerCrudManager.showContainer(containerId, true);
                 }
                 return true;
             }
 
-            // Enable layout mode and disable hug mode (they are mutually exclusive)
-            updatedAutoLayout.enabled = true;
+            // Derive enabled from containerMode (serialization compat — containerMode is the runtime authority)
+            updatedAutoLayout.enabled = this.objectStateManager.isLayoutMode(containerId);
 
             // Step 4: PropertyUpdateHandler → autoLayout[property] = newValue
             if (property.startsWith('autoLayout.')) {
@@ -249,7 +244,7 @@ class PropertyUpdateHandler {
                     // Handle padding sub-properties (e.g., 'autoLayout.padding.width')
                     const paddingDirection = parts[2];
                     if (!updatedAutoLayout.padding) {
-                        updatedAutoLayout.padding = { width: 0, height: 0, depth: 0 };
+                        updatedAutoLayout.padding = window.ObjectDataFormat.createDefaultPadding();
                     }
                     updatedAutoLayout.padding = { ...updatedAutoLayout.padding, [paddingDirection]: newValue };
                 } else if (parts.length >= 3) {
@@ -265,25 +260,23 @@ class PropertyUpdateHandler {
             } else if (property.startsWith('padding.')) {
                 const paddingDirection = property.split('.')[1];
                 if (!updatedAutoLayout.padding) {
-                    updatedAutoLayout.padding = { width: 0, height: 0, depth: 0 };
+                    updatedAutoLayout.padding = window.ObjectDataFormat.createDefaultPadding();
                 }
                 updatedAutoLayout.padding = { ...updatedAutoLayout.padding, [paddingDirection]: newValue };
             } else {
                 updatedAutoLayout[property] = newValue;
             }
 
-            // CRITICAL FIX: Persist via ObjectStateManager instead of direct mutation
-            // Preserve current container mode (hug containers stay hug, layout stays layout)
+            // Persist via ObjectStateManager — resolve mode via centralized policy
             const currentMode = this.objectStateManager.getContainerMode(containerId);
-            const targetMode = (currentMode === 'hug' || currentMode === 'layout') ? currentMode : 'layout';
+            const targetMode = ObjectStateManager.resolveAutoLayoutMode(currentMode);
             this.objectStateManager.updateObject(containerId, {
                 autoLayout: updatedAutoLayout,
                 ...ObjectStateManager.buildContainerModeUpdate(targetMode)
             }, { source: 'property-panel', immediate: true });
 
-            // Only proceed with layout if enabled and has valid direction
-            // SINGLE FUNNEL: updateContainer() handles resize internally (SceneLayoutManager)
-            if (updatedAutoLayout.enabled && updatedAutoLayout.direction && updatedAutoLayout.direction !== '') {
+            // Trigger layout update for layout-capable containers
+            if (this.objectStateManager.isLayoutCapableMode(containerId)) {
                 const layoutResult = sceneController.updateContainer(containerId);
 
                 if (layoutResult && layoutResult.success) {

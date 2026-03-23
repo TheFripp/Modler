@@ -743,12 +743,7 @@ class ObjectStateManager {
                 if (object.isContainer) {
                     sceneObject.autoLayout = object.autoLayout ||
                         window.ObjectDataFormat.createDefaultAutoLayout();
-
-                    // CRITICAL: If user manually sets gap, clear calculatedGap to use fixed gap
-                    if (object._changedProperties?.has('autoLayout')) {
-                        sceneObject.calculatedGap = undefined;
-                        object.calculatedGap = undefined;
-                    }
+                    // calculatedGap clearing is owned by SceneLayoutManager.updateContainer()
                 }
 
                 // LAYOUT PROPERTIES: Sync layoutProperties for all objects (layout engine reads from SceneController)
@@ -767,25 +762,9 @@ class ObjectStateManager {
 
             // Update container layout if needed (TOP-DOWN PROPAGATION)
             // UNIFIED: SceneLayoutManager.updateContainer() handles all mode routing
-            const autoLayoutChanged = object._changedProperties?.has('autoLayout');
-            const autoLayoutPropertyChanged = Array.from(object._changedProperties || []).some(prop =>
-                prop.startsWith('autoLayout.')
-            );
-            const dimensionChanged = object._changedProperties?.has('dimensions');
-
+            // calculatedGap clearing is owned by SceneLayoutManager.updateContainer()
             if (object.isContainer && sceneObject) {
-                const skipLayoutUpdate = source === 'push-tool' || options?.skipLayout;
-
-                // Trigger container update for any layout-relevant change
-                const needsUpdate = autoLayoutChanged || autoLayoutPropertyChanged || dimensionChanged;
-                if (!skipLayoutUpdate && needsUpdate) {
-                    // Clear calculatedGap when user explicitly sets gap (data-model concern)
-                    if (autoLayoutChanged) {
-                        sceneObject.calculatedGap = undefined;
-                        object.calculatedGap = undefined;
-                    }
-
-                    // SINGLE CALL: updateContainer handles layout/hug/manual routing internally
+                if (this.shouldTriggerContainerUpdate(object.id, object._changedProperties, source, options)) {
                     this.sceneController.updateContainer(object.id);
                 }
 
@@ -985,6 +964,29 @@ class ObjectStateManager {
     }
 
     /**
+     * Check if container is in a layout-capable mode (layout or hug).
+     * Use this instead of checking both modes separately.
+     *
+     * @param {string|number} objectId - Object ID
+     * @returns {boolean} True if container is in layout or hug mode
+     */
+    isLayoutCapableMode(objectId) {
+        const mode = this.getContainerMode(objectId);
+        return mode === 'layout' || mode === 'hug';
+    }
+
+    /**
+     * Resolve the target container mode when autoLayout properties change.
+     * Policy: layout-capable modes (layout/hug) are preserved; manual gets promoted to layout.
+     *
+     * @param {'layout'|'hug'|'manual'|null} currentMode - Current container mode
+     * @returns {'layout'|'hug'} Target mode
+     */
+    static resolveAutoLayoutMode(currentMode) {
+        return (currentMode === 'hug' || currentMode === 'layout') ? currentMode : 'layout';
+    }
+
+    /**
      * Build the update object for changing container mode.
      * Sets containerMode and keeps legacy flags (isHug, sizingMode) in sync.
      *
@@ -997,6 +999,27 @@ class ObjectStateManager {
             isHug: mode === 'hug',
             sizingMode: mode
         };
+    }
+
+    /**
+     * Determine if a container update should be triggered based on what changed.
+     * Single predicate for all layout trigger decisions.
+     *
+     * @param {string|number} objectId - Object ID
+     * @param {Set} changedProperties - Set of changed property names
+     * @param {string} source - Update source (e.g., 'push-tool', 'property-panel')
+     * @param {Object} options - Update options (e.g., { skipLayout: true })
+     * @returns {boolean} True if container layout should be recalculated
+     */
+    shouldTriggerContainerUpdate(objectId, changedProperties, source, options = {}) {
+        if (source === 'push-tool' || options?.skipLayout) return false;
+
+        const object = this.getObject(objectId);
+        if (!object?.isContainer) return false;
+
+        return changedProperties.has('autoLayout') ||
+            [...changedProperties].some(p => p.startsWith('autoLayout.')) ||
+            changedProperties.has('dimensions');
     }
 
     /**

@@ -584,12 +584,16 @@ function ensureStandardFormat(objectData, options = {}) {
  * SINGLE SOURCE OF TRUTH for autoLayout defaults
  * @returns {Object} Complete autoLayout object based on STANDARD_OBJECT_DATA_SCHEMA
  */
+function createDefaultPadding() {
+    return { width: 0, height: 0, depth: 0 };
+}
+
 function createDefaultAutoLayout() {
     return {
         enabled: false,
         direction: null,
         gap: 0,
-        padding: { width: 0, height: 0, depth: 0 },
+        padding: createDefaultPadding(),
         alignment: { x: 'center', y: 'center', z: 'center' },
         reversed: false,
         tileMode: undefined
@@ -754,6 +758,7 @@ window.ObjectDataFormat = {
     createObjectMetadata,
     createEmptyObjectData,
     createDefaultAutoLayout,
+    createDefaultPadding,
 
     // Migration & ID utilities
     migrateObjectData,

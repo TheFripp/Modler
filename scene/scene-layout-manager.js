@@ -390,7 +390,7 @@ class SceneLayoutManager {
             enabled: true,
             direction: layoutConfig.direction || container.autoLayout?.direction || 'x',
             gap: layoutConfig.gap ?? container.autoLayout?.gap ?? 0,
-            padding: layoutConfig.padding || container.autoLayout?.padding || { width: 0, height: 0, depth: 0 },
+            padding: layoutConfig.padding || container.autoLayout?.padding || window.ObjectDataFormat.createDefaultPadding(),
             ...layoutConfig
         };
 

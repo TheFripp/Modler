@@ -351,14 +351,7 @@ class SceneLifecycleManager {
             isPreview: options.isPreview || false,
 
             isContainer: options.isContainer || false,
-            autoLayout: options.autoLayout || {
-                enabled: false,
-                direction: null,
-                gap: 0,
-                padding: { width: 0, height: 0, depth: 0 },
-                alignment: { x: 'center', y: 'center', z: 'center' },
-                reversed: false
-            },
+            autoLayout: options.autoLayout || window.ObjectDataFormat.createDefaultAutoLayout(),
             parentContainer: options.parentContainer || null,
 
             containerMode: options.containerMode || (options.isContainer ? 'hug' : null),

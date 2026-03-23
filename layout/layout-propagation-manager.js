@@ -86,8 +86,7 @@ class LayoutPropagationManager {
         }
 
         // Use centralized state machine to check if parent has layout or hug enabled
-        const parentMode = this.objectStateManager?.getContainerMode(childObject.parentContainer);
-        if (parentMode !== 'layout' && parentMode !== 'hug') {
+        if (!this.objectStateManager?.isLayoutCapableMode(childObject.parentContainer)) {
             return; // Parent doesn't have layout or hug enabled
         }
 
@@ -145,8 +144,7 @@ class LayoutPropagationManager {
 
         // Update each container — SceneLayoutManager handles mode routing via updateContainer()
         sorted.forEach(containerId => {
-            const containerMode = this.objectStateManager?.getContainerMode(containerId);
-            if (containerMode !== 'layout' && containerMode !== 'hug') {
+            if (!this.objectStateManager?.isLayoutCapableMode(containerId)) {
                 return;
             }
 
@@ -159,9 +157,7 @@ class LayoutPropagationManager {
 
             // OPTIMIZATION: Defer grandparent propagations to next frame
             if (container.parentContainer) {
-                // Use centralized state machine to check if grandparent has layout or hug
-                const grandparentMode = this.objectStateManager?.getContainerMode(container.parentContainer);
-                if (grandparentMode === 'layout' || grandparentMode === 'hug') {
+                if (this.objectStateManager?.isLayoutCapableMode(container.parentContainer)) {
                     deferredPropagations.add(container.parentContainer);
                     this.stats.propagationsDeferred++;
                 }
