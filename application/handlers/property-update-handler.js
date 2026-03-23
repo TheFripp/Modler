@@ -243,14 +243,22 @@ class PropertyUpdateHandler {
             // Step 4: PropertyUpdateHandler → autoLayout[property] = newValue
             if (property.startsWith('autoLayout.')) {
                 // Handle nested autoLayout properties (e.g., 'autoLayout.direction' -> 'direction')
-                const nestedProperty = property.split('.')[1];
+                const parts = property.split('.');
+                const nestedProperty = parts[1];
                 if (nestedProperty === 'padding') {
-                    // Handle padding sub-properties
-                    const paddingDirection = property.split('.')[2];
+                    // Handle padding sub-properties (e.g., 'autoLayout.padding.width')
+                    const paddingDirection = parts[2];
                     if (!updatedAutoLayout.padding) {
                         updatedAutoLayout.padding = { width: 0, height: 0, depth: 0 };
                     }
                     updatedAutoLayout.padding = { ...updatedAutoLayout.padding, [paddingDirection]: newValue };
+                } else if (parts.length >= 3) {
+                    // Handle 3+ level deep paths (e.g., 'autoLayout.tileMode.repeat')
+                    const deepProperty = parts[2];
+                    if (!updatedAutoLayout[nestedProperty] || typeof updatedAutoLayout[nestedProperty] !== 'object') {
+                        updatedAutoLayout[nestedProperty] = {};
+                    }
+                    updatedAutoLayout[nestedProperty] = { ...updatedAutoLayout[nestedProperty], [deepProperty]: newValue };
                 } else {
                     updatedAutoLayout[nestedProperty] = newValue;
                 }
@@ -424,10 +432,10 @@ class PropertyUpdateHandler {
                 return false;
             }
 
-            // Handle sizing mode changes (accepts both 'sizingMode' and 'containerMode')
+            // Handle container mode changes (accepts both 'sizingMode' and 'containerMode' for backward compat)
             if (property === 'sizingMode' || property === 'containerMode') {
-                // Get old value for undo
-                const oldValue = objectData.containerMode || objectData.sizingMode;
+                // Get old value for undo — containerMode is the sole authority
+                const oldValue = objectData.containerMode;
 
                 // Route through ObjectStateManager — single entry point for all state changes
                 const modeUpdate = ObjectStateManager.buildContainerModeUpdate(value);

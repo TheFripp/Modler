@@ -40,9 +40,9 @@ function extractSerializableData(sceneObject) {
     } : (sceneObject.position || { x: 0, y: 0, z: 0 });
 
     const rotation = mesh ? {
-        x: mesh.rotation.x,
-        y: mesh.rotation.y,
-        z: mesh.rotation.z
+        x: (mesh.rotation.x * 180) / Math.PI,
+        y: (mesh.rotation.y * 180) / Math.PI,
+        z: (mesh.rotation.z * 180) / Math.PI
     } : (sceneObject.rotation || { x: 0, y: 0, z: 0 });
 
     const scale = mesh ? {
@@ -96,8 +96,7 @@ function extractSerializableData(sceneObject) {
         // Container properties - DIRECT COPY with validation
         isContainer: sceneObject.isContainer || false,
         containerMode: sceneObject.containerMode || null,
-        isHug: isHug,  // LEGACY: Validated to ensure mutual exclusivity
-        layoutMode: sceneObject.layoutMode || null,
+        isHug: isHug,  // Derived from containerMode for backward compat
         autoLayout: autoLayout,  // EXACT copy or null
         calculatedGap: sceneObject.calculatedGap, // May be undefined - that's OK
         layoutProperties: sceneObject.layoutProperties || null,
@@ -112,6 +111,16 @@ function extractSerializableData(sceneObject) {
         category: sceneObject.category || 'permanent',
         isTemporary: sceneObject.isTemporary || false,
         isPreview: sceneObject.isPreview || false,
+
+        // Yard (material library) metadata
+        yardItemId: sceneObject.yardItemId || null,
+        yardFixed: sceneObject.yardFixed || null,
+
+        // Component properties (reserved for future instancing)
+        componentId: sceneObject.componentId || null,
+        isComponentMaster: sceneObject.isComponentMaster || false,
+        isComponentInstance: sceneObject.isComponentInstance || false,
+        masterComponentId: sceneObject.masterComponentId || null,
 
         // Timestamp
         lastModified: Date.now()
@@ -150,8 +159,59 @@ function extractBasicData(sceneObject) {
     };
 }
 
+/**
+ * Extract a complete subtree (object + all descendants) as self-contained data.
+ * Root object's parentContainer is set to null. Internal references preserved.
+ * Used for object export, clipboard, and component library storage.
+ *
+ * @param {Object} sceneController - SceneController instance
+ * @param {string} rootObjectId - ID of the root object to extract
+ * @returns {Object|null} { root: serializedObject, children: [...], version: string }
+ */
+function extractSubtreeData(sceneController, rootObjectId) {
+    if (!sceneController) return null;
+
+    const rootObj = sceneController.getObject(rootObjectId);
+    if (!rootObj) return null;
+
+    const collected = [];
+
+    // Recursive depth-first collection
+    function collectDescendants(objId) {
+        const obj = sceneController.getObject(objId);
+        if (!obj) return;
+
+        const serialized = extractSerializableData(obj);
+        if (serialized) {
+            collected.push(serialized);
+        }
+
+        // Recurse into children (use childrenOrder for consistent ordering)
+        const childOrder = obj.childrenOrder || [];
+        for (const childId of childOrder) {
+            collectDescendants(childId);
+        }
+    }
+
+    collectDescendants(rootObjectId);
+
+    if (collected.length === 0) return null;
+
+    // Root's parentContainer is null (it's the top of the exported subtree).
+    // Safe to mutate: extractSerializableData() creates fresh objects.
+    collected[0].parentContainer = null;
+
+    return {
+        root: collected[0],
+        children: collected.slice(1),
+        version: window.ObjectDataFormat?.VERSION || '1.1.0',
+        exportedAt: Date.now()
+    };
+}
+
 // Export functions
 window.DataExtractor = {
     extractSerializableData,
-    extractBasicData
+    extractBasicData,
+    extractSubtreeData
 };

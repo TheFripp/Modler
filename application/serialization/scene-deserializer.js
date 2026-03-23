@@ -20,7 +20,8 @@ class SceneDeserializer {
 
         // Version handlers for migration
         this.versionHandlers = {
-            '1.0.0': this.deserializeV1_0_0.bind(this)
+            '1.0.0': this.deserializeV1_0_0.bind(this),
+            '1.1.0': this.deserializeV1_1_0.bind(this)
         };
 
         // Statistics for debugging
@@ -182,15 +183,58 @@ class SceneDeserializer {
         const version = sceneData.version;
 
         // If already current version, no migration needed
-        if (version === '1.0.0') {
+        if (version === '1.1.0') {
             return sceneData;
         }
 
-        console.warn(`SceneDeserializer: Migrating from version ${version} to 1.0.0`);
+        // Migrate 1.0.0 → 1.1.0: Convert integer IDs to UUIDs
+        if (version === '1.0.0') {
+            console.log('SceneDeserializer: Migrating from 1.0.0 → 1.1.0 (integer IDs → UUIDs)');
+            sceneData = this.migrateV1_0_0_to_V1_1_0(sceneData);
+        }
 
-        // Future: Add version migration logic here
-        // For now, we only support 1.0.0
+        return sceneData;
+    }
 
+    /**
+     * Migrate v1.0.0 → v1.1.0: Convert all integer IDs to UUIDs
+     * Builds a mapping of old integer IDs to new UUIDs, then remaps all references.
+     * @param {Object} sceneData - Scene data with integer IDs
+     * @returns {Object} Scene data with UUID IDs
+     */
+    migrateV1_0_0_to_V1_1_0(sceneData) {
+        const objects = sceneData.scene?.objects;
+        if (!objects || !Array.isArray(objects)) {
+            sceneData.version = '1.1.0';
+            return sceneData;
+        }
+
+        // Build old-ID → new-UUID mapping
+        const idMap = new Map();
+        for (const obj of objects) {
+            idMap.set(String(obj.id), crypto.randomUUID());
+        }
+
+        // Remap all object IDs and references using shared utility
+        window.ObjectDataFormat.remapObjectIds(objects, idMap);
+
+        // Update format version on each object
+        for (const obj of objects) {
+            obj.formatVersion = '1.1.0';
+        }
+
+        // Remap rootChildrenOrder
+        if (Array.isArray(sceneData.scene.rootChildrenOrder)) {
+            sceneData.scene.rootChildrenOrder = sceneData.scene.rootChildrenOrder.map(
+                id => idMap.get(String(id)) || id
+            );
+        }
+
+        // Clear nextId counter — no longer meaningful with UUIDs
+        // Keep nextBoxNumber/nextContainerNumber for display names
+        delete sceneData.scene.nextId;
+
+        sceneData.version = '1.1.0';
         return sceneData;
     }
 
@@ -222,8 +266,7 @@ class SceneDeserializer {
             }
         }
 
-        // Reset scene counters
-        this.sceneController.nextId = 1;
+        // Reset display name counters (IDs are now UUIDs — no counter needed)
         this.sceneController.nextBoxNumber = 1;
         this.sceneController.nextContainerNumber = 1;
         this.sceneController.rootChildrenOrder = [];
@@ -245,10 +288,7 @@ class SceneDeserializer {
             return;
         }
 
-        // Restore scene counters
-        if (sceneContent.nextId) {
-            this.sceneController.nextId = sceneContent.nextId;
-        }
+        // Restore display name counters (nextId no longer needed — UUIDs used for identity)
         if (sceneContent.nextBoxNumber) {
             this.sceneController.nextBoxNumber = sceneContent.nextBoxNumber;
         }
@@ -464,20 +504,14 @@ class SceneDeserializer {
                 },
                 // Pass autoLayout in options so it's stored in objectData
                 autoLayout: objData.autoLayout,
-                // Migrate to containerMode: use saved value, or derive from old flags
-                containerMode: objData.containerMode || (
-                    objData.autoLayout?.enabled ? 'layout' :
-                    objData.isHug ? 'hug' :
-                    (objData.layoutMode ? 'layout' : 'hug')
-                ),
-                // LEGACY: kept for backward compat
-                isHug: objData.autoLayout?.enabled ? false : (objData.isHug || false),
-                layoutMode: objData.layoutMode,
+                // Migrate to containerMode: use saved value, or derive from legacy flags
+                containerMode: objData.containerMode ||
+                    (objData.autoLayout?.enabled ? 'layout' : 'hug'),
                 childrenOrder: objData.childrenOrder,
                 layoutProperties: objData.layoutProperties
             });
 
-            // Sync legacy flags from containerMode (corrects SceneLifecycleManager's loose derivation)
+            // Sync legacy flags from containerMode via buildContainerModeUpdate
             if (objData.isContainer && createdObject) {
                 const modeUpdate = ObjectStateManager.buildContainerModeUpdate(createdObject.containerMode);
                 Object.assign(createdObject, modeUpdate);
@@ -501,6 +535,14 @@ class SceneDeserializer {
                         createdObject.id,
                         objData.dimensions
                     );
+                }
+
+                // Restore Yard metadata (material library template tracking)
+                if (objData.yardItemId) {
+                    createdObject.yardItemId = objData.yardItemId;
+                }
+                if (objData.yardFixed) {
+                    createdObject.yardFixed = objData.yardFixed;
                 }
             }
 
@@ -653,12 +695,20 @@ class SceneDeserializer {
     }
 
     /**
-     * Deserialize version 1.0.0 format (current version handler)
+     * Deserialize version 1.0.0 format (legacy — migrated to 1.1.0 on load)
      * @param {Object} sceneData - Scene data
      * @returns {Object} Deserialized data
      */
     deserializeV1_0_0(sceneData) {
-        // No migration needed, current version
+        return sceneData;
+    }
+
+    /**
+     * Deserialize version 1.1.0 format (current version — UUID IDs)
+     * @param {Object} sceneData - Scene data
+     * @returns {Object} Deserialized data
+     */
+    deserializeV1_1_0(sceneData) {
         return sceneData;
     }
 

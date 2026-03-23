@@ -373,39 +373,45 @@ class ContainerCrudManager {
      * The axis with the greatest spread among child positions becomes the direction.
      */
     detectAndSetOrientation(selectedObjects, containerObject) {
-        if (!selectedObjects || selectedObjects.length < 2) {
-            // Single object or empty — default to x
-            if (containerObject.autoLayout) {
-                containerObject.autoLayout.enabled = true;
-                containerObject.autoLayout.direction = 'x';
-            }
-            return;
-        }
-
-        let minX = Infinity, maxX = -Infinity;
-        let minY = Infinity, maxY = -Infinity;
-        let minZ = Infinity, maxZ = -Infinity;
-
-        selectedObjects.forEach(obj => {
-            const pos = obj.position;
-            if (!pos) return;
-            minX = Math.min(minX, pos.x); maxX = Math.max(maxX, pos.x);
-            minY = Math.min(minY, pos.y); maxY = Math.max(maxY, pos.y);
-            minZ = Math.min(minZ, pos.z); maxZ = Math.max(maxZ, pos.z);
-        });
-
-        const spreadX = maxX - minX;
-        const spreadY = maxY - minY;
-        const spreadZ = maxZ - minZ;
-
         let direction = 'x';
-        if (spreadY > spreadX && spreadY > spreadZ) {
-            direction = 'y';
-        } else if (spreadZ > spreadX && spreadZ > spreadY) {
-            direction = 'z';
+
+        if (selectedObjects && selectedObjects.length >= 2) {
+            let minX = Infinity, maxX = -Infinity;
+            let minY = Infinity, maxY = -Infinity;
+            let minZ = Infinity, maxZ = -Infinity;
+
+            selectedObjects.forEach(obj => {
+                const pos = obj.position;
+                if (!pos) return;
+                minX = Math.min(minX, pos.x); maxX = Math.max(maxX, pos.x);
+                minY = Math.min(minY, pos.y); maxY = Math.max(maxY, pos.y);
+                minZ = Math.min(minZ, pos.z); maxZ = Math.max(maxZ, pos.z);
+            });
+
+            const spreadX = maxX - minX;
+            const spreadY = maxY - minY;
+            const spreadZ = maxZ - minZ;
+
+            if (spreadY > spreadX && spreadY > spreadZ) {
+                direction = 'y';
+            } else if (spreadZ > spreadX && spreadZ > spreadY) {
+                direction = 'z';
+            }
         }
 
-        if (containerObject.autoLayout) {
+        // Route through ObjectStateManager (single source of truth for state changes)
+        const osm = window.modlerComponents?.objectStateManager;
+        if (osm) {
+            osm.updateObject(containerObject.id, {
+                autoLayout: {
+                    ...containerObject.autoLayout,
+                    enabled: true,
+                    direction: direction
+                },
+                ...ObjectStateManager.buildContainerModeUpdate('layout')
+            }, { source: 'container-creation', skipLayout: true });
+        } else if (containerObject.autoLayout) {
+            // Fallback: direct mutation if OSM not yet available
             containerObject.autoLayout.enabled = true;
             containerObject.autoLayout.direction = direction;
         }
@@ -444,21 +450,33 @@ class ContainerCrudManager {
      */
     toggleContainerState(objectData) {
         const sceneController = window.modlerComponents?.sceneController;
+        const osm = window.modlerComponents?.objectStateManager;
         if (!sceneController) return false;
-        
+
         if (objectData.isContainer) {
             // Disable container and auto layout
-            objectData.isContainer = false;
-            if (objectData.autoLayout) {
+            if (osm) {
+                osm.updateObject(objectData.id, {
+                    isContainer: false,
+                    autoLayout: null,
+                    ...ObjectStateManager.buildContainerModeUpdate('manual')
+                }, { source: 'container-toggle', skipLayout: true });
+            } else {
+                objectData.isContainer = false;
                 sceneController.disableAutoLayout(objectData.id);
             }
-            // Container removed
             return false;
         } else {
             // Enable container
-            objectData.isContainer = true;
-            Object.assign(objectData, ObjectStateManager.buildContainerModeUpdate('hug'));
-            // Object converted to container
+            if (osm) {
+                osm.updateObject(objectData.id, {
+                    isContainer: true,
+                    ...ObjectStateManager.buildContainerModeUpdate('hug')
+                }, { source: 'container-toggle', skipLayout: true });
+            } else {
+                objectData.isContainer = true;
+                Object.assign(objectData, ObjectStateManager.buildContainerModeUpdate('hug'));
+            }
             return true;
         }
     }

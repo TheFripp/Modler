@@ -15,7 +15,7 @@
 /**
  * Format version for migration compatibility
  */
-const OBJECT_DATA_FORMAT_VERSION = '1.0.0';
+const OBJECT_DATA_FORMAT_VERSION = '1.1.0';
 
 /**
  * Object type constants — single source of truth for type strings
@@ -45,20 +45,30 @@ const MAX_NESTING_DEPTH = 2;
  * Add new entries when the format changes to ensure old saved files load correctly.
  */
 const FORMAT_MIGRATIONS = {
-    // Example for future use:
-    // '1.0.0': {
-    //     to: '1.1.0',
-    //     migrate: (data) => {
-    //         // Add new required property with default
-    //         if (data.isContainer && !data.containerMode) {
-    //             if (data.autoLayout?.enabled) data.containerMode = 'layout';
-    //             else if (data.isHug) data.containerMode = 'hug';
-    //             else data.containerMode = 'manual';
-    //         }
-    //         data.formatVersion = '1.1.0';
-    //         return data;
-    //     }
-    // }
+    '1.0.0': {
+        to: '1.1.0',
+        migrate: (data) => {
+            // Convert integer ID to UUID string if needed
+            // Individual object migration — scene-level ID remapping handled by SceneDeserializer
+            if (typeof data.id === 'number') {
+                data.id = String(data.id);
+            }
+            if (typeof data.parentContainer === 'number') {
+                data.parentContainer = String(data.parentContainer);
+            }
+            if (Array.isArray(data.childIds)) {
+                data.childIds = data.childIds.map(id => typeof id === 'number' ? String(id) : id);
+            }
+            if (Array.isArray(data.childrenOrder)) {
+                data.childrenOrder = data.childrenOrder.map(id => typeof id === 'number' ? String(id) : id);
+            }
+            if (data.autoLayout?.tileMode?.sourceObjectId && typeof data.autoLayout.tileMode.sourceObjectId === 'number') {
+                data.autoLayout.tileMode.sourceObjectId = String(data.autoLayout.tileMode.sourceObjectId);
+            }
+            data.formatVersion = '1.1.0';
+            return data;
+        }
+    }
 };
 
 /**
@@ -130,6 +140,12 @@ const STANDARD_OBJECT_DATA_SCHEMA = {
     selected: 'boolean',
     locked: 'boolean',
     visible: 'boolean',
+
+    // Component properties (reserved for future component instancing)
+    componentId: 'string|null',           // UUID of the component definition (shared across instances)
+    isComponentMaster: 'boolean',         // Is this the master definition
+    isComponentInstance: 'boolean',       // Is this an instance
+    masterComponentId: 'string|null',     // Points to master's componentId
 
     // Metadata
     formatVersion: 'string',
@@ -408,16 +424,19 @@ function convertFromObjectStateManager(stateData) {
         calculatedGap: stateData.calculatedGap, // Include dynamic gap value
         parentContainer: stateData.parentContainer || null,
 
-        // Additional container properties
+        // Container mode — containerMode is the sole authority
         containerMode: stateData.containerMode || null,
-        isHug: stateData.isHug || false,
-        layoutMode: stateData.layoutMode || null,
+        isHug: (stateData.containerMode || null) === 'hug',
+        sizingMode: stateData.containerMode || null,
         childrenOrder: stateData.childrenOrder || [],
         childIds: stateData.childIds || [],
 
         // Additional object properties
         selectable: stateData.selectable !== undefined ? stateData.selectable : true,
-        visible: stateData.visible !== undefined ? stateData.visible : true
+        visible: stateData.visible !== undefined ? stateData.visible : true,
+
+        // Preserve formatVersion to avoid unnecessary migration
+        formatVersion: stateData.formatVersion || OBJECT_DATA_FORMAT_VERSION
     };
 
     return standardData;
@@ -442,7 +461,8 @@ function convertBestEffort(sourceData) {
         material: sourceData.material || { color: '#888888', opacity: 1, transparent: false },
         containerMode: sourceData.containerMode || null,
         autoLayout: sourceData.autoLayout || createDefaultAutoLayout(),
-        parentContainer: sourceData.parentContainer || null
+        parentContainer: sourceData.parentContainer || null,
+        formatVersion: sourceData.formatVersion || OBJECT_DATA_FORMAT_VERSION
     };
 }
 
@@ -582,7 +602,7 @@ function createDefaultAutoLayout() {
  */
 function createEmptyObjectData(id = null) {
     return {
-        id: id || `object-${Date.now()}`,
+        id: id || crypto.randomUUID(),
         name: 'Empty Object',
         type: 'object',
         isContainer: false,
@@ -632,7 +652,7 @@ function createObjectMetadata(options = {}) {
 
     return {
         // Core identification
-        id: options.id || 0,
+        id: options.id || crypto.randomUUID(),
         name: options.name || 'Object',
         type: type,
 
@@ -656,12 +676,11 @@ function createObjectMetadata(options = {}) {
 
         // Container properties - ALWAYS use schema defaults
         isContainer: options.isContainer || false,
-        containerMode: options.containerMode || (options.isContainer ? (options.sizingMode || 'hug') : null),
-        // LEGACY flags - derived from containerMode, kept for backward compat
-        isHug: options.containerMode === 'hug' || options.sizingMode === 'hug' || options.isHug || false,
-        sizingMode: options.containerMode || options.sizingMode || null,
+        containerMode: options.containerMode || (options.isContainer ? 'hug' : null),
+        // Legacy flags derived from containerMode via buildContainerModeUpdate pattern
+        isHug: (options.containerMode || (options.isContainer ? 'hug' : null)) === 'hug',
+        sizingMode: options.containerMode || (options.isContainer ? 'hug' : null),
         autoLayout: options.autoLayout || createDefaultAutoLayout(), // SCHEMA DEFAULT - never null
-        layoutMode: options.layoutMode || null,
         layoutProperties: options.layoutProperties || {
             sizeX: options.sizeX || 'fixed',
             sizeY: options.sizeY || 'fixed',
@@ -688,8 +707,40 @@ function createObjectMetadata(options = {}) {
         userData: options.userData || {},
 
         // Additional options pass-through
-        originalBounds: options.originalBounds || undefined
+        originalBounds: options.originalBounds || undefined,
+
+        // Yard (material library) metadata
+        yardItemId: options.yardItemId || null,
+        yardFixed: options.yardFixed || null
     };
+}
+
+/**
+ * Remap all ID references in an array of objects using a provided mapping.
+ * Handles: id, parentContainer, childIds, childrenOrder, autoLayout.tileMode.sourceObjectId.
+ * This is the single source of truth for "which fields contain object ID references".
+ *
+ * @param {Array<Object>} objects - Array of serialized object data to remap
+ * @param {Map<string, string>} idMap - Map from old ID (as string) to new ID
+ */
+function remapObjectIds(objects, idMap) {
+    for (const obj of objects) {
+        obj.id = idMap.get(String(obj.id)) || obj.id;
+
+        if (obj.parentContainer != null) {
+            obj.parentContainer = idMap.get(String(obj.parentContainer)) || obj.parentContainer;
+        }
+        if (Array.isArray(obj.childIds)) {
+            obj.childIds = obj.childIds.map(id => idMap.get(String(id)) || id);
+        }
+        if (Array.isArray(obj.childrenOrder)) {
+            obj.childrenOrder = obj.childrenOrder.map(id => idMap.get(String(id)) || id);
+        }
+        if (obj.autoLayout?.tileMode?.sourceObjectId != null) {
+            obj.autoLayout.tileMode.sourceObjectId =
+                idMap.get(String(obj.autoLayout.tileMode.sourceObjectId)) || obj.autoLayout.tileMode.sourceObjectId;
+        }
+    }
 }
 
 // Export the central format module
@@ -704,8 +755,9 @@ window.ObjectDataFormat = {
     createEmptyObjectData,
     createDefaultAutoLayout,
 
-    // Migration
+    // Migration & ID utilities
     migrateObjectData,
+    remapObjectIds,
 
     // Constants
     SCHEMA: STANDARD_OBJECT_DATA_SCHEMA,

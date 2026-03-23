@@ -90,14 +90,14 @@ class DuplicateObjectCommand extends BaseCommand {
             z: sourceObject.mesh.position.z
         } : { x: 0, y: 0, z: 0 });
 
-        // Extract rotation from mesh (if not default)
+        // Extract rotation from mesh (radians → degrees for addObject pipeline)
         const rotation = sourceObject.mesh &&
             (sourceObject.mesh.rotation.x !== 0 ||
              sourceObject.mesh.rotation.y !== 0 ||
              sourceObject.mesh.rotation.z !== 0) ? {
-            x: sourceObject.mesh.rotation.x,
-            y: sourceObject.mesh.rotation.y,
-            z: sourceObject.mesh.rotation.z
+            x: (sourceObject.mesh.rotation.x * 180) / Math.PI,
+            y: (sourceObject.mesh.rotation.y * 180) / Math.PI,
+            z: (sourceObject.mesh.rotation.z * 180) / Math.PI
         } : null;
 
         // Create duplicate options based on source object
@@ -163,14 +163,6 @@ class DuplicateObjectCommand extends BaseCommand {
             z: sourceContainer.mesh.position.z
         } : { x: 0, y: 0, z: 0 });
 
-        // Comprehensive logging for debugging
-        logger.info(`=== CONTAINER DUPLICATION START ===`);
-        logger.info(`  Source container: ${this.sourceObjectId} "${sourceContainer.name}"`);
-        logger.info(`  Source position: (${sourceContainer.mesh?.position.x}, ${sourceContainer.mesh?.position.y}, ${sourceContainer.mesh?.position.z})`);
-        logger.info(`  Options.position provided: ${this.options.position ? `(${this.options.position.x}, ${this.options.position.y}, ${this.options.position.z})` : 'NO - using source position'}`);
-        logger.info(`  Target position: (${position.x}, ${position.y}, ${position.z})`);
-        logger.info(`  Position delta: ${this.options.position ? `(${position.x - sourceContainer.mesh.position.x}, ${position.y - sourceContainer.mesh.position.y}, ${position.z - sourceContainer.mesh.position.z})` : 'N/A'}`);
-
         // Create container geometry using factory (same as createAndRegisterContainer)
         const size = new THREE.Vector3(
             sourceContainer.dimensions.x,
@@ -193,7 +185,7 @@ class DuplicateObjectCommand extends BaseCommand {
             parentContainer: sourceContainer.parentContainer,
             isContainer: true,
             selectable: true,
-            containerMode: sourceContainer.containerMode || sourceContainer.sizingMode || 'hug',
+            containerMode: sourceContainer.containerMode || 'hug',
             autoLayout: sourceContainer.autoLayout ? {
                 enabled: sourceContainer.autoLayout.enabled,
                 mode: sourceContainer.autoLayout.mode,
@@ -214,6 +206,18 @@ class DuplicateObjectCommand extends BaseCommand {
             }
         };
 
+        // Extract container rotation (radians → degrees for addObject pipeline)
+        if (sourceContainer.mesh &&
+            (sourceContainer.mesh.rotation.x !== 0 ||
+             sourceContainer.mesh.rotation.y !== 0 ||
+             sourceContainer.mesh.rotation.z !== 0)) {
+            containerOptions.rotation = {
+                x: (sourceContainer.mesh.rotation.x * 180) / Math.PI,
+                y: (sourceContainer.mesh.rotation.y * 180) / Math.PI,
+                z: (sourceContainer.mesh.rotation.z * 180) / Math.PI
+            };
+        }
+
         // Add container to scene (same pattern as createAndRegisterContainer)
         const duplicatedContainer = sceneController.addObject(containerData.mesh, null, containerOptions);
 
@@ -227,55 +231,21 @@ class DuplicateObjectCommand extends BaseCommand {
         // Map to track old child ID → new child ID for childrenOrder
         const childIdMap = new Map();
 
-        // Recursively duplicate all children
-        // NOTE: We pre-calculate local positions relative to the NEW container
-        // This avoids coordinate conversion race conditions
+        // Duplicate all children using their local positions (same orientation in duplicate)
         const children = sceneController.getChildObjects(sourceContainer.id);
-        logger.info(`  Duplicating ${children.length} children`);
-
-        // CRITICAL: Update source container's matrix FIRST so children's world positions are correct
-        sourceContainer.mesh.updateMatrixWorld(true);
-
-        // Get new container's world position for local position calculations
-        duplicatedContainer.mesh.updateMatrixWorld(true);
-        const newContainerWorldPos = duplicatedContainer.mesh.getWorldPosition(new THREE.Vector3());
-        logger.info(`  New container world position: (${newContainerWorldPos.x}, ${newContainerWorldPos.y}, ${newContainerWorldPos.z})`);
-
-        // Get source container's world position for reference
-        const sourceContainerWorldPos = sourceContainer.mesh.getWorldPosition(new THREE.Vector3());
-        logger.info(`  Source container world position: (${sourceContainerWorldPos.x}, ${sourceContainerWorldPos.y}, ${sourceContainerWorldPos.z})`);
 
         for (const child of children) {
-            // Force matrix update on child (parent matrix already updated above)
-            child.mesh.updateMatrixWorld(true);
-            const childWorldPos = child.mesh.getWorldPosition(new THREE.Vector3());
-            logger.info(`    Child ${child.id} "${child.name}" at world: (${childWorldPos.x}, ${childWorldPos.y}, ${childWorldPos.z})`);
-
-            // Pre-calculate local position relative to NEW container
+            // Use source child's local position directly — already in the correct
+            // local coordinate space, and the duplicate container has the same orientation
             const localPosition = {
-                x: childWorldPos.x - newContainerWorldPos.x,
-                y: childWorldPos.y - newContainerWorldPos.y,
-                z: childWorldPos.z - newContainerWorldPos.z
+                x: child.mesh.position.x,
+                y: child.mesh.position.y,
+                z: child.mesh.position.z
             };
-            logger.info(`    -> Local position relative to new container: (${localPosition.x}, ${localPosition.y}, ${localPosition.z})`);
 
-            // Pass local position directly - no coordinate conversion needed
             const childDuplicate = this.duplicateChild(child, duplicatedContainer.id, localPosition, sceneController);
             if (childDuplicate) {
                 childIdMap.set(child.id, childDuplicate.id);
-                const childMesh = childDuplicate.mesh;
-                const finalWorldPos = childMesh ? childMesh.getWorldPosition(new THREE.Vector3()) : null;
-
-                // COMPREHENSIVE LOGGING for debugging selection issues
-                logger.info(`    -> Created ${childDuplicate.id}:`);
-                logger.info(`       - Local position: (${childMesh?.position.x}, ${childMesh?.position.y}, ${childMesh?.position.z})`);
-                logger.info(`       - World position: (${finalWorldPos?.x}, ${finalWorldPos?.y}, ${finalWorldPos?.z})`);
-                logger.info(`       - parentContainer: ${childDuplicate.parentContainer}`);
-                logger.info(`       - Parent mesh: ${childMesh?.parent?.userData?.id || 'NO PARENT'}`);
-                logger.info(`       - Type: ${childDuplicate.type}`);
-                logger.info(`       - Selectable: ${childDuplicate.selectable}`);
-                logger.info(`       - Geometry: ${childMesh?.geometry?.type || 'NO GEOMETRY'}`);
-                logger.info(`       - Raycastable: ${typeof childMesh?.raycast === 'function'}`);
             }
         }
 
@@ -288,14 +258,10 @@ class DuplicateObjectCommand extends BaseCommand {
             objectStateManager.updateObject(duplicatedContainer.id, {
                 childrenOrder: newChildrenOrder
             }, 'duplicate');
-
-            logger.info(`  Updated childrenOrder: [${newChildrenOrder.join(', ')}]`);
         }
 
         // Trigger container update (mode routing handled by SceneLayoutManager)
         sceneController.updateContainer(duplicatedContainer.id, { reason: 'hierarchy-changed' });
-
-        logger.info(`=== CONTAINER DUPLICATION COMPLETE ===`);
 
         // If in a parent container, add to childrenOrder
         if (sourceContainer.parentContainer) {
@@ -310,7 +276,6 @@ class DuplicateObjectCommand extends BaseCommand {
             }
         }
 
-        logger.info(`✨ Duplicated container ${this.sourceObjectId} → ${this.duplicatedObjectId} with ${children.length} children`);
         return true;
     }
 
@@ -328,9 +293,9 @@ class DuplicateObjectCommand extends BaseCommand {
             (sourceChild.mesh.rotation.x !== 0 ||
              sourceChild.mesh.rotation.y !== 0 ||
              sourceChild.mesh.rotation.z !== 0) ? {
-            x: sourceChild.mesh.rotation.x,
-            y: sourceChild.mesh.rotation.y,
-            z: sourceChild.mesh.rotation.z
+            x: (sourceChild.mesh.rotation.x * 180) / Math.PI,
+            y: (sourceChild.mesh.rotation.y * 180) / Math.PI,
+            z: (sourceChild.mesh.rotation.z * 180) / Math.PI
         } : null;
 
         const options = {
@@ -487,15 +452,15 @@ class DuplicateObjectCommand extends BaseCommand {
             }
         };
 
-        // Only include rotation if it's not default (0,0,0)
+        // Only include rotation if it's not default (radians → degrees for addObject pipeline)
         if (objectData.mesh &&
             (objectData.mesh.rotation.x !== 0 ||
              objectData.mesh.rotation.y !== 0 ||
              objectData.mesh.rotation.z !== 0)) {
             snapshot.rotation = {
-                x: objectData.mesh.rotation.x,
-                y: objectData.mesh.rotation.y,
-                z: objectData.mesh.rotation.z
+                x: (objectData.mesh.rotation.x * 180) / Math.PI,
+                y: (objectData.mesh.rotation.y * 180) / Math.PI,
+                z: (objectData.mesh.rotation.z * 180) / Math.PI
             };
         }
 

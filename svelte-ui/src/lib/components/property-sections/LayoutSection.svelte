@@ -12,9 +12,8 @@
 	export let objectId: string;
 	export let currentUnit: string = 'm';
 
-	// Container mode state (manual / layout / hug)
-	$: currentMode = displayObject.containerMode ||
-		(displayObject.autoLayout?.enabled ? 'layout' : (displayObject.isHug ? 'hug' : 'manual'));
+	// Container mode state (manual / layout / hug) — containerMode is the sole authority
+	$: currentMode = displayObject.containerMode || 'manual';
 
 	function setContainerMode(mode: string) {
 		// Optimistic update

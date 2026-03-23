@@ -424,6 +424,22 @@ class ObjectStateManager {
             }
         }
 
+        // Guard: Yard fixed dimensions cannot be changed by any update path
+        const yardFixed = object.yardFixed || object.mesh?.userData?.yardFixed;
+        if (yardFixed) {
+            for (const axis of ['x', 'y', 'z']) {
+                if (yardFixed[axis]) {
+                    delete updates[`dimensions.${axis}`];
+                    if (updates.dimensions && typeof updates.dimensions === 'object') {
+                        delete updates.dimensions[axis];
+                    }
+                }
+            }
+            if (updates.dimensions && typeof updates.dimensions === 'object' && Object.keys(updates.dimensions).length === 0) {
+                delete updates.dimensions;
+            }
+        }
+
         // Apply updates to local state and track which properties changed
         const changedProperties = this.applyUpdates(object, updates);
 
@@ -581,9 +597,13 @@ class ObjectStateManager {
 
         this.updateScheduled = true;
 
-        // Propagate synchronously for immediate UI feedback
-        // This eliminates the 1-frame delay that was causing flickering
-        this.propagateChanges();
+        // Drain: propagate until stable. Cascading updates (e.g., tile sync adds
+        // sibling updates during event emission) need additional propagation cycles.
+        let safety = 10;
+        while (this.pendingChanges.size > 0 && safety-- > 0) {
+            this.propagateChanges();
+        }
+
         this.updateScheduled = false;
     }
 
@@ -593,7 +613,8 @@ class ObjectStateManager {
     propagateChanges() {
         if (this.pendingChanges.size === 0) return;
 
-        // Build array of {object, source, options} tuples
+        // Snapshot and clear BEFORE processing — any changes added during
+        // propagation (e.g., tile instance sync) survive for the next cycle
         const changedItems = Array.from(this.pendingChanges.entries()).map(([id, data]) => {
             // Support both old format (string source) and new format ({source, options})
             const source = typeof data === 'string' ? data : data.source;
@@ -605,6 +626,7 @@ class ObjectStateManager {
                 options
             };
         });
+        this.pendingChanges.clear();
 
         // Update 3D scene (with source and options information)
         this.updateSceneController(changedItems);
@@ -614,9 +636,6 @@ class ObjectStateManager {
 
         // Refresh selection UI if any changed objects are currently selected
         this.refreshSelectionUI(changedItems);
-
-        // Clear pending changes
-        this.pendingChanges.clear();
     }
 
     /**
@@ -736,6 +755,14 @@ class ObjectStateManager {
                 if (object.layoutProperties) {
                     sceneObject.layoutProperties = object.layoutProperties;
                 }
+
+                // Yard fixed dimensions — sync to SceneController and mesh.userData
+                if (object._changedProperties?.has('yardFixed')) {
+                    sceneObject.yardFixed = object.yardFixed;
+                    if (sceneObject.mesh) {
+                        sceneObject.mesh.userData.yardFixed = object.yardFixed;
+                    }
+                }
             }
 
             // Update container layout if needed (TOP-DOWN PROPAGATION)
@@ -747,7 +774,7 @@ class ObjectStateManager {
             const dimensionChanged = object._changedProperties?.has('dimensions');
 
             if (object.isContainer && sceneObject) {
-                const skipLayoutUpdate = source === 'push-tool';
+                const skipLayoutUpdate = source === 'push-tool' || options?.skipLayout;
 
                 // Trigger container update for any layout-relevant change
                 const needsUpdate = autoLayoutChanged || autoLayoutPropertyChanged || dimensionChanged;
@@ -928,17 +955,13 @@ class ObjectStateManager {
         const obj = this.getObject(objectId);
         if (!obj?.isContainer) return null;
 
-        // PRIMARY: Use containerMode if set (new canonical property)
+        // containerMode is the sole authority for mode detection
         if (obj.containerMode === 'layout' || obj.containerMode === 'hug' || obj.containerMode === 'manual') {
             return obj.containerMode;
         }
 
-        // LEGACY FALLBACK: Derive from old flags (for data created before containerMode existed)
-        if (obj.autoLayout?.enabled) return 'layout';
-        if (obj.layoutMode !== null && obj.layoutMode !== undefined) return 'layout';
-        if (obj.isHug === true) return 'hug';
-
-        return 'manual';
+        // Fallback for containers without explicit containerMode (shouldn't happen after Phase 1 cleanup)
+        return 'hug';
     }
 
     /**

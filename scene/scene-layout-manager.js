@@ -383,13 +383,26 @@ class SceneLayoutManager {
         // When layout is enabled on an existing container, children may be at preserved world positions
         this.resetChildPositionsForLayout(containerId);
 
-        container.autoLayout = {
+        // Route state change through ObjectStateManager (single source of truth)
+        const osm = this.getObjectStateManager();
+        const updatedAutoLayout = {
+            ...container.autoLayout,  // Preserve existing modifiers (tileMode, etc.)
             enabled: true,
-            direction: layoutConfig.direction || 'x',
-            gap: layoutConfig.gap || 0,
-            padding: layoutConfig.padding || { width: 0, height: 0, depth: 0 },
+            direction: layoutConfig.direction || container.autoLayout?.direction || 'x',
+            gap: layoutConfig.gap ?? container.autoLayout?.gap ?? 0,
+            padding: layoutConfig.padding || container.autoLayout?.padding || { width: 0, height: 0, depth: 0 },
             ...layoutConfig
         };
+
+        if (osm) {
+            osm.updateObject(containerId, {
+                autoLayout: updatedAutoLayout,
+                ...window.ObjectStateManager.buildContainerModeUpdate('layout')
+            }, { source: 'layout-manager', skipLayout: true });
+        } else {
+            // Fallback: direct mutation if OSM not yet available (early init)
+            container.autoLayout = updatedAutoLayout;
+        }
 
         this.updateContainer(containerId);
 
@@ -407,7 +420,16 @@ class SceneLayoutManager {
         const container = this.sceneController.getObject(containerId);
         if (!container) return false;
 
-        container.autoLayout = null;
+        // Route state change through ObjectStateManager (single source of truth)
+        const osm = this.getObjectStateManager();
+        if (osm) {
+            osm.updateObject(containerId, {
+                autoLayout: null,
+                ...window.ObjectStateManager.buildContainerModeUpdate('manual')
+            }, { source: 'layout-manager', skipLayout: true });
+        } else {
+            container.autoLayout = null;
+        }
         return true;
     }
 
