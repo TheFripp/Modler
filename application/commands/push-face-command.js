@@ -15,7 +15,7 @@ class PushFaceCommand extends BaseCommand {
      * @param {Object} newPosition - New position {x, y, z}
      * @param {Object} [hugTransitionState] - State for hug→layout transition undo/redo
      */
-    constructor(objectId, faceNormal, pushDistance, oldDimensions, newDimensions, oldPosition, newPosition, hugTransitionState = null, fillTransitionState = null, parentHugTransitionState = null) {
+    constructor(objectId, faceNormal, pushDistance, oldDimensions, newDimensions, oldPosition, newPosition, hugTransitionState = null, fillTransitionState = null, gapTransitionState = null) {
         super('push-face', 'Push face operation');
         this.objectId = objectId;
         this.faceNormal = faceNormal ? { ...faceNormal } : null;
@@ -26,7 +26,7 @@ class PushFaceCommand extends BaseCommand {
         this.newPosition = newPosition ? { ...newPosition } : null;
         this.hugTransitionState = hugTransitionState;
         this.fillTransitionState = fillTransitionState;
-        this.parentHugTransitionState = parentHugTransitionState;
+        this.gapTransitionState = gapTransitionState;
     }
 
     execute() {
@@ -59,9 +59,9 @@ class PushFaceCommand extends BaseCommand {
                 this.restoreFillState();
             }
 
-            // Reverse parent hug transition (restore to layout mode)
-            if (this.parentHugTransitionState) {
-                this.restoreParentLayoutState();
+            // Restore gap to original value
+            if (this.gapTransitionState) {
+                this.restoreGapState();
             }
 
             // Restore geometry to old dimensions and position
@@ -77,9 +77,9 @@ class PushFaceCommand extends BaseCommand {
                 sceneController.updateContainer(this.fillTransitionState.containerId);
             }
 
-            // Recalculate container after parent restored to layout mode
-            if (this.parentHugTransitionState) {
-                sceneController.updateContainer(this.parentHugTransitionState.containerId);
+            // Recalculate container after gap restored
+            if (this.gapTransitionState) {
+                sceneController.updateContainer(this.gapTransitionState.containerId);
             }
 
             logger.info(`↩️ Undid push: ${this.objectId}`);
@@ -116,9 +116,9 @@ class PushFaceCommand extends BaseCommand {
                 this.reapplyFillState();
             }
 
-            // Re-apply parent hug transition
-            if (this.parentHugTransitionState) {
-                this.reapplyParentHugState();
+            // Re-apply gap change
+            if (this.gapTransitionState) {
+                this.reapplyGapState();
             }
 
             // Restore geometry to new dimensions and position
@@ -134,9 +134,9 @@ class PushFaceCommand extends BaseCommand {
                 sceneController.updateContainer(this.fillTransitionState.containerId);
             }
 
-            // Recalculate container after parent re-applied to hug mode
-            if (this.parentHugTransitionState) {
-                sceneController.updateContainer(this.parentHugTransitionState.containerId);
+            // Recalculate container after gap re-applied
+            if (this.gapTransitionState) {
+                sceneController.updateContainer(this.gapTransitionState.containerId);
             }
 
             logger.info(`↪️ Redid push: ${this.objectId}`);
@@ -231,51 +231,36 @@ class PushFaceCommand extends BaseCommand {
     }
 
     /**
-     * Restore parent container to layout mode (undo of layout→hug transition)
+     * Restore gap to original value (undo of gap change from push)
      */
-    restoreParentLayoutState() {
+    restoreGapState() {
         const objectStateManager = window.modlerComponents?.objectStateManager;
-        if (!objectStateManager) return;
+        const sceneController = window.modlerComponents?.sceneController;
+        if (!objectStateManager || !sceneController) return;
 
-        const state = this.parentHugTransitionState;
+        const state = this.gapTransitionState;
+        const container = sceneController.getObject(state.containerId);
+        if (!container) return;
 
-        // Restore children's original layoutProperties
-        for (const [childId, childState] of Object.entries(state.childStates)) {
-            if (childState.originalLayoutProperties) {
-                objectStateManager.updateObject(childId, {
-                    layoutProperties: JSON.parse(JSON.stringify(childState.originalLayoutProperties))
-                }, 'undo');
-            }
-        }
-
-        // Restore parent to layout mode with original autoLayout
         objectStateManager.updateObject(state.containerId, {
-            ...ObjectStateManager.buildContainerModeUpdate('layout'),
-            autoLayout: JSON.parse(JSON.stringify(state.originalAutoLayout))
+            autoLayout: { ...container.autoLayout, gap: state.oldGap }
         }, 'undo');
     }
 
     /**
-     * Re-apply parent hug mode (redo of layout→hug transition)
+     * Re-apply gap change (redo of gap change from push)
      */
-    reapplyParentHugState() {
+    reapplyGapState() {
         const objectStateManager = window.modlerComponents?.objectStateManager;
-        if (!objectStateManager) return;
+        const sceneController = window.modlerComponents?.sceneController;
+        if (!objectStateManager || !sceneController) return;
 
-        const state = this.parentHugTransitionState;
+        const state = this.gapTransitionState;
+        const container = sceneController.getObject(state.containerId);
+        if (!container) return;
 
-        // Re-apply children's target layout properties
-        for (const [childId, childState] of Object.entries(state.childStates)) {
-            if (childState.targetLayoutProperties) {
-                objectStateManager.updateObject(childId, {
-                    layoutProperties: JSON.parse(JSON.stringify(childState.targetLayoutProperties))
-                }, 'redo');
-            }
-        }
-
-        // Set parent to hug mode
         objectStateManager.updateObject(state.containerId, {
-            ...ObjectStateManager.buildContainerModeUpdate('hug')
+            autoLayout: { ...container.autoLayout, gap: state.newGap }
         }, 'redo');
     }
 

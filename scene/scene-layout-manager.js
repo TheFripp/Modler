@@ -557,7 +557,14 @@ class SceneLayoutManager {
 
             // Apply fill-based sizing BEFORE positioning
             if (layoutSize && obj.layoutProperties) {
+                const layoutAxis = container?.autoLayout?.direction || 'x';
+                const isPushingPerpendicular = pushContext && pushContext.axis !== layoutAxis;
+
                 ['x', 'y', 'z'].forEach(axis => {
+                    // During perpendicular push, only resize on the push axis
+                    // (prevents cross-dimension contamination on other fill axes)
+                    if (isPushingPerpendicular && axis !== pushContext.axis) return;
+
                     const fillEnabled = this.getObjectStateManager()?.hasFillEnabled(obj.id, axis);
 
                     if (fillEnabled) {

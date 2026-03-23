@@ -29,6 +29,7 @@ class PushTool extends BaseTool {
         this.initialDimensions = null;
         this.initialPosition = null;
         this.hugTransitionState = null;
+        this.gapTransitionState = null;
     }
 
     onHover(hit, isAltPressed) {
@@ -151,16 +152,9 @@ class PushTool extends BaseTool {
             }
         }
 
-        // If pushing a child inside a layout container, transition parent to hug
-        {
-            const childObjectData = sceneController?.getObjectByMesh(targetObject);
-            if (childObjectData?.parentContainer) {
-                const parent = sceneController.getObject(childObjectData.parentContainer);
-                if (parent?.isContainer && this.objectStateManager?.isLayoutMode(parent.id)) {
-                    this.transitionParentToHug(parent);
-                }
-            }
-        }
+        // If pushing a child inside a layout container, keep layout mode.
+        // The child resizes normally; gap adjusts via space-between distribution.
+        // (Previously transitioned parent to hug, breaking layout constraints.)
 
         this.isPushing = true;
         this.pushedObject = targetObject;
@@ -336,40 +330,6 @@ class PushTool extends BaseTool {
         sceneController.updateContainer(objectData.id, { pushContext: { axis } });
     }
 
-    /**
-     * Transition parent container from layout → hug when pushing a child.
-     * Stores undo state in this.parentHugTransitionState.
-     */
-    transitionParentToHug(parentData) {
-        const sceneController = this.sceneController;
-        if (!sceneController || !this.objectStateManager) return;
-
-        const children = sceneController.getChildObjects(parentData.id);
-
-        // Snapshot original state for undo
-        const childStates = {};
-        children.forEach(child => {
-            childStates[child.id] = {
-                originalLayoutProperties: child.layoutProperties
-                    ? JSON.parse(JSON.stringify(child.layoutProperties))
-                    : null
-            };
-        });
-
-        this.parentHugTransitionState = {
-            containerId: parentData.id,
-            originalAutoLayout: JSON.parse(JSON.stringify(parentData.autoLayout || {})),
-            childStates: childStates
-        };
-
-        // Transition parent: layout → hug
-        this.objectStateManager.updateObject(parentData.id, {
-            ...ObjectStateManager.buildContainerModeUpdate('hug')
-        }, 'push-tool');
-
-        // Trigger hug resize to wrap around children
-        sceneController.updateContainer(parentData.id);
-    }
 
     /**
      * Update push during mouse movement
@@ -523,6 +483,22 @@ class PushTool extends BaseTool {
 
         if (success) {
 
+            // Re-center geometry so bounding box is symmetric around origin.
+            // Push resize with 'min'/'max' anchor shifts vertices asymmetrically,
+            // leaving the geometry off-center. This breaks duplication, serialization,
+            // and undo/redo which all create fresh centered geometry from dimensions.
+            // Re-centering + position adjustment cancel out visually.
+            this.pushedObject.geometry.computeBoundingBox();
+            const bbox = this.pushedObject.geometry.boundingBox;
+            const geomCenter = new THREE.Vector3();
+            bbox.getCenter(geomCenter);
+
+            if (geomCenter.lengthSq() > 0.0001) {
+                this.pushedObject.geometry.translate(-geomCenter.x, -geomCenter.y, -geomCenter.z);
+                this.pushedObject.geometry.computeBoundingBox();
+                this.pushedObject.position.add(geomCenter);
+            }
+
             // Update all support meshes (wireframes, etc.) - unified for containers and objects
             geometryUtils.updateSupportMeshGeometries(this.pushedObject, false);
 
@@ -536,17 +512,14 @@ class PushTool extends BaseTool {
                     const objectStateManager = this.objectStateManager;
                     if (objectStateManager) {
                         const updates = {
-                            dimensions: { x: dims.x, y: dims.y, z: dims.z }
-                        };
-
-                        // Update position for containers
-                        if (isContainer) {
-                            updates.position = {
+                            dimensions: { x: dims.x, y: dims.y, z: dims.z },
+                            // Track position for all objects (re-centering shifts mesh.position)
+                            position: {
                                 x: this.pushedObject.position.x,
                                 y: this.pushedObject.position.y,
                                 z: this.pushedObject.position.z
-                            };
-                        }
+                            }
+                        };
 
                         // Pass 'push-tool' as source to suppress parent layout updates during drag
                         // Layout will be updated once when push is complete
@@ -590,15 +563,23 @@ class PushTool extends BaseTool {
             sceneController.updateContainer(objectData.id, { pushContext: { axis: this.pushAxis } });
         }
 
-        // If pushed object is a child INSIDE a container, resize the parent
-        // Mirrors move tool's updateContainerDuringDrag() pattern
+        // If pushed object is a child INSIDE a container, update the parent
         if (objectData.parentContainer) {
-            const containerCrudManager = this.containerCrudManager;
-            if (containerCrudManager) {
-                containerCrudManager.resizeContainer(objectData.parentContainer, {
-                    reason: 'child-changed',
-                    immediate: false
+            const parent = sceneController.getObject(objectData.parentContainer);
+            if (parent?.isContainer && this.objectStateManager?.isLayoutMode(parent.id)) {
+                // Layout container: pass pushContext so layout uses space-between gap distribution
+                sceneController.updateContainer(objectData.parentContainer, {
+                    pushContext: { axis: this.pushAxis }
                 });
+            } else {
+                // Hug/manual container: resize to fit
+                const containerCrudManager = this.containerCrudManager;
+                if (containerCrudManager) {
+                    containerCrudManager.resizeContainer(objectData.parentContainer, {
+                        reason: 'child-changed',
+                        immediate: false
+                    });
+                }
             }
         }
     }
@@ -702,20 +683,50 @@ class PushTool extends BaseTool {
             if (sceneController && pushedObject.userData?.id) {
                 const objectData = sceneController.getObjectByMesh(pushedObject);
 
-                // If this is a container, update it (mode routing handled internally)
+                // If this is a container, persist gap and update layout
                 if (objectData?.isContainer) {
+                    // Persist dynamic gap as autoLayout.gap (same path as property panel)
+                    // Only when pushing along the layout direction (space-between mode)
+                    const layoutDirection = objectData.autoLayout?.direction;
+                    if (layoutDirection === this.pushAxis && objectData.calculatedGap !== undefined) {
+                        this.gapTransitionState = {
+                            containerId: objectData.id,
+                            oldGap: objectData.autoLayout.gap,
+                            newGap: objectData.calculatedGap
+                        };
+                        this.objectStateManager.updateObject(objectData.id, {
+                            autoLayout: { ...objectData.autoLayout, gap: objectData.calculatedGap }
+                        }, 'push-tool');
+                    }
                     sceneController.updateContainer(objectData.id);
                 }
 
-                // If object is inside a container, trigger final parent update for ALL modes
-                // Unified API auto-detects mode (layout/hug/manual)
+                // If object is inside a container, trigger final parent update
                 if (objectData?.parentContainer) {
-                    const containerCrudManager = this.containerCrudManager;
-                    if (containerCrudManager) {
-                        containerCrudManager.resizeContainer(objectData.parentContainer, {
-                            reason: 'child-changed',
-                            immediate: true
-                        });
+                    const parent = sceneController.getObject(objectData.parentContainer);
+                    if (parent?.isContainer && this.objectStateManager?.isLayoutMode(parent.id)) {
+                        // Layout container: persist gap if pushing along layout direction
+                        const layoutDirection = parent.autoLayout?.direction;
+                        if (this.pushAxis === layoutDirection && parent.calculatedGap !== undefined) {
+                            this.gapTransitionState = {
+                                containerId: parent.id,
+                                oldGap: parent.autoLayout.gap,
+                                newGap: parent.calculatedGap
+                            };
+                            this.objectStateManager.updateObject(parent.id, {
+                                autoLayout: { ...parent.autoLayout, gap: parent.calculatedGap }
+                            }, 'push-tool');
+                        }
+                        sceneController.updateContainer(parent.id);
+                    } else {
+                        // Hug/manual container: resize to fit
+                        const containerCrudManager = this.containerCrudManager;
+                        if (containerCrudManager) {
+                            containerCrudManager.resizeContainer(objectData.parentContainer, {
+                                reason: 'child-changed',
+                                immediate: true
+                            });
+                        }
                     }
                 }
             }
@@ -776,7 +787,7 @@ class PushTool extends BaseTool {
                 Math.abs(finalPosition.y - this.initialPosition.y) > 0.001 ||
                 Math.abs(finalPosition.z - this.initialPosition.z) > 0.001;
 
-            if (dimensionsChanged || positionChanged || this.hugTransitionState || this.fillTransitionState || this.parentHugTransitionState) {
+            if (dimensionsChanged || positionChanged || this.hugTransitionState || this.fillTransitionState || this.gapTransitionState) {
                 // Calculate push distance based on dimension change along push axis
                 let pushDistance = 0;
                 if (this.pushAxis) {
@@ -818,22 +829,6 @@ class PushTool extends BaseTool {
                     }
                 }
 
-                // Capture parent hug transition target state for redo
-                if (this.parentHugTransitionState) {
-                    const sceneController = this.sceneController;
-                    const children = sceneController?.getChildObjects(this.parentHugTransitionState.containerId);
-                    if (children) {
-                        children.forEach(child => {
-                            const entry = this.parentHugTransitionState.childStates[child.id];
-                            if (entry) {
-                                entry.targetLayoutProperties = child.layoutProperties
-                                    ? JSON.parse(JSON.stringify(child.layoutProperties))
-                                    : null;
-                            }
-                        });
-                    }
-                }
-
                 const command = new PushFaceCommand(
                     pushedObject.userData.id,
                     this.faceNormal,
@@ -844,7 +839,7 @@ class PushTool extends BaseTool {
                     finalPosition,
                     this.hugTransitionState,
                     this.fillTransitionState,
-                    this.parentHugTransitionState
+                    this.gapTransitionState
                 );
                 historyManager.executeCommand(command);
             }
@@ -878,7 +873,7 @@ class PushTool extends BaseTool {
         this.initialPosition = null;
         this.hugTransitionState = null;
         this.fillTransitionState = null;
-        this.parentHugTransitionState = null;
+        this.gapTransitionState = null;
         this.anchorMode = null;
     }
 
