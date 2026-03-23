@@ -134,7 +134,7 @@
   }
 
   .modler-property-label {
-    @apply text-xs font-medium;
+    @apply text-sm font-medium;
     color: hsl(var(--modler-text-secondary));
   }
 

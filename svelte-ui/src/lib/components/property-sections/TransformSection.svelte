@@ -1,6 +1,4 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
-	import PropertyGroup from '$lib/components/ui/property-group.svelte';
 	import SectionHeader from '$lib/components/ui/section-header.svelte';
 	import XyzInput from '$lib/components/ui/xyz-input.svelte';
 	import type { SectionFeatures } from '$lib/services/property-section-registry';
@@ -35,6 +33,9 @@
 	// Disabled state when no object is selected
 	$: isDisabled = !displayObject;
 
+	// Unit label from centralized store
+	$: unitLabel = $storeCurrentUnit;
+
 	function handleFillToggle(axis: 'x' | 'y' | 'z') {
 		if (!displayObject) return;
 
@@ -67,69 +68,54 @@
 	// with displayObject from StateSerializer. No request/response needed.
 </script>
 
-<PropertyGroup title="Transform" align="right">
-	<div class="space-y-4">
-		<!-- Position Sub-group (optional via features.position) -->
-		{#if features.position !== false}
-			<div class="space-y-2">
-				<SectionHeader label="Position" class={isDisabled ? 'opacity-30' : ''} />
-				<XyzInput
-					values={displayObject?.position || emptyVector}
-					{objectId}
-					propertyBase="position"
-					idPrefix="pos"
-					disableAll={isDisabled || inLayoutMode}
-					hideValues={isDisabled}
-				/>
-			</div>
-		{/if}
+<div class="space-y-4">
+	<!-- Dimensions Sub-group (optional via features.dimensions) -->
+	{#if features.dimensions !== false}
+		<div class="space-y-2">
+			<SectionHeader label="Dimensions" unit={unitLabel} align="left" class={isDisabled ? 'opacity-30' : ''} />
+			<XyzInput
+				values={displayObject?.dimensions || emptyVector}
+				{objectId}
+				propertyBase="dimensions"
+				labels={{ x: 'W', y: 'H', z: 'D' }}
+				idPrefix="dim"
+				{showFillButtons}
+				{fillStates}
+				onFillToggle={handleFillToggle}
+				onFillHover={handleFillHover}
+				disableAll={isDisabled}
+				hideValues={isDisabled}
+			/>
+		</div>
+	{/if}
 
-		<!-- Rotation Sub-group (optional via features.rotation) -->
-		{#if features.rotation !== false}
-			<div class="space-y-2">
-				<SectionHeader label="Rotation" class={isDisabled ? 'opacity-30' : ''} />
-				<XyzInput
-					values={displayObject?.rotation || emptyVector}
-					{objectId}
-					propertyBase="rotation"
-					step={1.0}
-					disableAll={isDisabled}
-					hideValues={isDisabled}
-				/>
-			</div>
-		{/if}
+	<!-- Rotation Sub-group (optional via features.rotation) -->
+	{#if features.rotation !== false}
+		<div class="space-y-2">
+			<SectionHeader label="Rotation" unit="°" align="left" class={isDisabled ? 'opacity-30' : ''} />
+			<XyzInput
+				values={displayObject?.rotation || emptyVector}
+				{objectId}
+				propertyBase="rotation"
+				step={1.0}
+				disableAll={isDisabled}
+				hideValues={isDisabled}
+			/>
+		</div>
+	{/if}
 
-		<!-- Dimensions Sub-group (optional via features.dimensions) -->
-		{#if features.dimensions !== false}
-			<div class="space-y-2">
-				<SectionHeader label="Dimensions" class={isDisabled ? 'opacity-30' : ''} />
-				<XyzInput
-					values={displayObject?.dimensions || emptyVector}
-					{objectId}
-					propertyBase="dimensions"
-					labels={{ x: 'W', y: 'H', z: 'D' }}
-					idPrefix="dim"
-					{showFillButtons}
-					{fillStates}
-					onFillToggle={handleFillToggle}
-					onFillHover={handleFillHover}
-					disableAll={isDisabled}
-					hideValues={isDisabled}
-				/>
-			</div>
-		{/if}
-
-		<!-- Example: Randomize feature (optional via features.randomize) -->
-		{#if features.randomize}
-			<div class="space-y-2">
-				<button
-					type="button"
-					onclick={() => console.log('Randomize clicked')}
-					class="w-full px-3 py-2 text-xs font-medium bg-[#2E2E2E] border border-[#404040] rounded-md text-foreground hover:bg-[#404040] transition-colors"
-				>
-					Randomize Transform
-				</button>
-			</div>
-		{/if}
-	</div>
-</PropertyGroup>
+	<!-- Position Sub-group (optional via features.position) -->
+	{#if features.position !== false}
+		<div class="space-y-2">
+			<SectionHeader label="Position" unit={unitLabel} align="left" class={isDisabled ? 'opacity-30' : ''} />
+			<XyzInput
+				values={displayObject?.position || emptyVector}
+				{objectId}
+				propertyBase="position"
+				idPrefix="pos"
+				disableAll={isDisabled || inLayoutMode}
+				hideValues={isDisabled}
+			/>
+		</div>
+	{/if}
+</div>
