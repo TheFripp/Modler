@@ -31,6 +31,12 @@ class RotationTool extends BaseTool {
         this.screenAnchor = null;           // { worldPos } from findNearestAnchorPoint
         this.screenAnchorNormal = null;     // face normal for screen-anchor-only rotation
 
+        // Quick-rotate state (click = instant 90° toward floor)
+        this._quickRotateReady = false;
+        this._quickRotateNormal = null;
+        this._wasQuickRotateReady = false;
+        this._quickRotateFaceNormal = null;
+
         // Reusable math objects
         this._tempQuat = new THREE.Quaternion();
         this._tempVec = new THREE.Vector3();
@@ -84,7 +90,21 @@ class RotationTool extends BaseTool {
                 // Prefer face anchor > screen anchor > hit point
                 const anchor = faceAnchor || screenAnchor;
                 const gizmoPos = anchor ? anchor.worldPos : hoverState.hit.point;
-                this.toolGizmoManager?.showRotationArc(gizmoPos, worldNormal);
+
+                // Side faces: show quick-rotate arc (click = 90° toward floor)
+                // Top/bottom faces: show existing rotation arc (drag only)
+                if (this._isSideFace(worldNormal)) {
+                    const faceCenter = this._computeFaceCenter(hoverState.object, worldNormal);
+                    this.toolGizmoManager?.showQuickRotateArc(faceCenter || gizmoPos, worldNormal);
+                    this.toolGizmoManager?.hide('rotation-arc');
+                    this._quickRotateReady = true;
+                    this._quickRotateNormal = worldNormal.clone();
+                } else {
+                    this.toolGizmoManager?.showRotationArc(gizmoPos, worldNormal);
+                    this.toolGizmoManager?.hide('quick-rotate-arc');
+                    this._quickRotateReady = false;
+                    this._quickRotateNormal = null;
+                }
 
                 if (anchor) {
                     this.toolGizmoManager?.showAnchorPoint(anchor.worldPos);
@@ -97,14 +117,20 @@ class RotationTool extends BaseTool {
             this.toolGizmoManager?.showAnchorPoint(screenAnchor.worldPos);
             const faceNormal = this.toolGizmoManager?.getMostVisibleFaceNormal(selectedObjects[0]);
             this.toolGizmoManager?.showRotationArc(screenAnchor.worldPos, faceNormal);
+            this.toolGizmoManager?.hide('quick-rotate-arc');
             // Track for hasActiveHighlight() — gizmo is visible, tool should claim input
             this.screenAnchor = screenAnchor;
             this.screenAnchorNormal = faceNormal;
+            this._quickRotateReady = false;
+            this._quickRotateNormal = null;
         } else {
             this.toolGizmoManager?.hide('rotation-arc');
             this.toolGizmoManager?.hide('circle');
+            this.toolGizmoManager?.hide('quick-rotate-arc');
             this.screenAnchor = null;
             this.screenAnchorNormal = null;
+            this._quickRotateReady = false;
+            this._quickRotateNormal = null;
         }
     }
 
@@ -211,9 +237,14 @@ class RotationTool extends BaseTool {
         // Capture pointer so drag continues outside canvas
         this.inputController?.capturePointer();
 
+        // Capture quick-rotate readiness before clearing hover state
+        this._wasQuickRotateReady = this._quickRotateReady;
+        this._quickRotateFaceNormal = this._quickRotateNormal?.clone() || null;
+
         // Hide face highlight and corner circle during drag, keep rotation arc
         this.faceToolBehavior.clearHover();
         this.toolGizmoManager?.hide('circle');
+        this.toolGizmoManager?.hide('quick-rotate-arc');
     }
 
     updateRotation() {
@@ -304,6 +335,13 @@ class RotationTool extends BaseTool {
             return;
         }
 
+        // Quick rotate: click with negligible drag on a side face → instant 90° toward floor
+        if (Math.abs(this.currentAngle) < 2 && this._wasQuickRotateReady && this._quickRotateFaceNormal) {
+            this._applyQuickRotation();
+            this._cleanupRotationState();
+            return;
+        }
+
         const sceneController = this.sceneController;
         const objectData = sceneController?.getObjectByMesh(this.rotateObject);
         const objectId = objectData?.id || this.rotateObject.userData?.id;
@@ -337,26 +375,10 @@ class RotationTool extends BaseTool {
             );
             this.historyManager?.executeCommand(command);
 
-            // Resize parent container if applicable
-            if (objectData?.parentContainer) {
-                this.containerCrudManager?.resizeContainer(objectData.parentContainer);
-            }
+            // Parent layout propagation handled by OSM (rotation triggerLayout = true)
         }
 
-        // Clean up
-        this.isRotating = false;
-        this.rotateObject = null;
-        this.rotateAxis = null;
-        this.pivotPoint = null;
-        this.startRotationDeg = null;
-        this.startPosition = null;
-        this.currentAngle = 0;
-        this.dragFaceNormal = null;
-        this.screenAnchor = null;
-        this.screenAnchorNormal = null;
-
-        this.toolGizmoManager?.hide('rotation-arc');
-        this.toolGizmoManager?.hide('circle');
+        this._cleanupRotationState();
     }
 
     // --- Helpers ---
@@ -373,6 +395,97 @@ class RotationTool extends BaseTool {
         if (ax >= ay && ax >= az) return 'x';
         if (ay >= ax && ay >= az) return 'y';
         return 'z';
+    }
+
+    _isSideFace(worldNormal) {
+        const cross = new THREE.Vector3().crossVectors(worldNormal, new THREE.Vector3(0, -1, 0));
+        return cross.length() > 0.1;
+    }
+
+    _computeFaceCenter(object, worldNormal) {
+        const geomSource = object?.userData?.supportMeshes?.interactiveMesh || object;
+        if (!geomSource?.geometry) return null;
+
+        const geometry = geomSource.geometry;
+        geometry.computeBoundingBox();
+        const box = geometry.boundingBox;
+        if (!box) return null;
+
+        const center = box.getCenter(new THREE.Vector3());
+
+        // Convert normal to local space to find which face
+        const invMatrix = new THREE.Matrix4().copy(geomSource.matrixWorld).invert();
+        const localNormal = worldNormal.clone().transformDirection(invMatrix).normalize();
+        const dominant = this.getDominantAxis(localNormal);
+
+        center[dominant] = Math.sign(localNormal[dominant]) > 0 ? box.max[dominant] : box.min[dominant];
+        return center.applyMatrix4(geomSource.matrixWorld);
+    }
+
+    _applyQuickRotation() {
+        const faceNormal = this._quickRotateFaceNormal;
+        const down = new THREE.Vector3(0, -1, 0);
+        const rotAxis = new THREE.Vector3().crossVectors(faceNormal, down).normalize();
+        const rotQuat = new THREE.Quaternion().setFromAxisAngle(rotAxis, Math.PI / 2);
+
+        // World-space pre-multiply: newQuat = rotQuat * currentQuat
+        const currentQuat = new THREE.Quaternion().copy(this.rotateObject.quaternion);
+        const newQuat = rotQuat.multiply(currentQuat);
+
+        const newEuler = new THREE.Euler().setFromQuaternion(newQuat, 'XYZ');
+        const newRotationDeg = {
+            x: (newEuler.x * 180) / Math.PI,
+            y: (newEuler.y * 180) / Math.PI,
+            z: (newEuler.z * 180) / Math.PI
+        };
+
+        const positionObj = {
+            x: this.rotateObject.position.x,
+            y: this.rotateObject.position.y,
+            z: this.rotateObject.position.z
+        };
+
+        const objectData = this.sceneController?.getObjectByMesh(this.rotateObject);
+        const objectId = objectData?.id || this.rotateObject.userData?.id;
+
+        if (objectId && this.objectStateManager) {
+            this.objectStateManager.updateObject(objectId, {
+                rotation: newRotationDeg,
+                position: positionObj
+            });
+
+            const command = new RotateObjectCommand(
+                objectId,
+                this.startRotationDeg,
+                newRotationDeg,
+                { x: this.startPosition.x, y: this.startPosition.y, z: this.startPosition.z },
+                positionObj
+            );
+            this.historyManager?.executeCommand(command);
+
+            // Parent layout propagation handled by OSM (rotation triggerLayout = true)
+        }
+    }
+
+    _cleanupRotationState() {
+        this.isRotating = false;
+        this.rotateObject = null;
+        this.rotateAxis = null;
+        this.pivotPoint = null;
+        this.startRotationDeg = null;
+        this.startPosition = null;
+        this.currentAngle = 0;
+        this.dragFaceNormal = null;
+        this.screenAnchor = null;
+        this.screenAnchorNormal = null;
+        this._wasQuickRotateReady = false;
+        this._quickRotateFaceNormal = null;
+        this._quickRotateReady = false;
+        this._quickRotateNormal = null;
+
+        this.toolGizmoManager?.hide('rotation-arc');
+        this.toolGizmoManager?.hide('circle');
+        this.toolGizmoManager?.hide('quick-rotate-arc');
     }
 
     // --- Lifecycle ---

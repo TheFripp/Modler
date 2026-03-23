@@ -723,8 +723,8 @@ class ObjectStateManager {
             // Apply position updates
             this.applyGeometryUpdate(object, 'Position', 'updateObjectPosition', false);
 
-            // Apply rotation updates
-            this.applyGeometryUpdate(object, 'Rotation', 'updateObjectRotation', false);
+            // Apply rotation updates (triggers parent layout — rotated AABB affects container sizing)
+            this.applyGeometryUpdate(object, 'Rotation', 'updateObjectRotation', shouldTriggerLayout);
 
             // Sync non-geometry properties to SceneController first (needed for layout)
             const sceneObject = this.sceneController.getObject(object.id);
