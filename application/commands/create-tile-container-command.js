@@ -131,7 +131,8 @@ class CreateTileContainerCommand extends BaseCommand {
             const addedContainer = sceneController.addObject(containerData.mesh, null, {
                 name: this.originalName || originalObj.name,
                 parentContainer: this.originalParentId,
-                isContainer: true
+                isContainer: true,
+                containerMode: 'layout'
             });
 
             // Update stored container ID for future undo/redo
@@ -140,7 +141,13 @@ class CreateTileContainerCommand extends BaseCommand {
             // Move original into container
             sceneController.setParentContainer(this.originalObjectId, addedContainer.id);
 
-            // Create instances
+            // Create instances with matching rotation
+            const sourceRotation = {
+                x: (originalObj.mesh.rotation.x * 180) / Math.PI,
+                y: (originalObj.mesh.rotation.y * 180) / Math.PI,
+                z: (originalObj.mesh.rotation.z * 180) / Math.PI
+            };
+
             this.instanceChildIds = [];
             for (let i = 1; i < repeat; i++) {
                 const clonedGeometry = originalObj.mesh.geometry.clone();
@@ -149,7 +156,8 @@ class CreateTileContainerCommand extends BaseCommand {
                 const instance = sceneController.addObject(clonedGeometry, clonedMaterial, {
                     name: originalObj.name,
                     parentContainer: addedContainer.id,
-                    position: { x: 0, y: 0, z: 0 }
+                    position: { x: 0, y: 0, z: 0 },
+                    rotation: sourceRotation
                 });
                 this.instanceChildIds.push(instance.id);
             }

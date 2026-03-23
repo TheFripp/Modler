@@ -65,10 +65,7 @@ class UpdateTileRepeatCommand extends BaseCommand {
                 }, { source: 'undo', immediate: true });
             }
 
-            // Step 4: Update tracked repeat in TileInstanceManager to prevent re-triggering
-            this._syncTrackedRepeat(this.oldRepeat);
-
-            // Step 5: Recalculate layout
+            // Step 4: Recalculate layout
             sceneController.updateContainer(this.containerId);
 
             return true;
@@ -106,6 +103,12 @@ class UpdateTileRepeatCommand extends BaseCommand {
             const sourceObject = sourceObjectId ? sceneController.getObject(sourceObjectId) : null;
 
             if (this.addedChildIds.length > 0 && sourceObject) {
+                const sourceRotation = {
+                    x: (sourceObject.mesh.rotation.x * 180) / Math.PI,
+                    y: (sourceObject.mesh.rotation.y * 180) / Math.PI,
+                    z: (sourceObject.mesh.rotation.z * 180) / Math.PI
+                };
+
                 // Re-create the same number of instances
                 const newAddedIds = [];
                 for (let i = 0; i < this.addedChildIds.length; i++) {
@@ -115,7 +118,8 @@ class UpdateTileRepeatCommand extends BaseCommand {
                     const instance = sceneController.addObject(clonedGeometry, clonedMaterial, {
                         name: sourceObject.name,
                         parentContainer: this.containerId,
-                        position: { x: 0, y: 0, z: 0 }
+                        position: { x: 0, y: 0, z: 0 },
+                        rotation: sourceRotation
                     });
                     newAddedIds.push(instance.id);
                 }
@@ -130,10 +134,7 @@ class UpdateTileRepeatCommand extends BaseCommand {
                 }, { source: 'redo', immediate: true });
             }
 
-            // Step 4: Update tracked repeat
-            this._syncTrackedRepeat(this.newRepeat);
-
-            // Step 5: Recalculate layout
+            // Step 4: Recalculate layout
             sceneController.updateContainer(this.containerId);
 
             return true;
@@ -155,25 +156,21 @@ class UpdateTileRepeatCommand extends BaseCommand {
         if (sourceObject) {
             const clonedGeometry = sourceObject.mesh.geometry.clone();
             const clonedMaterial = sourceObject.mesh.material.clone();
+            const sourceRotation = {
+                x: (sourceObject.mesh.rotation.x * 180) / Math.PI,
+                y: (sourceObject.mesh.rotation.y * 180) / Math.PI,
+                z: (sourceObject.mesh.rotation.z * 180) / Math.PI
+            };
 
             sceneController.addObject(clonedGeometry, clonedMaterial, {
                 name: snapshot.name || sourceObject.name,
                 parentContainer: this.containerId,
-                position: { x: 0, y: 0, z: 0 }
+                position: { x: 0, y: 0, z: 0 },
+                rotation: sourceRotation
             });
         }
     }
 
-    /**
-     * Keep TileInstanceManager's tracked repeat in sync to prevent
-     * it from re-triggering instance changes on the next HIERARCHY event
-     */
-    _syncTrackedRepeat(repeat) {
-        const tim = window.tileInstanceManager;
-        if (tim?.trackedRepeats) {
-            tim.trackedRepeats.set(this.containerId, repeat);
-        }
-    }
 }
 
 window.UpdateTileRepeatCommand = UpdateTileRepeatCommand;

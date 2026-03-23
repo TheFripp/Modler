@@ -145,6 +145,10 @@ export interface ObjectData {
     master?: MasterData;
     constraints?: { [propertyName: string]: 'locked' | 'formula' };
 
+    // Yard (material library) metadata
+    yardItemId?: string | null;
+    yardFixed?: { x: boolean; y: boolean; z: boolean } | null;
+
     // Metadata
     formatVersion: string;
     lastModified: number;
@@ -166,7 +170,7 @@ export interface ContainerContext {
 // Field state management for UI
 export interface FieldState {
     disabled: boolean;
-    reason?: 'hug-mode' | 'parametric-locked' | 'parametric-formula' | 'instance-restricted';
+    reason?: 'hug-mode' | 'parametric-locked' | 'parametric-formula' | 'instance-restricted' | 'yard-fixed';
     tooltip?: string;
 }
 
@@ -255,7 +259,9 @@ export function createEmptyObjectData(id?: string): ObjectData {
             enabled: false,
             direction: null,
             gap: 0,
-            padding: { top: 0, bottom: 0, left: 0, right: 0, front: 0, back: 0 }
+            padding: { width: 0, height: 0, depth: 0 },
+            alignment: { x: 'center', y: 'center', z: 'center' },
+            reversed: false
         },
 
         selected: false,

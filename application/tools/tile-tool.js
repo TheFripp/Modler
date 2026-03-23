@@ -19,7 +19,7 @@ class TileTool extends BaseTool {
             const objectData = this.getObjectData(selectedObjects[0]);
             if (objectData && !objectData.isContainer) {
                 this.targetObject = selectedObjects[0];
-                const container = this.createTiledContainer({ axis: 'x', repeat: 3, gap: 0 });
+                const container = this.createTiledContainer({ repeat: 3 });
                 if (container) {
                     this.switchToSelectAndFocus(container.id);
                 }
@@ -60,7 +60,7 @@ class TileTool extends BaseTool {
             if (objectData && objectData.selectable !== false && !objectData.isContainer) {
                 this.selectionController.handleObjectClick(hit.object, event, { toolType: 'TileTool' });
                 this.targetObject = hit.object;
-                const container = this.createTiledContainer({ axis: 'x', repeat: 3, gap: 0 });
+                const container = this.createTiledContainer({ repeat: 3 });
                 if (container) {
                     this.switchToSelectAndFocus(container.id);
                 }
@@ -84,12 +84,7 @@ class TileTool extends BaseTool {
             return null;
         }
 
-        const { axis, repeat, gap } = config;
-
-        if (!axis || !['x', 'y', 'z'].includes(axis)) {
-            console.error('TileTool: Invalid axis:', axis);
-            return null;
-        }
+        let { axis, repeat, gap } = config;
 
         if (!repeat || repeat < 2) {
             console.error('TileTool: Repeat must be at least 2:', repeat);
@@ -111,7 +106,7 @@ class TileTool extends BaseTool {
             return null;
         }
 
-        // Calculate container size based on object dimensions and tiling
+        // Calculate object dimensions for axis/gap auto-detection
         const objectSize = new THREE.Vector3();
         objectData.mesh.geometry.computeBoundingBox();
         const bbox = objectData.mesh.geometry.boundingBox;
@@ -120,6 +115,17 @@ class TileTool extends BaseTool {
             bbox.max.y - bbox.min.y,
             bbox.max.z - bbox.min.z
         );
+
+        // Auto-detect axis: tile along the shortest side so copies spread visibly
+        if (!axis || !['x', 'y', 'z'].includes(axis)) {
+            axis = objectSize.x <= objectSize.y && objectSize.x <= objectSize.z ? 'x' :
+                   objectSize.y <= objectSize.z ? 'y' : 'z';
+        }
+
+        // Default gap: tiles touch (0 gap). User can increase via TileSection.
+        if (gap === undefined || gap === null) {
+            gap = 0;
+        }
 
         const containerSize = objectSize.clone();
         containerSize[axis] = (objectSize[axis] * repeat) + (gap * (repeat - 1));
@@ -167,6 +173,13 @@ class TileTool extends BaseTool {
         // Move original object into container as first child
         this.sceneController.setParentContainer(objectData.id, addedContainer.id);
 
+        // Copy original's rotation so instances match (convert radians → degrees for addObject)
+        const sourceRotation = {
+            x: (objectData.mesh.rotation.x * 180) / Math.PI,
+            y: (objectData.mesh.rotation.y * 180) / Math.PI,
+            z: (objectData.mesh.rotation.z * 180) / Math.PI
+        };
+
         // Create additional instances (repeat - 1) times
         for (let i = 1; i < repeat; i++) {
             const clonedGeometry = objectData.mesh.geometry.clone();
@@ -175,7 +188,8 @@ class TileTool extends BaseTool {
             this.sceneController.addObject(clonedGeometry, clonedMaterial, {
                 name: objectData.name,
                 parentContainer: addedContainer.id,
-                position: { x: 0, y: 0, z: 0 }
+                position: { x: 0, y: 0, z: 0 },
+                rotation: sourceRotation
             });
         }
 

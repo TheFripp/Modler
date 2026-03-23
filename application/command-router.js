@@ -38,6 +38,10 @@ class CommandRouter {
         this.toolController = null;
         this.containerCrudManager = null;
         this.historyManager = null;
+
+        // Drag batching: captures before-state on first drag event,
+        // defers undo command creation until final commit
+        this._tileRepeatDragState = null;
     }
 
     /**
@@ -221,6 +225,7 @@ class CommandRouter {
         this.handlers.set('yard-remove-item', this.handleYardRemoveItem.bind(this));
         this.handlers.set('yard-place-item', this.handleYardPlaceItem.bind(this));
         this.handlers.set('yard-get-materials-list', this.handleYardGetMaterialsList.bind(this));
+        this.handlers.set('yard-toggle-dimension-lock', this.handleYardToggleDimensionLock.bind(this));
 
         console.log(`✅ CommandRouter: Registered ${this.handlers.size} action handlers`);
 
@@ -500,8 +505,10 @@ class CommandRouter {
     }
 
     /**
-     * Handle tile repeat count change with undo support (Phase 5).
-     * Captures child add/remove deltas so undo can reverse instance changes.
+     * Handle tile repeat count change with undo support.
+     * DRAG BATCHING: During drag scrubbing (source='drag'), captures before-state
+     * once and defers command creation until final commit (source='input').
+     * This prevents creating/destroying objects per pixel and flooding the undo stack.
      */
     _handleTileRepeatUpdate(objectId, property, value, source) {
         const data = { objectId, property, value, source };
@@ -511,18 +518,42 @@ class CommandRouter {
             return;
         }
 
-        // Capture before-state
-        const oldAutoLayout = container.autoLayout ? JSON.parse(JSON.stringify(container.autoLayout)) : null;
-        const oldRepeat = container.autoLayout?.tileMode?.repeat || 0;
+        // DRAG BATCHING: Capture before-state once on first drag event
+        if (source === 'drag') {
+            if (!this._tileRepeatDragState) {
+                const children = this.sceneController.getChildObjects?.(objectId) || [];
+                const sourceObjectId = container.autoLayout?.tileMode?.sourceObjectId;
+                this._tileRepeatDragState = {
+                    objectId,
+                    oldRepeat: container.autoLayout?.tileMode?.repeat || 0,
+                    oldAutoLayout: container.autoLayout ? JSON.parse(JSON.stringify(container.autoLayout)) : null,
+                    childrenBefore: children.map(c => c.id),
+                    childSnapshots: children.map(child => ({
+                        id: child.id,
+                        name: child.name,
+                        dimensions: child.dimensions ? { ...child.dimensions } : null,
+                        sourceObjectId
+                    }))
+                };
+            }
+            // Forward the update (TileInstanceManager syncs instances) but no command
+            this._forwardPropertyUpdate(data);
+            return;
+        }
+
+        // FINAL COMMIT (source='input' or other)
+        // Use stored drag state if available, otherwise capture fresh
+        const dragState = this._tileRepeatDragState;
+        this._tileRepeatDragState = null;
+
         const sourceObjectId = container.autoLayout?.tileMode?.sourceObjectId;
-
         const children = this.sceneController.getChildObjects?.(objectId) || [];
-        const childrenBefore = children.map(c => c.id);
 
-        // Snapshot children that might be removed (for undo restoration)
-        const childSnapshots = children.map(child => ({
-            id: child.id,
-            name: child.name,
+        const oldRepeat = dragState?.oldRepeat ?? (container.autoLayout?.tileMode?.repeat || 0);
+        const oldAutoLayout = dragState?.oldAutoLayout ?? (container.autoLayout ? JSON.parse(JSON.stringify(container.autoLayout)) : null);
+        const childrenBefore = dragState?.childrenBefore ?? children.map(c => c.id);
+        const childSnapshots = dragState?.childSnapshots ?? children.map(child => ({
+            id: child.id, name: child.name,
             dimensions: child.dimensions ? { ...child.dimensions } : null,
             sourceObjectId
         }));
@@ -537,15 +568,12 @@ class CommandRouter {
         const newAutoLayout = updatedContainer.autoLayout ? JSON.parse(JSON.stringify(updatedContainer.autoLayout)) : null;
         const newRepeat = parseInt(value) || oldRepeat;
 
-        // Get children after the change
         const childrenAfter = (this.sceneController.getChildObjects?.(objectId) || []).map(c => c.id);
-
-        // Calculate deltas
         const addedChildIds = childrenAfter.filter(id => !childrenBefore.includes(id));
         const removedChildIds = childrenBefore.filter(id => !childrenAfter.includes(id));
         const removedChildSnapshots = childSnapshots.filter(s => removedChildIds.includes(s.id));
 
-        // Register undoable command
+        // Register single undoable command for the entire drag (or direct edit)
         if (oldRepeat !== newRepeat && this.historyManager) {
             const command = new UpdateTileRepeatCommand({
                 containerId: objectId,
@@ -1245,6 +1273,24 @@ class CommandRouter {
                 data: materialsList
             });
         }
+    }
+
+    handleYardToggleDimensionLock(data) {
+        if (!this.objectStateManager) return;
+
+        const objectId = data.objectId;
+        const axis = data.axis;
+        if (!objectId || !axis) return;
+
+        const object = this.objectStateManager.getObject(objectId);
+        if (!object) return;
+
+        // Toggle the yardFixed flag for this axis
+        const currentFixed = object.yardFixed || { x: false, y: false, z: false };
+        const newFixed = { ...currentFixed, [axis]: !currentFixed[axis] };
+
+        // Update through ObjectStateManager (single source of truth)
+        this.objectStateManager.updateObject(objectId, { yardFixed: newFixed });
     }
 
     /**
