@@ -46,7 +46,20 @@ class InputController {
         this.handleMouseMove = this.onMouseMove.bind(this);
         this.handleMouseDown = this.onMouseDown.bind(this);
         this.handleMouseUp = this.onMouseUp.bind(this);
-        this.handleContextMenu = (e) => e.preventDefault();
+        this.handleContextMenu = (e) => {
+            e.preventDefault();
+
+            // Show context menu if right-clicking on an object
+            const contextMenu = window.modlerComponents?.contextMenu;
+            if (!contextMenu) return;
+
+            // Raycast to find object under cursor
+            this.updateMousePosition(e);
+            const hit = this._raycastForContextMenu();
+            if (hit) {
+                contextMenu.show(e.clientX, e.clientY, hit);
+            }
+        };
         // Keyboard handlers removed - now in KeyboardRouter
 
         this.setupEventListeners();
@@ -54,10 +67,10 @@ class InputController {
 
     setupEventListeners() {
 
-        // Mouse events
-        this.canvas.addEventListener('mousemove', this.handleMouseMove, false);
-        this.canvas.addEventListener('mousedown', this.handleMouseDown, false);
-        this.canvas.addEventListener('mouseup', this.handleMouseUp, false);
+        // Pointer events (superset of mouse events, enables setPointerCapture for off-canvas dragging)
+        this.canvas.addEventListener('pointermove', this.handleMouseMove, false);
+        this.canvas.addEventListener('pointerdown', this.handleMouseDown, false);
+        this.canvas.addEventListener('pointerup', this.handleMouseUp, false);
         this.canvas.addEventListener('contextmenu', this.handleContextMenu, false);
 
         // Keyboard events - REMOVED, now handled by KeyboardRouter
@@ -127,6 +140,7 @@ class InputController {
         }
 
         this.mouseButtons.add(event.button);
+        this.activePointerId = event.pointerId;
         this.updateMousePosition(event);
 
         // Store for potential click processing - enable logging on mouse down
@@ -143,9 +157,13 @@ class InputController {
         // Left mouse button logic
         if (event.button === 0) {
             if (event.shiftKey) {
-                // Shift+Left = Pan
+                if (this.lastMouseDownEvent.hit) {
+                    // Shift+Click on object → multi-select (handled on mouseUp via onClick)
+                    return;
+                }
+                // Shift+Click on empty space → camera pan
                 this.startCameraPan(event);
-                return; // Prevent further event processing
+                return;
             } else {
                 // Check if tool has active highlight
                 const tool = this.toolBehaviors[this.currentTool];
@@ -324,7 +342,7 @@ class InputController {
 
                 // FALLBACK: Regular selectable objects (not containers, no parent container)
                 // Allow selecting other objects even when a container is selected
-                if (objectData.selectable === true && !objectData.parentContainer && !objectData.isContainer) {
+                if (objectData.selectable === true && !objectData.parentContainer) {
                     return {
                         ...this.createHitResult(hit),
                         object: mainObject
@@ -376,6 +394,20 @@ class InputController {
         const rect = this.canvas.getBoundingClientRect();
         this.mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
         this.mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+    }
+
+    /** Capture pointer so drag events continue outside the canvas */
+    capturePointer() {
+        if (this.activePointerId != null) {
+            try { this.canvas.setPointerCapture(this.activePointerId); } catch (_) { /* ignore */ }
+        }
+    }
+
+    /** Release pointer capture */
+    releasePointer() {
+        if (this.activePointerId != null) {
+            try { this.canvas.releasePointerCapture(this.activePointerId); } catch (_) { /* ignore */ }
+        }
     }
 
     detectDoubleClick(event) {
@@ -464,11 +496,35 @@ class InputController {
         return { x: this.mouse.x, y: this.mouse.y };
     }
 
+    /**
+     * Simple raycast for context menu — returns scene object data, not just mesh
+     */
+    _raycastForContextMenu() {
+        this.raycaster.setFromCamera(this.mouse, this.camera);
+        this.raycaster.layers.set(0);
+
+        const supportMeshFactory = window.modlerComponents?.supportMeshFactory;
+        const intersects = this.raycaster.intersectObjects(this.scene.children, true);
+
+        for (const hit of intersects) {
+            const mainObject = supportMeshFactory
+                ? supportMeshFactory.resolveMainObjectFromHit(hit)
+                : hit.object;
+            if (!mainObject) continue;
+
+            const objectData = this.sceneController.getObjectByMesh(mainObject);
+            if (!objectData || objectData.selectable === false) continue;
+
+            return objectData;
+        }
+        return null;
+    }
+
     destroy() {
         // Remove event listeners
-        this.canvas.removeEventListener('mousemove', this.handleMouseMove);
-        this.canvas.removeEventListener('mousedown', this.handleMouseDown);
-        this.canvas.removeEventListener('mouseup', this.handleMouseUp);
+        this.canvas.removeEventListener('pointermove', this.handleMouseMove);
+        this.canvas.removeEventListener('pointerdown', this.handleMouseDown);
+        this.canvas.removeEventListener('pointerup', this.handleMouseUp);
         this.canvas.removeEventListener('contextmenu', this.handleContextMenu);
         // Keyboard listeners removed - now in KeyboardRouter
 

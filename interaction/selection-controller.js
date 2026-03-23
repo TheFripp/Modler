@@ -346,15 +346,16 @@ class SelectionController {
         const objectData = this.getObjectData(object);
         if (!objectData) return false;
 
-        // Prevent direct container clicks (except when already inside that container OR already selected)
+        // Prevent direct container clicks (except when already inside that container, already selected, or multi-selecting)
         if (objectData.isContainer) {
             const isInContext = this.isInContainerContext();
             const currentContext = this.getContainerContext();
             const isAlreadySelected = this.selectedObjects.has(objectData.mesh);
+            const isMultiSelect = event.ctrlKey || event.metaKey || event.shiftKey;
 
-            // Only treat as empty space if NOT in context, NOT in current context, AND NOT already selected
+            // Only treat as empty space if NOT in context, NOT in current context, NOT already selected, AND NOT multi-selecting
             if (!isInContext || currentContext !== objectData.mesh) {
-                if (!isAlreadySelected) {
+                if (!isAlreadySelected && !isMultiSelect) {
                     this.handleEmptySpaceClick(event);
                     return false;
                 }
@@ -425,7 +426,7 @@ class SelectionController {
             navigationController.handleEmptySpaceClick(event);
         } else {
             // Fallback: clear selection unless multi-select is active
-            const isMultiSelect = event.ctrlKey || event.metaKey;
+            const isMultiSelect = event.ctrlKey || event.metaKey || event.shiftKey;
             if (!isMultiSelect) {
                 this.clearSelection();
             }

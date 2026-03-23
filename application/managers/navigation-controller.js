@@ -309,7 +309,7 @@ class NavigationController {
      * @param {Event} event - Mouse event
      */
     handleEmptySpaceClick(event) {
-        const isMultiSelect = event && (event.ctrlKey || event.metaKey);
+        const isMultiSelect = event && (event.ctrlKey || event.metaKey || event.shiftKey);
 
         if (!isMultiSelect) {
             if (this.isInContainerContext()) {
