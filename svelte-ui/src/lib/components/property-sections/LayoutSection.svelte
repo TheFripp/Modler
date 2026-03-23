@@ -5,6 +5,7 @@
 	import AxisSelector from '$lib/components/ui/axis-selector.svelte';
 	import InlineInput from '$lib/components/ui/inline-input.svelte';
 	import { updateThreeJSProperty } from '$lib/stores/modler';
+	import { currentUnit as unitStore, toDisplayValue, toInternalValue, getUnitStep } from '$lib/stores/units';
 
 	// Props
 	export let displayObject: any;
@@ -25,12 +26,16 @@
 	$: isLayoutEnabled = displayObject.autoLayout?.enabled ?? false;
 	$: layoutDirection = displayObject.autoLayout?.direction ?? '';
 
-	// Reactive gap value - formatted to exactly 2 decimal places for UI display
-	// toFixed(2) ensures consistent "1.20" format instead of "1.2"
-	// (Internal calculations maintain full precision)
-	$: gapValue = Number((displayObject.calculatedGap !== undefined
+	// Reactive gap value - convert from internal meters to display unit
+	$: gapValueInternal = displayObject.calculatedGap !== undefined
 		? displayObject.calculatedGap
-		: (displayObject.autoLayout?.gap ?? 0)).toFixed(2));
+		: (displayObject.autoLayout?.gap ?? 0);
+	$: gapValue = toDisplayValue(gapValueInternal, $unitStore);
+
+	// Unit conversion helper for InlineInput
+	function convertToInternal(displayVal: number): number {
+		return toInternalValue(displayVal, $unitStore);
+	}
 
 	// Reactive alignment values
 	$: alignmentX = displayObject.autoLayout?.alignment?.x ?? 'center';
@@ -43,6 +48,13 @@
 		: layoutDirection === 'z' ? ['x', 'y']
 		: [];
 
+	// Get the gap value the user sees — calculatedGap takes precedence over autoLayout.gap
+	function getDisplayedGap(): number {
+		return displayObject.calculatedGap !== undefined
+			? displayObject.calculatedGap
+			: (displayObject.autoLayout?.gap ?? 0);
+	}
+
 	// Handle layout axis selection with toggle behavior
 	function selectLayoutAxis(axis: string) {
 		if (!axis || !['x', 'y', 'z'].includes(axis)) {
@@ -54,11 +66,12 @@
 		const isCurrentlyEnabled = displayObject.autoLayout?.enabled;
 		const currentReversed = displayObject.autoLayout?.reversed ?? false;
 
-		// Build complete autoLayout object
+		// Build complete autoLayout object — spread existing to preserve modifiers (tileMode, etc.)
 		const autoLayout = {
+			...displayObject.autoLayout,
 			enabled: !(currentDirection === axis && isCurrentlyEnabled),
 			direction: (currentDirection === axis && isCurrentlyEnabled) ? '' : axis,
-			gap: displayObject.autoLayout?.gap ?? 0,
+			gap: getDisplayedGap(),
 			padding: displayObject.autoLayout?.padding ?? {
 				width: 0, height: 0, depth: 0
 			},
@@ -80,9 +93,10 @@
 		const isReversed = displayObject.autoLayout?.reversed ?? false;
 
 		const autoLayout = {
+			...displayObject.autoLayout,
 			enabled: displayObject.autoLayout?.enabled ?? false,
 			direction: displayObject.autoLayout?.direction ?? '',
-			gap: displayObject.autoLayout?.gap ?? 0,
+			gap: getDisplayedGap(),
 			padding: displayObject.autoLayout?.padding ?? {
 				width: 0, height: 0, depth: 0
 			},
@@ -130,9 +144,10 @@
 		}
 
 		const autoLayout = {
+			...displayObject.autoLayout,
 			enabled: displayObject.autoLayout?.enabled ?? false,
 			direction: displayObject.autoLayout?.direction ?? '',
-			gap: displayObject.autoLayout?.gap ?? 0,
+			gap: getDisplayedGap(),
 			padding: displayObject.autoLayout?.padding ?? {
 				width: 0, height: 0, depth: 0
 			},
@@ -232,8 +247,10 @@
 					{objectId}
 					property="autoLayout.gap"
 					min={0}
-					step={0.1}
+					step={getUnitStep($unitStore)}
+					suffix={$unitStore}
 					disabled={!isLayoutEnabled}
+					{convertToInternal}
 				/>
 				{#if displayObject.calculatedGap !== undefined}
 					<span class="text-muted-foreground text-[10px]">(auto)</span>
@@ -263,37 +280,40 @@
 
 		<!-- Padding Controls -->
 		<div class="space-y-2 {!isLayoutEnabled ? 'opacity-30' : ''}">
-			<SectionHeader label="Padding" />
+			<SectionHeader label="Padding" unit={$unitStore} />
 			<div class="grid grid-cols-3 gap-2">
 				<InlineInput
 					label="W"
 					type="number"
-					value={displayObject.autoLayout?.padding?.width ?? 0}
+					value={toDisplayValue(displayObject.autoLayout?.padding?.width ?? 0, $unitStore)}
 					{objectId}
 					property="autoLayout.padding.width"
 					min={0}
-					step={0.1}
+					step={getUnitStep($unitStore)}
 					disabled={!isLayoutEnabled}
+					{convertToInternal}
 				/>
 				<InlineInput
 					label="H"
 					type="number"
-					value={displayObject.autoLayout?.padding?.height ?? 0}
+					value={toDisplayValue(displayObject.autoLayout?.padding?.height ?? 0, $unitStore)}
 					{objectId}
 					property="autoLayout.padding.height"
 					min={0}
-					step={0.1}
+					step={getUnitStep($unitStore)}
 					disabled={!isLayoutEnabled}
+					{convertToInternal}
 				/>
 				<InlineInput
 					label="D"
 					type="number"
-					value={displayObject.autoLayout?.padding?.depth ?? 0}
+					value={toDisplayValue(displayObject.autoLayout?.padding?.depth ?? 0, $unitStore)}
 					{objectId}
 					property="autoLayout.padding.depth"
 					min={0}
-					step={0.1}
+					step={getUnitStep($unitStore)}
 					disabled={!isLayoutEnabled}
+					{convertToInternal}
 				/>
 			</div>
 		</div>

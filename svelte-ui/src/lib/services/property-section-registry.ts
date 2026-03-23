@@ -7,8 +7,7 @@
 export type SectionType =
 	| 'transform'
 	| 'material'
-	| 'layout'
-	| 'tile';
+	| 'layout';
 
 export interface SectionFeatures {
 	[key: string]: boolean | string | number | any;
@@ -66,7 +65,7 @@ propertySectionRegistry.register('box', [
 	{
 		type: 'transform',
 		features: {
-			position: true,
+			position: false,
 			rotation: true,
 			dimensions: true
 		}
@@ -78,7 +77,7 @@ propertySectionRegistry.register('container', [
 	{
 		type: 'transform',
 		features: {
-			position: true,
+			position: false,
 			rotation: true,
 			dimensions: true
 		}
@@ -86,23 +85,15 @@ propertySectionRegistry.register('container', [
 	{ type: 'layout' }
 ]);
 
-propertySectionRegistry.register('tiled-container', [
-	{
-		type: 'transform',
-		features: {
-			position: true,
-			rotation: true,
-			dimensions: true
-		}
-	},
-	{ type: 'tile' }
-]);
+// Note: 'tiled-container' is no longer a separate type.
+// Containers always show Layout. Modifiers (like Tile) are detected
+// dynamically by PropertyPanel and append additional sections.
 
 propertySectionRegistry.register('multi', [
 	{
 		type: 'transform',
 		features: {
-			position: true,
+			position: false,
 			rotation: true,
 			dimensions: true
 		}

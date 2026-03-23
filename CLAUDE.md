@@ -44,6 +44,10 @@ Full architecture details: see auto-memory `project_architecture_systems.md`
 - New tool → Extend `BaseTool`, register in `v2-main.js`
 - New settings → Three-file contract: CommandRouter settingsRoutes + SettingsHandler + SettingsPanel
 - New message type → Register in CommandRouter `registerHandlers()`, document in [`MESSAGE-PROTOCOL.md`](integration/communication/MESSAGE-PROTOCOL.md)
+- Yard library item → `YardManager` for data, CommandRouter handlers for messages, `yard.ts` store for UI
+- Context menu action → Add to `ContextMenu._getMenuItems()` in `application/ui/context-menu.js`
+- New container modifier → Add detection in `PropertyPanel.getModifiers()`, create modifier section component, store data in `autoLayout`
+- **Modifier pattern**: Containers are the base (Transform + Layout). Modifiers (Tile, future) add extra sections dynamically. Never use separate registry types for modified containers.
 
 Full file map & responsibilities: see auto-memory `project_file_responsibilities.md`
 
@@ -70,6 +74,7 @@ Full file map & responsibilities: see auto-memory `project_file_responsibilities
 - Check legacy flags for mode detection — use `containerMode` exclusively
 - Use visual transforms instead of CAD geometry
 - Recreate support meshes (show/hide only)
+- Rebuild autoLayout without spreading existing data — always `{ ...displayObject.autoLayout, ...overrides }` to preserve modifiers
 - Add complexity without clear architectural benefit
 
 ✅ **ALWAYS**:

@@ -2,6 +2,7 @@
 	import { onMount } from 'svelte';
 	import { displayObject, toolState } from '$lib/stores/modler';
 	import { propertySectionRegistry } from '$lib/services/property-section-registry';
+	import { currentUnit as storeUnit } from '$lib/stores/units';
 	import Badge from '$lib/components/ui/badge.svelte';
 	import TileControls from '$lib/components/TileControls.svelte';
 	import PropertyGroup from '$lib/components/ui/property-group.svelte';
@@ -14,53 +15,41 @@
 
 	// SimpleCommunication: No bridge initialization needed
 
-	// Unit system state
-	let currentUnit = 'm';
-	let unitConverter: any = null;
+	// Unit from centralized store (updated via postMessage from main window)
+	$: currentUnit = $storeUnit;
 
 	// Tile tool state (for creating new tiled containers)
 	let tileAxis: 'x' | 'y' | 'z' | null = null;
 	let tileRepeat: number = 3;
 	let tileGap: number = 0;
 
-	// Update current unit from UnitConverter or unit change events
-	function updateCurrentUnit() {
-		if (unitConverter) {
-			currentUnit = unitConverter.userUnit;
-		}
-	}
-
 	// Get the appropriate object ID for property updates (multi-selection or single object)
 	function getObjectIdForUpdate(): string {
 		return $displayObject?.id || '';
 	}
 
-	// Determine object type for section registry
+	// Determine base object type for section registry
 	function getObjectType(obj: any): string {
 		if (!obj) return '';
-
-		// Check for tiled container first
-		if (obj.isContainer && obj.autoLayout?.tileMode?.enabled) {
-			return 'tiled-container';
-		}
-
-		// Check for regular container
-		if (obj.isContainer) {
-			return 'container';
-		}
-
-		// Check for multi-selection
-		if (obj.type === 'multi' || obj.type === 'mixed') {
-			return 'multi';
-		}
-
-		// Default to box
+		if (obj.isContainer) return 'container';
+		if (obj.type === 'multi' || obj.type === 'mixed') return 'multi';
 		return 'box';
+	}
+
+	// Detect active modifiers on the container
+	// Modifiers add extra sections below the base Layout section
+	function getModifiers(obj: any): string[] {
+		if (!obj?.isContainer) return [];
+		const mods: string[] = [];
+		if (obj.autoLayout?.tileMode?.enabled) mods.push('tile');
+		// Future modifiers: mirror, pattern, array, etc.
+		return mods;
 	}
 
 	// Get sections for current object
 	$: objectType = getObjectType($displayObject);
 	$: sections = propertySectionRegistry.getSections(objectType);
+	$: modifiers = getModifiers($displayObject);
 
 	// Tile tool handlers
 	function selectTileAxis(axis: 'x' | 'y' | 'z') {
@@ -82,50 +71,37 @@
 				gap: tileGap
 			}, '*');
 		} catch (error) {
-			console.error('❌ Failed to send tile creation request:', error);
+			console.error('Failed to send tile creation request:', error);
 		}
 	}
 
-	// Initialize unit system on mount
 	onMount(() => {
-		// Get unit converter instance
-		unitConverter = typeof window !== 'undefined' && window.UnitConverter ? new UnitConverter() : null;
-		updateCurrentUnit();
+		// Forward Tab key to parent window when not in an input
+		const handleTabKey = (event: KeyboardEvent) => {
+			if (event.key === 'Tab') {
+				const activeElement = document.activeElement;
+				const isInputFocused = activeElement && (
+					activeElement.tagName === 'INPUT' ||
+					activeElement.tagName === 'TEXTAREA' ||
+					activeElement instanceof HTMLElement && activeElement.isContentEditable
+				);
 
-		// Listen for unit changes from settings
-		if (typeof window !== 'undefined') {
-			window.addEventListener('unit-changed', updateCurrentUnit);
-
-			// Forward Tab key to parent window when not in an input
-			const handleTabKey = (event: KeyboardEvent) => {
-				if (event.key === 'Tab') {
-					// Check if an input is focused
-					const activeElement = document.activeElement;
-					const isInputFocused = activeElement && (
-						activeElement.tagName === 'INPUT' ||
-						activeElement.tagName === 'TEXTAREA' ||
-						activeElement instanceof HTMLElement && activeElement.isContentEditable
-					);
-
-					// If no input focused, forward Tab to parent window's KeyboardRouter
-					if (!isInputFocused) {
-						event.preventDefault();
-						window.parent.postMessage({
-							type: 'keyboard-event',
-							key: 'Tab',
-							code: 'Tab'
-						}, '*');
-					}
+				if (!isInputFocused) {
+					event.preventDefault();
+					window.parent.postMessage({
+						type: 'keyboard-event',
+						key: 'Tab',
+						code: 'Tab'
+					}, '*');
 				}
-			};
+			}
+		};
 
-			window.addEventListener('keydown', handleTabKey);
+		window.addEventListener('keydown', handleTabKey);
 
-			return () => {
-				window.removeEventListener('unit-changed', updateCurrentUnit);
-				window.removeEventListener('keydown', handleTabKey);
-			};
-		}
+		return () => {
+			window.removeEventListener('keydown', handleTabKey);
+		};
 	});
 </script>
 
@@ -138,14 +114,15 @@
 		<div class="flex items-center justify-between mb-6">
 			<h3 class="modler-object-name">{$displayObject.name}</h3>
 			<div class="flex items-center gap-2">
-				{#if $displayObject.isContainer && $displayObject.autoLayout?.tileMode?.enabled}
-					<Badge variant="outline" style="background-color: hsl(var(--modler-selection) / 0.25); color: hsl(var(--modler-selection)); border-color: hsl(var(--modler-selection) / 0.3);">
-						Tile
-					</Badge>
-				{:else if $displayObject.isContainer}
+				{#if $displayObject.isContainer}
 					<Badge variant="outline" style="background-color: hsl(var(--modler-container) / 0.25); color: hsl(var(--modler-container)); border-color: hsl(var(--modler-container) / 0.3);">
 						Container
 					</Badge>
+					{#each modifiers as mod}
+						<Badge variant="outline" style="background-color: hsl(var(--modler-selection) / 0.25); color: hsl(var(--modler-selection)); border-color: hsl(var(--modler-selection) / 0.3);">
+							{mod.charAt(0).toUpperCase() + mod.slice(1)}
+						</Badge>
+					{/each}
 				{:else if $displayObject.type === 'multi'}
 					<Badge variant="outline" style="background-color: hsl(var(--modler-selection) / 0.25); color: hsl(var(--modler-selection)); border-color: hsl(var(--modler-selection) / 0.3);">
 						Mixed
@@ -162,7 +139,7 @@
 			</div>
 		</div>
 
-		<!-- Render sections dynamically based on object type -->
+		<!-- Render base sections from registry -->
 		{#each sections as section}
 			{#if section.type === 'transform'}
 				<TransformSection
@@ -182,11 +159,15 @@
 					objectId={getObjectIdForUpdate()}
 					{currentUnit}
 				/>
-			{:else if section.type === 'tile'}
+			{/if}
+		{/each}
+
+		<!-- Render modifier sections (additive, below base sections) -->
+		{#each modifiers as modifier}
+			{#if modifier === 'tile'}
 				<TileSection
 					displayObject={$displayObject}
 					objectId={getObjectIdForUpdate()}
-					{currentUnit}
 				/>
 			{/if}
 		{/each}
