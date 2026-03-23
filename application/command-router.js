@@ -220,8 +220,17 @@ class CommandRouter {
         this.handlers.set('yard-update-item', this.handleYardUpdateItem.bind(this));
         this.handlers.set('yard-remove-item', this.handleYardRemoveItem.bind(this));
         this.handlers.set('yard-place-item', this.handleYardPlaceItem.bind(this));
+        this.handlers.set('yard-get-materials-list', this.handleYardGetMaterialsList.bind(this));
 
         console.log(`✅ CommandRouter: Registered ${this.handlers.size} action handlers`);
+
+        // Subscribe to lifecycle events to update materials list on create/delete/undo
+        if (window.objectEventBus) {
+            window.objectEventBus.subscribe(
+                window.objectEventBus.EVENT_TYPES.LIFECYCLE,
+                () => { this._broadcastMaterialsList(); }
+            );
+        }
     }
 
     /**
@@ -313,12 +322,242 @@ class CommandRouter {
             return;
         }
 
+        // Skip command wrapping during undo/redo (commands replay through ObjectStateManager directly)
+        if (this.historyManager?.isUndoing || this.historyManager?.isRedoing) {
+            this._forwardPropertyUpdate(data);
+            return;
+        }
+
+        // containerMode/sizingMode already has its own command in handleContainerSizingChange — skip
+        if (property === 'containerMode' || property === 'sizingMode') {
+            this._forwardPropertyUpdate(data);
+            return;
+        }
+
+        // autoLayout properties are handled separately (layout undo + tile repeat undo)
+        if (property === 'autoLayout' || property.startsWith('autoLayout.')) {
+            this._handleAutoLayoutPropertyUpdate(data);
+            return;
+        }
+
+        // Capture before-snapshot
+        const beforeSnapshot = this._capturePropertySnapshot(objectId, property);
+        if (!beforeSnapshot) {
+            this._forwardPropertyUpdate(data);
+            return;
+        }
+
+        // Perform the update
+        this._forwardPropertyUpdate(data);
+
+        // Capture after-snapshot
+        const afterSnapshot = this._capturePropertySnapshot(objectId, property);
+
+        // Register undoable command if state actually changed
+        if (afterSnapshot && this._snapshotsDiffer(beforeSnapshot, afterSnapshot) && this.historyManager) {
+            const command = new UpdatePropertySnapshotCommand(objectId, beforeSnapshot, afterSnapshot, `Update ${property}`);
+            this.historyManager.executeCommand(command);
+        }
+    }
+
+    /**
+     * Forward a property update to PropertyUpdateHandler (no command wrapping)
+     */
+    _forwardPropertyUpdate(data) {
+        const { objectId, property, value, source } = data;
         this.propertyUpdateHandler.handlePropertyUpdate({
-            objectId,
-            property,
-            value,
+            objectId, property, value,
             source: source || 'command-router'
         });
+    }
+
+    /**
+     * Capture a property snapshot from the current object state.
+     * Reads from mesh.position (live) rather than obj.position (can be stale).
+     * Scope depends on which property is being changed.
+     */
+    _capturePropertySnapshot(objectId, property) {
+        const obj = this.sceneController?.getObject(objectId);
+        if (!obj) return null;
+
+        const snapshot = {};
+
+        if (property.startsWith('dimensions.') || property === 'dimensions') {
+            // Dimension changes can also affect position (push-tool integration) and layoutProperties (fill mode)
+            snapshot.dimensions = obj.dimensions ? { ...obj.dimensions } : null;
+            snapshot.position = obj.mesh
+                ? { x: obj.mesh.position.x, y: obj.mesh.position.y, z: obj.mesh.position.z }
+                : (obj.position ? { ...obj.position } : null);
+            if (obj.layoutProperties) {
+                snapshot.layoutProperties = JSON.parse(JSON.stringify(obj.layoutProperties));
+            }
+        } else if (property.startsWith('position.') || property === 'position') {
+            snapshot.position = obj.mesh
+                ? { x: obj.mesh.position.x, y: obj.mesh.position.y, z: obj.mesh.position.z }
+                : (obj.position ? { ...obj.position } : null);
+        } else if (property.startsWith('rotation.') || property === 'rotation') {
+            snapshot.rotation = obj.rotation ? { ...obj.rotation } : null;
+        } else if (property.startsWith('material.') || property === 'material') {
+            snapshot.material = obj.material ? { ...obj.material } : null;
+        } else if (property === 'name') {
+            snapshot.name = obj.name;
+        } else {
+            // Fallback: capture the top-level property
+            const topProp = property.split('.')[0];
+            const val = obj[topProp];
+            snapshot[topProp] = (val && typeof val === 'object') ? JSON.parse(JSON.stringify(val)) : val;
+        }
+
+        return snapshot;
+    }
+
+    /**
+     * Compare two snapshots to detect if state actually changed
+     */
+    _snapshotsDiffer(before, after) {
+        return JSON.stringify(before) !== JSON.stringify(after);
+    }
+
+    /**
+     * Handle autoLayout property updates with undo support (Phase 3 + Phase 5)
+     * Separates tile repeat changes from general layout property changes.
+     */
+    _handleAutoLayoutPropertyUpdate(data) {
+        const { objectId, property, value, source } = data;
+
+        // Detect tile repeat changes — needs specialized command for child add/remove
+        if (property === 'autoLayout.tileMode.repeat') {
+            this._handleTileRepeatUpdate(objectId, property, value, source);
+            return;
+        }
+
+        // General layout property change — wrap with UpdateLayoutPropertyCommand
+        const container = this.sceneController?.getObject(objectId);
+        if (!container) {
+            this._forwardPropertyUpdate(data);
+            return;
+        }
+
+        // Capture before-state
+        const oldAutoLayout = container.autoLayout ? JSON.parse(JSON.stringify(container.autoLayout)) : null;
+        const oldContainerMode = container.containerMode;
+        const oldChildPositions = new Map();
+        const children = this.sceneController.getChildObjects?.(objectId) || [];
+        children.forEach(child => {
+            if (child.mesh) {
+                oldChildPositions.set(child.id, {
+                    x: child.mesh.position.x,
+                    y: child.mesh.position.y,
+                    z: child.mesh.position.z
+                });
+            }
+        });
+
+        // Determine old value for the specific property
+        let oldValue = null;
+        if (property === 'autoLayout') {
+            oldValue = oldAutoLayout;
+        } else if (property.startsWith('autoLayout.')) {
+            const nestedProp = property.replace('autoLayout.', '');
+            oldValue = oldAutoLayout ? this._getNestedValue(oldAutoLayout, nestedProp) : null;
+        }
+
+        // Perform the update
+        this._forwardPropertyUpdate(data);
+
+        // Capture after-state
+        const updatedContainer = this.sceneController.getObject(objectId);
+        if (!updatedContainer) return;
+
+        const newAutoLayout = updatedContainer.autoLayout ? JSON.parse(JSON.stringify(updatedContainer.autoLayout)) : null;
+        const newContainerMode = updatedContainer.containerMode;
+
+        // Register undoable command if state changed
+        if (JSON.stringify(oldAutoLayout) !== JSON.stringify(newAutoLayout) || oldContainerMode !== newContainerMode) {
+            if (this.historyManager) {
+                const command = new UpdateLayoutPropertyCommand(objectId, property, value, oldValue);
+                command.originalLayoutState = oldAutoLayout;
+                command.newLayoutState = newAutoLayout;
+                command.originalContainerMode = oldContainerMode;
+                command.newContainerMode = newContainerMode;
+                command.childPositionSnapshots = oldChildPositions;
+                this.historyManager.executeCommand(command);
+            }
+        }
+    }
+
+    /**
+     * Get nested value from object by dot-separated path
+     */
+    _getNestedValue(obj, path) {
+        const parts = path.split('.');
+        let current = obj;
+        for (const part of parts) {
+            if (current == null) return null;
+            current = current[part];
+        }
+        return current;
+    }
+
+    /**
+     * Handle tile repeat count change with undo support (Phase 5).
+     * Captures child add/remove deltas so undo can reverse instance changes.
+     */
+    _handleTileRepeatUpdate(objectId, property, value, source) {
+        const data = { objectId, property, value, source };
+        const container = this.sceneController?.getObject(objectId);
+        if (!container) {
+            this._forwardPropertyUpdate(data);
+            return;
+        }
+
+        // Capture before-state
+        const oldAutoLayout = container.autoLayout ? JSON.parse(JSON.stringify(container.autoLayout)) : null;
+        const oldRepeat = container.autoLayout?.tileMode?.repeat || 0;
+        const sourceObjectId = container.autoLayout?.tileMode?.sourceObjectId;
+
+        const children = this.sceneController.getChildObjects?.(objectId) || [];
+        const childrenBefore = children.map(c => c.id);
+
+        // Snapshot children that might be removed (for undo restoration)
+        const childSnapshots = children.map(child => ({
+            id: child.id,
+            name: child.name,
+            dimensions: child.dimensions ? { ...child.dimensions } : null,
+            sourceObjectId
+        }));
+
+        // Perform the update (triggers TileInstanceManager via events)
+        this._forwardPropertyUpdate(data);
+
+        // Capture after-state
+        const updatedContainer = this.sceneController.getObject(objectId);
+        if (!updatedContainer) return;
+
+        const newAutoLayout = updatedContainer.autoLayout ? JSON.parse(JSON.stringify(updatedContainer.autoLayout)) : null;
+        const newRepeat = parseInt(value) || oldRepeat;
+
+        // Get children after the change
+        const childrenAfter = (this.sceneController.getChildObjects?.(objectId) || []).map(c => c.id);
+
+        // Calculate deltas
+        const addedChildIds = childrenAfter.filter(id => !childrenBefore.includes(id));
+        const removedChildIds = childrenBefore.filter(id => !childrenAfter.includes(id));
+        const removedChildSnapshots = childSnapshots.filter(s => removedChildIds.includes(s.id));
+
+        // Register undoable command
+        if (oldRepeat !== newRepeat && this.historyManager) {
+            const command = new UpdateTileRepeatCommand({
+                containerId: objectId,
+                oldRepeat,
+                newRepeat,
+                addedChildIds,
+                removedChildSnapshots,
+                oldAutoLayout,
+                newAutoLayout
+            });
+            this.historyManager.executeCommand(command);
+        }
     }
 
     handleFillModeToggle(data) {
@@ -329,7 +568,34 @@ class CommandRouter {
             return;
         }
 
+        // Skip command wrapping during undo/redo
+        if (this.historyManager?.isUndoing || this.historyManager?.isRedoing) {
+            this.propertyUpdateHandler.handleFillButtonToggle(objectId, axis);
+            return;
+        }
+
+        // Capture before-snapshot: layoutProperties + dimensions
+        const obj = this.sceneController?.getObject(objectId);
+        const beforeSnapshot = obj ? {
+            layoutProperties: obj.layoutProperties ? JSON.parse(JSON.stringify(obj.layoutProperties)) : null,
+            dimensions: obj.dimensions ? { ...obj.dimensions } : null
+        } : null;
+
+        // Perform the toggle
         this.propertyUpdateHandler.handleFillButtonToggle(objectId, axis);
+
+        // Capture after-snapshot
+        const updatedObj = this.sceneController?.getObject(objectId);
+        const afterSnapshot = updatedObj ? {
+            layoutProperties: updatedObj.layoutProperties ? JSON.parse(JSON.stringify(updatedObj.layoutProperties)) : null,
+            dimensions: updatedObj.dimensions ? { ...updatedObj.dimensions } : null
+        } : null;
+
+        // Register undoable command
+        if (beforeSnapshot && afterSnapshot && this._snapshotsDiffer(beforeSnapshot, afterSnapshot) && this.historyManager) {
+            const command = new UpdatePropertySnapshotCommand(objectId, beforeSnapshot, afterSnapshot, `Toggle fill ${axis}`);
+            this.historyManager.executeCommand(command);
+        }
     }
 
     /**
@@ -925,6 +1191,60 @@ class CommandRouter {
             type: 'yard-library-updated',
             data: yardManager.getLibraryData()
         });
+    }
+
+    _computeMaterialsList() {
+        const yardManager = window.modlerComponents?.yardManager;
+        if (!this.sceneController || !yardManager) return [];
+
+        const counts = new Map();
+        for (const [id, objectData] of this.sceneController.objects) {
+            if (objectData.yardItemId) {
+                counts.set(objectData.yardItemId, (counts.get(objectData.yardItemId) || 0) + 1);
+            }
+        }
+
+        const materialsList = [];
+        for (const [yardItemId, count] of counts) {
+            const item = yardManager.getItem(yardItemId);
+            if (item) {
+                materialsList.push({
+                    yardItemId,
+                    name: item.name,
+                    category: item.category,
+                    subcategory: item.subcategory,
+                    count,
+                    dimensions: item.dimensions
+                });
+            }
+        }
+        return materialsList;
+    }
+
+    _broadcastMaterialsList() {
+        if (!window.simpleCommunication) return;
+        const materialsList = this._computeMaterialsList();
+        window.simpleCommunication.sendToAllIframes({
+            type: 'yard-materials-list',
+            data: materialsList
+        });
+    }
+
+    handleYardGetMaterialsList(data) {
+        const materialsList = this._computeMaterialsList();
+        if (data.sourceWindow) {
+            try {
+                data.sourceWindow.postMessage({
+                    type: 'yard-materials-list',
+                    data: materialsList
+                }, '*');
+            } catch (e) { /* sourceWindow may be closed */ }
+        } else if (window.simpleCommunication) {
+            window.simpleCommunication.sendToAllIframes({
+                type: 'yard-materials-list',
+                data: materialsList
+            });
+        }
     }
 
     /**

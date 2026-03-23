@@ -36,11 +36,12 @@ Full architecture details: see auto-memory `project_architecture_systems.md`
 - State change → `ObjectStateManager.updateObject()`
 - Object CRUD → `SceneController.addObject/removeObject()`
 - Layout/container → `SceneController.updateContainer()` (handles all modes)
-- UI property update → `PropertyUpdateHandler` → `ObjectStateManager`
+- UI property update → `CommandRouter` (wraps with undo command) → `PropertyUpdateHandler` → `ObjectStateManager`
 - UI notification (3D→UI) → Automatic via ObjectEventBus → SimpleCommunication
 - UI command (UI→3D) → `postMessage` → `main-integration.js` → `CommandRouter`
 - Visual effect → `VisualizationManager`
-- Undo/redo → `HistoryManager.executeCommand()`
+- Undo/redo → `HistoryManager.executeCommand()` (post-hoc snapshot pattern, see [`/documentation/systems/undo-redo.md`](documentation/systems/undo-redo.md))
+- New undoable action → Wrap at `CommandRouter` level, extend `BaseCommand`, register script in `index.html`
 - New tool → Extend `BaseTool`, register in `v2-main.js`
 - New settings → Three-file contract: CommandRouter settingsRoutes + SettingsHandler + SettingsPanel
 - New message type → Register in CommandRouter `registerHandlers()`, document in [`MESSAGE-PROTOCOL.md`](integration/communication/MESSAGE-PROTOCOL.md)

@@ -22,70 +22,12 @@ class UpdateLayoutPropertyCommand extends BaseCommand {
 
     /**
      * Execute the layout property change
+     * Post-hoc registration: the change already happened via PropertyUpdateHandler.
+     * Snapshots (originalLayoutState, newLayoutState, childPositionSnapshots) are
+     * populated by CommandRouter before calling historyManager.executeCommand().
      */
     execute() {
-        try {
-            const sceneController = window.modlerComponents?.sceneController;
-            const propertyUpdateHandler = window.modlerComponents?.propertyUpdateHandler;
-
-            if (!sceneController || !propertyUpdateHandler) {
-                console.error('UpdateLayoutPropertyCommand: Required components not available');
-                return false;
-            }
-
-            // Get container data
-            const containerData = sceneController.getObject(this.containerId);
-            if (!containerData || !containerData.isContainer) {
-                console.error('UpdateLayoutPropertyCommand: Invalid container');
-                return false;
-            }
-
-            // Store original layout state before change
-            this.originalLayoutState = JSON.parse(JSON.stringify(containerData.autoLayout || {}));
-            this.originalContainerMode = containerData.containerMode;
-
-            // CRITICAL: Capture child positions BEFORE layout activation
-            // This allows proper restoration when undoing layout mode
-            const childIds = sceneController.getChildObjects(this.containerId);
-            childIds.forEach(childData => {
-                if (childData.mesh && childData.position) {
-                    this.childPositionSnapshots.set(childData.id, {
-                        x: childData.position.x,
-                        y: childData.position.y,
-                        z: childData.position.z
-                    });
-                }
-            });
-
-            // Execute the property change using existing handler
-            const success = propertyUpdateHandler.handleContainerLayoutPropertyChange(
-                this.containerId,
-                this.property,
-                this.newValue
-            );
-
-            if (success) {
-                // Store new layout state after change
-                const updatedContainerData = sceneController.getObject(this.containerId);
-                this.newLayoutState = JSON.parse(JSON.stringify(updatedContainerData.autoLayout || {}));
-                this.newContainerMode = updatedContainerData.containerMode;
-
-                console.log(`✅ UpdateLayoutPropertyCommand executed: ${this.description}`, {
-                    property: this.property,
-                    oldValue: this.oldValue,
-                    newValue: this.newValue,
-                    childrenCaptured: this.childPositionSnapshots.size
-                });
-                return true;
-            } else {
-                console.error('UpdateLayoutPropertyCommand: Failed to update layout property');
-                return false;
-            }
-
-        } catch (error) {
-            console.error('UpdateLayoutPropertyCommand execute error:', error);
-            return false;
-        }
+        return true;
     }
 
     /**
@@ -96,68 +38,48 @@ class UpdateLayoutPropertyCommand extends BaseCommand {
             const sceneController = window.modlerComponents?.sceneController;
             const objectStateManager = window.modlerComponents?.objectStateManager;
 
-            if (!sceneController) {
-                console.error('UpdateLayoutPropertyCommand: SceneController not available for undo');
+            if (!sceneController || !objectStateManager) {
+                console.error('UpdateLayoutPropertyCommand: Required components not available for undo');
                 return false;
             }
 
-            // Get container data
             const containerData = sceneController.getObject(this.containerId);
             if (!containerData || !containerData.isContainer) {
                 console.error('UpdateLayoutPropertyCommand: Container not found for undo');
                 return false;
             }
 
-            // Step 1: Restore original layout state and container mode
+            // Step 1: Restore original layout state and container mode via ObjectStateManager
+            const updates = {};
             if (this.originalLayoutState) {
-                containerData.autoLayout = JSON.parse(JSON.stringify(this.originalLayoutState));
+                updates.autoLayout = JSON.parse(JSON.stringify(this.originalLayoutState));
             }
             if (this.originalContainerMode) {
-                Object.assign(containerData, ObjectStateManager.buildContainerModeUpdate(this.originalContainerMode));
+                Object.assign(updates, ObjectStateManager.buildContainerModeUpdate(this.originalContainerMode));
             }
 
+            objectStateManager.updateObject(this.containerId, updates, {
+                source: 'undo',
+                immediate: true
+            });
+
             // Step 2: Restore child positions if layout is being disabled
-            const layoutNowEnabled = containerData.containerMode === 'layout';
+            const layoutNowEnabled = this.originalContainerMode === 'layout';
 
             if (!layoutNowEnabled && this.childPositionSnapshots.size > 0) {
-                // Layout is being disabled - restore manual positions
-                console.log(`Restoring ${this.childPositionSnapshots.size} child positions (layout disabled)`);
-
                 this.childPositionSnapshots.forEach((position, childId) => {
-                    if (objectStateManager) {
-                        objectStateManager.updateObject(childId, {
-                            position: position
-                        });
-                    } else {
-                        const childData = sceneController.getObject(childId);
-                        if (childData && childData.mesh) {
-                            childData.mesh.position.set(position.x, position.y, position.z);
-                            childData.position = { ...position };
-                        }
-                    }
+                    objectStateManager.updateObject(childId, { position }, {
+                        source: 'undo',
+                        immediate: true
+                    });
                 });
             }
 
             // Step 3: Apply layout if it was enabled
             if (layoutNowEnabled) {
-                const layoutResult = sceneController.updateContainer(this.containerId);
-                if (!layoutResult || !layoutResult.success) {
-                    console.warn('UpdateLayoutPropertyCommand: Layout update failed during undo');
-                }
+                sceneController.updateContainer(this.containerId);
             }
 
-            // Step 4: Trigger unified state updates
-            if (objectStateManager) {
-                objectStateManager.updateObject(this.containerId, {
-                    layout: containerData.autoLayout
-                });
-            }
-
-            console.log(`↩️ UpdateLayoutPropertyCommand undone: ${this.description}`, {
-                property: this.property,
-                restoredValue: this.oldValue,
-                childrenRestored: !layoutNowEnabled ? this.childPositionSnapshots.size : 0
-            });
             return true;
 
         } catch (error) {
@@ -174,48 +96,37 @@ class UpdateLayoutPropertyCommand extends BaseCommand {
             const sceneController = window.modlerComponents?.sceneController;
             const objectStateManager = window.modlerComponents?.objectStateManager;
 
-            if (!sceneController) {
-                console.error('UpdateLayoutPropertyCommand: SceneController not available for redo');
+            if (!sceneController || !objectStateManager) {
+                console.error('UpdateLayoutPropertyCommand: Required components not available for redo');
                 return false;
             }
 
-            // Get container data
             const containerData = sceneController.getObject(this.containerId);
             if (!containerData || !containerData.isContainer) {
                 console.error('UpdateLayoutPropertyCommand: Container not found for redo');
                 return false;
             }
 
-            // Restore the new layout state and container mode (from execute)
+            // Restore new layout state and container mode via ObjectStateManager
+            const updates = {};
             if (this.newLayoutState) {
-                containerData.autoLayout = JSON.parse(JSON.stringify(this.newLayoutState));
+                updates.autoLayout = JSON.parse(JSON.stringify(this.newLayoutState));
             }
             if (this.newContainerMode) {
-                Object.assign(containerData, ObjectStateManager.buildContainerModeUpdate(this.newContainerMode));
+                Object.assign(updates, ObjectStateManager.buildContainerModeUpdate(this.newContainerMode));
             }
 
-            // Check if layout is now enabled
-            const layoutNowEnabled = containerData.containerMode === 'layout';
-
-            // Apply layout if enabled
-            if (layoutNowEnabled) {
-                const layoutResult = sceneController.updateContainer(this.containerId);
-                if (!layoutResult || !layoutResult.success) {
-                    console.warn('UpdateLayoutPropertyCommand: Layout update failed during redo');
-                }
-            }
-
-            // Trigger unified state updates
-            if (objectStateManager) {
-                objectStateManager.updateObject(this.containerId, {
-                    layout: containerData.autoLayout
-                });
-            }
-
-            console.log(`↪️ UpdateLayoutPropertyCommand redone: ${this.description}`, {
-                property: this.property,
-                restoredValue: this.newValue
+            objectStateManager.updateObject(this.containerId, updates, {
+                source: 'redo',
+                immediate: true
             });
+
+            // Apply layout if now enabled
+            const layoutNowEnabled = this.newContainerMode === 'layout';
+            if (layoutNowEnabled) {
+                sceneController.updateContainer(this.containerId);
+            }
+
             return true;
 
         } catch (error) {

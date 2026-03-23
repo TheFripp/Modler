@@ -13,15 +13,20 @@ class TileTool extends BaseTool {
     }
 
     activate() {
-        // Check if there's already a selected object
+        // Check if there's already a selected object — immediately create tile
         const selectedObjects = this.selectionController.getSelectedObjects?.() || [];
         if (selectedObjects.length === 1) {
             const objectData = this.getObjectData(selectedObjects[0]);
             if (objectData && !objectData.isContainer) {
                 this.targetObject = selectedObjects[0];
-                this.notifyUIStateChange(true);
+                const container = this.createTiledContainer({ axis: 'x', repeat: 3, gap: 0 });
+                if (container) {
+                    this.switchToSelectAndFocus(container.id);
+                }
+                return;
             }
         }
+        // No valid selection — tool stays active, user can click an object
     }
 
     deactivate() {
@@ -55,7 +60,10 @@ class TileTool extends BaseTool {
             if (objectData && objectData.selectable !== false && !objectData.isContainer) {
                 this.selectionController.handleObjectClick(hit.object, event, { toolType: 'TileTool' });
                 this.targetObject = hit.object;
-                this.notifyUIStateChange(true);
+                const container = this.createTiledContainer({ axis: 'x', repeat: 3, gap: 0 });
+                if (container) {
+                    this.switchToSelectAndFocus(container.id);
+                }
                 return;
             }
         }
@@ -63,7 +71,6 @@ class TileTool extends BaseTool {
         // Empty space click (or non-selectable object) - clear target
         this.selectionController.handleEmptySpaceClick(event);
         this.targetObject = null;
-        this.notifyUIStateChange(false);
     }
 
     /**
@@ -132,7 +139,8 @@ class TileTool extends BaseTool {
         const addedContainer = this.sceneController.addObject(containerData.mesh, null, {
             name: objectData.name,
             parentContainer: originalParent,
-            isContainer: true
+            isContainer: true,
+            containerMode: 'layout'
         });
 
         // Configure container with tileMode
@@ -171,11 +179,14 @@ class TileTool extends BaseTool {
             });
         }
 
-        // Apply layout configuration
+        // Apply layout configuration with correct container mode
         if (this.objectStateManager) {
             this.objectStateManager.updateObject(
                 addedContainer.id,
-                { autoLayout: autoLayout },
+                {
+                    autoLayout: autoLayout,
+                    ...ObjectStateManager.buildContainerModeUpdate('layout')
+                },
                 'tile-tool'
             );
         }
@@ -184,7 +195,45 @@ class TileTool extends BaseTool {
         this.selectionController.clearSelection();
         this.selectionController.select(addedContainer.mesh);
 
+        // Register undoable command
+        const historyManager = window.modlerComponents?.historyManager;
+        if (historyManager && !historyManager.isUndoing && !historyManager.isRedoing) {
+            const children = this.sceneController.getChildObjects?.(addedContainer.id) || [];
+            const instanceChildIds = children
+                .filter(child => child.id !== objectData.id)
+                .map(child => child.id);
+
+            const command = new CreateTileContainerCommand({
+                containerId: addedContainer.id,
+                originalObjectId: objectData.id,
+                originalParentId: originalParent,
+                originalPosition: { x: originalPosition.x, y: originalPosition.y, z: originalPosition.z },
+                config: { axis, repeat, gap },
+                instanceChildIds,
+                originalName: objectData.name
+            });
+            historyManager.executeCommand(command);
+        }
+
         return addedContainer;
+    }
+
+    switchToSelectAndFocus(containerId) {
+        const toolController = window.modlerComponents?.toolController;
+        if (toolController) {
+            toolController.switchToTool('select');
+        }
+
+        // Allow selection + render propagation before focusing
+        setTimeout(() => {
+            const simpleCommunication = window.simpleCommunication;
+            if (simpleCommunication) {
+                simpleCommunication.sendToAllIframes({
+                    type: 'focus-tile-repeat',
+                    objectId: containerId
+                });
+            }
+        }, 100);
     }
 
     hasActiveHighlight() {

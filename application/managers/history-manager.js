@@ -186,7 +186,11 @@ class HistoryManager {
         this.isRedoing = true;
 
         try {
-            const success = command.execute();
+            // Call redo() if the command defines it, otherwise fall back to execute()
+            // Post-hoc commands (move, rotate, push, property updates) have execute() as a
+            // no-op and the real redo logic in redo(). Commands like DeleteObjectCommand
+            // do real work in execute() and don't define redo().
+            const success = (typeof command.redo === 'function') ? command.redo() : command.execute();
 
             if (success) {
                 // Add back to undo stack

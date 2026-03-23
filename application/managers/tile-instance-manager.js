@@ -62,7 +62,10 @@ class TileInstanceManager {
     }
 
     /**
-     * Handle geometry/material changes — sync across all tile instances
+     * Handle geometry/material changes — sync across all tile instances.
+     * INTENTIONALLY NOT wrapped in a command: this is a derivative effect.
+     * When the source property change is undone, the event bus re-triggers
+     * this sync automatically, so siblings revert naturally.
      */
     handleInstanceChange(event) {
         const { objectId, changeData } = event;

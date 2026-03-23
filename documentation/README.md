@@ -33,6 +33,7 @@
 - **Face Highlighting System**: [`/architecture/FACE-HIGHLIGHTING-SYSTEM.md`](architecture/FACE-HIGHLIGHTING-SYSTEM.md) - ⭐ **UNIFIED face highlighting - ONE system, multiple triggers. NEVER create alternates**
 
 ### Systems
+- **Undo/Redo System**: [`/systems/undo-redo.md`](systems/undo-redo.md) - ⭐ **Post-hoc snapshot command pattern, CommandRouter wrapping, all property changes undoable**
 - **Selection System**: [`/systems/selection.md`](systems/selection.md) - Container-first selection patterns
 - **Bi-Directional Selection**: [`/systems/bi-directional-selection.md`](systems/bi-directional-selection.md) - UI ↔ Scene selection system with NavigationController integration
 - **Container System**: [`/systems/containers.md`](systems/containers.md) - Dual geometry containers and layout
@@ -42,6 +43,9 @@
 - **Input & Events**: [`/systems/input-events.md`](systems/input-events.md) - Event coordination and camera controls
 - **Keyboard Router**: [`keyboard-router-architecture.md`](keyboard-router-architecture.md) - ⭐ **Centralized keyboard input with state polling pattern**
 - **Mesh Synchronization**: [`/systems/mesh-synchronization.md`](systems/mesh-synchronization.md) - Centralized mesh coordination
+
+### Features
+- **The Yard (Material Library)**: [`MESSAGE-PROTOCOL.md`](../integration/communication/MESSAGE-PROTOCOL.md#yard-operations-material-library) — Predefined lumber/sheet stock, right-click "Add to Yard", click to place. Data in `YardManager`, UI in `YardPanel.svelte`, context menu in `ContextMenu`.
 
 ## 🎨 UI Design System
 - **Design Language**: Dark theme with gray palette, minimal borders
