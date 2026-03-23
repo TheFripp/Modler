@@ -290,6 +290,15 @@ class SnapController {
         const sceneController = window.modlerComponents?.sceneController;
         if (!sceneController) return objectsToCheck;
 
+        // Collect IDs of any containers being dragged, so we can exclude their children
+        const draggedContainerIds = new Set();
+        for (const mesh of selectedObjects) {
+            const objData = sceneController.getObjectByMesh(mesh);
+            if (objData?.isContainer) {
+                draggedContainerIds.add(objData.id);
+            }
+        }
+
         // Whitelist approach: only include registered CAD objects
         // This inherently excludes support meshes, gizmos, grid lines, floor plane
         for (const [id, objectData] of sceneController.objects) {
@@ -304,6 +313,18 @@ class SnapController {
 
             // Skip containers
             if (objectData.isContainer) continue;
+
+            // Skip children of any container being dragged (they move with it)
+            if (draggedContainerIds.size > 0 && objectData.parentContainer) {
+                let isChildOfDragged = false;
+                for (const cid of draggedContainerIds) {
+                    if (this.isObjectInContainer(objectData, cid, sceneController)) {
+                        isChildOfDragged = true;
+                        break;
+                    }
+                }
+                if (isChildOfDragged) continue;
+            }
 
             if (mesh.isMesh && mesh.geometry) {
                 objectsToCheck.push(mesh);

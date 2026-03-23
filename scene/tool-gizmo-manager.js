@@ -12,7 +12,10 @@ import { LineSegmentsGeometry } from 'three/lines/LineSegmentsGeometry';
 
 class ToolGizmoManager {
     // Screen-space scale factor (gizmo world size = cameraDistance * factor)
-    static SCREEN_SCALE_FACTOR = 0.012;
+    static SCREEN_SCALE_FACTOR = 0.024;
+
+    // Industry-standard axis colors: Red=X, Green=Y, Blue=Z
+    static AXIS_COLORS = { x: 0xE74C3C, y: 0x2ECC71, z: 0x3498DB };
 
     constructor(scene, camera, materialManager) {
         this.scene = scene;
@@ -30,17 +33,25 @@ class ToolGizmoManager {
         this._arrowGroup = this._createArrowGizmo();
         this._circleGroup = this._createCircleGizmo();
         this._rotationArcGroup = this._createRotationArcGizmo();
+        this._quickRotateArcGroup = this._createQuickRotateArcGizmo();
 
         // Add to scene (hidden by default)
         this.scene.add(this._arrowGroup);
         this.scene.add(this._circleGroup);
         this.scene.add(this._rotationArcGroup);
+        this.scene.add(this._quickRotateArcGroup);
     }
 
     // --- Private: Screen-space scaling ---
 
     _getScreenSpaceScale(worldPosition) {
         return this.camera.position.distanceTo(worldPosition) * ToolGizmoManager.SCREEN_SCALE_FACTOR;
+    }
+
+    _setAxisColor(directionOrNormal) {
+        const ax = Math.abs(directionOrNormal.x), ay = Math.abs(directionOrNormal.y), az = Math.abs(directionOrNormal.z);
+        const axis = (ax >= ay && ax >= az) ? 'x' : (ay >= ax && ay >= az) ? 'y' : 'z';
+        this._material.color.setHex(ToolGizmoManager.AXIS_COLORS[axis]);
     }
 
     // --- Private: Gizmo creation ---
@@ -187,6 +198,52 @@ class ToolGizmoManager {
         return group;
     }
 
+    _createQuickRotateArcGizmo() {
+        const group = new THREE.Group();
+        group.visible = false;
+
+        // 90° arc starting at face center, dropping down then curving outward (CCW visual)
+        // Local +X = face outward direction, local +Y = toward-floor direction
+        // Arc center at (R, 0, 0), radius R
+        // Sweep CW from θ=π to θ=π/2: start (0,0) → end (R,R)
+        // Initial tangent = (0,1) = downward, arc curves away from face
+        const segments = 16;
+        const R = 1;
+        const positions = [];
+        for (let i = 0; i < segments; i++) {
+            const a0 = Math.PI - (i / segments) * (Math.PI / 2);
+            const a1 = Math.PI - ((i + 1) / segments) * (Math.PI / 2);
+            positions.push(
+                R + R * Math.cos(a0), R * Math.sin(a0), 0,
+                R + R * Math.cos(a1), R * Math.sin(a1), 0
+            );
+        }
+
+        // Arrowhead at end (R, R, 0), pointing downward (+Y)
+        const tipX = R;
+        const tipY = R;
+        const headLength = 0.15;
+        const headWidth = 0.08;
+        positions.push(
+            tipX - headWidth, tipY - headLength, 0,  tipX, tipY, 0,
+            tipX, tipY, 0,  tipX + headWidth, tipY - headLength, 0
+        );
+
+        const geometry = new LineSegmentsGeometry();
+        geometry.setPositions(positions);
+
+        const lines = new LineSegments2(geometry, this._material);
+        lines.renderOrder = 1000;
+        lines.raycast = () => {};
+        lines.computeLineDistances();
+        group.add(lines);
+
+        group.renderOrder = 1000;
+        group.traverse(child => { child.raycast = () => {}; });
+
+        return group;
+    }
+
     // --- Private: Orientation helpers ---
 
     _orientToDirection(object, direction) {
@@ -201,13 +258,24 @@ class ToolGizmoManager {
         object.quaternion.copy(this._tempQuaternion);
     }
 
+    _orientQuickRotateArc(object, faceNormal) {
+        // Map local +X → face outward, local +Y → toward floor, local +Z → rotation axis
+        const down = new THREE.Vector3(0, -1, 0);
+        const basisX = this._tempVector.copy(faceNormal).normalize();
+        const basisZ = new THREE.Vector3().crossVectors(basisX, down).normalize();
+        const basisY = new THREE.Vector3().crossVectors(basisZ, basisX).normalize();
+        const m = new THREE.Matrix4().makeBasis(basisX, basisY, basisZ);
+        object.quaternion.setFromRotationMatrix(m);
+    }
+
     // --- Public API ---
 
     showArrow(position, direction) {
         this._arrowGroup.visible = true;
         this._arrowGroup.position.copy(position).addScaledVector(direction, 0.005);
         this._orientToDirection(this._arrowGroup, direction);
-        this._arrowGroup.scale.setScalar(this._getScreenSpaceScale(position));
+        this._arrowGroup.scale.setScalar(this._getScreenSpaceScale(position) * 2);
+        this._setAxisColor(direction);
         this._requestRender();
     }
 
@@ -218,7 +286,7 @@ class ToolGizmoManager {
             this._arrowGroup.position.addScaledVector(direction, 0.005);
             this._orientToDirection(this._arrowGroup, direction);
         }
-        this._arrowGroup.scale.setScalar(this._getScreenSpaceScale(this._arrowGroup.position));
+        this._arrowGroup.scale.setScalar(this._getScreenSpaceScale(this._arrowGroup.position) * 2);
         this._requestRender();
     }
 
@@ -246,31 +314,41 @@ class ToolGizmoManager {
         this._requestRender();
     }
 
-    showRotationArc(position, normal, radius = 0.1) {
+    showRotationArc(position, normal) {
         this._rotationArcGroup.visible = true;
         this._rotationArcGroup.position.copy(position);
-        // Use provided radius for object-relative sizing
-        this._rotationArcGroup.scale.setScalar(radius);
-        // Scale pivot crosshair to constant screen-space size, independent of arc radius
-        const screenScale = this._getScreenSpaceScale(position);
-        this._pivotGroup.scale.setScalar(screenScale / radius);
+        this._rotationArcGroup.scale.setScalar(this._getScreenSpaceScale(position) * 2);
+        this._pivotGroup.scale.setScalar(1);
         if (normal) {
             this._orientToNormal(this._rotationArcGroup, normal);
+            this._setAxisColor(normal);
+        } else {
+            this._rotationArcGroup.lookAt(this.camera.position);
         }
         this._requestRender();
     }
 
-    updateRotationArc(position, normal, radius) {
+    updateRotationArc(position, normal) {
         if (!this._rotationArcGroup.visible) return;
         this._rotationArcGroup.position.copy(position);
-        if (radius !== undefined) {
-            this._rotationArcGroup.scale.setScalar(radius);
-            const screenScale = this._getScreenSpaceScale(position);
-            this._pivotGroup.scale.setScalar(screenScale / radius);
-        }
+        this._rotationArcGroup.scale.setScalar(this._getScreenSpaceScale(position) * 2);
+        this._pivotGroup.scale.setScalar(1);
         if (normal) {
             this._orientToNormal(this._rotationArcGroup, normal);
+        } else {
+            this._rotationArcGroup.lookAt(this.camera.position);
         }
+        this._requestRender();
+    }
+
+    showQuickRotateArc(position, faceNormal) {
+        this._quickRotateArcGroup.visible = true;
+        this._quickRotateArcGroup.position.copy(position);
+        this._quickRotateArcGroup.scale.setScalar(this._getScreenSpaceScale(position) * 2);
+        this._orientQuickRotateArc(this._quickRotateArcGroup, faceNormal);
+        // Color by rotation axis (cross of faceNormal and down)
+        const rotAxis = new THREE.Vector3().crossVectors(faceNormal, new THREE.Vector3(0, -1, 0));
+        this._setAxisColor(rotAxis);
         this._requestRender();
     }
 
@@ -278,6 +356,7 @@ class ToolGizmoManager {
         if (type === 'arrow') this._arrowGroup.visible = false;
         else if (type === 'circle') this._circleGroup.visible = false;
         else if (type === 'rotation-arc') this._rotationArcGroup.visible = false;
+        else if (type === 'quick-rotate-arc') this._quickRotateArcGroup.visible = false;
         this._requestRender();
     }
 
@@ -285,6 +364,7 @@ class ToolGizmoManager {
         this._arrowGroup.visible = false;
         this._circleGroup.visible = false;
         this._rotationArcGroup.visible = false;
+        this._quickRotateArcGroup.visible = false;
         this._requestRender();
     }
 
@@ -484,6 +564,35 @@ class ToolGizmoManager {
         this.showCircle(worldPos, null);
     }
 
+    /**
+     * Get the world-space normal of the most camera-facing face of an object.
+     * @param {THREE.Object3D} object - Mesh to check
+     * @returns {THREE.Vector3} World-space face normal
+     */
+    getMostVisibleFaceNormal(object) {
+        const geomSource = object?.userData?.supportMeshes?.interactiveMesh || object;
+        if (!geomSource || !this.camera) return new THREE.Vector3(0, 0, 1);
+
+        // Camera direction in object's local space
+        const objectCenter = geomSource.getWorldPosition(this._tempVector.set(0, 0, 0));
+        const toCamera = this.camera.position.clone().sub(objectCenter).normalize();
+        const invMatrix = new THREE.Matrix4().copy(geomSource.matrixWorld).invert();
+        const localToCamera = toCamera.transformDirection(invMatrix);
+
+        // Find the axis with the largest component — that face points most toward camera
+        const ax = Math.abs(localToCamera.x);
+        const ay = Math.abs(localToCamera.y);
+        const az = Math.abs(localToCamera.z);
+
+        const localNormal = new THREE.Vector3();
+        if (ax >= ay && ax >= az) localNormal.x = Math.sign(localToCamera.x);
+        else if (ay >= ax && ay >= az) localNormal.y = Math.sign(localToCamera.y);
+        else localNormal.z = Math.sign(localToCamera.z);
+
+        // Transform back to world space
+        return localNormal.transformDirection(geomSource.matrixWorld).normalize();
+    }
+
     // --- Lifecycle ---
 
     _requestRender() {
@@ -494,8 +603,9 @@ class ToolGizmoManager {
         this.scene.remove(this._arrowGroup);
         this.scene.remove(this._circleGroup);
         this.scene.remove(this._rotationArcGroup);
+        this.scene.remove(this._quickRotateArcGroup);
 
-        [this._arrowGroup, this._circleGroup, this._rotationArcGroup].forEach(group => {
+        [this._arrowGroup, this._circleGroup, this._rotationArcGroup, this._quickRotateArcGroup].forEach(group => {
             group.traverse(child => {
                 if (child.geometry) child.geometry.dispose();
                 // Shared material owned by MaterialManager — don't dispose here
