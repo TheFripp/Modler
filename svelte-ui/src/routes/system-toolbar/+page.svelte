@@ -3,13 +3,12 @@
 	import { initializeBridge } from '$lib/bridge/threejs-bridge';
 	import { toolState } from '$lib/stores/modler';
 	import { toggleSnapInScene } from '$lib/bridge/threejs-bridge';
+	import { currentUnit } from '$lib/stores/units';
 	import PropertyGroup from '$lib/components/ui/property-group.svelte';
 	import InlineInput from '$lib/components/ui/inline-input.svelte';
 	import { cn } from '$lib/utils';
 
 	let showSettings = false;
-	let currentUnit = 'mm';
-	let unitConverter: any = null;
 
 	// CAD wireframe settings
 	let cadWireframeSettings = {
@@ -39,11 +38,10 @@
 	}
 
 	function selectUnit(unit: string) {
-		currentUnit = unit;
-		if (unitConverter) {
-			unitConverter.setUserUnit(unit);
-			// Trigger property panel refresh
-			window.dispatchEvent(new CustomEvent('unit-changed', { detail: { unit } }));
+		currentUnit.set(unit as any);
+		// Route through main window so all iframes get notified
+		if (window.parent && window.parent !== window) {
+			window.parent.postMessage({ type: 'unit-settings-changed', settings: { 'unit.current': unit } }, '*');
 		}
 		showSettings = false;
 	}
@@ -79,18 +77,12 @@
 		// Initialize the bridge with Three.js for real-time synchronization
 		initializeBridge();
 
-		// Get unit converter instance
-		unitConverter = window.UnitConverter ? new UnitConverter() : null;
-		if (unitConverter) {
-			currentUnit = unitConverter.userUnit;
-		}
-
-		// Initialize CAD wireframe settings from ConfigurationManager
+		// Initialize CAD wireframe settings from main window
 		if (window !== window.parent) {
 			window.parent.postMessage({ type: 'get-cad-wireframe-settings' }, '*');
 
-			// Listen for settings response
-			const handleMessage = (event) => {
+			// Listen for settings responses
+			const handleMessage = (event: MessageEvent) => {
 				if (event.data.type === 'cad-wireframe-settings-response') {
 					cadWireframeSettings = event.data.settings;
 				}
@@ -155,14 +147,14 @@
 							<button
 								class={cn(
 									"w-full flex items-center justify-between px-3 py-2 text-xs text-left cursor-pointer transition-colors rounded-md",
-									currentUnit === unit.value
+									$currentUnit === unit.value
 										? "bg-secondary text-primary"
 										: "text-foreground hover:bg-accent"
 								)}
 								on:click={() => selectUnit(unit.value)}
 							>
 								{unit.label}
-								{#if currentUnit === unit.value}
+								{#if $currentUnit === unit.value}
 									<span class="text-xs text-primary">✓</span>
 								{/if}
 							</button>

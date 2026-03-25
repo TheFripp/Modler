@@ -24,6 +24,9 @@ class ToolGizmoManager {
         // Get shared gizmo material from MaterialManager
         this._material = materialManager.createToolGizmoLineMaterial();
 
+        // Gizmo size multiplier (1.0 = default, driven by visual.gizmo.size config)
+        this._sizeMultiplier = 1.0;
+
         // Reusable math objects (avoid GC during drag)
         this._upVector = new THREE.Vector3(0, 1, 0);
         this._tempQuaternion = new THREE.Quaternion();
@@ -45,7 +48,7 @@ class ToolGizmoManager {
     // --- Private: Screen-space scaling ---
 
     _getScreenSpaceScale(worldPosition) {
-        return this.camera.position.distanceTo(worldPosition) * ToolGizmoManager.SCREEN_SCALE_FACTOR;
+        return this.camera.position.distanceTo(worldPosition) * ToolGizmoManager.SCREEN_SCALE_FACTOR * this._sizeMultiplier;
     }
 
     _setAxisColor(directionOrNormal) {
@@ -202,32 +205,45 @@ class ToolGizmoManager {
         const group = new THREE.Group();
         group.visible = false;
 
-        // 90° arc starting at face center, dropping down then curving outward (CCW visual)
+        // 90° arc starting at face center, curving inward and down toward floor
         // Local +X = face outward direction, local +Y = toward-floor direction
-        // Arc center at (R, 0, 0), radius R
-        // Sweep CW from θ=π to θ=π/2: start (0,0) → end (R,R)
-        // Initial tangent = (0,1) = downward, arc curves away from face
+        // Arc center at (-R, 0, 0), radius R
+        // Sweep CCW from θ=0 to θ=π/2: start (0,0) → end (-R,R)
+        // Initial tangent = (0,1) = downward, arc curves toward object
         const segments = 16;
         const R = 1;
         const positions = [];
         for (let i = 0; i < segments; i++) {
-            const a0 = Math.PI - (i / segments) * (Math.PI / 2);
-            const a1 = Math.PI - ((i + 1) / segments) * (Math.PI / 2);
+            const a0 = (i / segments) * (Math.PI / 2);
+            const a1 = ((i + 1) / segments) * (Math.PI / 2);
             positions.push(
-                R + R * Math.cos(a0), R * Math.sin(a0), 0,
-                R + R * Math.cos(a1), R * Math.sin(a1), 0
+                -R + R * Math.cos(a0), R * Math.sin(a0), 0,
+                -R + R * Math.cos(a1), R * Math.sin(a1), 0
             );
         }
 
-        // Arrowhead at end (R, R, 0), pointing downward (+Y)
-        const tipX = R;
+        // Arrowhead at end (-R, R, 0), pointing along tangent (-X direction = inward)
+        const tipX = -R;
         const tipY = R;
         const headLength = 0.15;
         const headWidth = 0.08;
         positions.push(
-            tipX - headWidth, tipY - headLength, 0,  tipX, tipY, 0,
-            tipX, tipY, 0,  tipX + headWidth, tipY - headLength, 0
+            tipX + headLength, tipY - headWidth, 0,  tipX, tipY, 0,
+            tipX, tipY, 0,  tipX + headLength, tipY + headWidth, 0
         );
+
+        // Ground surface indicator — circle at arrowhead tip
+        // Lies in XZ plane at Y=R, perpendicular to toward-floor direction
+        const circleSegments = 24;
+        const circleR = 0.3;
+        for (let i = 0; i < circleSegments; i++) {
+            const a0 = (i / circleSegments) * Math.PI * 2;
+            const a1 = ((i + 1) / circleSegments) * Math.PI * 2;
+            positions.push(
+                tipX + Math.cos(a0) * circleR, tipY, Math.sin(a0) * circleR,
+                tipX + Math.cos(a1) * circleR, tipY, Math.sin(a1) * circleR
+            );
+        }
 
         const geometry = new LineSegmentsGeometry();
         geometry.setPositions(positions);

@@ -250,6 +250,15 @@ const CONFIGURATION_SCHEMA = {
         description: 'Tool gizmo line width in screen pixels'
     },
 
+    'visual.gizmo.size': {
+        type: 'number',
+        default: 1.0,
+        constraint: CONSTRAINT_TYPES.MIN_MAX,
+        min: 0.5,
+        max: 3.0,
+        description: 'Tool gizmo size multiplier (1.0 = default size)'
+    },
+
     // Measurement tool
     'visual.measurement.color': {
         type: 'string',

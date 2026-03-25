@@ -33,8 +33,8 @@
 	};
 
 	let gizmoSettings = {
-		color: '#ff6600',
-		lineWidth: 2
+		lineWidth: 2,
+		size: 1.0
 	};
 
 	let currentUnit = 'm';
@@ -116,7 +116,7 @@
 
 	function updateGizmoSettings(property: string, value: any) {
 		gizmoSettings[property] = value;
-		const configPath = property === 'color' ? 'visual.gizmo.color' : 'visual.gizmo.lineWidth';
+		const configPath = `visual.gizmo.${property}`;
 		if (window.parent && window.parent !== window) {
 			window.parent.postMessage({ type: 'visual-settings-changed', settings: { [configPath]: value } }, '*');
 		}
@@ -150,8 +150,8 @@
 			};
 			if (settings.gizmo) {
 				gizmoSettings = {
-					color: settings.gizmo.color || '#ff6600',
-					lineWidth: settings.gizmo.lineWidth || 2
+					lineWidth: settings.gizmo.lineWidth || 2,
+					size: settings.gizmo.size || 1.0
 				};
 			}
 		} else if (event.data.type === 'scene-settings-response') {
@@ -290,11 +290,6 @@
 		<!-- Tool Gizmos -->
 		<div class="space-y-2 mt-8">
 			<SectionHeader label="Tool Gizmos" align="left" />
-			<ColorInput
-				label="Color"
-				value={gizmoSettings.color}
-				onchange={(value) => updateGizmoSettings('color', value)}
-			/>
 			<InlineInput
 				label="Line Width"
 				type="number"
@@ -308,6 +303,21 @@
 				onchange={(event) => {
 					const numValue = parseFloat((event.target as HTMLInputElement).value);
 					updateGizmoSettings('lineWidth', numValue);
+				}}
+			/>
+			<InlineInput
+				label="Size"
+				type="number"
+				value={gizmoSettings.size}
+				objectId={null}
+				property="visual.gizmo.size"
+				min={0.5}
+				max={3.0}
+				step={0.1}
+				suffix="x"
+				onchange={(event) => {
+					const numValue = parseFloat((event.target as HTMLInputElement).value);
+					updateGizmoSettings('size', numValue);
 				}}
 			/>
 		</div>

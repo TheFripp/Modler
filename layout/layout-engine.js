@@ -22,6 +22,7 @@ import * as THREE from 'three';
  * Invariant: padding is always symmetric (no per-side distinction).
  */
 class LayoutEngine {
+    static AXIS_TO_PADDING = { x: 'width', y: 'height', z: 'depth' };
     /**
      * Calculate layout positions and sizes for objects in a container
      * @param {Array} objects - Array of object data from SceneController
@@ -238,7 +239,7 @@ class LayoutEngine {
         }
 
         // Calculate bounds for the final layout (pass pre-computed sizes to avoid re-derivation)
-        const layoutBounds = this.calculateLayoutBounds(objects, finalPositions, null, null, objectSizes);
+        const layoutBounds = this.calculateLayoutBounds(objects, finalPositions, layoutConfig, null, objectSizes);
 
         return {
             positions: finalPositions,
@@ -253,18 +254,46 @@ class LayoutEngine {
      * @returns {THREE.Vector3} Object size
      */
     static getObjectSize(obj) {
-        // Get geometry size first (most reliable)
+        // Get geometry size, accounting for rotation (rotated AABB)
         let geometrySize = null;
         if (obj.mesh && obj.mesh.geometry) {
             obj.mesh.geometry.computeBoundingBox();
             const box = obj.mesh.geometry.boundingBox;
 
             if (box) {
-                geometrySize = new THREE.Vector3(
-                    box.max.x - box.min.x,
-                    box.max.y - box.min.y,
-                    box.max.z - box.min.z
-                );
+                // Check if object has non-trivial rotation
+                const rot = obj.mesh.rotation;
+                const hasRotation = rot &&
+                    (Math.abs(rot.x) > 0.001 || Math.abs(rot.y) > 0.001 || Math.abs(rot.z) > 0.001);
+
+                if (hasRotation) {
+                    // Compute axis-aligned bounding box of rotated geometry
+                    const corners = [
+                        new THREE.Vector3(box.min.x, box.min.y, box.min.z),
+                        new THREE.Vector3(box.max.x, box.min.y, box.min.z),
+                        new THREE.Vector3(box.min.x, box.max.y, box.min.z),
+                        new THREE.Vector3(box.max.x, box.max.y, box.min.z),
+                        new THREE.Vector3(box.min.x, box.min.y, box.max.z),
+                        new THREE.Vector3(box.max.x, box.min.y, box.max.z),
+                        new THREE.Vector3(box.min.x, box.max.y, box.max.z),
+                        new THREE.Vector3(box.max.x, box.max.y, box.max.z)
+                    ];
+                    const rotMatrix = new THREE.Matrix4().makeRotationFromEuler(rot);
+                    const minV = new THREE.Vector3(Infinity, Infinity, Infinity);
+                    const maxV = new THREE.Vector3(-Infinity, -Infinity, -Infinity);
+                    for (const c of corners) {
+                        c.applyMatrix4(rotMatrix);
+                        minV.min(c);
+                        maxV.max(c);
+                    }
+                    geometrySize = new THREE.Vector3().subVectors(maxV, minV);
+                } else {
+                    geometrySize = new THREE.Vector3(
+                        box.max.x - box.min.x,
+                        box.max.y - box.min.y,
+                        box.max.z - box.min.z
+                    );
+                }
             }
         }
 
@@ -302,7 +331,6 @@ class LayoutEngine {
 
         const adjustedSize = baseSize.clone();
         const fillSizePerObject = (availableSpace && fillCount > 0) ? availableSpace / fillCount : baseSize[layoutAxis];
-        const AXIS_TO_PADDING = { x: 'width', y: 'height', z: 'depth' };
 
         ['x', 'y', 'z'].forEach(axis => {
             const sizeProp = `size${axis.toUpperCase()}`;
@@ -312,7 +340,7 @@ class LayoutEngine {
                 if (layoutAxis === axis && availableSpace !== null) {
                     adjustedSize[axis] = Math.max(fillSizePerObject, 0.1);
                 } else if (containerSize) {
-                    const paddingVal = padding[AXIS_TO_PADDING[axis]] || 0;
+                    const paddingVal = padding[LayoutEngine.AXIS_TO_PADDING[axis]] || 0;
                     adjustedSize[axis] = Math.max(containerSize[axis] - paddingVal * 2, 0.1);
                 }
                 // else: keep baseSize (no container size available)
@@ -418,14 +446,9 @@ class LayoutEngine {
                 const size = this.getObjectSize(child);
                 maxChildSize = Math.max(maxChildSize, size[axis]);
             });
-            fillChildren.forEach(child => {
-                if (this.objectHasFillBehavior(child, axis)) {
-                    maxChildSize = Math.max(maxChildSize, MIN_FILL_SIZE);
-                } else {
-                    const size = this.getObjectSize(child);
-                    maxChildSize = Math.max(maxChildSize, size[axis]);
-                }
-            });
+            if (fillChildren.length > 0) {
+                maxChildSize = Math.max(maxChildSize, MIN_FILL_SIZE);
+            }
             minSize += maxChildSize;
         }
 
@@ -449,8 +472,7 @@ class LayoutEngine {
      * @returns {number} Padding offset for one side
      */
     static getPaddingOffset(axis, padding) {
-        const AXIS_TO_PADDING = { x: 'width', y: 'height', z: 'depth' };
-        return (padding && padding[AXIS_TO_PADDING[axis]]) || 0;
+        return (padding && padding[LayoutEngine.AXIS_TO_PADDING[axis]]) || 0;
     }
     
     /**
@@ -602,29 +624,9 @@ class LayoutEngine {
 
         objects.forEach((obj, index) => {
             const pos = positions[index];
-
-            // Use pre-computed sizes when available (eliminates redundant re-derivation)
-            let size;
-            if (precomputedSizes && precomputedSizes[index]) {
-                size = precomputedSizes[index];
-            } else {
-                size = this.getObjectSize(obj);
-
-                // Fallback: apply sizing behavior if layout configuration provided but no pre-computed sizes
-                if (layoutConfig && containerSize) {
-                    const { direction, gap = 0, padding = {} } = layoutConfig;
-                    const { fillCount, totalFixedSize } = this.categorizeObjects(objects, direction);
-
-                    let availableSpace = null;
-                    if (fillCount > 0) {
-                        const totalGaps = (objects.length - 1) * gap;
-                        const paddingTotal = this.getTotalPadding(direction, padding);
-                        availableSpace = Math.max(0, containerSize[direction] - totalFixedSize - totalGaps - paddingTotal);
-                    }
-
-                    size = this.applySizingBehavior(obj, size, direction, availableSpace, fillCount, containerSize, padding);
-                }
-            }
+            const size = (precomputedSizes && precomputedSizes[index])
+                ? precomputedSizes[index]
+                : this.getObjectSize(obj);
 
             minX = Math.min(minX, pos.x - size.x / 2);
             maxX = Math.max(maxX, pos.x + size.x / 2);
@@ -674,9 +676,8 @@ class LayoutEngine {
         const bounds = this._calculateSelectionBounds(childMeshes, false, true);
 
         // Add padding to bounds size (symmetric per axis, same as layout bounds padding)
-        const AXIS_TO_PADDING = { x: 'width', y: 'height', z: 'depth' };
         ['x', 'y', 'z'].forEach(axis => {
-            const paddingVal = (padding[AXIS_TO_PADDING[axis]] || 0) * 2;
+            const paddingVal = (padding[LayoutEngine.AXIS_TO_PADDING[axis]] || 0) * 2;
             bounds.size[axis] += paddingVal;
         });
 
@@ -760,24 +761,13 @@ class LayoutEngine {
      * @returns {Object} Bounds object {min: Vector3, max: Vector3, size: Vector3, center: Vector3}
      */
     static calculateUnifiedBounds(items, options = {}) {
-        const { type = 'layout', useWorldSpace = false, useLocalTransform = false } = options;
+        const { useWorldSpace = false, useLocalTransform = false } = options;
 
         if (!items || items.length === 0) {
             return this._getEmptyBounds();
         }
 
-        // Detect if items are mesh objects (have .geometry property)
-        const isMeshArray = items.length > 0 && items[0] && items[0].geometry !== undefined;
-
-        if (isMeshArray) {
-            // Items are mesh objects, use selection bounds calculation
-            return this._calculateSelectionBounds(items, useWorldSpace, useLocalTransform);
-        } else if (type === 'selection') {
-            return this._calculateSelectionBounds(items, useWorldSpace, useLocalTransform);
-        } else {
-            // Items are position/size objects, use position bounds calculation
-            return this._calculatePositionBounds(items);
-        }
+        return this._calculateSelectionBounds(items, useWorldSpace, useLocalTransform);
     }
 
     /**
@@ -835,47 +825,6 @@ class LayoutEngine {
                     });
                 }
             }
-        });
-
-        return this._createBoundsObject(minX, minY, minZ, maxX, maxY, maxZ);
-    }
-
-    /**
-     * Calculate bounds for position+size pairs (layout bounds)
-     * @param {Array} items - Array of {position: Vector3, size: Vector3} or positions array with corresponding sizes
-     * @returns {Object} Bounds object
-     */
-    static _calculatePositionBounds(items) {
-        if (items.length === 0) return this._getEmptyBounds();
-
-        let minX = Infinity, minY = Infinity, minZ = Infinity;
-        let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
-
-        items.forEach(item => {
-            let pos, size;
-
-            if (item.position && item.size) {
-                // Item has position and size properties
-                pos = item.position;
-                size = item.size;
-            } else if (Array.isArray(item) && item.length >= 2) {
-                // Array format: [position, size]
-                pos = item[0];
-                size = item[1];
-            } else {
-                // Assume item is position, size needs to be provided separately
-                pos = item;
-                size = new THREE.Vector3(1, 1, 1); // Default size
-            }
-
-            const halfSize = size.clone().multiplyScalar(0.5);
-
-            minX = Math.min(minX, pos.x - halfSize.x);
-            maxX = Math.max(maxX, pos.x + halfSize.x);
-            minY = Math.min(minY, pos.y - halfSize.y);
-            maxY = Math.max(maxY, pos.y + halfSize.y);
-            minZ = Math.min(minZ, pos.z - halfSize.z);
-            maxZ = Math.max(maxZ, pos.z + halfSize.z);
         });
 
         return this._createBoundsObject(minX, minY, minZ, maxX, maxY, maxZ);

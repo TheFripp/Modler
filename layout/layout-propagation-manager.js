@@ -44,10 +44,9 @@ class LayoutPropagationManager {
     /**
      * Initialize with dependencies
      * @param {Object} sceneController - SceneController instance
-     * @param {Object} _containerCrudManager - Unused (kept for backward compat)
      * @param {Object} objectStateManager - ObjectStateManager instance
      */
-    initialize(sceneController, _containerCrudManager = null, objectStateManager = null) {
+    initialize(sceneController, objectStateManager = null) {
         this.sceneController = sceneController;
         this.objectStateManager = objectStateManager || window.modlerComponents?.objectStateManager;
 

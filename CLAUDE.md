@@ -23,7 +23,7 @@ Full 20 principles: see auto-memory `project_guiding_principles.md`
 - **`containerMode`** is the sole runtime mode detector (`'manual' | 'layout' | 'hug'`). Read via `getContainerMode(id)` / `isLayoutMode(id)`. Write via `buildContainerModeUpdate(mode)`.
 - **ObjectStateManager** is the single entry point for ALL state changes
 - **SceneController** coordinates geometry — delegates to SceneHierarchyManager, SceneLayoutManager, SceneLifecycleManager. NEVER call these managers directly.
-- **Support meshes**: create once as children, then show/hide only via VisualizationManager
+- **Support meshes**: create once as children, then show/hide only via VisualizationManager. Exception: cell wireframes on layout containers are rebuilt by `SceneLayoutManager` after layout recalculations.
 - **SimpleCommunication** handles Main→UI sync automatically via ObjectEventBus → DataExtractor → postMessage
 - **NEVER** access main window globals from iframe UI — all data flows through postMessage
 

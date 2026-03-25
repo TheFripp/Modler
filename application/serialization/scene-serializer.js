@@ -16,7 +16,7 @@ class SceneSerializer {
         this.objectSerializer = null;
 
         // Current file format version (semantic versioning)
-        this.CURRENT_VERSION = '1.0.0';
+        this.CURRENT_VERSION = '1.1.0';
 
         // Statistics for debugging
         this.stats = {
@@ -110,7 +110,11 @@ class SceneSerializer {
             created: options.createdTimestamp || now,
             modified: now,
             appVersion: this.getAppVersion(),
-            description: options.description || ''
+            formatVersion: this.CURRENT_VERSION,
+            description: options.description || '',
+            // Persistent scene identity — survives save/load cycles
+            // Used for cross-scene references and future cloud sync
+            sceneId: options.sceneId || crypto.randomUUID()
         };
     }
 
@@ -137,7 +141,6 @@ class SceneSerializer {
             return {
                 objects: [],
                 rootChildrenOrder: [],
-                nextId: this.sceneController.nextId || 1,
                 nextBoxNumber: this.sceneController.nextBoxNumber || 1,
                 nextContainerNumber: this.sceneController.nextContainerNumber || 1
             };
@@ -150,7 +153,7 @@ class SceneSerializer {
         return {
             objects: serializedObjects,
             rootChildrenOrder: this.sceneController.rootChildrenOrder || [],
-            nextId: this.sceneController.nextId,
+            // Display name counters only — IDs are UUIDs, no counter needed
             nextBoxNumber: this.sceneController.nextBoxNumber,
             nextContainerNumber: this.sceneController.nextContainerNumber
         };
@@ -214,7 +217,10 @@ class SceneSerializer {
             isLocked: false,
             originalAuthor: null,
             purchaseChain: [],
-            licenseType: 'single-use'
+            licenseType: 'single-use',
+            // Sharing metadata (reserved for future online features)
+            visibility: 'private',  // 'private' | 'shared' | 'public'
+            tags: []
         };
     }
 

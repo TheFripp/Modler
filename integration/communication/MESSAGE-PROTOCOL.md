@@ -604,7 +604,68 @@ All UI → Main messages must go through `CommandRouter.execute()` via postMessa
 
 ---
 
+### Yard Operations (Material Library)
+
+#### `yard-get-library`
+Request full yard library data.
+- **Direction**: UI → Main
+- **Response**: `yard-library-response` sent back to requesting iframe
+
+#### `yard-add-item`
+Add a new user item to the yard.
+- **Direction**: UI → Main
+- **Parameters**: `{ item: { name, category, subcategory, tags, dimensions, fixedDimensions, material } }`
+- **Effect**: Saves to localStorage, broadcasts `yard-library-updated`
+
+#### `yard-update-item`
+Update an existing user item.
+- **Direction**: UI → Main
+- **Parameters**: `{ itemId: string, updates: Partial<YardItem> }`
+
+#### `yard-remove-item`
+Remove a user item from the yard (builtins cannot be removed).
+- **Direction**: UI → Main
+- **Parameters**: `{ itemId: string }`
+
+#### `yard-place-item`
+Place a yard item into the scene as a new object.
+- **Direction**: UI → Main
+- **Parameters**: `{ itemId: string }`
+- **Effect**: Creates object via `CreateObjectCommand` with `yardItemId` and `yardFixed` metadata
+
+#### `yard-library-response` / `yard-library-updated`
+- **Direction**: Main → UI
+- **Data**: `{ items: YardItem[], categories: YardCategory[] }`
+
+#### `show-add-to-yard-dialog`
+- **Direction**: Main → UI (left panel)
+- **Data**: `{ name, dimensions, material }` — pre-populated from right-clicked object
+- **Effect**: Switches to Yard tab, opens Add to Yard dialog
+
+#### `yard-get-materials-list`
+Request the list of yard items currently placed in the scene.
+- **Direction**: UI → Main
+- **Parameters**: none
+
+#### `yard-materials-list`
+- **Direction**: Main → UI
+- **Data**: `MaterialsListItem[]` — `{ yardItemId, name, category, subcategory, count, dimensions }`
+- **Triggered by**: `yard-get-materials-list` request, or automatically on object lifecycle events (create/delete/undo)
+
+---
+
 ## Changelog
+
+### v1.4.0 (2026-03-22)
+- Added `yard-get-materials-list` (UI→Main) and `yard-materials-list` (Main→UI) for tracking yard items in use
+- Yard objects now display purple CAD wireframes to distinguish them from regular objects
+- Dimension locking enforced in ObjectStateManager for yard-fixed axes
+- Left panel restructured: Files/Settings moved to header icon buttons, Materials tab added
+
+### v1.3.0 (2026-03-21)
+- Added Yard (material library) operations: `yard-get-library`, `yard-add-item`, `yard-update-item`, `yard-remove-item`, `yard-place-item`
+- Added `yard-library-response`, `yard-library-updated`, `show-add-to-yard-dialog` Main→UI messages
+- Objects placed from Yard carry `yardItemId` and `yardFixed` metadata through DataExtractor pipeline
 
 ### v1.2.0 (2026-03-20)
 - Added `object-hover` message type documentation (was missing)

@@ -1,11 +1,9 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { displayObject, toolState } from '$lib/stores/modler';
+	import { displayObject } from '$lib/stores/modler';
 	import { propertySectionRegistry } from '$lib/services/property-section-registry';
 	import { currentUnit as storeUnit } from '$lib/stores/units';
 	import Badge from '$lib/components/ui/badge.svelte';
-	import TileControls from '$lib/components/TileControls.svelte';
-	import PropertyGroup from '$lib/components/ui/property-group.svelte';
 
 	// Import section components
 	import TransformSection from '$lib/components/property-sections/TransformSection.svelte';
@@ -17,11 +15,6 @@
 
 	// Unit from centralized store (updated via postMessage from main window)
 	$: currentUnit = $storeUnit;
-
-	// Tile tool state (for creating new tiled containers)
-	let tileAxis: 'x' | 'y' | 'z' | null = null;
-	let tileRepeat: number = 3;
-	let tileGap: number = 0;
 
 	// Get the appropriate object ID for property updates (multi-selection or single object)
 	function getObjectIdForUpdate(): string {
@@ -50,30 +43,6 @@
 	$: objectType = getObjectType($displayObject);
 	$: sections = propertySectionRegistry.getSections(objectType);
 	$: modifiers = getModifiers($displayObject);
-
-	// Tile tool handlers
-	function selectTileAxis(axis: 'x' | 'y' | 'z') {
-		tileAxis = axis;
-		// Auto-create when axis is selected
-		createTiledContainer();
-	}
-
-	function createTiledContainer() {
-		if (!tileAxis || tileRepeat < 2 || !$displayObject) return;
-
-		// SimpleCommunication: Direct postMessage to Main
-		try {
-			window.parent.postMessage({
-				type: 'create-tiled-container',
-				objectId: $displayObject.id,
-				axis: tileAxis,
-				repeat: tileRepeat,
-				gap: tileGap
-			}, '*');
-		} catch (error) {
-			console.error('Failed to send tile creation request:', error);
-		}
-	}
 
 	onMount(() => {
 		// Forward Tab key to parent window when not in an input
@@ -136,6 +105,11 @@
 						{$displayObject.type}
 					</Badge>
 				{/if}
+				{#if $displayObject.yardItemId}
+					<Badge variant="outline" style="background-color: rgba(155, 89, 182, 0.25); color: #9b59b6; border-color: rgba(155, 89, 182, 0.3);">
+						Yard
+					</Badge>
+				{/if}
 			</div>
 		</div>
 
@@ -172,19 +146,6 @@
 			{/if}
 		{/each}
 
-		<!-- Tile Tool Section (only when tile tool is active and non-container selected) -->
-		{#if $toolState.activeTool === 'tile' && !$displayObject.isContainer}
-			<PropertyGroup title="Tile Configuration">
-				<TileControls
-					axis={tileAxis}
-					bind:repeat={tileRepeat}
-					bind:gap={tileGap}
-					{currentUnit}
-					objectId={null}
-					onAxisChange={selectTileAxis}
-				/>
-			</PropertyGroup>
-		{/if}
 		{/key}
 	{:else}
 		<!-- Empty state: Show header and disabled transform section -->

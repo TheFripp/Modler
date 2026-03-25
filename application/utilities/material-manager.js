@@ -135,7 +135,8 @@ class MaterialManager {
             HOVER_EFFECT: 'hover-effect',
             SELECTION_EDGE_FAT: 'selection-edge-fat',
             CONTAINER_WIREFRAME_FAT: 'container-wireframe-fat',
-            TOOL_GIZMO: 'tool-gizmo'
+            TOOL_GIZMO: 'tool-gizmo',
+            YARD_CAD_WIREFRAME: 'yard-cad-wireframe'
         };
 
         // Performance metrics
@@ -189,12 +190,14 @@ class MaterialManager {
             this.updateMaterialsOfType(this.materialTypes.CONTAINER_WIREFRAME, 'linewidth', newValue);
             this.updateMaterialsOfType(this.materialTypes.CONTAINER_WIREFRAME_FAT, 'linewidth', newValue);
             this.updateMaterialsOfType(this.materialTypes.CAD_WIREFRAME, 'linewidth', newValue);
+            this.updateMaterialsOfType(this.materialTypes.YARD_CAD_WIREFRAME, 'linewidth', newValue);
             this.updateMaterialsOfType(this.materialTypes.HOVER_EFFECT, 'linewidth', newValue);
             this.invalidateCacheForType(this.materialTypes.SELECTION_EDGE);
             this.invalidateCacheForType(this.materialTypes.SELECTION_EDGE_FAT);
             this.invalidateCacheForType(this.materialTypes.CONTAINER_WIREFRAME);
             this.invalidateCacheForType(this.materialTypes.CONTAINER_WIREFRAME_FAT);
             this.invalidateCacheForType(this.materialTypes.CAD_WIREFRAME);
+            this.invalidateCacheForType(this.materialTypes.YARD_CAD_WIREFRAME);
             this.invalidateCacheForType(this.materialTypes.HOVER_EFFECT);
         });
 
@@ -266,11 +269,7 @@ class MaterialManager {
             this.invalidateCacheForType(this.materialTypes.CAD_WIREFRAME);
         });
 
-        // Tool gizmo materials
-        this.registerConfigCallback('visual.gizmo.color', (newValue) => {
-            this.updateMaterialsOfType(this.materialTypes.TOOL_GIZMO, 'color', newValue);
-        });
-
+        // Tool gizmo materials (color is axis-determined, only lineWidth is configurable)
         this.registerConfigCallback('visual.gizmo.lineWidth', (newValue) => {
             this.updateMaterialsOfType(this.materialTypes.TOOL_GIZMO, 'linewidth', newValue);
         });
@@ -911,6 +910,49 @@ class MaterialManager {
         });
 
         return this.cacheMaterial(key, material, this.materialTypes.CAD_WIREFRAME);
+    }
+
+    /**
+     * Create yard object CAD edge wireframe material (purple, always visible)
+     * @param {Object} options - Material options
+     * @returns {THREE.LineBasicMaterial} Yard CAD wireframe material
+     */
+    createYardCadEdgeMaterial(options = {}) {
+        const configManager = this.getConfigManager();
+
+        const config = {
+            color: options.color || configManager?.get('visual.yard.wireframe.color') || '#9b59b6',
+            lineWidth: options.lineWidth || configManager?.get('visual.wireframe.lineWidth') || 2,
+            opacity: options.opacity !== undefined ? options.opacity : 0.8,
+            transparent: true,
+            depthTest: true,
+            depthWrite: false,
+            ...options
+        };
+
+        const key = this.generateMaterialKey(this.materialTypes.YARD_CAD_WIREFRAME, config);
+
+        const cached = this.getMaterialFromCache(key);
+        if (cached) return cached;
+
+        let colorHex;
+        if (typeof config.color === 'string') {
+            colorHex = parseInt(config.color.replace('#', ''), 16);
+        } else if (typeof config.color === 'number') {
+            colorHex = config.color;
+        } else {
+            colorHex = 0x9b59b6;
+        }
+
+        const material = new THREE.LineBasicMaterial({
+            color: colorHex,
+            transparent: config.transparent,
+            opacity: config.opacity,
+            linewidth: config.lineWidth,
+            clippingPlanes: []
+        });
+
+        return this.cacheMaterial(key, material, this.materialTypes.YARD_CAD_WIREFRAME);
     }
 
     /**

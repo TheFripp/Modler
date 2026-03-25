@@ -234,6 +234,22 @@ class BoxCreationTool extends BaseTool {
                         },
                         { immediate: true, source: 'BoxCreationTool.finalizeBox' }
                     );
+
+                    // Now that isTemporary is removed, notify UI so object appears in tree
+                    window.objectEventBus.emit(
+                        window.objectEventBus.EVENT_TYPES.LIFECYCLE,
+                        objectData.id,
+                        {
+                            operation: 'created',
+                            objectType: objectData.type,
+                            objectData: {
+                                name: objectData.name,
+                                isContainer: false,
+                                dimensions: dims
+                            }
+                        },
+                        { immediate: true, source: 'BoxCreationTool.finalizeBox' }
+                    );
                 }
             }
         }

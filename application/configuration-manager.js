@@ -54,6 +54,11 @@ class ConfigurationManager {
                         lineWidth: 1
                     }
                 },
+                gizmo: {
+                    color: '#ff6600',
+                    lineWidth: 2,
+                    size: 1.0
+                },
                 grid: {
                     renderOrder: -100  // Render behind all wireframes to prevent z-fighting
                 },

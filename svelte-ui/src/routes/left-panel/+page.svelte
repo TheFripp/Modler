@@ -1,13 +1,16 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { Plus } from 'lucide-svelte';
+	import { Plus, FolderOpen, Settings } from 'lucide-svelte';
 	import { initializeBridge } from '$lib/bridge/threejs-bridge';
 	import ObjectTree from '$lib/components/ObjectTree.svelte';
 	import SettingsPanel from '$lib/components/SettingsPanel.svelte';
 	import FileBrowser from '$lib/components/FileBrowser.svelte';
+	import YardPanel from '$lib/components/YardPanel.svelte';
+	import MaterialsPanel from '$lib/components/MaterialsPanel.svelte';
+	import { showAddToYardDialog, addToYardObjectData } from '$lib/stores/yard';
 
 	// Tab state
-	let activeTab: 'objects' | 'files' | 'settings' = 'objects';
+	let activeTab: 'objects' | 'yard' | 'materials' | 'files' | 'settings' = 'objects';
 	let settingsPanel: SettingsPanel;
 
 	// Current file state
@@ -81,6 +84,14 @@
 			return;
 		}
 
+		// Handle Yard: open Add to Yard dialog
+		if (type === 'show-add-to-yard-dialog') {
+			activeTab = 'yard';
+			addToYardObjectData.set(data);
+			showAddToYardDialog.set(true);
+			return;
+		}
+
 		// Handle FileManager events
 		if (type.startsWith('file-manager-event:')) {
 			const eventType = type.replace('file-manager-event:', '');
@@ -145,7 +156,7 @@
 
 <!-- Standalone Left Panel for iframe integration -->
 <div class="h-screen w-full flex flex-col bg-[#171717] text-foreground overflow-hidden">
-	<!-- Current Scene Header -->
+	<!-- Header: Scene name + utility icon buttons -->
 	<div class="flex items-center justify-between px-4 py-3 border-b border-[#2E2E2E] shrink-0">
 		<div class="flex items-center gap-2 flex-1 min-w-0">
 			<span class="font-medium truncate">
@@ -155,17 +166,39 @@
 				{/if}
 			</span>
 		</div>
-		<button
-			onclick={handleNewScene}
-			class="p-2 rounded hover:bg-[#2E2E2E] transition-colors"
-			disabled={!isFileManagerReady}
-			title="New Scene"
-		>
-			<Plus size={16} class="text-foreground/60" />
-		</button>
+		<div class="flex items-center gap-1">
+			<button
+				type="button"
+				onclick={() => (activeTab = 'files')}
+				class="p-2 rounded transition-colors {activeTab === 'files'
+					? 'bg-[#2E2E2E] text-foreground'
+					: 'hover:bg-[#2E2E2E] text-foreground/60'}"
+				title="Files"
+			>
+				<FolderOpen size={16} />
+			</button>
+			<button
+				type="button"
+				onclick={() => (activeTab = 'settings')}
+				class="p-2 rounded transition-colors {activeTab === 'settings'
+					? 'bg-[#2E2E2E] text-foreground'
+					: 'hover:bg-[#2E2E2E] text-foreground/60'}"
+				title="Settings"
+			>
+				<Settings size={16} />
+			</button>
+			<button
+				onclick={handleNewScene}
+				class="p-2 rounded hover:bg-[#2E2E2E] transition-colors"
+				disabled={!isFileManagerReady}
+				title="New Scene"
+			>
+				<Plus size={16} class="text-foreground/60" />
+			</button>
+		</div>
 	</div>
 
-	<!-- Horizontal Tabs -->
+	<!-- Main Tabs: Objects, Yard, Materials -->
 	<div class="flex border-b border-[#2E2E2E] shrink-0">
 		<button
 			type="button"
@@ -178,21 +211,21 @@
 		</button>
 		<button
 			type="button"
-			onclick={() => (activeTab = 'files')}
-			class="flex-1 px-6 py-6 modler-section-title transition-colors {activeTab === 'files'
+			onclick={() => (activeTab = 'yard')}
+			class="flex-1 px-6 py-6 modler-section-title transition-colors {activeTab === 'yard'
 				? 'text-foreground border-b-2 border-blue-500'
 				: 'text-foreground/60 hover:text-foreground/80'}"
 		>
-			Files
+			Yard
 		</button>
 		<button
 			type="button"
-			onclick={() => (activeTab = 'settings')}
-			class="flex-1 px-6 py-6 modler-section-title transition-colors {activeTab === 'settings'
+			onclick={() => (activeTab = 'materials')}
+			class="flex-1 px-6 py-6 modler-section-title transition-colors {activeTab === 'materials'
 				? 'text-foreground border-b-2 border-blue-500'
 				: 'text-foreground/60 hover:text-foreground/80'}"
 		>
-			Settings
+			Materials
 		</button>
 	</div>
 
@@ -200,9 +233,13 @@
 	<div class="flex-1 overflow-hidden">
 		{#if activeTab === 'objects'}
 			<ObjectTree />
+		{:else if activeTab === 'yard'}
+			<YardPanel />
+		{:else if activeTab === 'materials'}
+			<MaterialsPanel />
 		{:else if activeTab === 'files'}
 			<FileBrowser />
-		{:else}
+		{:else if activeTab === 'settings'}
 			<SettingsPanel bind:this={settingsPanel} />
 		{/if}
 	</div>

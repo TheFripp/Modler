@@ -161,8 +161,7 @@ function initializeScene() {
     modlerV2Components.layoutPropagationManager = new LayoutPropagationManager();
     modlerV2Components.layoutPropagationManager.initialize(
         modlerV2Components.sceneController,
-        null, // containerCrudManager will be set later in initializeInteraction
-        modlerV2Components.objectStateManager // Pass objectStateManager for centralized state machine
+        modlerV2Components.objectStateManager
     );
 }
 
@@ -304,6 +303,13 @@ function initializeApplication() {
                 modlerV2Components.measurementTool.updateColor(newColor);
             }
         });
+
+        // Subscribe to gizmo size changes
+        if (modlerV2Components.toolGizmoManager) {
+            modlerV2Components.configurationManager.subscribe('visual.gizmo.size', (newValue) => {
+                modlerV2Components.toolGizmoManager._sizeMultiplier = newValue || 1.0;
+            });
+        }
     }
 
     // Move gizmo snap registration removed - face-based movement doesn't need grid snapping
@@ -780,8 +786,9 @@ async function autoLoadLastScene() {
 }
 
 /**
- * MIGRATION: Update existing container interactive meshes to Layer 1
- * Fixes containers created before layer-based raycasting was implemented
+ * MIGRATION: Ensure container interactive meshes are ONLY on Layer 1
+ * Fixes containers that had interactive mesh on both Layer 0 and Layer 1,
+ * which caused the mesh to block raycasts to children inside the container
  */
 function migrateContainerInteractiveMeshesToLayer1() {
     const sceneController = modlerV2Components.sceneController;
@@ -794,9 +801,9 @@ function migrateContainerInteractiveMeshesToLayer1() {
         if (objData.isContainer && objData.mesh) {
             const supportMeshes = objData.mesh.userData.supportMeshes;
             if (supportMeshes && supportMeshes.interactiveMesh) {
-                // Check if already on Layer 1
-                if (!supportMeshes.interactiveMesh.layers.test(1)) {
-                    supportMeshes.interactiveMesh.layers.enable(1); // Add Layer 1, keep Layer 0
+                // Ensure ONLY on Layer 1 (mask 2); fix for meshes on both Layer 0 and 1
+                if (supportMeshes.interactiveMesh.layers.mask !== 2) {
+                    supportMeshes.interactiveMesh.layers.set(1);
                     migratedCount++;
                 }
             }

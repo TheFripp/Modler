@@ -78,9 +78,9 @@ class AxisGizmo {
 
         // Define axes with their directions, labels, and colors (line and circle colors match)
         const axes = [
-            { axis: 'x', direction: new THREE.Vector3(1, 0, 0), label: 'X', lineColor: 0xff6b6b, circleColor: 0xff6b6b }, // Red line, red circle
-            { axis: 'y', direction: new THREE.Vector3(0, 1, 0), label: 'Y', lineColor: 0x6bff6b, circleColor: 0x6bff6b }, // Green line, green circle
-            { axis: 'z', direction: new THREE.Vector3(0, 0, 1), label: 'Z', lineColor: 0x6b6bff, circleColor: 0x6b6bff }  // Blue line, blue circle
+            { axis: 'x', direction: new THREE.Vector3(1, 0, 0), label: 'X', lineColor: 0xE74C3C, circleColor: 0xE74C3C }, // Red
+            { axis: 'y', direction: new THREE.Vector3(0, 1, 0), label: 'Y', lineColor: 0x2ECC71, circleColor: 0x2ECC71 }, // Green
+            { axis: 'z', direction: new THREE.Vector3(0, 0, 1), label: 'Z', lineColor: 0x3498DB, circleColor: 0x3498DB }  // Blue
         ];
 
         axes.forEach(({ axis, direction, label, lineColor, circleColor }) => {

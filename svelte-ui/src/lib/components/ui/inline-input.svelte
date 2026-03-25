@@ -24,6 +24,10 @@
 		fillTitle?: string;
 		onFillToggle?: () => void;
 		onFillHover?: (hovering: boolean) => void;
+		// Lock button props (yard dimension locking)
+		showLockButton?: boolean;
+		lockActive?: boolean;
+		onLockToggle?: () => void;
 		// Unit conversion function (optional - for dimensional properties)
 		convertToInternal?: (displayValue: number, axis?: string) => number;
 	}
@@ -48,6 +52,10 @@
 		fillTitle = '',
 		onFillToggle,
 		onFillHover,
+		// Lock button
+		showLockButton = false,
+		lockActive = false,
+		onLockToggle,
 		// Unit conversion
 		convertToInternal,
 		...restProps
@@ -68,6 +76,8 @@
 
 	// Update internal state when external value changes (but not during drag)
 	let isDragging = false;
+	// Dedup flag: prevents blur from re-sending after change already sent
+	let _justCommitted = $state(false);
 	$effect(() => {
 		if (!isDragging) {
 			inputValue = value;
@@ -161,6 +171,7 @@
 				? convertToInternal(newValue)
 				: newValue;
 			propertyController?.updateProperty(objectId, property, internalValue, 'input');
+			_justCommitted = true;
 		} else if (onchange) {
 			if (type === 'number' && typeof newValue === 'number') {
 				target.value = String(newValue);
@@ -199,6 +210,10 @@
 		}
 
 		if (objectId && property) {
+			if (_justCommitted) {
+				_justCommitted = false;
+				return;
+			}
 			const internalValue = convertToInternal && typeof newValue === 'number'
 				? convertToInternal(newValue)
 				: newValue;
@@ -211,6 +226,7 @@
 	}
 
 	function handleInputFocus(event: FocusEvent) {
+		_justCommitted = false;
 		const target = event.target as HTMLInputElement;
 		if (value === '' && target.placeholder === 'Mixed') {
 			target.value = '';
@@ -274,6 +290,30 @@
 		<!-- Suffix -->
 		{#if suffix}
 			<span class="text-xs text-muted-foreground pl-1 pr-1.5 flex-shrink-0">{suffix}</span>
+		{/if}
+
+		<!-- Lock Button (yard dimension locking) -->
+		{#if showLockButton}
+			<button
+				type="button"
+				tabindex="-1"
+				class={cn(
+					'w-5 h-full text-xs transition-colors flex-shrink-0 p-0 flex items-center justify-center border-l border-[#2E2E2E]',
+					!showFillButton ? 'rounded-r-[4px]' : '',
+					'hover:bg-[#212121]',
+					lockActive
+						? 'bg-[#212121] text-[#9b59b6]'
+						: 'bg-[#171717] text-muted-foreground/40'
+				)}
+				title={lockActive ? 'Dimension locked (click to unlock)' : 'Dimension unlocked (click to lock)'}
+				onclick={onLockToggle}
+			>
+				{#if lockActive}
+					<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+				{:else}
+					<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/></svg>
+				{/if}
+			</button>
 		{/if}
 
 		<!-- Fill Button -->

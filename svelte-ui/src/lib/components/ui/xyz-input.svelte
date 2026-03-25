@@ -25,6 +25,10 @@
 		fillStates?: { x?: boolean; y?: boolean; z?: boolean };
 		onFillToggle?: (axis: 'x' | 'y' | 'z') => void;
 		onFillHover?: (axis: 'x' | 'y' | 'z' | null) => void;
+		// Lock button functionality (yard dimension locking)
+		showLockButtons?: boolean;
+		lockStates?: { x?: boolean; y?: boolean; z?: boolean };
+		onLockToggle?: (axis: 'x' | 'y' | 'z') => void;
 		// Disable all inputs (for layout mode)
 		disableAll?: boolean;
 		// Hide values (for empty state)
@@ -45,6 +49,9 @@
 		fillStates = {},
 		onFillToggle,
 		onFillHover,
+		showLockButtons = false,
+		lockStates = {},
+		onLockToggle,
 		disableAll = false,
 		hideValues = false,
 		...restProps
@@ -74,11 +81,18 @@
 		}
 	}
 
+	// Lock button handler
+	function handleLockToggle(axis: 'x' | 'y' | 'z') {
+		if (onLockToggle) {
+			onLockToggle(axis);
+		}
+	}
+
 	// Convert internal value to display value (if applicable to this property)
 	function getDisplayValue(internalValue: number, axis: 'x' | 'y' | 'z'): number {
 		if (propertyBase === 'rotation') {
-			// Internal is radians (from Three.js mesh), display as degrees
-			return Math.round(internalValue * 180 / Math.PI * 10) / 10;
+			// Rotation values are already in degrees from ObjectStateManager
+			return Math.round(internalValue * 10) / 10;
 		}
 		return toDisplayValue(internalValue, $currentUnit);
 	}
@@ -86,8 +100,8 @@
 	// Convert display value back to internal value
 	function fromDisplayValue(displayValue: number, axis: 'x' | 'y' | 'z'): number {
 		if (propertyBase === 'rotation') {
-			// User enters degrees, convert to radians for internal storage
-			return displayValue * Math.PI / 180;
+			// Rotation is stored in degrees — pass through as-is
+			return displayValue;
 		}
 		return toInternalValue(displayValue, $currentUnit);
 	}
@@ -148,10 +162,11 @@
 			{@const property = objectId && propertyBase ? `${propertyBase}.${axis}` : undefined}
 			{@const mixedState = property ? getPropertyMixedState(property, $selectedObjects) : { isMixed: false, value: values[axis] }}
 			{@const internalValue = mixedState.isMixed ? 0 : (typeof mixedState.value === 'number' ? mixedState.value : values[axis])}
-			{@const displayValue = hideValues ? '' : (mixedState.isMixed ? '' : (propertyBase === 'rotation' ? Math.round(internalValue * 180 / Math.PI * 10) / 10 : toDisplayValue(internalValue, $currentUnit)))}
+			{@const displayValue = hideValues ? '' : (mixedState.isMixed ? '' : (propertyBase === 'rotation' ? Math.round(internalValue * 10) / 10 : toDisplayValue(internalValue, $currentUnit)))}
 			{@const fieldState = property ? $fieldStates[property] : undefined}
 			{@const isDisabled = disableAll || fieldState?.disabled || false}
 			{@const isFilled = fillStates[axis] || false}
+			{@const isLocked = lockStates[axis] || false}
 			<div class="flex-1 min-w-0">
 				{#key `${axis}-${$currentUnit}`}
 					<InlineInput
@@ -175,6 +190,9 @@
 						fillTitle={`Toggle fill for ${axis.toUpperCase()}-axis`}
 						onFillToggle={() => handleFillToggle(axis)}
 						onFillHover={(hovering) => handleFillHover(axis, hovering)}
+						showLockButton={showLockButtons}
+						lockActive={isLocked}
+						onLockToggle={() => handleLockToggle(axis)}
 						convertToInternal={fromDisplayValue}
 					/>
 				{/key}

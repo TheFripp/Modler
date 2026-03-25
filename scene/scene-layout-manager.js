@@ -158,6 +158,9 @@ class SceneLayoutManager {
                 this._persistCalculatedGap(container, finalResult.calculatedGap, pushContext);
             }
 
+            // Refresh cell wireframes if currently showing on this container
+            this._refreshCellWireframesIfNeeded(container);
+
             return { success: true, layoutBounds: result.bounds };
 
         } finally {
@@ -165,11 +168,27 @@ class SceneLayoutManager {
         }
     }
 
+    /**
+     * Refresh cell wireframes on a container if they are currently visible.
+     * Called after layout recalculation so wireframes stay in sync with child positions.
+     * @private
+     */
+    _refreshCellWireframesIfNeeded(container) {
+        if (!container.mesh) return;
+        const cellGroup = container.mesh.getObjectByName('cellWireframes');
+        if (!cellGroup) return;
+
+        const containerVisualizer = window.modlerComponents?.containerVisualizer;
+        if (containerVisualizer) {
+            containerVisualizer.showCellWireframes(container.mesh);
+        }
+    }
+
     // ====== HUG MODE ======
 
     /**
-     * Update a hug-mode container: resize to fit children tightly.
-     * Absorbs logic previously in ContainerCrudManager._resizeToFitChildren().
+     * Update a hug-mode container: arrange children with gap (if direction set),
+     * then resize to fit children tightly.
      * @private
      */
     _updateHugContainer(container, context) {
@@ -177,61 +196,84 @@ class SceneLayoutManager {
             return { success: false, reason: 'layout in progress' };
         }
 
-        const children = this.sceneController.getChildObjects(container.id);
-        if (children.length === 0) {
-            return { success: true, reason: 'no children' };
-        }
+        this._layoutInProgress = true;
 
-        if (!window.LayoutEngine) {
-            return { success: false, reason: 'LayoutEngine not available' };
-        }
+        try {
+            const children = this.sceneController.getChildObjects(container.id);
+            if (children.length === 0) {
+                return { success: true, reason: 'no children' };
+            }
 
-        const childMeshes = this.getChildMeshesForBounds(children);
-        if (childMeshes.length === 0) {
-            return { success: false, reason: 'no valid child meshes' };
-        }
+            if (!window.LayoutEngine) {
+                return { success: false, reason: 'LayoutEngine not available' };
+            }
 
-        const padding = container.autoLayout?.padding || {};
-        const bounds = window.LayoutEngine.calculateHugBounds(childMeshes, padding);
-
-        if (!bounds) {
-            return { success: false, reason: 'bounds calculation failed' };
-        }
-
-        // Hug containers recenter around children (container moves to wrap them)
-        const currentContainerPosition = container.mesh.position.clone();
-        const targetPosition = currentContainerPosition.clone().add(bounds.center);
-
-        // Apply geometry resize
-        const containerCrudManager = this.getContainerCrudManager();
-        if (!containerCrudManager) {
-            return { success: false, reason: 'ContainerCrudManager not available' };
-        }
-
-        const success = containerCrudManager.updateContainerGeometryWithFactories(
-            container, bounds.size, targetPosition, true
-        );
-
-        if (success) {
-            // Compensate child positions for container movement
-            const containerMovement = targetPosition.clone().sub(currentContainerPosition);
-            children.forEach(childObj => {
-                if (childObj.mesh) {
-                    childObj.mesh.position.sub(containerMovement);
-                    this.sceneController.updateObject(childObj.id, {
-                        position: childObj.mesh.position.clone()
+            // If layout direction is configured, arrange children with gap before wrapping.
+            // calculateLayout with null containerSize uses fixed gap (no fill, no space-between).
+            // Children are centered around origin, so bounds.center ≈ (0,0,0) — no drift.
+            if (container.autoLayout?.enabled && container.autoLayout?.direction) {
+                const result = window.LayoutEngine.calculateLayout(
+                    children, container.autoLayout, null
+                );
+                if (result.positions && result.positions.length === children.length) {
+                    children.forEach((child, i) => {
+                        if (child.mesh) {
+                            child.mesh.position.copy(result.positions[i]);
+                        }
                     });
                 }
-            });
+            }
+
+            const childMeshes = this.getChildMeshesForBounds(children);
+            if (childMeshes.length === 0) {
+                return { success: false, reason: 'no valid child meshes' };
+            }
+
+            const padding = container.autoLayout?.padding || {};
+            const bounds = window.LayoutEngine.calculateHugBounds(childMeshes, padding);
+
+            if (!bounds) {
+                return { success: false, reason: 'bounds calculation failed' };
+            }
+
+            // Hug containers recenter around children (container moves to wrap them)
+            const currentContainerPosition = container.mesh.position.clone();
+            const targetPosition = currentContainerPosition.clone().add(bounds.center);
+
+            // Apply geometry resize
+            const containerCrudManager = this.getContainerCrudManager();
+            if (!containerCrudManager) {
+                return { success: false, reason: 'ContainerCrudManager not available' };
+            }
+
+            const success = containerCrudManager.updateContainerGeometryWithFactories(
+                container, bounds.size, targetPosition, true
+            );
+
+            if (success) {
+                // Compensate child positions for container movement
+                const containerMovement = targetPosition.clone().sub(currentContainerPosition);
+                children.forEach(childObj => {
+                    if (childObj.mesh) {
+                        childObj.mesh.position.sub(containerMovement);
+                        this.sceneController.updateObject(childObj.id, {
+                            position: childObj.mesh.position.clone()
+                        });
+                    }
+                });
+            }
+
+            // Update container position
+            this.sceneController.updateObject(container.id, { position: targetPosition });
+
+            // Handle visibility after resize
+            containerCrudManager.handleContainerVisibilityAfterResize(container, true);
+
+            return { success: true };
+
+        } finally {
+            this._layoutInProgress = false;
         }
-
-        // Update container position
-        this.sceneController.updateObject(container.id, { position: targetPosition });
-
-        // Handle visibility after resize
-        containerCrudManager.handleContainerVisibilityAfterResize(container, true);
-
-        return { success: true };
     }
 
     // ====== MANUAL MODE ======
@@ -343,15 +385,7 @@ class SceneLayoutManager {
      */
     getChildMeshesForBounds(childObjects) {
         return childObjects
-            .map(child => {
-                if (child.isContainer && child.mesh) {
-                    const collisionMesh = child.mesh.children.find(grandchild =>
-                        grandchild.userData.isContainerCollision
-                    );
-                    if (collisionMesh) return collisionMesh;
-                }
-                return child.mesh;
-            })
+            .map(child => child.mesh)
             .filter(mesh => mesh && mesh.geometry && mesh.geometry.type !== 'EdgesGeometry');
     }
 
@@ -573,15 +607,15 @@ class SceneLayoutManager {
             }
         }
 
+        const layoutAxis = container?.autoLayout?.direction || 'x';
+        const isPushingPerpendicular = pushContext && pushContext.axis !== layoutAxis;
+
         objects.forEach((obj, index) => {
             const layoutPosition = positions[index];
             const layoutSize = sizes[index];
 
             // Apply fill-based sizing BEFORE positioning
             if (layoutSize && obj.layoutProperties) {
-                const layoutAxis = container?.autoLayout?.direction || 'x';
-                const isPushingPerpendicular = pushContext && pushContext.axis !== layoutAxis;
-
                 ['x', 'y', 'z'].forEach(axis => {
                     // During perpendicular push, only resize on the push axis
                     // (prevents cross-dimension contamination on other fill axes)
@@ -604,43 +638,21 @@ class SceneLayoutManager {
                 });
             }
 
-            // Apply layout positions
-            {
-                const layoutAxis = container.autoLayout?.direction || 'x';
-                const isPushingPerpendicular = pushContext && pushContext.axis !== layoutAxis;
-
-                if (container && container.mesh && obj.mesh.parent === container.mesh) {
-                    // Object is child of container - use layout position directly as local position
-                    if (isPushingPerpendicular) {
-                        obj.mesh.position[pushContext.axis] = layoutPosition[pushContext.axis];
-                        if (geomCenterOffset) obj.mesh.position[pushContext.axis] += geomCenterOffset[pushContext.axis];
-                    } else {
-                        obj.mesh.position.copy(layoutPosition);
-                        if (geomCenterOffset) obj.mesh.position.add(geomCenterOffset);
-                    }
-
-                    obj.position = { x: obj.mesh.position.x, y: obj.mesh.position.y, z: obj.mesh.position.z };
-
-                } else {
-                    // Object not in container hierarchy - use world position (fallback)
-                    const containerPosition = container && container.mesh ? container.mesh.position : new THREE.Vector3(0, 0, 0);
-
-                    if (isPushingPerpendicular) {
-                        const worldPos = layoutPosition[pushContext.axis] + containerPosition[pushContext.axis];
-                        obj.mesh.position[pushContext.axis] = worldPos;
-                        if (geomCenterOffset) obj.mesh.position[pushContext.axis] += geomCenterOffset[pushContext.axis];
-                        obj.position = { x: obj.mesh.position.x, y: obj.mesh.position.y, z: obj.mesh.position.z };
-                    } else {
-                        const worldPosition = new THREE.Vector3()
-                            .copy(layoutPosition)
-                            .add(containerPosition);
-                        if (geomCenterOffset) worldPosition.add(geomCenterOffset);
-
-                        obj.mesh.position.copy(worldPosition);
-                        obj.position = { x: obj.mesh.position.x, y: obj.mesh.position.y, z: obj.mesh.position.z };
-                    }
-                }
+            // Apply layout positions (children are always parented to container mesh)
+            if (obj.mesh.parent !== container.mesh) {
+                console.warn('Layout: object', obj.id, 'not parented to container — skipping position');
+                return;
             }
+
+            if (isPushingPerpendicular) {
+                obj.mesh.position[pushContext.axis] = layoutPosition[pushContext.axis];
+                if (geomCenterOffset) obj.mesh.position[pushContext.axis] += geomCenterOffset[pushContext.axis];
+            } else {
+                obj.mesh.position.copy(layoutPosition);
+                if (geomCenterOffset) obj.mesh.position.add(geomCenterOffset);
+            }
+
+            obj.position = { x: obj.mesh.position.x, y: obj.mesh.position.y, z: obj.mesh.position.z };
         });
     }
 

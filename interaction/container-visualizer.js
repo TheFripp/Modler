@@ -1,4 +1,6 @@
 import * as THREE from 'three';
+import { LineSegments2 } from 'three/lines/LineSegments2';
+import { LineSegmentsGeometry } from 'three/lines/LineSegmentsGeometry';
 // Modler V2 - Container Visualization Extension
 // Extends ObjectVisualizer with container-specific behaviors
 // Handles container wireframes, context states, padding visualization, and layout guides
@@ -189,6 +191,7 @@ class ContainerVisualizer extends ObjectVisualizer {
             for (const objectData of allObjects) {
                 if (objectData.isContainer) {
                     factory.hideContainerWireframe(objectData.mesh);
+                    this.hideCellWireframes(objectData.mesh);
                     this.edgeHighlights.delete(objectData.mesh);
                 }
             }
@@ -360,9 +363,118 @@ class ContainerVisualizer extends ObjectVisualizer {
     }
 
     /**
+     * Show cell wireframes on a layout-mode parent container.
+     * Each child gets a cell wireframe that matches its size on the layout axis
+     * and fills the parent's full volume on perpendicular axes.
+     * Gap between children is empty space (only vertical edge lines visible).
+     */
+    showCellWireframes(parentObject) {
+        const sceneController = window.modlerComponents?.sceneController;
+        if (!sceneController) return;
+
+        const parentData = sceneController.getObjectByMesh(parentObject);
+        if (!parentData?.isContainer || parentData.containerMode !== 'layout') return;
+        if (!parentData.autoLayout?.direction) return;
+
+        const direction = parentData.autoLayout.direction;
+        // Only support single-axis linear layouts for cell wireframes
+        if (!['x', 'y', 'z'].includes(direction)) return;
+
+        const children = sceneController.getChildObjects(parentData.id);
+        if (children.length === 0) return;
+
+        // Get parent dimensions (used for perpendicular axes)
+        const parentDims = window.GeometryUtils?.getGeometryDimensions(parentObject.geometry);
+        if (!parentDims) return;
+
+        // Remove existing cell wireframes group if present
+        this.hideCellWireframes(parentObject);
+
+        // Create group to hold cell wireframes
+        const cellGroup = new THREE.Group();
+        cellGroup.name = 'cellWireframes';
+        cellGroup.renderOrder = 9999;
+        cellGroup.raycast = () => {};
+
+        // Get child centers and sizes along layout axis, sorted by position
+        const childSlices = children.map(child => {
+            const pos = child.mesh.position[direction];
+            const childDims = window.GeometryUtils?.getGeometryDimensions(child.mesh.geometry);
+            const size = childDims ? childDims[direction] : 0;
+            return { pos, size };
+        }).sort((a, b) => a.pos - b.pos);
+
+        // Get material for cell wireframes (fat lines at reduced opacity)
+        const materialManager = this.materialManager;
+
+        for (let i = 0; i < childSlices.length; i++) {
+            const slice = childSlices[i];
+
+            // Cell wraps child exactly — gap is empty space between cells
+            const cellSize = slice.size;
+            const cellCenter = slice.pos;
+
+            // Build cell dimensions: full parent size on perpendicular axes, cell size on layout axis
+            const cellDims = {
+                x: parentDims.x,
+                y: parentDims.y,
+                z: parentDims.z
+            };
+            cellDims[direction] = cellSize;
+
+            // Create box geometry for this cell
+            const boxGeom = new THREE.BoxGeometry(cellDims.x, cellDims.y, cellDims.z);
+            const edgeGeom = new THREE.EdgesGeometry(boxGeom);
+            const lineGeom = new LineSegmentsGeometry().fromEdgesGeometry(edgeGeom);
+
+            // Create fat line material with reduced opacity for cells
+            const material = materialManager.createContainerSelectionLineMaterial({ opacity: 0.5 });
+            material.needsUpdate = true;
+
+            const cellWireframe = new LineSegments2(lineGeom, material);
+
+            // Position at cell center along layout axis (perpendicular axes stay at 0 = parent center)
+            cellWireframe.position[direction] = cellCenter;
+
+            lineGeom.computeBoundingSphere();
+            lineGeom.computeBoundingBox();
+
+            // Cleanup intermediate geometry
+            boxGeom.dispose();
+            edgeGeom.dispose();
+
+            cellWireframe.renderOrder = 9998; // Just below parent selection wireframe
+            cellWireframe.raycast = () => {};
+            cellWireframe.userData.isCellWireframe = true;
+
+            cellGroup.add(cellWireframe);
+        }
+
+        parentObject.add(cellGroup);
+    }
+
+    /**
+     * Hide and dispose cell wireframes on a parent container
+     */
+    hideCellWireframes(parentObject) {
+        if (!parentObject) return;
+
+        const cellGroup = parentObject.getObjectByName('cellWireframes');
+        if (!cellGroup) return;
+
+        // Dispose all cell wireframe geometries and materials
+        for (const child of cellGroup.children) {
+            if (child.geometry) child.geometry.dispose();
+            if (child.material) child.material.dispose();
+        }
+        cellGroup.clear();
+        parentObject.remove(cellGroup);
+    }
+
+    /**
      * Show child containers when parent container is selected.
-     * Recursively shows all descendant containers with depth-based opacity:
-     * depth 1 = 75%, depth 2 = 50%, depth 3 = 25%, etc.
+     * For layout-mode parents: shows cell wireframes (divisions filling parent volume).
+     * For non-layout parents: no child wireframes shown.
      */
     showChildContainers(parentObject, depth = 0) {
         const sceneController = window.modlerComponents?.sceneController;
@@ -371,51 +483,19 @@ class ContainerVisualizer extends ObjectVisualizer {
         const parentObjectData = sceneController.getObjectByMesh(parentObject);
         if (!parentObjectData || !parentObjectData.isContainer) return;
 
-        const childObjects = sceneController.getChildObjects(parentObjectData.id);
-        const factory = this.getSupportMeshFactory();
-        if (!factory) return;
-
-        childObjects.forEach(childData => {
-            if (childData.isContainer) {
-                factory.showContainerWireframe(childData.mesh);
-
-                // Depth-based opacity: 75% at depth 1, 50% at depth 2, etc.
-                const childDepth = depth + 1;
-                const opacity = Math.max(0.25, 1.0 - childDepth * 0.25);
-                factory.setContainerWireframeOpacity(childData.mesh, opacity);
-
-                // Recursively show deeper nested containers
-                this.showChildContainers(childData.mesh, childDepth);
-            }
-        });
+        // Only layout-mode parents get cell wireframes
+        if (parentObjectData.containerMode === 'layout') {
+            this.showCellWireframes(parentObject);
+        }
+        // Non-layout parents: no child wireframes shown
     }
 
     /**
-     * Hide child containers when parent container is deselected
+     * Hide child containers when parent container is deselected.
+     * Cleans up cell wireframes on the parent.
      */
     hideChildContainers(parentObject, forceHideAll = false) {
-        const sceneController = window.modlerComponents?.sceneController;
-        const selectionController = window.modlerComponents?.selectionController;
-        if (!sceneController || !selectionController) return;
-
-        const parentObjectData = sceneController.getObjectByMesh(parentObject);
-        if (!parentObjectData || !parentObjectData.isContainer) return;
-
-        const childObjects = sceneController.getChildObjects(parentObjectData.id);
-        const factory = this.getSupportMeshFactory();
-        if (!factory) return;
-
-        childObjects.forEach(childData => {
-            if (childData.isContainer) {
-                // Always recurse first (since showChildContainers is now recursive)
-                this.hideChildContainers(childData.mesh, forceHideAll);
-
-                // Hide child container if forced or if not currently selected
-                if (forceHideAll || !selectionController.isSelected(childData.mesh)) {
-                    factory.hideContainerWireframe(childData.mesh);
-                }
-            }
-        });
+        this.hideCellWireframes(parentObject);
     }
 
     /**
@@ -565,6 +645,7 @@ class ContainerVisualizer extends ObjectVisualizer {
 
         // Clean up container-specific visualizations
         this.hidePaddingVisualization(object);
+        this.hideCellWireframes(object);
     }
 
     /**

@@ -237,7 +237,7 @@
 		</div>
 
 		<!-- Gap Controls and Alignment Grid -->
-		<div class="flex items-start gap-3 {!isLayoutEnabled ? 'opacity-30' : ''}">
+		<div class="flex items-start gap-3 {!layoutDirection ? 'opacity-30' : ''}">
 			<div class="w-1/2">
 				<InlineInput
 					label="Gap"
@@ -248,7 +248,7 @@
 					min={0}
 					step={getUnitStep($unitStore)}
 					suffix={$unitStore}
-					disabled={!isLayoutEnabled}
+					disabled={!layoutDirection}
 					{convertToInternal}
 				/>
 				{#if displayObject.calculatedGap !== undefined}
@@ -262,12 +262,12 @@
 				<div class="grid grid-cols-3 gap-1.5">
 					{#each ['top', 'center', 'bottom'] as vertical}
 						{#each ['left', 'center', 'right'] as horizontal}
-							{@const isActive = isLayoutEnabled && currentGridPosition.horizontal === horizontal && currentGridPosition.vertical === vertical}
+							{@const isActive = !!layoutDirection && currentGridPosition.horizontal === horizontal && currentGridPosition.vertical === vertical}
 							<button
 								type="button"
 								onclick={() => updateGridAlignment(horizontal, vertical)}
-								disabled={!isLayoutEnabled}
-								class="w-3.5 h-3.5 rounded transition-all {isActive ? 'bg-blue-500' : 'bg-[#2E2E2E] hover:bg-[#404040]'} {!isLayoutEnabled ? 'cursor-not-allowed' : ''}"
+								disabled={!layoutDirection}
+								class="w-3.5 h-3.5 rounded transition-all {isActive ? 'bg-blue-500' : 'bg-[#2E2E2E] hover:bg-[#404040]'} {!layoutDirection ? 'cursor-not-allowed' : ''}"
 								title="{vertical}-{horizontal}"
 							>
 							</button>
@@ -278,7 +278,7 @@
 		</div>
 
 		<!-- Padding Controls -->
-		<div class="space-y-2 {!isLayoutEnabled ? 'opacity-30' : ''}">
+		<div class="space-y-2 {!layoutDirection ? 'opacity-30' : ''}">
 			<SectionHeader label="Padding" unit={$unitStore} />
 			<div class="grid grid-cols-3 gap-2">
 				<InlineInput
@@ -289,7 +289,7 @@
 					property="autoLayout.padding.width"
 					min={0}
 					step={getUnitStep($unitStore)}
-					disabled={!isLayoutEnabled}
+					disabled={!layoutDirection}
 					{convertToInternal}
 				/>
 				<InlineInput
@@ -300,7 +300,7 @@
 					property="autoLayout.padding.height"
 					min={0}
 					step={getUnitStep($unitStore)}
-					disabled={!isLayoutEnabled}
+					disabled={!layoutDirection}
 					{convertToInternal}
 				/>
 				<InlineInput
@@ -311,7 +311,7 @@
 					property="autoLayout.padding.depth"
 					min={0}
 					step={getUnitStep($unitStore)}
-					disabled={!isLayoutEnabled}
+					disabled={!layoutDirection}
 					{convertToInternal}
 				/>
 			</div>

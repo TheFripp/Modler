@@ -2,6 +2,7 @@
 	import InlineInput from './ui/inline-input.svelte';
 	import AxisSelector from './ui/axis-selector.svelte';
 	import { AlignLeft, AlignCenter, AlignRight, AlignVerticalJustifyCenter, AlignHorizontalJustifyCenter } from 'lucide-svelte';
+	import { currentUnit as unitStore, toDisplayValue, toInternalValue, getUnitStep } from '$lib/stores/units';
 
 	// Props
 	export let axis: 'x' | 'y' | 'z' | null = null;
@@ -15,6 +16,12 @@
 
 	// Determine perpendicular axes based on layout direction
 	$: perpendicularAxes = axis ? ['x', 'y', 'z'].filter(a => a !== axis) : [];
+
+	// Unit conversion for gap display
+	$: gapDisplay = toDisplayValue(gap, $unitStore);
+	function convertToInternal(displayVal: number): number {
+		return toInternalValue(displayVal, $unitStore);
+	}
 
 	// Alignment options for each axis
 	const alignmentOptions = {
@@ -69,11 +76,13 @@
 		<InlineInput
 			label="Gap"
 			type="number"
-			bind:value={gap}
+			value={gapDisplay}
 			{objectId}
 			property="autoLayout.gap"
 			min={0}
-			step={0.1}
+			step={getUnitStep($unitStore)}
+			suffix={$unitStore}
+			{convertToInternal}
 		/>
 	</div>
 

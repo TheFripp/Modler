@@ -116,8 +116,8 @@ class SettingsHandler {
                 }
             },
             gizmo: {
-                color: configurationManager.get('visual.gizmo.color') || '#ff6600',
-                lineWidth: configurationManager.get('visual.gizmo.lineWidth') || 2
+                lineWidth: configurationManager.get('visual.gizmo.lineWidth') || 2,
+                size: configurationManager.get('visual.gizmo.size') || 1.0
             }
         };
 

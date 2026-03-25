@@ -126,9 +126,9 @@ class CreateObjectCommand extends BaseCommand {
                     this.objectSnapshot.position.z
                 );
                 objectData.mesh.rotation.set(
-                    this.objectSnapshot.rotation.x,
-                    this.objectSnapshot.rotation.y,
-                    this.objectSnapshot.rotation.z
+                    (this.objectSnapshot.rotation.x * Math.PI) / 180,
+                    (this.objectSnapshot.rotation.y * Math.PI) / 180,
+                    (this.objectSnapshot.rotation.z * Math.PI) / 180
                 );
             }
 
@@ -157,9 +157,9 @@ class CreateObjectCommand extends BaseCommand {
                 z: mesh.position.z
             },
             rotation: {
-                x: mesh.rotation.x,
-                y: mesh.rotation.y,
-                z: mesh.rotation.z
+                x: (mesh.rotation.x * 180) / Math.PI,
+                y: (mesh.rotation.y * 180) / Math.PI,
+                z: (mesh.rotation.z * 180) / Math.PI
             },
             dimensions: objectData.dimensions ? { ...objectData.dimensions } : { x: 1, y: 1, z: 1 },
             material: {

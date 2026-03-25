@@ -12,8 +12,16 @@
  */
 
 class FileManager extends EventTarget {
-    constructor() {
+    /**
+     * @param {Object} [options] - Configuration options
+     * @param {Object} [options.storage] - Storage backend (must implement StorageInterface).
+     *                                     Defaults to IndexedDBWrapper for local browser storage.
+     */
+    constructor(options = {}) {
         super();
+
+        // Store injected options for component initialization
+        this._options = options;
 
         // File states (enum)
         this.FILE_STATES = {
@@ -27,6 +35,7 @@ class FileManager extends EventTarget {
         // Current file state
         this.currentFileId = null;
         this.currentFileName = 'Untitled';
+        this.currentSceneId = null;                     // Persistent scene identity (survives save/load)
         this.state = this.FILE_STATES.CLEAN;            // Use state machine instead of boolean
         this.isDirty = false;                           // DEPRECATED: Keep for backward compatibility during transition
         this.lastSaved = null;
@@ -69,9 +78,10 @@ class FileManager extends EventTarget {
 
     /**
      * Initialize component references
+     * Storage backend is injectable — defaults to IndexedDBWrapper (see StorageInterface)
      */
     initializeComponents() {
-        this.storage = new IndexedDBWrapper();
+        this.storage = this._options?.storage || new IndexedDBWrapper();
         this.serializer = new SceneSerializer();
         this.deserializer = new SceneDeserializer();
 
@@ -252,6 +262,7 @@ class FileManager extends EventTarget {
             const sceneName = await this.generateUniqueSceneName();
             this.currentFileId = null;
             this.currentFileName = sceneName;
+            this.currentSceneId = crypto.randomUUID(); // New scene gets fresh identity
             this.lastSaved = null;
             this.createdTimestamp = Date.now();
 
@@ -318,7 +329,8 @@ class FileManager extends EventTarget {
                 // Serialize scene
                 const sceneData = this.serializer.serializeScene({
                     fileName: fileName,
-                    createdTimestamp: this.createdTimestamp || Date.now()
+                    createdTimestamp: this.createdTimestamp || Date.now(),
+                    sceneId: this.currentSceneId
                 });
 
                 // Add thumbnail if available
@@ -437,6 +449,7 @@ class FileManager extends EventTarget {
             // Update file metadata
             this.currentFileId = fileId;
             this.currentFileName = fileData.metadata?.name || 'Untitled';
+            this.currentSceneId = fileData.metadata?.sceneId || null;
             this.createdTimestamp = fileData.metadata?.created || null;
             this.lastSaved = Date.now();
 
@@ -511,7 +524,8 @@ class FileManager extends EventTarget {
                 console.log('FileManager.deleteScene: Was current file, resetting state');
                 this.currentFileId = null;
                 this.currentFileName = 'Untitled';
-                this.isDirty = false;
+                this.currentSceneId = null;
+                this.setState(this.FILE_STATES.CLEAN);
                 this.lastSaved = null;
                 this.createdTimestamp = null;
             }

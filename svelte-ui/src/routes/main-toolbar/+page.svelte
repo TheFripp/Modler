@@ -3,21 +3,27 @@
 	import { initializeBridge } from '$lib/bridge/threejs-bridge';
 	import { toolState } from '$lib/stores/modler';
 	import { activateToolInScene, toggleSnapInScene, wrapSelectionInContainer } from '$lib/bridge/threejs-bridge';
-	import { MousePointer, Move, FoldHorizontal, Box, Magnet, SquareStack, Group, Ruler } from 'lucide-svelte';
+	import { MousePointer, Move, FoldHorizontal, RotateCw, Box, Magnet, SquareStack, Group, Ruler } from 'lucide-svelte';
 
 	// Main tool configuration with Lucide icons
 	const tools = [
 		{ id: 'select', label: 'Select', shortcut: 'Q', icon: MousePointer },
 		{ id: 'move', label: 'Move', shortcut: 'W', icon: Move },
 		{ id: 'push', label: 'Push', shortcut: 'E', icon: FoldHorizontal },
-		{ id: 'box-creation', label: 'Create Box', shortcut: 'R', icon: Box },
-		{ id: 'tile', label: 'Tile', shortcut: 'T', icon: SquareStack },
+		{ id: 'rotate', label: 'Rotate', shortcut: 'R', icon: RotateCw },
+		{ id: 'box-creation', label: 'Create Box', shortcut: 'T', icon: Box },
+		{ id: 'tile', label: 'Tile', shortcut: 'Y', icon: SquareStack },
 		{ id: 'measure', label: 'Measure', shortcut: 'M', icon: Ruler }
 	];
 
 	function handleToolClick(toolName: string) {
 		try {
-			activateToolInScene(toolName);
+			// Toggle: if clicking the already-active tool, switch back to select
+			if ($toolState.activeTool === toolName && toolName !== 'select') {
+				activateToolInScene('select');
+			} else {
+				activateToolInScene(toolName);
+			}
 		} catch (error) {
 			console.error('❌ Tool activation failed:', error);
 		}

@@ -295,7 +295,11 @@ class SupportMeshFactory {
         }
 
         // Get fresh material from MaterialManager to pick up current config values
-        const material = this.materialManager.createCadEdgeMaterial();
+        // Yard objects get purple wireframe to distinguish them from regular objects
+        const isYardObject = !!mainMesh.userData.yardItemId;
+        const material = isYardObject
+            ? this.materialManager.createYardCadEdgeMaterial()
+            : this.materialManager.createCadEdgeMaterial();
 
         // CRITICAL: Force material update to ensure it renders properly
         material.needsUpdate = true;
@@ -484,10 +488,10 @@ class SupportMeshFactory {
         // Delete the override to restore default THREE.js raycasting behavior
         delete interactiveMesh.raycast;
 
-        // RAYCASTING LAYERS: Enable Layer 1 in addition to Layer 0 for container interactive meshes
-        // This allows raycaster to selectively target them when switching to Layer 1
-        // NOTE: Keep Layer 0 enabled for visibility, add Layer 1 for selective raycasting
-        interactiveMesh.layers.enable(1); // Add Layer 1 (Layer 0 remains enabled by default)
+        // RAYCASTING LAYERS: Set to Layer 1 ONLY for container interactive meshes
+        // Layer 0 is for normal objects; interactive mesh must NOT be on Layer 0
+        // or it blocks raycasts to children inside the container
+        interactiveMesh.layers.set(1); // ONLY Layer 1 — removes default Layer 0
 
         interactiveMesh.userData.isContainerInteractive = true;
         interactiveMesh.userData.isContainerCollision = true;

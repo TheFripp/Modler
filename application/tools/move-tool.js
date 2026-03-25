@@ -795,9 +795,10 @@ class MoveTool extends BaseTool {
             .add(worldDelta);
 
         // Snap check — null travelAxis includes all edges/corners
+        // Pass dragged corner world position for anchor-to-anchor snap detection
         const snapController = this.snapController;
         if (snapController && snapController.getEnabled()) {
-            snapController.updateSnapDetection('move', [this.dragObject], null);
+            snapController.updateSnapDetection('move', [this.dragObject], null, null, draggedCornerWorldPos);
             const currentSnapPoint = snapController.getCurrentSnapPoint();
             if (currentSnapPoint) {
                 // Snap: position object so the dragged corner lands at the snap point

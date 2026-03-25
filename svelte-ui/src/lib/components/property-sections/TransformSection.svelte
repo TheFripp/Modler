@@ -63,6 +63,21 @@
 		}, '*');
 	}
 
+	// Yard dimension lock state
+	$: isYardObject = !!displayObject?.yardItemId;
+	$: yardFixed = displayObject?.yardFixed || { x: false, y: false, z: false };
+
+	function handleLockToggle(axis: 'x' | 'y' | 'z') {
+		if (!displayObject) return;
+
+		// SimpleCommunication: Direct postMessage to CommandRouter
+		window.parent.postMessage({
+			type: 'yard-toggle-dimension-lock',
+			objectId: displayObject.id,
+			axis
+		}, '*');
+	}
+
 	// SimpleCommunication: No message listeners needed!
 	// All data (canHaveFillButtons, fillButtonStates, isInLayoutMode) comes automatically
 	// with displayObject from StateSerializer. No request/response needed.
@@ -83,6 +98,9 @@
 				{fillStates}
 				onFillToggle={handleFillToggle}
 				onFillHover={handleFillHover}
+				showLockButtons={isYardObject}
+				lockStates={yardFixed}
+				onLockToggle={handleLockToggle}
 				disableAll={isDisabled}
 				hideValues={isDisabled}
 			/>

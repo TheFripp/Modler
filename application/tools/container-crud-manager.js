@@ -225,15 +225,7 @@ class ContainerCrudManager {
      */
     getChildMeshesForBounds(childObjects) {
         return childObjects
-            .map(child => {
-                if (child.isContainer && child.mesh) {
-                    const collisionMesh = child.mesh.children.find(grandchild =>
-                        grandchild.userData.isContainerCollision
-                    );
-                    if (collisionMesh) return collisionMesh;
-                }
-                return child.mesh;
-            })
+            .map(child => child.mesh)
             .filter(mesh => mesh && mesh.geometry && mesh.geometry.type !== 'EdgesGeometry');
     }
 

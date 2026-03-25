@@ -471,16 +471,30 @@ class DeleteObjectCommand extends BaseCommand {
             // Priority: meshData.position > position > default
             const position = snapshot.meshData?.position || snapshot.position || { x: 0, y: 0, z: 0 };
 
+            // Build options with rotation (meshData.rotation is Euler radians → convert to degrees)
+            const restoreOptions = {
+                id: snapshot.id,
+                name: snapshot.name,
+                type: snapshot.type,
+                position: { x: position.x, y: position.y, z: position.z },
+                parentContainer: snapshot.parentContainer || null
+            };
+
+            if (snapshot.meshData?.rotation &&
+                (snapshot.meshData.rotation.x !== 0 ||
+                 snapshot.meshData.rotation.y !== 0 ||
+                 snapshot.meshData.rotation.z !== 0)) {
+                restoreOptions.rotation = {
+                    x: (snapshot.meshData.rotation.x * 180) / Math.PI,
+                    y: (snapshot.meshData.rotation.y * 180) / Math.PI,
+                    z: (snapshot.meshData.rotation.z * 180) / Math.PI
+                };
+            }
+
             const boxData = this.sceneController.addObject(
                 geometry,
                 material,
-                {
-                    id: snapshot.id,
-                    name: snapshot.name,
-                    type: snapshot.type,
-                    position: { x: position.x, y: position.y, z: position.z },
-                    parentContainer: snapshot.parentContainer || null
-                }
+                restoreOptions
             );
 
             // Properties will be restored by restoreAllObjectProperties

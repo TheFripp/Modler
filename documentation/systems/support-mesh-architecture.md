@@ -93,9 +93,18 @@ Support meshes are created through centralized factory systems for consistency a
 | `application/tools/select-tool.js` | Emits hover states on mouse movement |
 | `application/command-router.js` | Routes `object-hover` from UI tree to VisualizationManager |
 
+## Cell Wireframes (Layout Containers)
+
+Layout-mode containers show cell wireframes wrapping each child when selected:
+- Each cell matches child's size on the layout axis, full parent size on perpendicular axes
+- Gap between children is empty space (only edge lines from adjacent cells visible)
+- Created by `ContainerVisualizer.showCellWireframes()` when container is selected
+- **Live refresh**: `SceneLayoutManager._refreshCellWireframesIfNeeded()` rebuilds cells after every layout recalculation if they are currently visible
+- Stored as a `THREE.Group` named `'cellWireframes'` on the parent mesh
+
 ## Architecture Rules
 
-- **NEVER create support meshes dynamically** — they exist as children from object creation
+- **NEVER create support meshes dynamically** — they exist as children from object creation. Exception: cell wireframes are rebuilt by SceneLayoutManager after layout changes.
 - **NEVER set `.visible` directly** — use SupportMeshFactory visibility API
 - **NEVER modify support mesh geometry directly** — update parent geometry via SupportMeshFactory
 - **ALWAYS route visual state changes through VisualizationManager** — it enforces state priority
