@@ -70,6 +70,7 @@
     <script type="module" src="scene/visual-effects.js"></script>
     <script type="module" src="scene/snap-visualizer.js"></script>
     <script type="module" src="scene/tool-gizmo-manager.js"></script>
+    <script type="module" src="interaction/face-highlight-positioner.js"></script>
     <script type="module" src="interaction/support-mesh-factory.js"></script>
     <script type="module" src="interaction/object-visualizer.js"></script>
     <script type="module" src="interaction/container-visualizer.js"></script>
@@ -81,11 +82,14 @@
     <script type="module" src="interaction/camera-controller.js"></script>
     <script type="module" src="interaction/keyboard-router.js"></script>
     <script type="module" src="layout/layout-engine.js"></script>
+    <script type="module" src="core/osm-selection-sync.js"></script>
+    <script type="module" src="core/osm-scene-sync.js"></script>
     <script type="module" src="core/object-state-manager.js"></script>
     <script type="module" src="core/dimension-manager.js"></script>
     <script type="module" src="interaction/input-controller.js"></script>
     <script type="module" src="application/tool-controller.js"></script>
     <script type="module" src="application/configuration-manager.js"></script>
+    <script type="module" src="application/snap-candidate-detector.js"></script>
     <script type="module" src="application/snap-controller.js"></script>
     <script type="module" src="application/managers/navigation-controller.js"></script>
     <script type="module" src="application/commands/base-command.js"></script>
@@ -109,8 +113,11 @@
     <script type="module" src="application/tools/select-tool.js"></script>
     <script type="module" src="application/tools/duplication-mode.js"></script>
     <script type="module" src="application/tools/move-tool.js"></script>
+    <script type="module" src="application/tools/push-undo-capture.js"></script>
+    <script type="module" src="application/tools/push-container-transitions.js"></script>
     <script type="module" src="application/tools/push-tool.js"></script>
     <script type="module" src="application/tools/rotation-tool.js"></script>
+    <script type="module" src="application/tools/measurement-visuals.js"></script>
     <script type="module" src="application/tools/measurement-tool.js"></script>
     <script type="module" src="application/tools/measure-tool-adapter.js"></script>
     <script type="module" src="application/tools/tile-tool.js"></script>
@@ -121,6 +128,7 @@
     <script type="module" src="application/utilities/transformation-manager.js"></script>
     <script type="module" src="application/utilities/visualization-resource-pool.js"></script>
     <script type="module" src="application/utilities/geometry-factory.js"></script>
+    <script type="module" src="application/utilities/material-definitions.js"></script>
     <script type="module" src="application/utilities/material-manager.js"></script>
     <script type="module" src="application/utilities/development-validator.js"></script>
     <script type="module" src="application/tools/layout-geometry.js"></script>
@@ -153,6 +161,8 @@
     <script type="module" src="integration/svelte/property-format-converter.js"></script>
     <script type="module" src="application/serialization/object-serializer.js"></script>
 
+    <script type="module" src="application/handlers/yard-command-handler.js"></script>
+    <script type="module" src="application/handlers/export-import-handler.js"></script>
     <script type="module" src="application/command-router.js"></script>
     <script type="module" src="application/serialization/data-extractor.js"></script>
     <script type="module" src="application/state-serializer.js"></script>

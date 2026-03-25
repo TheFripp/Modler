@@ -242,169 +242,30 @@ class PushTool extends BaseTool {
         }
     }
 
-    /**
-     * Transition a hug-mode container to layout mode when push begins.
-     * Sets layout direction to push axis and enables fill on all children.
-     */
+    // Container transitions — delegated to PushContainerTransitions
+
     transitionHugToLayout(objectData, pushAxis) {
-        const sceneController = this.sceneController;
-        if (!sceneController || !this.objectStateManager) return;
-
-        // Snapshot pre-transition state for undo
-        const children = sceneController.getChildObjects(objectData.id);
-        const childStates = {};
-        children.forEach(child => {
-            childStates[child.id] = {
-                originalLayoutProperties: child.layoutProperties
-                    ? JSON.parse(JSON.stringify(child.layoutProperties))
-                    : null
-            };
-        });
-
-        this.hugTransitionState = {
-            containerId: objectData.id,
-            originalAutoLayout: JSON.parse(JSON.stringify(objectData.autoLayout || {})),
-            childStates: childStates
-        };
-
-        // Transition container: hug → layout
-        const baseAutoLayout = objectData.autoLayout || window.ObjectDataFormat.createDefaultAutoLayout();
-        this.objectStateManager.updateObject(objectData.id, {
-            ...ObjectStateManager.buildContainerModeUpdate('layout'),
-            autoLayout: {
-                ...baseAutoLayout,
-                enabled: true,
-                direction: pushAxis
-            }
-        }, 'push-tool');
-
-        // Set all children to fill on the push axis
-        const fillProperty = `size${pushAxis.toUpperCase()}`;
-        children.forEach(child => {
-            const currentLP = child.layoutProperties || {
-                sizeX: 'fixed', sizeY: 'fixed', sizeZ: 'fixed',
-                fixedSize: { x: null, y: null, z: null }
-            };
-            const fixedSize = { ...(currentLP.fixedSize || { x: null, y: null, z: null }) };
-            fixedSize[pushAxis] = child.dimensions?.[pushAxis] || null;
-
-            this.objectStateManager.updateObject(child.id, {
-                layoutProperties: {
-                    ...currentLP,
-                    [fillProperty]: 'fill',
-                    fixedSize: fixedSize
-                }
-            }, 'push-tool');
-        });
-
-        // Run initial layout to position children in new layout mode
-        // Pass pushContext to skip container resize block (preserve current dimensions)
-        sceneController.updateContainer(objectData.id, { pushContext: { axis: pushAxis } });
+        this.hugTransitionState = PushContainerTransitions.transitionHugToLayout(
+            objectData, pushAxis, this.sceneController, this.objectStateManager
+        );
     }
 
-    /**
-     * Set children to fill on a specific axis (perpendicular push).
-     * Stores undo state in this.fillTransitionState.
-     */
     setChildrenToFillOnAxis(objectData, axis) {
-        const sceneController = this.sceneController;
-        if (!sceneController || !this.objectStateManager) return;
-
-        const children = sceneController.getChildObjects(objectData.id);
-        const fillProperty = `size${axis.toUpperCase()}`;
-
-        // Snapshot original state for undo
-        const childStates = {};
-        children.forEach(child => {
-            childStates[child.id] = {
-                originalLayoutProperties: child.layoutProperties
-                    ? JSON.parse(JSON.stringify(child.layoutProperties))
-                    : null
-            };
-        });
-
-        this.fillTransitionState = {
-            containerId: objectData.id,
-            childStates: childStates
-        };
-
-        // Set children to fill on the push axis
-        children.forEach(child => {
-            const currentLP = child.layoutProperties || {
-                sizeX: 'fixed', sizeY: 'fixed', sizeZ: 'fixed',
-                fixedSize: { x: null, y: null, z: null }
-            };
-            if (currentLP[fillProperty] !== 'fill') {
-                const fixedSize = { ...(currentLP.fixedSize || { x: null, y: null, z: null }) };
-                fixedSize[axis] = child.dimensions?.[axis] || null;
-
-                this.objectStateManager.updateObject(child.id, {
-                    layoutProperties: {
-                        ...currentLP,
-                        [fillProperty]: 'fill',
-                        fixedSize: fixedSize
-                    }
-                }, 'push-tool');
-            }
-        });
-
-        // Run layout to apply fill sizing
-        // Pass pushContext to skip container resize block (preserve gaps on other axes)
-        sceneController.updateContainer(objectData.id, { pushContext: { axis } });
+        this.fillTransitionState = PushContainerTransitions.setChildrenToFillOnAxis(
+            objectData, axis, this.sceneController, this.objectStateManager
+        );
     }
 
-    /**
-     * Sync tile siblings to match pushed child's dimensions.
-     * Direct sync avoids relying on the indirect event chain through TileInstanceManager.
-     */
     syncTileSiblings(pushedObjectData, container) {
-        const dimensionManager = window.dimensionManager;
-        if (!dimensionManager || !this.objectStateManager) return;
-
-        const sourceDims = dimensionManager.getDimensions(pushedObjectData.mesh);
-        if (!sourceDims) return;
-
-        const siblings = this.sceneController.getAllObjects()
-            .filter(obj => obj.parentContainer === container.id && obj.id !== pushedObjectData.id);
-
-        for (const sibling of siblings) {
-            dimensionManager.setDimensions(sibling.mesh, sourceDims, 'center');
-            this.objectStateManager.updateObject(sibling.id, {
-                dimensions: { ...sourceDims }
-            }, 'push-tool');
-        }
+        PushContainerTransitions.syncTileSiblings(
+            pushedObjectData, container, this.sceneController, this.objectStateManager
+        );
     }
 
-    /**
-     * Sync all tile children to match the pushed container's perpendicular dimension.
-     * Called during drag when pushing a tile container perpendicular to layout direction.
-     */
     syncTileChildrenToContainer(containerData) {
-        const dimensionManager = window.dimensionManager;
-        if (!dimensionManager || !this.objectStateManager) return;
-
-        const containerDims = dimensionManager.getDimensions(containerData.mesh);
-        if (!containerDims) return;
-
-        const axis = this.tileChildSyncState.syncAxis;
-        const padding = containerData.autoLayout?.padding || {};
-        const paddingKey = { x: 'width', y: 'height', z: 'depth' }[axis];
-        const paddingVal = (padding[paddingKey] || 0) * 2;
-
-        const targetDim = containerDims[axis] - paddingVal;
-        if (targetDim <= 0) return;
-
-        const children = this.sceneController.getChildObjects(containerData.id);
-        for (const child of children) {
-            const currentDims = dimensionManager.getDimensions(child.mesh);
-            if (!currentDims) continue;
-
-            const newDims = { ...currentDims, [axis]: targetDim };
-            dimensionManager.setDimensions(child.mesh, newDims, 'center');
-            this.objectStateManager.updateObject(child.id, {
-                dimensions: newDims
-            }, 'push-tool');
-        }
+        PushContainerTransitions.syncTileChildrenToContainer(
+            containerData, this.tileChildSyncState.syncAxis, this.sceneController, this.objectStateManager
+        );
     }
 
     /**
@@ -854,110 +715,23 @@ class PushTool extends BaseTool {
     }
 
     /**
-     * Register undo action for history
+     * Register undo action for history — delegated to PushUndoCapture
      */
     registerUndoAction(pushedObject) {
-        const historyManager = this.historyManager;
-        if (!historyManager) return;
-
-        const geometryUtils = window.GeometryUtils;
-        const finalDimensions = geometryUtils?.getGeometryDimensions(pushedObject.geometry);
-        const finalPosition = {
-            x: pushedObject.position.x,
-            y: pushedObject.position.y,
-            z: pushedObject.position.z
-        };
-
-        if (this.initialDimensions && finalDimensions && this.initialPosition) {
-            // Check if dimensions or position actually changed
-            const dimensionsChanged =
-                Math.abs(finalDimensions.x - this.initialDimensions.x) > 0.001 ||
-                Math.abs(finalDimensions.y - this.initialDimensions.y) > 0.001 ||
-                Math.abs(finalDimensions.z - this.initialDimensions.z) > 0.001;
-
-            const positionChanged =
-                Math.abs(finalPosition.x - this.initialPosition.x) > 0.001 ||
-                Math.abs(finalPosition.y - this.initialPosition.y) > 0.001 ||
-                Math.abs(finalPosition.z - this.initialPosition.z) > 0.001;
-
-            if (dimensionsChanged || positionChanged || this.hugTransitionState || this.fillTransitionState || this.gapTransitionState || this.tileChildSyncState) {
-                // Calculate push distance based on dimension change along push axis
-                let pushDistance = 0;
-                if (this.pushAxis) {
-                    const axis = this.pushAxis.toLowerCase();
-                    pushDistance = (finalDimensions[axis] - this.initialDimensions[axis]) * this.pushDirection;
-                }
-
-                // Capture post-transition state for redo
-                if (this.hugTransitionState) {
-                    const sceneController = this.sceneController;
-                    const objectData = sceneController?.getObject(this.hugTransitionState.containerId);
-                    if (objectData) {
-                        this.hugTransitionState.targetAutoLayout = JSON.parse(JSON.stringify(objectData.autoLayout));
-                        const children = sceneController.getChildObjects(objectData.id);
-                        children.forEach(child => {
-                            const entry = this.hugTransitionState.childStates[child.id];
-                            if (entry) {
-                                entry.targetLayoutProperties = child.layoutProperties
-                                    ? JSON.parse(JSON.stringify(child.layoutProperties))
-                                    : null;
-                            }
-                        });
-                    }
-                }
-
-                // Capture fill transition target state for redo
-                if (this.fillTransitionState) {
-                    const sceneController = this.sceneController;
-                    const children = sceneController?.getChildObjects(this.fillTransitionState.containerId);
-                    if (children) {
-                        children.forEach(child => {
-                            const entry = this.fillTransitionState.childStates[child.id];
-                            if (entry) {
-                                entry.targetLayoutProperties = child.layoutProperties
-                                    ? JSON.parse(JSON.stringify(child.layoutProperties))
-                                    : null;
-                            }
-                        });
-                    }
-                }
-
-                // Capture final tile child state for redo
-                if (this.tileChildSyncState) {
-                    const sceneController = this.sceneController;
-                    const children = sceneController?.getChildObjects(this.tileChildSyncState.containerId);
-                    this.tileChildSyncState.finalChildStates = {};
-                    if (children) {
-                        const dimensionManager = window.dimensionManager;
-                        children.forEach(child => {
-                            this.tileChildSyncState.finalChildStates[child.id] = {
-                                dimensions: dimensionManager ? { ...dimensionManager.getDimensions(child.mesh) } : null,
-                                position: child.mesh ? {
-                                    x: child.mesh.position.x,
-                                    y: child.mesh.position.y,
-                                    z: child.mesh.position.z
-                                } : null
-                            };
-                        });
-                    }
-                }
-
-                const command = new PushFaceCommand(
-                    pushedObject.userData.id,
-                    this.faceNormal,
-                    pushDistance,
-                    this.initialDimensions,
-                    finalDimensions,
-                    this.initialPosition,
-                    finalPosition,
-                    this.hugTransitionState,
-                    this.fillTransitionState,
-                    this.gapTransitionState,
-                    this.tileChildSyncState
-                );
-                historyManager.executeCommand(command);
-            }
-        }
+        PushUndoCapture.capture({
+            pushedObject,
+            initialDimensions: this.initialDimensions,
+            initialPosition: this.initialPosition,
+            faceNormal: this.faceNormal,
+            pushAxis: this.pushAxis,
+            pushDirection: this.pushDirection,
+            hugTransitionState: this.hugTransitionState,
+            fillTransitionState: this.fillTransitionState,
+            gapTransitionState: this.gapTransitionState,
+            tileChildSyncState: this.tileChildSyncState,
+            sceneController: this.sceneController,
+            historyManager: this.historyManager
+        });
     }
 
     /**

@@ -1,5 +1,3 @@
-import * as THREE from 'three';
-
 /**
  * CommandRouter - Central Action Router
  *
@@ -42,7 +40,11 @@ class CommandRouter {
         // Drag batching: captures before-state on first drag event,
         // defers undo command creation until final commit
         this._propertyDragState = null;
+        this._layoutPropertyDragState = null;
         this._tileRepeatDragState = null;
+
+        // Delegated handlers (initialized in registerHandlers)
+        this.yardHandler = null;
     }
 
     /**
@@ -209,33 +211,27 @@ class CommandRouter {
             });
         }
         // ═══════════════════════════════════════════════════════════
-        // EXPORT/IMPORT OPERATIONS
+        // EXPORT/IMPORT OPERATIONS — delegated to ExportImportHandler
         // ═══════════════════════════════════════════════════════════
-        this.handlers.set('export-scene', this.handleExportScene.bind(this));
-        this.handlers.set('import-scene', this.handleImportScene.bind(this));
-        this.handlers.set('export-object', this.handleExportObject.bind(this));
-        this.handlers.set('import-object', this.handleImportObject.bind(this));
+        this.exportImportHandler = new ExportImportHandler();
+        this.handlers.set('export-scene', (d) => this.exportImportHandler.handleExportScene(d));
+        this.handlers.set('import-scene', (d) => this.exportImportHandler.handleImportScene(d));
+        this.handlers.set('export-object', (d) => this.exportImportHandler.handleExportObject(d));
+        this.handlers.set('import-object', (d) => this.exportImportHandler.handleImportObject(d));
 
         // ═══════════════════════════════════════════════════════════
-        // YARD OPERATIONS (Material Library)
+        // YARD OPERATIONS (Material Library) — delegated to YardCommandHandler
         // ═══════════════════════════════════════════════════════════
-        this.handlers.set('yard-get-library', this.handleYardGetLibrary.bind(this));
-        this.handlers.set('yard-add-item', this.handleYardAddItem.bind(this));
-        this.handlers.set('yard-update-item', this.handleYardUpdateItem.bind(this));
-        this.handlers.set('yard-remove-item', this.handleYardRemoveItem.bind(this));
-        this.handlers.set('yard-place-item', this.handleYardPlaceItem.bind(this));
-        this.handlers.set('yard-get-materials-list', this.handleYardGetMaterialsList.bind(this));
-        this.handlers.set('yard-toggle-dimension-lock', this.handleYardToggleDimensionLock.bind(this));
+        this.yardHandler = new YardCommandHandler(this);
+        this.handlers.set('yard-get-library', (d) => this.yardHandler.handleYardGetLibrary(d));
+        this.handlers.set('yard-add-item', (d) => this.yardHandler.handleYardAddItem(d));
+        this.handlers.set('yard-update-item', (d) => this.yardHandler.handleYardUpdateItem(d));
+        this.handlers.set('yard-remove-item', (d) => this.yardHandler.handleYardRemoveItem(d));
+        this.handlers.set('yard-place-item', (d) => this.yardHandler.handleYardPlaceItem(d));
+        this.handlers.set('yard-get-materials-list', (d) => this.yardHandler.handleYardGetMaterialsList(d));
+        this.handlers.set('yard-toggle-dimension-lock', (d) => this.yardHandler.handleYardToggleDimensionLock(d));
 
         console.log(`✅ CommandRouter: Registered ${this.handlers.size} action handlers`);
-
-        // Subscribe to lifecycle events to update materials list on create/delete/undo
-        if (window.objectEventBus) {
-            window.objectEventBus.subscribe(
-                window.objectEventBus.EVENT_TYPES.LIFECYCLE,
-                () => { this._broadcastMaterialsList(); }
-            );
-        }
     }
 
     /**
@@ -345,47 +341,19 @@ class CommandRouter {
             return;
         }
 
-        // DRAG BATCHING: During drag scrubbing (source='drag'), capture before-state
-        // once and defer command creation until final commit (source='input').
-        // This prevents per-frame snapshotting and undo stack flooding.
-        if (source === 'drag') {
-            if (!this._propertyDragState) {
-                this._propertyDragState = {
-                    objectId,
-                    property,
-                    beforeSnapshot: this._capturePropertySnapshot(objectId, property)
-                };
+        // Drag batching: capture before-state once on first drag, create command on final commit
+        this._dragBatch('_propertyDragState', source,
+            () => this._capturePropertySnapshot(objectId, property),
+            () => this._forwardPropertyUpdate(data),
+            (beforeSnapshot) => {
+                if (!beforeSnapshot) return;
+                const afterSnapshot = this._capturePropertySnapshot(objectId, property);
+                if (afterSnapshot && this._snapshotsDiffer(beforeSnapshot, afterSnapshot) && this.historyManager) {
+                    const command = new UpdatePropertySnapshotCommand(objectId, beforeSnapshot, afterSnapshot, `Update ${property}`);
+                    this.historyManager.executeCommand(command);
+                }
             }
-            // Forward update for realtime visual feedback (no undo command)
-            this._forwardPropertyUpdate(data);
-            return;
-        }
-
-        // FINAL COMMIT (source='input' or other)
-        // Use stored drag state if available, otherwise capture fresh
-        const dragState = this._propertyDragState;
-        this._propertyDragState = null;
-
-        const beforeSnapshot = (dragState && dragState.objectId === objectId)
-            ? dragState.beforeSnapshot
-            : this._capturePropertySnapshot(objectId, property);
-
-        if (!beforeSnapshot) {
-            this._forwardPropertyUpdate(data);
-            return;
-        }
-
-        // Perform the update
-        this._forwardPropertyUpdate(data);
-
-        // Capture after-snapshot
-        const afterSnapshot = this._capturePropertySnapshot(objectId, property);
-
-        // Register undoable command if state actually changed
-        if (afterSnapshot && this._snapshotsDiffer(beforeSnapshot, afterSnapshot) && this.historyManager) {
-            const command = new UpdatePropertySnapshotCommand(objectId, beforeSnapshot, afterSnapshot, `Update ${property}`);
-            this.historyManager.executeCommand(command);
-        }
+        );
     }
 
     /**
@@ -447,6 +415,25 @@ class CommandRouter {
     }
 
     /**
+     * Shared drag-batch helper. On source='drag': captures before-state once
+     * and applies update. On final commit: retrieves stored state (or captures
+     * fresh), applies update, then calls onCommit with the beforeState.
+     */
+    _dragBatch(stateKey, source, captureBefore, applyUpdate, onCommit) {
+        if (source === 'drag') {
+            if (!this[stateKey]) {
+                this[stateKey] = captureBefore();
+            }
+            applyUpdate();
+            return;
+        }
+        const beforeState = this[stateKey] || captureBefore();
+        this[stateKey] = null;
+        applyUpdate();
+        onCommit(beforeState);
+    }
+
+    /**
      * Handle autoLayout property updates with undo support (Phase 3 + Phase 5)
      * Separates tile repeat changes from general layout property changes.
      */
@@ -466,88 +453,57 @@ class CommandRouter {
             return;
         }
 
-        // DRAG BATCHING: During drag scrubbing (source='drag'), capture before-state
-        // once and defer command creation until final commit (source='input').
-        // This prevents expensive per-frame snapshotting and undo stack flooding.
-        if (source === 'drag') {
-            if (!this._layoutPropertyDragState) {
-                const children = this.sceneController.getChildObjects?.(objectId) || [];
-                const oldChildPositions = new Map();
-                children.forEach(child => {
-                    if (child.mesh) {
-                        oldChildPositions.set(child.id, {
-                            x: child.mesh.position.x,
-                            y: child.mesh.position.y,
-                            z: child.mesh.position.z
-                        });
-                    }
-                });
-                this._layoutPropertyDragState = {
-                    objectId,
-                    property,
-                    oldAutoLayout: container.autoLayout ? JSON.parse(JSON.stringify(container.autoLayout)) : null,
-                    oldContainerMode: container.containerMode,
-                    childPositionSnapshots: oldChildPositions
-                };
-            }
-            // Forward update for realtime visual feedback (no undo command)
-            this._forwardPropertyUpdate(data);
-            return;
-        }
-
-        // FINAL COMMIT (source='input' or other)
-        // Use stored drag state if available, otherwise capture fresh
-        const dragState = this._layoutPropertyDragState;
-        this._layoutPropertyDragState = null;
-
-        const oldAutoLayout = dragState?.oldAutoLayout ?? (container.autoLayout ? JSON.parse(JSON.stringify(container.autoLayout)) : null);
-        const oldContainerMode = dragState?.oldContainerMode ?? container.containerMode;
-        const oldChildPositions = dragState?.childPositionSnapshots ?? (() => {
-            const positions = new Map();
+        // Drag batching: capture layout before-state once, create command on final commit
+        const captureLayoutBefore = () => {
             const children = this.sceneController.getChildObjects?.(objectId) || [];
+            const childPositions = new Map();
             children.forEach(child => {
                 if (child.mesh) {
-                    positions.set(child.id, {
+                    childPositions.set(child.id, {
                         x: child.mesh.position.x,
                         y: child.mesh.position.y,
                         z: child.mesh.position.z
                     });
                 }
             });
-            return positions;
-        })();
+            return {
+                oldAutoLayout: container.autoLayout ? JSON.parse(JSON.stringify(container.autoLayout)) : null,
+                oldContainerMode: container.containerMode,
+                childPositionSnapshots: childPositions
+            };
+        };
 
-        // Determine old value for the specific property
-        let oldValue = null;
-        if (property === 'autoLayout') {
-            oldValue = oldAutoLayout;
-        } else if (property.startsWith('autoLayout.')) {
-            const nestedProp = property.replace('autoLayout.', '');
-            oldValue = oldAutoLayout ? this._getNestedValue(oldAutoLayout, nestedProp) : null;
-        }
+        this._dragBatch('_layoutPropertyDragState', source,
+            captureLayoutBefore,
+            () => this._forwardPropertyUpdate(data),
+            (stored) => {
+                let oldValue = null;
+                if (property === 'autoLayout') {
+                    oldValue = stored.oldAutoLayout;
+                } else if (property.startsWith('autoLayout.')) {
+                    const nestedProp = property.replace('autoLayout.', '');
+                    oldValue = stored.oldAutoLayout ? this._getNestedValue(stored.oldAutoLayout, nestedProp) : null;
+                }
 
-        // Perform the update
-        this._forwardPropertyUpdate(data);
+                const updatedContainer = this.sceneController.getObject(objectId);
+                if (!updatedContainer) return;
 
-        // Capture after-state
-        const updatedContainer = this.sceneController.getObject(objectId);
-        if (!updatedContainer) return;
+                const newAutoLayout = updatedContainer.autoLayout ? JSON.parse(JSON.stringify(updatedContainer.autoLayout)) : null;
+                const newContainerMode = updatedContainer.containerMode;
 
-        const newAutoLayout = updatedContainer.autoLayout ? JSON.parse(JSON.stringify(updatedContainer.autoLayout)) : null;
-        const newContainerMode = updatedContainer.containerMode;
-
-        // Register undoable command if state changed
-        if (JSON.stringify(oldAutoLayout) !== JSON.stringify(newAutoLayout) || oldContainerMode !== newContainerMode) {
-            if (this.historyManager) {
-                const command = new UpdateLayoutPropertyCommand(objectId, property, value, oldValue);
-                command.originalLayoutState = oldAutoLayout;
-                command.newLayoutState = newAutoLayout;
-                command.originalContainerMode = oldContainerMode;
-                command.newContainerMode = newContainerMode;
-                command.childPositionSnapshots = oldChildPositions;
-                this.historyManager.executeCommand(command);
+                if (JSON.stringify(stored.oldAutoLayout) !== JSON.stringify(newAutoLayout) || stored.oldContainerMode !== newContainerMode) {
+                    if (this.historyManager) {
+                        const command = new UpdateLayoutPropertyCommand(objectId, property, value, oldValue);
+                        command.originalLayoutState = stored.oldAutoLayout;
+                        command.newLayoutState = newAutoLayout;
+                        command.originalContainerMode = stored.oldContainerMode;
+                        command.newContainerMode = newContainerMode;
+                        command.childPositionSnapshots = stored.childPositionSnapshots;
+                        this.historyManager.executeCommand(command);
+                    }
+                }
             }
-        }
+        );
     }
 
     /**
@@ -577,74 +533,51 @@ class CommandRouter {
             return;
         }
 
-        // DRAG BATCHING: Capture before-state once on first drag event
-        if (source === 'drag') {
-            if (!this._tileRepeatDragState) {
-                const children = this.sceneController.getChildObjects?.(objectId) || [];
-                const sourceObjectId = container.autoLayout?.tileMode?.sourceObjectId;
-                this._tileRepeatDragState = {
-                    objectId,
-                    oldRepeat: container.autoLayout?.tileMode?.repeat || 0,
-                    oldAutoLayout: container.autoLayout ? JSON.parse(JSON.stringify(container.autoLayout)) : null,
-                    childrenBefore: children.map(c => c.id),
-                    childSnapshots: children.map(child => ({
-                        id: child.id,
-                        name: child.name,
-                        dimensions: child.dimensions ? { ...child.dimensions } : null,
-                        sourceObjectId
-                    }))
-                };
+        // Drag batching: capture tile state once, create command on final commit
+        const captureTileBefore = () => {
+            const children = this.sceneController.getChildObjects?.(objectId) || [];
+            const srcId = container.autoLayout?.tileMode?.sourceObjectId;
+            return {
+                oldRepeat: container.autoLayout?.tileMode?.repeat || 0,
+                oldAutoLayout: container.autoLayout ? JSON.parse(JSON.stringify(container.autoLayout)) : null,
+                childrenBefore: children.map(c => c.id),
+                childSnapshots: children.map(child => ({
+                    id: child.id, name: child.name,
+                    dimensions: child.dimensions ? { ...child.dimensions } : null,
+                    sourceObjectId: srcId
+                }))
+            };
+        };
+
+        this._dragBatch('_tileRepeatDragState', source,
+            captureTileBefore,
+            () => this._forwardPropertyUpdate(data),
+            (stored) => {
+                const updatedContainer = this.sceneController.getObject(objectId);
+                if (!updatedContainer) return;
+
+                const newAutoLayout = updatedContainer.autoLayout ? JSON.parse(JSON.stringify(updatedContainer.autoLayout)) : null;
+                const newRepeat = parseInt(value) || stored.oldRepeat;
+
+                const childrenAfter = (this.sceneController.getChildObjects?.(objectId) || []).map(c => c.id);
+                const addedChildIds = childrenAfter.filter(id => !stored.childrenBefore.includes(id));
+                const removedChildIds = stored.childrenBefore.filter(id => !childrenAfter.includes(id));
+                const removedChildSnapshots = stored.childSnapshots.filter(s => removedChildIds.includes(s.id));
+
+                if (stored.oldRepeat !== newRepeat && this.historyManager) {
+                    const command = new UpdateTileRepeatCommand({
+                        containerId: objectId,
+                        oldRepeat: stored.oldRepeat,
+                        newRepeat,
+                        addedChildIds,
+                        removedChildSnapshots,
+                        oldAutoLayout: stored.oldAutoLayout,
+                        newAutoLayout
+                    });
+                    this.historyManager.executeCommand(command);
+                }
             }
-            // Forward the update (TileInstanceManager syncs instances) but no command
-            this._forwardPropertyUpdate(data);
-            return;
-        }
-
-        // FINAL COMMIT (source='input' or other)
-        // Use stored drag state if available, otherwise capture fresh
-        const dragState = this._tileRepeatDragState;
-        this._tileRepeatDragState = null;
-
-        const sourceObjectId = container.autoLayout?.tileMode?.sourceObjectId;
-        const children = this.sceneController.getChildObjects?.(objectId) || [];
-
-        const oldRepeat = dragState?.oldRepeat ?? (container.autoLayout?.tileMode?.repeat || 0);
-        const oldAutoLayout = dragState?.oldAutoLayout ?? (container.autoLayout ? JSON.parse(JSON.stringify(container.autoLayout)) : null);
-        const childrenBefore = dragState?.childrenBefore ?? children.map(c => c.id);
-        const childSnapshots = dragState?.childSnapshots ?? children.map(child => ({
-            id: child.id, name: child.name,
-            dimensions: child.dimensions ? { ...child.dimensions } : null,
-            sourceObjectId
-        }));
-
-        // Perform the update (triggers TileInstanceManager via events)
-        this._forwardPropertyUpdate(data);
-
-        // Capture after-state
-        const updatedContainer = this.sceneController.getObject(objectId);
-        if (!updatedContainer) return;
-
-        const newAutoLayout = updatedContainer.autoLayout ? JSON.parse(JSON.stringify(updatedContainer.autoLayout)) : null;
-        const newRepeat = parseInt(value) || oldRepeat;
-
-        const childrenAfter = (this.sceneController.getChildObjects?.(objectId) || []).map(c => c.id);
-        const addedChildIds = childrenAfter.filter(id => !childrenBefore.includes(id));
-        const removedChildIds = childrenBefore.filter(id => !childrenAfter.includes(id));
-        const removedChildSnapshots = childSnapshots.filter(s => removedChildIds.includes(s.id));
-
-        // Register single undoable command for the entire drag (or direct edit)
-        if (oldRepeat !== newRepeat && this.historyManager) {
-            const command = new UpdateTileRepeatCommand({
-                containerId: objectId,
-                oldRepeat,
-                newRepeat,
-                addedChildIds,
-                removedChildSnapshots,
-                oldAutoLayout,
-                newAutoLayout
-            });
-            this.historyManager.executeCommand(command);
-        }
+        );
     }
 
     handleFillModeToggle(data) {
@@ -1112,224 +1045,6 @@ class CommandRouter {
         const settingsHandler = window.modlerComponents?.settingsHandler;
         if (!settingsHandler) return;
         settingsHandler[method](data.sourceWindow);
-    }
-
-    // ═══════════════════════════════════════════════════════════════
-    // EXPORT/IMPORT HANDLERS
-    // ═══════════════════════════════════════════════════════════════
-
-    handleExportScene(data) {
-        const exportImportManager = window.modlerComponents?.exportImportManager;
-        if (!exportImportManager) return;
-        exportImportManager.exportScene({ fileName: data?.fileName });
-    }
-
-    async handleImportScene(data) {
-        const exportImportManager = window.modlerComponents?.exportImportManager;
-        if (!exportImportManager) return;
-
-        const result = await exportImportManager.importScene();
-        if (result.success && data?.sourceWindow) {
-            data.sourceWindow.postMessage({
-                type: 'scene-imported',
-                fileId: result.fileId,
-                name: result.name
-            }, '*');
-        }
-    }
-
-    handleExportObject(data) {
-        const exportImportManager = window.modlerComponents?.exportImportManager;
-        if (!exportImportManager || !data?.objectId) return;
-        exportImportManager.exportObject(data.objectId);
-    }
-
-    async handleImportObject(data) {
-        const exportImportManager = window.modlerComponents?.exportImportManager;
-        if (!exportImportManager) return;
-
-        const result = await exportImportManager.importObject();
-        if (result.success && data?.sourceWindow) {
-            data.sourceWindow.postMessage({
-                type: 'object-imported',
-                rootId: result.rootId
-            }, '*');
-        }
-    }
-
-    // ═══════════════════════════════════════════════════════════════
-    // YARD HANDLERS
-    // ═══════════════════════════════════════════════════════════════
-
-    handleYardGetLibrary(data) {
-        const yardManager = window.modlerComponents?.yardManager;
-        if (!yardManager) return;
-
-        const libraryData = yardManager.getLibraryData();
-
-        // Send response to the requesting iframe
-        if (data.sourceWindow) {
-            try {
-                data.sourceWindow.postMessage({
-                    type: 'yard-library-response',
-                    data: libraryData
-                }, '*');
-            } catch (e) { /* sourceWindow may be closed */ }
-        } else if (window.simpleCommunication) {
-            window.simpleCommunication.sendToAllIframes({
-                type: 'yard-library-response',
-                data: libraryData
-            });
-        }
-    }
-
-    handleYardAddItem(data) {
-        const yardManager = window.modlerComponents?.yardManager;
-        if (!yardManager) return;
-
-        const itemData = data.data?.item || data.item;
-        if (!itemData) return;
-
-        yardManager.addItem(itemData);
-        this._broadcastYardUpdate();
-    }
-
-    handleYardUpdateItem(data) {
-        const yardManager = window.modlerComponents?.yardManager;
-        if (!yardManager) return;
-
-        const itemId = data.data?.itemId || data.itemId;
-        const updates = data.data?.updates || data.updates;
-        if (!itemId || !updates) return;
-
-        yardManager.updateItem(itemId, updates);
-        this._broadcastYardUpdate();
-    }
-
-    handleYardRemoveItem(data) {
-        const yardManager = window.modlerComponents?.yardManager;
-        if (!yardManager) return;
-
-        const itemId = data.data?.itemId || data.itemId;
-        if (!itemId) return;
-
-        yardManager.removeItem(itemId);
-        this._broadcastYardUpdate();
-    }
-
-    handleYardPlaceItem(data) {
-        const yardManager = window.modlerComponents?.yardManager;
-        if (!yardManager || !this.sceneController || !this.historyManager) return;
-
-        const itemId = data.data?.itemId || data.itemId;
-        if (!itemId) return;
-
-        const item = yardManager.getItem(itemId);
-        if (!item) return;
-
-        const dim = item.dimensions;
-        const geometry = new THREE.BoxGeometry(dim.x, dim.y, dim.z);
-
-        const colorHex = item.material?.color || '#888888';
-        const color = parseInt(colorHex.replace('#', ''), 16);
-        const material = new THREE.MeshLambertMaterial({
-            color,
-            opacity: item.material?.opacity ?? 1,
-            transparent: item.material?.transparent ?? false
-        });
-
-        const command = new CreateObjectCommand(geometry, material, {
-            name: item.name,
-            type: 'box',
-            position: { x: 0, y: dim.y / 2, z: 0 },
-            dimensions: { x: dim.x, y: dim.y, z: dim.z },
-            yardItemId: item.id,
-            yardFixed: item.fixedDimensions
-        });
-
-        this.historyManager.executeCommand(command);
-    }
-
-    _broadcastYardUpdate() {
-        const yardManager = window.modlerComponents?.yardManager;
-        if (!yardManager || !window.simpleCommunication) return;
-
-        window.simpleCommunication.sendToAllIframes({
-            type: 'yard-library-updated',
-            data: yardManager.getLibraryData()
-        });
-    }
-
-    _computeMaterialsList() {
-        const yardManager = window.modlerComponents?.yardManager;
-        if (!this.sceneController || !yardManager) return [];
-
-        const counts = new Map();
-        for (const [id, objectData] of this.sceneController.objects) {
-            if (objectData.yardItemId) {
-                counts.set(objectData.yardItemId, (counts.get(objectData.yardItemId) || 0) + 1);
-            }
-        }
-
-        const materialsList = [];
-        for (const [yardItemId, count] of counts) {
-            const item = yardManager.getItem(yardItemId);
-            if (item) {
-                materialsList.push({
-                    yardItemId,
-                    name: item.name,
-                    category: item.category,
-                    subcategory: item.subcategory,
-                    count,
-                    dimensions: item.dimensions
-                });
-            }
-        }
-        return materialsList;
-    }
-
-    _broadcastMaterialsList() {
-        if (!window.simpleCommunication) return;
-        const materialsList = this._computeMaterialsList();
-        window.simpleCommunication.sendToAllIframes({
-            type: 'yard-materials-list',
-            data: materialsList
-        });
-    }
-
-    handleYardGetMaterialsList(data) {
-        const materialsList = this._computeMaterialsList();
-        if (data.sourceWindow) {
-            try {
-                data.sourceWindow.postMessage({
-                    type: 'yard-materials-list',
-                    data: materialsList
-                }, '*');
-            } catch (e) { /* sourceWindow may be closed */ }
-        } else if (window.simpleCommunication) {
-            window.simpleCommunication.sendToAllIframes({
-                type: 'yard-materials-list',
-                data: materialsList
-            });
-        }
-    }
-
-    handleYardToggleDimensionLock(data) {
-        if (!this.objectStateManager) return;
-
-        const objectId = data.objectId;
-        const axis = data.axis;
-        if (!objectId || !axis) return;
-
-        const object = this.objectStateManager.getObject(objectId);
-        if (!object) return;
-
-        // Toggle the yardFixed flag for this axis
-        const currentFixed = object.yardFixed || { x: false, y: false, z: false };
-        const newFixed = { ...currentFixed, [axis]: !currentFixed[axis] };
-
-        // Update through ObjectStateManager (single source of truth)
-        this.objectStateManager.updateObject(objectId, { yardFixed: newFixed });
     }
 
     /**

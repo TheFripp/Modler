@@ -1,4 +1,3 @@
-import * as THREE from 'three';
 /**
  * ObjectStateManager - State Coordination Layer
  *
@@ -39,6 +38,12 @@ class ObjectStateManager {
 
         // Layout propagation manager (Phase 4 refactoring)
         this.layoutPropagationManager = null; // Lazy-initialized
+
+        // Selection UI sync (extracted helper)
+        this.selectionSync = new OsmSelectionSync(this);
+
+        // SceneController sync (extracted helper)
+        this.sceneSync = new OsmSceneSync(this);
     }
 
     // ====== COMPONENT GETTERS (reduce repeated lookups) ======
@@ -60,57 +65,6 @@ class ObjectStateManager {
             this.layoutPropagationManager = window.modlerComponents?.layoutPropagationManager;
         }
         return this.layoutPropagationManager;
-    }
-
-    /**
-     * Apply geometry updates (dimension/position/rotation) to SceneController
-     * Handles the repeated pattern of: apply updates → sync back → trigger layout
-     */
-    applyGeometryUpdate(object, updateType, sceneMethodName, triggerLayout = false) {
-        const pendingKey = `_pending${updateType}Updates`;
-        const propertyKey = updateType.toLowerCase();
-        const sceneMethod = this.sceneController[sceneMethodName];
-
-        if (!object[pendingKey] || !sceneMethod) return;
-
-        // Apply updates to SceneController
-        const updates = object[pendingKey];
-        Object.entries(updates).forEach(([axis, value]) => {
-            sceneMethod.call(this.sceneController, object.id, axis, value);
-        });
-        delete object[pendingKey];
-
-        // Sync back from SceneController (single source of truth)
-        // CRITICAL: Read directly from THREE.js mesh for position/rotation (tools mutate mesh directly)
-        const sceneObject = this.sceneController.getObject(object.id);
-        if (sceneObject?.mesh) {
-            if (propertyKey === 'position' && sceneObject.mesh.position) {
-                // Read fresh position from mesh (push tool and move tool modify directly)
-                object.position = {
-                    x: sceneObject.mesh.position.x,
-                    y: sceneObject.mesh.position.y,
-                    z: sceneObject.mesh.position.z
-                };
-            } else if (propertyKey === 'rotation' && sceneObject.mesh.rotation) {
-                // Read fresh rotation from mesh and convert to degrees
-                object.rotation = {
-                    x: (sceneObject.mesh.rotation.x * 180) / Math.PI,
-                    y: (sceneObject.mesh.rotation.y * 180) / Math.PI,
-                    z: (sceneObject.mesh.rotation.z * 180) / Math.PI
-                };
-            } else if (propertyKey === 'dimension') {
-                // ARCHITECTURE: Read dimensions from geometry via DimensionManager
-                const dimensions = window.dimensionManager?.getDimensions(sceneObject.mesh);
-                if (dimensions) {
-                    object.dimensions = { ...dimensions };
-                }
-            }
-        }
-
-        // Trigger parent layout update if needed (BOTTOM-UP PROPAGATION)
-        if (triggerLayout) {
-            this.scheduleParentLayoutUpdate(object.id);
-        }
     }
 
     /**
@@ -637,164 +591,19 @@ class ObjectStateManager {
     }
 
     /**
-     * Refresh selection UI for currently selected objects
-     * This ensures PropertyPanel shows real-time updates during operations like push tool
+     * Refresh selection UI for currently selected objects.
+     * Delegates to OsmSelectionSync helper.
      */
     refreshSelectionUI(changedItems) {
-        const selectionController = this.getSelectionController();
-        if (!selectionController) return;
-
-        // Check if any changed object is currently selected
-        const hasSelectedChange = changedItems.some(({ object }) =>
-            this.selection.has(object.id)
-        );
-
-        if (!hasSelectedChange) return;
-
-        // Get current selection with fresh data FROM SCENECONTROLLER (after updateSceneController has run)
-        const selectedMeshes = selectionController.getSelectedObjects?.() || [];
-        if (selectedMeshes.length === 0) return;
-
-        // Only rebuild structures for objects that actually changed
-        const changedIds = new Set(changedItems.map(({ object }) => object.id));
-        const serializedSelection = selectedMeshes.map(mesh => {
-            const objectData = this.sceneController?.getObjectByMesh?.(mesh);
-            if (!objectData) return null;
-
-            // Reuse cached structure for unchanged objects
-            if (!changedIds.has(objectData.id) && this._selectionStructureCache?.has(objectData.id)) {
-                return this._selectionStructureCache.get(objectData.id);
-            }
-
-            return this.buildObjectStructure(objectData);
-        }).filter(Boolean);
-
-        // Cache for next cycle
-        this._selectionStructureCache = new Map(serializedSelection.map(s => [s.id, s]));
-
-        if (serializedSelection.length === 0) return;
-
-        // Try callback first (for iframe/indirect mode)
-        if (selectionController.selectionChangeCallback) {
-            selectionController.selectionChangeCallback(serializedSelection);
-        }
-
-        // Direct store update (for direct mode)
-        // Access Svelte store function directly
-        const syncFunction = window.syncSelectionFromThreeJS;
-        if (syncFunction && typeof syncFunction === 'function') {
-            syncFunction(serializedSelection);
-        }
-
-        // Iframe postMessage fallback (needed for cross-origin iframe mode during drag)
-        // The selectionChanged() check in the Svelte store prevents duplicate updates
-        const simpleCommunication = window.simpleCommunication;
-        if (simpleCommunication) {
-            simpleCommunication.sendToAllIframes({
-                type: 'selection-changed',
-                data: {
-                    selectedObjectIds: serializedSelection.map(obj => obj.id),
-                    selectedObjects: serializedSelection,
-                    containerContext: null
-                }
-            });
-        }
+        this.selectionSync.refresh(changedItems);
     }
 
     /**
-     * Update SceneController with object changes
+     * Update SceneController with object changes.
+     * Delegates to OsmSceneSync helper.
      */
     updateSceneController(changedItems) {
-        if (!this.sceneController) {
-            return;
-        }
-
-        changedItems.forEach(({ object, source, options }) => {
-            // PROXY PATTERN: Apply ALL geometry updates directly to SceneController
-            // SceneController is the single source of truth for all 3D properties
-
-            // Handle parent container changes (drag-and-drop in object tree)
-            if (object._changedProperties?.has('parentContainer')) {
-                this.sceneController.setParentContainer(object.id, object.parentContainer, true);
-            }
-
-            // Check if layout propagation should be skipped (optimization for material/transform changes)
-            const skipLayoutPropagation = options?.skipLayoutPropagation || false;
-
-            // Apply dimension updates (triggers parent layout on change, UNLESS source is push-tool or skipLayoutPropagation is true)
-            // Push tool suppresses layout updates during drag for performance and to prevent container movement
-            const shouldTriggerLayout = source !== 'push-tool' && !skipLayoutPropagation;
-            this.applyGeometryUpdate(object, 'Dimension', 'updateObjectDimensions', shouldTriggerLayout);
-
-            // Apply position updates
-            this.applyGeometryUpdate(object, 'Position', 'updateObjectPosition', false);
-
-            // Apply rotation updates (triggers parent layout — rotated AABB affects container sizing)
-            this.applyGeometryUpdate(object, 'Rotation', 'updateObjectRotation', shouldTriggerLayout);
-
-            // Sync non-geometry properties to SceneController first (needed for layout)
-            const sceneObject = this.sceneController.getObject(object.id);
-            if (sceneObject) {
-                sceneObject.name = object.name;
-
-                // childrenOrder is owned by SceneController — CommandRouter writes it directly
-                // No sync needed here
-
-                // Sync container mode so SceneLayoutManager gate checks match OSM
-                if (object.isContainer && object.containerMode) {
-                    sceneObject.containerMode = object.containerMode;
-                }
-
-                // SCHEMA-FIRST: Always sync autoLayout for containers, use schema defaults if needed
-                if (object.isContainer) {
-                    sceneObject.autoLayout = object.autoLayout ||
-                        window.ObjectDataFormat.createDefaultAutoLayout();
-                    // calculatedGap clearing is owned by SceneLayoutManager.updateContainer()
-                }
-
-                // LAYOUT PROPERTIES: Sync layoutProperties for all objects (layout engine reads from SceneController)
-                if (object.layoutProperties) {
-                    sceneObject.layoutProperties = object.layoutProperties;
-                }
-
-                // Yard fixed dimensions — sync to SceneController and mesh.userData
-                if (object._changedProperties?.has('yardFixed')) {
-                    sceneObject.yardFixed = object.yardFixed;
-                    if (sceneObject.mesh) {
-                        sceneObject.mesh.userData.yardFixed = object.yardFixed;
-                    }
-                }
-            }
-
-            // Update container layout if needed (TOP-DOWN PROPAGATION)
-            // UNIFIED: SceneLayoutManager.updateContainer() handles all mode routing
-            // calculatedGap clearing is owned by SceneLayoutManager.updateContainer()
-            if (object.isContainer && sceneObject) {
-                if (this.shouldTriggerContainerUpdate(object.id, object._changedProperties, source, options)) {
-                    this.sceneController.updateContainer(object.id);
-                }
-
-                // Show padding visualization if padding is set
-                const visualEffects = this.getVisualEffects();
-                if (visualEffects && object.autoLayout?.padding) {
-                    visualEffects.showPaddingVisualization(sceneObject.mesh, object.autoLayout.padding);
-                } else if (visualEffects) {
-                    visualEffects.hidePaddingVisualization(sceneObject.mesh);
-                }
-
-                // BOTTOM-UP PROPAGATION: Container size changed → schedule grandparent layout update
-                this.scheduleParentLayoutUpdate(object.id);
-            }
-
-            // CHILD LAYOUT PROPERTIES CHANGED: Trigger parent container layout update
-            const layoutPropertiesChanged = object._changedProperties?.has('layoutProperties') ||
-                Array.from(object._changedProperties || []).some(prop => prop.startsWith('layoutProperties.'));
-
-            if (layoutPropertiesChanged && object.parentContainer && !object.isContainer) {
-                // Child sizing changed → parent needs to recalculate layout
-                this.sceneController.updateContainer(object.parentContainer);
-            }
-        });
+        this.sceneSync.sync(changedItems);
     }
 
 
@@ -860,11 +669,11 @@ class ObjectStateManager {
         if (changedProps.has('name')) {
             return window.objectEventBus.EVENT_TYPES.HIERARCHY;
         }
-        if (changedProps.has('position') || changedProps.has('rotation')) {
-            return window.objectEventBus.EVENT_TYPES.TRANSFORM;
-        }
         if (changedProps.has('dimensions')) {
             return window.objectEventBus.EVENT_TYPES.GEOMETRY;
+        }
+        if (changedProps.has('position') || changedProps.has('rotation')) {
+            return window.objectEventBus.EVENT_TYPES.TRANSFORM;
         }
         if (changedProps.has('material')) {
             return window.objectEventBus.EVENT_TYPES.MATERIAL;
@@ -893,7 +702,7 @@ class ObjectStateManager {
         objectIds.forEach(id => this.selection.add(id));
 
         // Invalidate cached selection structures so next refreshSelectionUI rebuilds fresh
-        this._selectionStructureCache = null;
+        this.selectionSync.invalidateCache();
 
         // NOTE: Do NOT emit to ObjectEventBus here - SelectionController already emits
         // This method is called BY SelectionController.notifySelectionChange() which handles emission
@@ -1005,27 +814,6 @@ class ObjectStateManager {
         return {
             containerMode: mode
         };
-    }
-
-    /**
-     * Determine if a container update should be triggered based on what changed.
-     * Single predicate for all layout trigger decisions.
-     *
-     * @param {string|number} objectId - Object ID
-     * @param {Set} changedProperties - Set of changed property names
-     * @param {string} source - Update source (e.g., 'push-tool', 'property-panel')
-     * @param {Object} options - Update options (e.g., { skipLayout: true })
-     * @returns {boolean} True if container layout should be recalculated
-     */
-    shouldTriggerContainerUpdate(objectId, changedProperties, source, options = {}) {
-        if (source === 'push-tool' || options?.skipLayout) return false;
-
-        const object = this.getObject(objectId);
-        if (!object?.isContainer) return false;
-
-        return changedProperties.has('autoLayout') ||
-            [...changedProperties].some(p => p.startsWith('autoLayout.')) ||
-            changedProperties.has('dimensions');
     }
 
     /**

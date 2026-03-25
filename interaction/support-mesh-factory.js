@@ -24,6 +24,9 @@ class SupportMeshFactory {
             cadWireframe: null
         };
 
+        // Delegated face highlight positioning logic
+        this.faceHighlightPositioner = new FaceHighlightPositioner(this.geometryFactory);
+
         this.createBaseMaterials();
     }
 
@@ -580,368 +583,30 @@ class SupportMeshFactory {
 
         // Smart face highlight updates - only if visible and geometry tracking is needed
         if (updateFaceHighlight && supportMeshes.faceHighlight && supportMeshes.faceHighlight.visible) {
-            this.updateFaceHighlightAfterGeometryChange(mainMesh, supportMeshes.faceHighlight);
+            this.faceHighlightPositioner.updateFaceHighlightAfterGeometryChange(mainMesh, supportMeshes.faceHighlight);
         }
     }
 
-    /**
-     * Update face highlight geometry for specific face
-     */
+    // ====== FACE HIGHLIGHT POSITIONING — delegated to FaceHighlightPositioner ======
+
     updateFaceHighlightGeometry(mainMesh, face) {
-        const supportMeshes = mainMesh.userData.supportMeshes;
-        if (!supportMeshes?.faceHighlight || !face || !mainMesh.geometry) return;
-
-        // Get position attribute to convert face indices to vertex coordinates
-        const positionAttribute = mainMesh.geometry.getAttribute('position');
-        if (!positionAttribute) return;
-
-        // Convert face indices to actual vertex positions
-        const va = new THREE.Vector3().fromBufferAttribute(positionAttribute, face.a);
-        const vb = new THREE.Vector3().fromBufferAttribute(positionAttribute, face.b);
-        const vc = new THREE.Vector3().fromBufferAttribute(positionAttribute, face.c);
-
-        // Update face highlight geometry
-        const vertices = new Float32Array([
-            va.x, va.y, va.z,
-            vb.x, vb.y, vb.z,
-            vc.x, vc.y, vc.z
-        ]);
-
-        // Return old geometry to pool instead of disposing
-        this.geometryFactory.returnGeometry(supportMeshes.faceHighlight.geometry, 'face');
-        // TODO: Consider adding dynamic BufferGeometry creation to GeometryFactory
-        const faceGeometry = new THREE.BufferGeometry();
-        faceGeometry.setAttribute('position', new THREE.BufferAttribute(vertices, 3));
-        supportMeshes.faceHighlight.geometry = faceGeometry;
+        this.faceHighlightPositioner.updateFaceHighlightGeometry(mainMesh, face);
     }
 
-    /**
-     * Resolve the main object from a hit that might be on a collision/interactive mesh
-     * @param {Object} hit - Raycast hit data
-     * @returns {THREE.Mesh|null} The main object mesh
-     */
     resolveMainObjectFromHit(hit) {
-        if (!hit || !hit.object) return null;
-
-        // Check if hit object is a container interactive/collision mesh
-        const isContainerInteractive = hit.object.userData.isContainerInteractive;
-        const isContainerCollision = hit.object.userData.isContainerCollision;
-
-        if (isContainerInteractive && hit.object.userData.containerMesh) {
-            // NEW ARCHITECTURE: Interactive mesh has direct containerMesh reference
-            return hit.object.userData.containerMesh;
-        } else if (isContainerCollision && hit.object.parent) {
-            // OLD ARCHITECTURE: Collision mesh is child of container
-            return hit.object.parent;
-        } else if (isContainerInteractive) {
-            // FALLBACK: Scene-level interactive mesh with parent container ID
-            const sceneController = window.modlerComponents?.sceneController;
-            const containerId = hit.object.userData.parentContainer;
-
-            if (sceneController && containerId) {
-                const containerData = sceneController.getObject(containerId);
-                return containerData?.mesh || hit.object;
-            } else {
-                return hit.object.parent || hit.object;
-            }
-        } else {
-            // Regular objects - walk up parent hierarchy to find object with userData.id
-            // This handles wireframes, support meshes, and other child meshes
-            let current = hit.object;
-            while (current) {
-                // Check if this object has a userData.id (main object)
-                if (current.userData && current.userData.id !== undefined) {
-                    return current;
-                }
-                // Move up to parent
-                current = current.parent;
-            }
-
-            // Fallback: return original hit object if no parent with id found
-            return hit.object;
-        }
+        return this.faceHighlightPositioner.resolveMainObjectFromHit(hit);
     }
 
-    /**
-     * Update face highlight position after geometry changes (smart tracking)
-     * @param {THREE.Mesh} mainMesh - The main object mesh
-     * @param {THREE.Mesh} faceHighlightMesh - The face highlight mesh
-     */
     updateFaceHighlightAfterGeometryChange(mainMesh, faceHighlightMesh) {
-        if (!mainMesh || !faceHighlightMesh || !mainMesh.geometry) return;
-
-        try {
-            // Use stored face information instead of trying to reverse-engineer from position
-            const storedFaceInfo = faceHighlightMesh.userData.faceInfo;
-            if (!storedFaceInfo) {
-                // No stored face info - face highlight was created without proper positioning
-                // Hide it since we don't know which face it should represent
-                faceHighlightMesh.visible = false;
-                return;
-            }
-
-            // Calculate current geometry bounds
-            mainMesh.geometry.computeBoundingBox();
-            const bbox = mainMesh.geometry.boundingBox;
-            const size = bbox.getSize(new THREE.Vector3());
-
-            // Use stored face info to recalculate position for the same face
-            const { faceType, isPositive } = storedFaceInfo;
-            let width, height, localCenter, localNormal;
-
-            if (faceType === 'x') {
-                // X face (left/right)
-                width = size.z;
-                height = size.y;
-                localNormal = new THREE.Vector3(isPositive ? 1 : -1, 0, 0);
-                localCenter = new THREE.Vector3(
-                    isPositive ? bbox.max.x : bbox.min.x,
-                    (bbox.max.y + bbox.min.y) / 2,
-                    (bbox.max.z + bbox.min.z) / 2
-                );
-            } else if (faceType === 'y') {
-                // Y face (top/bottom)
-                width = size.x;
-                height = size.z;
-                localNormal = new THREE.Vector3(0, isPositive ? 1 : -1, 0);
-                localCenter = new THREE.Vector3(
-                    (bbox.max.x + bbox.min.x) / 2,
-                    isPositive ? bbox.max.y : bbox.min.y,
-                    (bbox.max.z + bbox.min.z) / 2
-                );
-            } else {
-                // Z face (front/back)
-                width = size.x;
-                height = size.y;
-                localNormal = new THREE.Vector3(0, 0, isPositive ? 1 : -1);
-                localCenter = new THREE.Vector3(
-                    (bbox.max.x + bbox.min.x) / 2,
-                    (bbox.max.y + bbox.min.y) / 2,
-                    isPositive ? bbox.max.z : bbox.min.z
-                );
-            }
-
-            // Update rotation to match face orientation
-            faceHighlightMesh.rotation.set(0, 0, 0); // Reset rotation first
-            if (faceType === 'x') {
-                faceHighlightMesh.rotation.y = isPositive ? Math.PI/2 : -Math.PI/2;
-            } else if (faceType === 'y') {
-                faceHighlightMesh.rotation.x = isPositive ? -Math.PI/2 : Math.PI/2;
-            } else {
-                // Z face - default orientation
-                if (!isPositive) {
-                    faceHighlightMesh.rotation.y = Math.PI; // Flip for negative Z
-                }
-            }
-
-            // Update scale to match new face dimensions
-            faceHighlightMesh.scale.set(width, height, 1);
-
-            // Update position to new face center
-            faceHighlightMesh.position.copy(localCenter);
-
-            // Add small offset to prevent z-fighting
-            const offset = 0.001;
-            faceHighlightMesh.position.add(localNormal.clone().multiplyScalar(offset));
-
-        } catch (error) {
-            console.warn('Failed to update face highlight after geometry change:', error);
-        }
+        this.faceHighlightPositioner.updateFaceHighlightAfterGeometryChange(mainMesh, faceHighlightMesh);
     }
 
-    /**
-     * Position face highlight for specific hit (called once per hover session)
-     * @param {THREE.Mesh} faceHighlightMesh - The face highlight mesh
-     * @param {Object} hit - Raycast hit data
-     */
     positionFaceHighlightForHit(faceHighlightMesh, hit) {
-        if (!faceHighlightMesh || !hit || !hit.face || !hit.object) {
-            return;
-        }
-
-        try {
-            // Resolve the main object geometry
-            const mainObject = this.resolveMainObjectFromHit(hit);
-            if (!mainObject || !mainObject.geometry) {
-                return;
-            }
-
-            // CRITICAL FIX: For containers, use interactive mesh for bounding box calculations
-            // Interactive mesh has BoxGeometry with proper face dimensions
-            // Main mesh (EdgesGeometry) only has edge lines, resulting in tiny bounding box
-            let geometryForBounds = mainObject.geometry;
-            if (mainObject.userData?.isContainer && mainObject.userData?.supportMeshes?.interactiveMesh) {
-                geometryForBounds = mainObject.userData.supportMeshes.interactiveMesh.geometry;
-            }
-
-            // Work in local space since face highlight is a child
-            geometryForBounds.computeBoundingBox();
-            const bbox = geometryForBounds.boundingBox;
-            const size = bbox.getSize(new THREE.Vector3());
-
-            // Get face normal in local space
-            const face = hit.face;
-            const localNormal = face.normal.clone().normalize();
-
-            // Determine which face we hit and calculate dimensions
-            const absNormal = {
-                x: Math.abs(localNormal.x),
-                y: Math.abs(localNormal.y),
-                z: Math.abs(localNormal.z)
-            };
-
-            let width, height;
-            let localCenter = new THREE.Vector3();
-
-            if (absNormal.x > absNormal.y && absNormal.x > absNormal.z) {
-                // X face (left/right)
-                width = size.z;
-                height = size.y;
-                localCenter.set(
-                    localNormal.x > 0 ? bbox.max.x : bbox.min.x,
-                    (bbox.max.y + bbox.min.y) / 2,
-                    (bbox.max.z + bbox.min.z) / 2
-                );
-            } else if (absNormal.y > absNormal.x && absNormal.y > absNormal.z) {
-                // Y face (top/bottom)
-                width = size.x;
-                height = size.z;
-                localCenter.set(
-                    (bbox.max.x + bbox.min.x) / 2,
-                    localNormal.y > 0 ? bbox.max.y : bbox.min.y,
-                    (bbox.max.z + bbox.min.z) / 2
-                );
-            } else {
-                // Z face (front/back)
-                width = size.x;
-                height = size.y;
-                localCenter.set(
-                    (bbox.max.x + bbox.min.x) / 2,
-                    (bbox.max.y + bbox.min.y) / 2,
-                    localNormal.z > 0 ? bbox.max.z : bbox.min.z
-                );
-            }
-
-            // Scale the face highlight to match the face size
-            faceHighlightMesh.scale.set(width, height, 1);
-
-            // Position the face highlight at the face center in local space
-            faceHighlightMesh.position.copy(localCenter);
-
-            // Set rotation directly based on face normal
-            faceHighlightMesh.rotation.set(0, 0, 0); // Reset rotation first
-
-            if (absNormal.x > absNormal.y && absNormal.x > absNormal.z) {
-                // X face - rotate to face along X axis
-                faceHighlightMesh.rotation.y = localNormal.x > 0 ? Math.PI/2 : -Math.PI/2;
-            } else if (absNormal.y > absNormal.x && absNormal.y > absNormal.z) {
-                // Y face - rotate to face along Y axis
-                faceHighlightMesh.rotation.x = localNormal.y > 0 ? -Math.PI/2 : Math.PI/2;
-            } else {
-                // Z face - default orientation (no rotation needed for Z-facing plane)
-                if (localNormal.z < 0) {
-                    faceHighlightMesh.rotation.y = Math.PI; // Flip for negative Z
-                }
-            }
-
-            // Small offset to prevent z-fighting
-            const offset = 0.001;
-            faceHighlightMesh.position.add(localNormal.clone().multiplyScalar(offset));
-
-            // Store face information for future geometry updates
-            let faceType, isPositive;
-            if (absNormal.x > absNormal.y && absNormal.x > absNormal.z) {
-                faceType = 'x';
-                isPositive = localNormal.x > 0;
-            } else if (absNormal.y > absNormal.x && absNormal.y > absNormal.z) {
-                faceType = 'y';
-                isPositive = localNormal.y > 0;
-            } else {
-                faceType = 'z';
-                isPositive = localNormal.z > 0;
-            }
-
-            faceHighlightMesh.userData.faceInfo = { faceType, isPositive };
-
-        } catch (error) {
-            console.warn('Failed to position face highlight for hit:', error);
-        }
+        this.faceHighlightPositioner.positionFaceHighlightForHit(faceHighlightMesh, hit);
     }
 
-    /**
-     * Position face highlight for specific axis (for button hovers)
-     * Determines camera-facing face on the specified axis and positions highlight
-     * @param {THREE.Mesh} faceHighlightMesh - The face highlight mesh
-     * @param {THREE.Mesh} objectMesh - The object to highlight a face on
-     * @param {string} axis - Axis to highlight ('x', 'y', or 'z')
-     * @param {boolean} cameraFacingOnly - If true, show only camera-facing face (default: true)
-     */
     positionFaceHighlightForAxis(faceHighlightMesh, objectMesh, axis, cameraFacingOnly = true) {
-        if (!faceHighlightMesh || !objectMesh || !axis) {
-            return;
-        }
-
-        // Get camera to determine which face is camera-facing
-        const camera = window.modlerComponents?.sceneFoundation?.camera;
-        if (!camera) {
-            console.warn('SupportMeshFactory: Camera not available for axis face highlighting');
-            return;
-        }
-
-        // Determine face normal based on axis and camera position
-        let faceNormal;
-
-        if (cameraFacingOnly) {
-            // Get camera direction in world space
-            const cameraPos = new THREE.Vector3();
-            camera.getWorldPosition(cameraPos);
-
-            const objectPos = new THREE.Vector3();
-            objectMesh.getWorldPosition(objectPos);
-
-            const cameraToObject = new THREE.Vector3().subVectors(cameraPos, objectPos);
-
-            // Determine which face on the axis is camera-facing
-            switch (axis) {
-                case 'x':
-                    faceNormal = cameraToObject.x > 0 ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3(-1, 0, 0);
-                    break;
-                case 'y':
-                    faceNormal = cameraToObject.y > 0 ? new THREE.Vector3(0, 1, 0) : new THREE.Vector3(0, -1, 0);
-                    break;
-                case 'z':
-                    faceNormal = cameraToObject.z > 0 ? new THREE.Vector3(0, 0, 1) : new THREE.Vector3(0, 0, -1);
-                    break;
-                default:
-                    console.warn('SupportMeshFactory: Invalid axis for face highlighting:', axis);
-                    return;
-            }
-        } else {
-            // Show positive side of axis regardless of camera
-            switch (axis) {
-                case 'x':
-                    faceNormal = new THREE.Vector3(1, 0, 0);
-                    break;
-                case 'y':
-                    faceNormal = new THREE.Vector3(0, 1, 0);
-                    break;
-                case 'z':
-                    faceNormal = new THREE.Vector3(0, 0, 1);
-                    break;
-                default:
-                    console.warn('SupportMeshFactory: Invalid axis for face highlighting:', axis);
-                    return;
-            }
-        }
-
-        // Create synthetic hit object for positioning
-        const syntheticHit = {
-            object: objectMesh,
-            face: { normal: faceNormal }
-        };
-
-        // Use existing positionFaceHighlightForHit logic
-        this.positionFaceHighlightForHit(faceHighlightMesh, syntheticHit);
+        this.faceHighlightPositioner.positionFaceHighlightForAxis(faceHighlightMesh, objectMesh, axis, cameraFacingOnly);
     }
 
     // ====== VISIBILITY API ======

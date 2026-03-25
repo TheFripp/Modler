@@ -5,8 +5,6 @@ import * as THREE from 'three';
 class MeasurementTool {
     constructor() {
         this.isActive = false;
-        this.currentMeasurement = null;
-        this.measurementVisuals = null;
 
         // References
         this.sceneController = null;
@@ -24,7 +22,7 @@ class MeasurementTool {
         // Current measurement state for Tab key focus
         this.currentEdgeAxis = null; // 'x', 'y', or 'z' - which dimension is being measured
         this.currentObject = null; // The object being measured
-        this.currentLabelSprite = null; // Reference to active label sprite for click detection
+        // currentLabelSprite is now on this.visuals
 
         // Stabilization to prevent flickering
         this.lastUpdateTime = 0; // Timestamp of last measurement update
@@ -32,90 +30,9 @@ class MeasurementTool {
 
         // Load color from configuration
         this.loadColorFromConfig();
-    }
 
-    /**
-     * Calculate screen-space perpendicular offset vector for parallel line spacing
-     * Returns a world-space vector that represents a perpendicular offset in screen space
-     */
-    getScreenSpacePerpendicularOffset(position, lineStart, lineEnd, pixelOffset) {
-        if (!this.camera || !this.renderer) {
-            return this.camera.up.clone().multiplyScalar(0.01);
-        }
-
-        const canvas = this.renderer.domElement;
-
-        // Project line endpoints to screen space
-        const screenStart = lineStart.clone().project(this.camera);
-        const screenEnd = lineEnd.clone().project(this.camera);
-
-        // Calculate line direction in screen space (normalized device coordinates)
-        const screenLineDir = new THREE.Vector2(
-            screenEnd.x - screenStart.x,
-            screenEnd.y - screenStart.y
-        ).normalize();
-
-        // Get perpendicular direction in screen space (rotate 90 degrees)
-        const screenPerpDir = new THREE.Vector2(-screenLineDir.y, screenLineDir.x);
-
-        // Convert pixel offset to NDC (Normalized Device Coordinates)
-        const ndcOffsetX = (pixelOffset / canvas.clientWidth) * 2;
-        const ndcOffsetY = (pixelOffset / canvas.clientHeight) * 2;
-
-        // Project position to screen space
-        const screenPos = position.clone().project(this.camera);
-
-        // Create offset position in screen space
-        const screenOffset = new THREE.Vector3(
-            screenPos.x + screenPerpDir.x * ndcOffsetX,
-            screenPos.y + screenPerpDir.y * ndcOffsetY,
-            screenPos.z
-        );
-
-        // Unproject both points back to world space
-        const worldPos = position.clone();
-        const worldOffset = screenOffset.unproject(this.camera);
-
-        // Return the offset vector
-        return worldOffset.clone().sub(worldPos);
-    }
-
-    /**
-     * Add multiple parallel lines for visual thickness using screen-space offsets
-     * @param {THREE.Group} group - Group to add lines to
-     * @param {THREE.Vector3} point1 - Line start point
-     * @param {THREE.Vector3} point2 - Line end point
-     * @param {THREE.Material} material - Material for solid lines (ignored if isDashed)
-     * @param {THREE.Vector3} refMidPoint - Reference midpoint for offset calculation
-     * @param {THREE.Vector3} refStart - Reference line start for offset direction
-     * @param {THREE.Vector3} refEnd - Reference line end for offset direction
-     * @param {boolean} isDashed - If true, creates dashed lines with measurement styling
-     */
-    _addThickLines(group, point1, point2, material, refMidPoint, refStart, refEnd, isDashed = false) {
-        const numLines = 3;
-        for (let i = 0; i < numLines; i++) {
-            const pixelOffset = (i - (numLines - 1) / 2) * 1;
-            const offsetVec = this.getScreenSpacePerpendicularOffset(refMidPoint, refStart, refEnd, pixelOffset);
-
-            const p1 = point1.clone().add(offsetVec);
-            const p2 = point2.clone().add(offsetVec);
-
-            const geometry = new THREE.BufferGeometry().setFromPoints([p1, p2]);
-            const lineMaterial = isDashed ? new THREE.LineDashedMaterial({
-                color: this.lineColor,
-                dashSize: this.dashSize,
-                gapSize: this.gapSize,
-                linewidth: 1,
-                depthTest: false,
-                transparent: true,
-                opacity: 0.9
-            }) : material;
-
-            const line = new THREE.Line(geometry, lineMaterial);
-            if (isDashed) line.computeLineDistances();
-            line.renderOrder = 999;
-            group.add(line);
-        }
+        // Delegated rendering (MeasurementVisuals owns visual creation/clearing)
+        this.visuals = new MeasurementVisuals(this);
     }
 
     /**
@@ -141,7 +58,7 @@ class MeasurementTool {
     deactivate() {
         this.isActive = false;
         this.lastUpdateTime = 0;
-        this.clearMeasurement();
+        this.visuals.clearMeasurement();
     }
 
     /**
@@ -154,7 +71,7 @@ class MeasurementTool {
         }
 
         if (!intersect) {
-            this.clearMeasurement();
+            this.visuals.clearMeasurement();
             this.lastUpdateTime = 0;
             return;
         }
@@ -164,7 +81,7 @@ class MeasurementTool {
         const timeSinceLastUpdate = currentTime - this.lastUpdateTime;
 
         // If no measurement exists OR stabilization delay has passed, update immediately
-        if (!this.currentMeasurement || timeSinceLastUpdate >= this.stabilizationDelay) {
+        if (!this.visuals.currentMeasurement || timeSinceLastUpdate >= this.stabilizationDelay) {
             // Case 1: No selection - show edge dimension
             if (selectedObjects.length === 0) {
                 this.showEdgeMeasurement(intersect);
@@ -197,7 +114,7 @@ class MeasurementTool {
         const face = intersect.face;
 
         if (!object || !face || !object.geometry) {
-            this.clearMeasurement();
+            this.visuals.clearMeasurement();
             return;
         }
 
@@ -208,7 +125,7 @@ class MeasurementTool {
         const edge = this.getClosestEdge(object, intersect.point, face);
 
         if (!edge) {
-            this.clearMeasurement();
+            this.visuals.clearMeasurement();
             return;
         }
 
@@ -234,7 +151,7 @@ class MeasurementTool {
         this.currentObject = object;
 
         // Create visualization with face normal
-        this.createEdgeMeasurementVisual(edge.start, edge.end, length, edge.direction);
+        this.visuals.createEdgeMeasurementVisual(edge.start, edge.end, length, edge.direction, this.currentFace, this.currentObject);
     }
 
     /**
@@ -263,7 +180,7 @@ class MeasurementTool {
         const length = edge.start.distanceTo(edge.end);
 
         // Create measurement visual
-        this.createEdgeMeasurementVisual(edge.start, edge.end, length, edge.direction);
+        this.visuals.createEdgeMeasurementVisual(edge.start, edge.end, length, edge.direction, this.currentFace, this.currentObject);
     }
 
     /**
@@ -317,19 +234,19 @@ class MeasurementTool {
      */
     showObjectDistance(selectedObject, hoveredObject) {
         if (selectedObject === hoveredObject) {
-            this.clearMeasurement();
+            this.visuals.clearMeasurement();
             return;
         }
 
         // Skip if hovered object is not a valid scene object (floor, grid, etc.)
         if (!hoveredObject || !hoveredObject.geometry) {
-            this.clearMeasurement();
+            this.visuals.clearMeasurement();
             return;
         }
 
         // Check if hoveredObject is marked as hidden from selection (floor, grid, helpers)
         if (hoveredObject.userData && hoveredObject.userData.hideFromSelection) {
-            this.clearMeasurement();
+            this.visuals.clearMeasurement();
             return;
         }
 
@@ -341,7 +258,7 @@ class MeasurementTool {
 
             // Only measure between actual scene objects
             if (!selectedObjectData || !hoveredObjectData) {
-                this.clearMeasurement();
+                this.visuals.clearMeasurement();
                 return;
             }
         }
@@ -358,12 +275,12 @@ class MeasurementTool {
         const measurementData = this.calculateFaceNormalMeasurement(selectedBox, hoveredBox, selectedCenter);
 
         if (!measurementData) {
-            this.clearMeasurement();
+            this.visuals.clearMeasurement();
             return;
         }
 
         // Create visualization
-        this.createFaceNormalMeasurementVisual(
+        this.visuals.createFaceNormalMeasurementVisual(
             measurementData.startPoint,
             measurementData.endPoint,
             measurementData.distance,
@@ -553,33 +470,16 @@ class MeasurementTool {
         // Check if the offset measurement line position is within object bounds
         // Only show connectors if the offset position is OUTSIDE the object
         // When the offset position is ON the object edge, we don't need a connector going INTO it
-        const needsStartConnector = !this.isPointWithinObjectBounds(measurementPosition, selectedBox, axis);
-        const needsEndConnector = !this.isPointWithinObjectBounds(measurementPosition, hoveredBox, axis);
+        const needsStartConnector = !this.visuals.isPointWithinObjectBounds(measurementPosition, selectedBox, axis);
+        const needsEndConnector = !this.visuals.isPointWithinObjectBounds(measurementPosition, hoveredBox, axis);
 
         return { startPoint, endPoint, distance, normal, needsStartConnector, needsEndConnector };
-    }
-
-    /**
-     * Check if a point's perpendicular position is within object bounds
-     */
-    isPointWithinObjectBounds(point, box, excludeAxis) {
-        const axes = ['x', 'y', 'z'].filter(a => a !== excludeAxis);
-        const tolerance = 0.001;
-
-        for (let a of axes) {
-            // Check if point is between min and max on this axis
-            if (point[a] < box.min[a] - tolerance || point[a] > box.max[a] + tolerance) {
-                return false;
-            }
-        }
-        return true;
     }
 
     /**
      * Check if two bounding boxes overlap along the axes perpendicular to the separation axis
      */
     hasOverlapAlongAxis(box1, box2, separationAxis) {
-        // Check overlap on the two axes that are NOT the separation axis
         const axes = ['x', 'y', 'z'].filter(axis => axis !== separationAxis);
 
         for (let axis of axes) {
@@ -588,378 +488,21 @@ class MeasurementTool {
             const box2Min = box2.min[axis];
             const box2Max = box2.max[axis];
 
-            // Check if there's overlap on this axis
             const hasOverlap = box1Min <= box2Max && box1Max >= box2Min;
 
             if (!hasOverlap) {
-                // No overlap on this perpendicular axis means objects are offset
                 return false;
             }
         }
 
-        // Objects overlap on both perpendicular axes
         return true;
     }
 
     /**
-     * Create visual for edge measurement
-     */
-    createEdgeMeasurementVisual(start, end, length, direction) {
-        this.clearMeasurement();
-
-        const group = new THREE.Group();
-
-        // DEVELOPMENT_VALIDATOR_IGNORE: Measurement visuals are temporary and not pooled
-        // Create dashed line with offset in the normal direction of the face
-        let offsetStart = start.clone();
-        let offsetEnd = end.clone();
-
-        // Calculate offset direction perpendicular to edge in the face plane
-        const face = this.currentFace;
-        let normalDirection;
-        let isBottomFace = false;
-
-        if (face && face.normal) {
-            const faceNormal = face.normal.clone().normalize();
-
-            // Check if this is a bottom face (normal pointing downward)
-            // Face normal Y component should be significantly negative
-            isBottomFace = faceNormal.y < -0.7;
-
-            if (isBottomFace) {
-                // For bottom faces, position measurement on floor plane below object
-                const object = this.currentObject;
-                if (object) {
-                    const bbox = new THREE.Box3().setFromObject(object);
-                    const floorY = bbox.min.y - 0.5; // 0.5 units below object bottom
-
-                    // Project edge points to floor plane
-                    offsetStart.y = floorY;
-                    offsetEnd.y = floorY;
-                }
-            } else {
-                // Normal offset behavior for non-bottom faces
-                // Calculate direction perpendicular to both edge and face normal
-                const edgeDirection = end.clone().sub(start).normalize();
-                normalDirection = edgeDirection.clone().cross(faceNormal).normalize();
-
-                // Make sure it points away from the face (outward)
-                if (normalDirection.dot(faceNormal) < 0) {
-                    normalDirection.negate();
-                }
-
-                // Offset 0.5 units in the calculated direction
-                const offsetAmount = 0.5;
-                const offset = normalDirection.multiplyScalar(offsetAmount);
-                offsetStart.add(offset);
-                offsetEnd.add(offset);
-            }
-        } else {
-            // Fallback: offset toward camera so measurement is visible
-            const edgeMid = start.clone().add(end).multiplyScalar(0.5);
-            const toCamera = this.camera.position.clone().sub(edgeMid);
-            // Remove the component along the edge direction
-            const edgeDir = direction.clone().normalize();
-            toCamera.sub(edgeDir.multiplyScalar(toCamera.dot(edgeDir)));
-            normalDirection = toCamera.normalize();
-
-            const offsetAmount = 0.5;
-            const offset = normalDirection.clone().multiplyScalar(offsetAmount);
-            offsetStart.add(offset);
-            offsetEnd.add(offset);
-        }
-
-        // DEVELOPMENT_VALIDATOR_IGNORE_START: Measurement visuals are temporary overlays, not pooled resources
-        const connectorMaterial = new THREE.LineBasicMaterial({
-            color: this.lineColor, linewidth: 1, depthTest: false, transparent: true, opacity: 0.7
-        });
-        const capMaterial = new THREE.LineBasicMaterial({
-            color: this.lineColor, linewidth: 1, depthTest: false, transparent: true, opacity: 0.9
-        });
-
-        const midPoint = offsetStart.clone().add(offsetEnd).multiplyScalar(0.5);
-
-        // Connector lines from edge to measurement line
-        const startConnectorGeometry = new THREE.BufferGeometry().setFromPoints([start, offsetStart]);
-        const startConnector = new THREE.Line(startConnectorGeometry, connectorMaterial);
-        startConnector.renderOrder = 999;
-        group.add(startConnector);
-
-        const endConnectorGeometry = new THREE.BufferGeometry().setFromPoints([end, offsetEnd]);
-        const endConnector = new THREE.Line(endConnectorGeometry, connectorMaterial);
-        endConnector.renderOrder = 999;
-        group.add(endConnector);
-
-        // Main dashed measurement line
-        this._addThickLines(group, offsetStart, offsetEnd, null, midPoint, offsetStart, offsetEnd, true);
-
-        // End caps (small perpendicular lines)
-        const capSize = 0.1;
-        const capPerpendicular = this.getPerpendicularVector(direction);
-        const startCap1 = offsetStart.clone().add(capPerpendicular.clone().multiplyScalar(capSize));
-        const startCap2 = offsetStart.clone().add(capPerpendicular.clone().multiplyScalar(-capSize));
-        const endCap1 = offsetEnd.clone().add(capPerpendicular.clone().multiplyScalar(capSize));
-        const endCap2 = offsetEnd.clone().add(capPerpendicular.clone().multiplyScalar(-capSize));
-
-        this._addThickLines(group, startCap1, startCap2, capMaterial, midPoint, offsetStart, offsetEnd);
-        this._addThickLines(group, endCap1, endCap2, capMaterial, midPoint, offsetStart, offsetEnd);
-        // DEVELOPMENT_VALIDATOR_IGNORE_END
-
-        // Add 3D text label at the offset line's midpoint (centered on the line)
-        const edgeLabelPos = offsetStart.clone().add(offsetEnd).multiplyScalar(0.5);
-        const label = this.create3DLabel(this.formatMeasurementWithUnit(length), edgeLabelPos);
-        this.currentLabelSprite = label;
-        group.add(label);
-
-        // Add to scene
-        this.scene.add(group);
-        this.measurementVisuals = group;
-
-        this.currentMeasurement = { start, end, length, type: 'edge' };
-    }
-
-    /**
-     * Create visual for face normal measurement
-     */
-    createFaceNormalMeasurementVisual(startPoint, endPoint, distance, needsStartConnector, needsEndConnector, selectedObject, hoveredObject) {
-        this.clearMeasurement();
-
-        const group = new THREE.Group();
-
-        // Use the SAME logic as edge measurements for consistency
-        // Calculate measurement direction
-        const measurementDirection = endPoint.clone().sub(startPoint).normalize();
-
-        // Get the midpoint to determine the face normal direction
-        const midPoint = startPoint.clone().add(endPoint).multiplyScalar(0.5);
-
-        // Calculate perpendicular offset direction (same as edge measurements)
-        // Use the cross product with camera up vector to get a perpendicular direction
-        let perpendicular = measurementDirection.clone().cross(this.camera.up).normalize();
-
-        // If cross product is too small, use a different approach
-        if (perpendicular.length() < 0.1) {
-            perpendicular = measurementDirection.clone().cross(new THREE.Vector3(1, 0, 0)).normalize();
-            if (perpendicular.length() < 0.1) {
-                perpendicular = new THREE.Vector3(0, 0, 1);
-            }
-        }
-
-        // Make sure perpendicular points toward camera
-        const toCamera = this.camera.position.clone().sub(midPoint);
-        if (perpendicular.dot(toCamera) < 0) {
-            perpendicular.negate();
-        }
-
-        // Offset amount: 0.5 units perpendicular (same as edge measurements)
-        const offsetAmount = 0.5;
-
-        // Offset the measurement line
-        const offsetStart = startPoint.clone().add(perpendicular.clone().multiplyScalar(offsetAmount));
-        const offsetEnd = endPoint.clone().add(perpendicular.clone().multiplyScalar(offsetAmount));
-
-        // Determine if we need connectors by checking if offset line is outside object bounds
-        // Connectors should only appear when the measurement line is positioned outside the object
-        const axis = Math.abs(endPoint.x - startPoint.x) > 0.001 ? 'x'
-                   : Math.abs(endPoint.y - startPoint.y) > 0.001 ? 'y' : 'z';
-
-        const selectedBox = new THREE.Box3().setFromObject(selectedObject);
-        const hoveredBox = new THREE.Box3().setFromObject(hoveredObject);
-
-        // Check if the perpendicular offset pushes the line outside the object bounds
-        const actualNeedsStartConnector = !this.isPointWithinObjectBounds(offsetStart, selectedBox, axis);
-        const actualNeedsEndConnector = !this.isPointWithinObjectBounds(offsetEnd, hoveredBox, axis);
-
-        // Bracket extension length
-        const extensionLength = 0.3;
-
-        // DEVELOPMENT_VALIDATOR_IGNORE_START: Measurement visuals are temporary overlays, not pooled resources
-        const lineMidPoint = offsetStart.clone().add(offsetEnd).multiplyScalar(0.5);
-        const extensionMaterial = new THREE.LineBasicMaterial({
-            color: this.lineColor, linewidth: 1, depthTest: false, transparent: true, opacity: 0.5
-        });
-        const bracketMaterial = new THREE.LineBasicMaterial({
-            color: this.lineColor, linewidth: 1, depthTest: false, transparent: true, opacity: 0.9
-        });
-
-        // 1. Connector from startPoint to offset start (only if needed)
-        if (actualNeedsStartConnector) {
-            this._addThickLines(group, startPoint, offsetStart, extensionMaterial, lineMidPoint, offsetStart, offsetEnd);
-        }
-
-        // 2. Main dashed measurement line
-        this._addThickLines(group, offsetStart, offsetEnd, null, lineMidPoint, offsetStart, offsetEnd, true);
-
-        // 3. Connector from offset end to endPoint (only if needed)
-        if (actualNeedsEndConnector) {
-            this._addThickLines(group, offsetEnd, endPoint, extensionMaterial, lineMidPoint, offsetStart, offsetEnd);
-        }
-
-        // 4. Brackets at measurement line ends (only when connectors are shown)
-        const bracketDir = perpendicular.clone();
-        if (actualNeedsStartConnector) {
-            const bracketStart1 = offsetStart.clone().sub(bracketDir.clone().multiplyScalar(extensionLength / 2));
-            const bracketStart2 = offsetStart.clone().add(bracketDir.clone().multiplyScalar(extensionLength / 2));
-            this._addThickLines(group, bracketStart1, bracketStart2, bracketMaterial, lineMidPoint, offsetStart, offsetEnd);
-        }
-        if (actualNeedsEndConnector) {
-            const bracketEnd1 = offsetEnd.clone().sub(bracketDir.clone().multiplyScalar(extensionLength / 2));
-            const bracketEnd2 = offsetEnd.clone().add(bracketDir.clone().multiplyScalar(extensionLength / 2));
-            this._addThickLines(group, bracketEnd1, bracketEnd2, bracketMaterial, lineMidPoint, offsetStart, offsetEnd);
-        }
-        // DEVELOPMENT_VALIDATOR_IGNORE_END
-
-        // Add 3D text label at the midpoint of the dashed line
-        const labelPosition = offsetStart.clone().add(offsetEnd).multiplyScalar(0.5);
-        const label = this.create3DLabel(this.formatMeasurementWithUnit(distance), labelPosition);
-        this.currentLabelSprite = label;
-        group.add(label);
-
-        // Add to scene
-        this.scene.add(group);
-        this.measurementVisuals = group;
-
-        this.currentMeasurement = { startPoint, endPoint, distance, type: 'distance' };
-    }
-
-    /**
-     * Create 3D text label (using CSS2DRenderer would be better, but using sprite for now)
-     */
-    create3DLabel(text, position) {
-        // Create canvas for text - compact with minimal padding
-        const canvas = document.createElement('canvas');
-        const context = canvas.getContext('2d');
-        canvas.width = 42;  // Tighter width
-        canvas.height = 24; // Tighter height
-
-        // Draw rounded rectangle background with minimal padding
-        const paddingX = 1.5; // Minimal horizontal padding
-        const paddingY = 6;   // Moderate vertical padding
-        context.fillStyle = this.labelColor;
-        context.beginPath();
-        context.roundRect(0, 0, canvas.width, canvas.height, 3);
-        context.fill();
-
-        // Draw text - normal weight, smaller font
-        context.font = '14px Arial, sans-serif';
-        context.fillStyle = 'white';
-        context.textAlign = 'center';
-        context.textBaseline = 'middle';
-        context.fillText(text, canvas.width / 2, canvas.height / 2);
-
-        // Create sprite
-        const texture = new THREE.CanvasTexture(canvas);
-        const spriteMaterial = new THREE.SpriteMaterial({
-            map: texture,
-            sizeAttenuation: false,
-            depthTest: false, // Always render on top
-            transparent: true
-        });
-        const sprite = new THREE.Sprite(spriteMaterial);
-        sprite.position.copy(position);
-        // No offset - position should be exactly where requested
-        sprite.scale.set(0.053, 0.03, 1); // Compact size matching reduced canvas
-        sprite.renderOrder = 1000; // Render after lines
-
-        return sprite;
-    }
-
-    /**
-     * Get a perpendicular vector (for end caps)
-     */
-    getPerpendicularVector(direction) {
-        // Find a vector perpendicular to direction
-        let perpendicular;
-
-        if (Math.abs(direction.y) < 0.9) {
-            perpendicular = new THREE.Vector3(0, 1, 0);
-        } else {
-            perpendicular = new THREE.Vector3(1, 0, 0);
-        }
-
-        return perpendicular.cross(direction).normalize();
-    }
-
-    /**
-     * Format measurement value with unit suffix
-     * @param {number} valueInMeters - Measurement value in internal meters
-     * @returns {string} Formatted string like "1.2m" or "2' 3\""
-     */
-    formatMeasurementWithUnit(valueInMeters) {
-        const unitConverter = window.modlerComponents?.unitConverter;
-
-        if (!unitConverter) {
-            // Fallback to meters with 1 decimal if no converter available
-            return `${valueInMeters.toFixed(1)}m`;
-        }
-
-        const userUnit = unitConverter.userUnit;
-
-        // Handle imperial feet/inches format specially
-        if (userUnit === 'ft' || userUnit === 'in') {
-            // Convert to inches first
-            const totalInches = valueInMeters * unitConverter.conversionFromMeters['in'];
-
-            if (userUnit === 'ft') {
-                // Display as feet and inches (e.g., "2' 3\"")
-                const feet = Math.floor(totalInches / 12);
-                const inches = Math.round(totalInches % 12);
-
-                if (inches === 0) {
-                    return `${feet}'`;
-                } else {
-                    return `${feet}' ${inches}"`;
-                }
-            } else {
-                // Just inches
-                return `${Math.round(totalInches)}"`;
-            }
-        }
-
-        // For metric and other units, use standard formatting
-        const convertedValue = unitConverter.convertFromInternal(valueInMeters);
-        const precision = unitConverter.unitPrecision[userUnit] || 1;
-
-        return `${convertedValue.toFixed(precision)}${userUnit}`;
-    }
-
-    /**
-     * Clear current measurement visualization
-     */
-    clearMeasurement() {
-        if (this.measurementVisuals) {
-            this.scene.remove(this.measurementVisuals);
-
-            // Dispose geometries and materials
-            this.measurementVisuals.traverse(child => {
-                if (child.geometry) child.geometry.dispose();
-                if (child.material) {
-                    if (child.material.map) child.material.map.dispose();
-                    child.material.dispose();
-                }
-            });
-
-            this.measurementVisuals = null;
-        }
-
-        this.currentMeasurement = null;
-        this.currentLabelSprite = null;
-    }
-
-    /**
-     * Check if mouse NDC coordinates are near the measurement label
-     * @param {THREE.Vector2} mouse - Normalized device coordinates (-1 to 1)
-     * @returns {boolean}
+     * Delegate to visuals for external callers (e.g., measure-tool-adapter)
      */
     isMouseNearLabel(mouse) {
-        if (!this.currentLabelSprite || !this.camera || !this.renderer) return false;
-
-        const projected = this.currentLabelSprite.position.clone().project(this.camera);
-
-        // Threshold in NDC space, roughly matching sprite visual size (scale 0.053 x 0.03)
-        const dx = Math.abs(mouse.x - projected.x);
-        const dy = Math.abs(mouse.y - projected.y);
-        return dx < 0.04 && dy < 0.025;
+        return this.visuals.isMouseNearLabel(mouse);
     }
 
     /**
@@ -991,7 +534,7 @@ class MeasurementTool {
      */
     destroy() {
         this.lastUpdateTime = 0;
-        this.clearMeasurement();
+        this.visuals.clearMeasurement();
         this.isActive = false;
     }
 }
