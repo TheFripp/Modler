@@ -500,10 +500,11 @@ class VisualEffects {
         // Build current children snapshot (IDs, positions, sizes)
         const currentChildrenState = [];
         mesh.children.forEach(child => {
-            // Skip support meshes (wireframes, highlights, padding viz itself)
-            if (child.name && (child.name.includes('wireframe') ||
-                              child.name.includes('highlight') ||
-                              child.name === 'paddingVisualization')) {
+            // Skip support meshes and non-object children
+            if (child.userData.supportMeshType ||
+                child.userData.isCellWireframe ||
+                child.name === 'paddingVisualization' ||
+                child.name === 'cellWireframes') {
                 return;
             }
 

@@ -975,15 +975,16 @@ class MaterialManager {
     /**
      * Create padding visualization material
      * @param {Object} options - Material options
-     * @returns {THREE.MeshBasicMaterial} Padding visualization material
+     * @returns {THREE.LineBasicMaterial} Padding visualization material
      */
     createPaddingVisualizationMaterial(options = {}) {
         // Build configuration
         const config = {
             color: options.color || '#ff9900',
             opacity: options.opacity !== undefined ? options.opacity : 0.3,
-            wireframe: true,
             transparent: true,
+            depthTest: true,
+            depthWrite: false,
             ...options
         };
 
@@ -1004,11 +1005,12 @@ class MaterialManager {
         } else {
             colorHex = 0xffffff; // Default to white
         }
-        const material = new THREE.MeshBasicMaterial({
+        const material = new THREE.LineBasicMaterial({
             color: colorHex,
             transparent: config.transparent,
             opacity: config.opacity,
-            wireframe: config.wireframe
+            depthTest: config.depthTest,
+            depthWrite: config.depthWrite
         });
 
         return this.cacheMaterial(key, material, this.materialTypes.PADDING_VISUALIZATION);
