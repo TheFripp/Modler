@@ -4,6 +4,8 @@
 	import SectionHeader from '$lib/components/ui/section-header.svelte';
 	import InlineInput from '$lib/components/ui/inline-input.svelte';
 	import ColorInput from '$lib/components/ui/color-input.svelte';
+	import ButtonGroup from '$lib/components/ui/button-group.svelte';
+	import SelectInput from '$lib/components/ui/select-input.svelte';
 
 	// Settings state
 	let wireframeLineWidth = 2;
@@ -200,8 +202,8 @@
 				objectId={null}
 				property="visual.wireframe.lineWidth"
 				min={1}
-				max={10}
-				step={0.5}
+				max={8}
+				step={1}
 				suffix="px"
 				onchange={(event) => {
 					const numValue = parseFloat((event.target as HTMLInputElement).value);
@@ -297,8 +299,8 @@
 				objectId={null}
 				property="visual.gizmo.lineWidth"
 				min={1}
-				max={10}
-				step={0.5}
+				max={8}
+				step={1}
 				suffix="px"
 				onchange={(event) => {
 					const numValue = parseFloat((event.target as HTMLInputElement).value);

@@ -69,7 +69,7 @@ const CONFIGURATION_SCHEMA = {
         default: 2,
         constraint: CONSTRAINT_TYPES.MIN_MAX,
         min: 1,
-        max: 10,
+        max: 8,
         description: 'Global wireframe line width for all wireframe types'
     },
 
@@ -86,7 +86,7 @@ const CONFIGURATION_SCHEMA = {
         default: 2,
         constraint: CONSTRAINT_TYPES.MIN_MAX,
         min: 1,
-        max: 10,
+        max: 8,
         description: 'Selection wireframe line width'
     },
 
@@ -246,7 +246,7 @@ const CONFIGURATION_SCHEMA = {
         default: 2,
         constraint: CONSTRAINT_TYPES.MIN_MAX,
         min: 1,
-        max: 10,
+        max: 8,
         description: 'Tool gizmo line width in screen pixels'
     },
 

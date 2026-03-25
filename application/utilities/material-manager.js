@@ -501,6 +501,12 @@ class MaterialManager {
         // LessEqualDepth: wireframe edges are coplanar with geometry faces
         material.depthFunc = THREE.LessEqualDepth;
 
+        // Push wireframe lines in front of coplanar geometry faces.
+        // LineMaterial renders as triangles so polygonOffset applies.
+        material.polygonOffset = true;
+        material.polygonOffsetFactor = -1;
+        material.polygonOffsetUnits = -4;
+
         // Set resolution from current canvas
         const renderer = window.modlerComponents?.sceneFoundation?.renderer;
         if (renderer) {
@@ -554,6 +560,12 @@ class MaterialManager {
 
         // LessEqualDepth: wireframe edges are coplanar with geometry faces
         material.depthFunc = THREE.LessEqualDepth;
+
+        // Push wireframe lines in front of coplanar geometry faces.
+        // LineMaterial renders as triangles so polygonOffset applies.
+        material.polygonOffset = true;
+        material.polygonOffsetFactor = -1;
+        material.polygonOffsetUnits = -4;
 
         const renderer = window.modlerComponents?.sceneFoundation?.renderer;
         if (renderer) {
@@ -906,8 +918,13 @@ class MaterialManager {
             transparent: config.transparent,
             opacity: config.opacity,
             linewidth: config.lineWidth,
+            depthTest: true,
+            depthWrite: false,
             clippingPlanes: [] // Disable clipping - always render wireframes
         });
+
+        // LessEqualDepth: wireframe edges are coplanar with geometry faces
+        material.depthFunc = THREE.LessEqualDepth;
 
         return this.cacheMaterial(key, material, this.materialTypes.CAD_WIREFRAME);
     }
