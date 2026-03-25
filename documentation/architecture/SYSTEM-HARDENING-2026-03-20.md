@@ -85,6 +85,47 @@ Removed `toggleFillProperty()` (66 lines) — dead method referencing undefined 
 
 **Fix**: When a command includes an optional `requestId`, CommandRouter sends a `command-response` message back to the source window with `{ requestId, success, error }`. Backward compatible — commands without `requestId` work unchanged. Covers success, handler error, and unknown action cases.
 
+## Tier 3: Hardening Pass (2026-03-24)
+
+### 3.1 Correctness Fixes
+
+**SceneController fallback path `||` → `??`** (`scene/scene-controller.js`):
+Position/rotation/scale defaults in the non-TransformationManager fallback used `||` which treats `0` as falsy. Setting any axis to exactly 0 would silently keep the old value. Fixed to `??` (nullish coalescing).
+
+**`autoLayout.enabled` check removed** (`scene/scene-layout-manager.js`):
+Last remaining `autoLayout.enabled` runtime check in hug mode replaced with `autoLayout?.direction`. Method is only reached when containerMode is already `'hug'`, so the enabled check was redundant and violated the "containerMode is sole authority" principle.
+
+**Stale position cache write removed** (`scene/scene-layout-manager.js`):
+`applyLayoutPositionsAndSizes()` was writing `obj.position = {...}` after already setting `obj.mesh.position`. The mesh position is the only authority; the stale cache write created false confidence.
+
+**`_changedProperties` accumulation leak** (`core/object-state-manager.js`):
+`_changedProperties` Set on objects was never cleared after propagation, causing stale properties to pollute `determineEventType()` on subsequent unrelated updates (e.g., a prior `autoLayout.gap` change would make a position-only update emit HIERARCHY instead of TRANSFORM). Now cleared at end of `propagateChanges()`.
+
+### 3.2 Performance Improvements
+
+**Eliminated redundant second layout pass** (`scene/scene-layout-manager.js`):
+After container resize, a defensive second `calculateLayout()` call re-applied positions "in case geometry was clamped." Traced through the chain — geometry factories produce exact requested sizes with no clamping. The second pass always produced identical results. Removed.
+
+**Hug child repositioning clone removal** (`scene/scene-layout-manager.js`):
+Hug container recentering called `sceneController.updateObject()` with `.clone()` per child. The mesh position was already set; passing the Vector3 directly avoids N allocations.
+
+**refreshSelectionUI short-circuit** (`core/object-state-manager.js`):
+Previously rebuilt `buildObjectStructure()` for ALL selected objects when any one changed. Now caches structures per selected object and only rebuilds for objects in the `changedItems` set. Cache invalidated on selection change.
+
+### 3.3 Simplification
+
+**Consistent `_layoutInProgress` guards** (`scene/scene-layout-manager.js`):
+All three modes (layout, hug, manual) now use identical save/restore pattern for the re-entrancy guard. Previously hug mode rejected re-entrant calls and manual mode had no guard.
+
+**Grid color method deduplication** (`scene/scene-controller.js`):
+`updateGridMainColor()` and `updateGridSubColor()` were identical 25-line methods differing only in loop offset. Extracted shared `_updateGridColor(color, startIndex)` helper.
+
+**Error-isolated lifecycle cleanup** (`scene/scene-lifecycle-manager.js`):
+8 sequential cleanup steps in `removeObject()` now individually wrapped in try/catch. Previously a failure in any step (e.g., visualization cleanup) would prevent subsequent steps (geometry disposal, registry removal) from running.
+
+**Shared ancestor-chain walker** (`scene/scene-hierarchy-manager.js`):
+`isDescendantContainer()` and `getContainerNestingDepth()` both walked the ancestor chain with identical cycle-detection Sets. Extracted `_walkAncestorChain(startId, callback)` helper.
+
 ## Architecture Impact
 
 - **No new dependencies** added
@@ -92,3 +133,4 @@ Removed `toggleFillProperty()` (66 lines) — dead method referencing undefined 
 - **66 lines removed** (dead code), ~80 lines added (caching, guards, migration infrastructure)
 - **Validation is now enforced** for container mode flags (was convention-only)
 - **Migration path exists** for future format changes
+- **Tier 3**: 5 files changed, 166 insertions, 199 deletions (net -33 lines)

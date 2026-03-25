@@ -67,6 +67,7 @@ class SceneLifecycleManager {
 - `isDescendantOf(childId, ancestorId)` - Circular reference detection
 - `getRootObjects()` - Get scene-level objects
 - `getObjectDepth(objectId)` - Calculate nesting depth
+- `_walkAncestorChain(startId, callback)` - Shared ancestor traversal with cycle detection
 
 **Data Access**:
 - Shared: `objects` Map (read/write)
@@ -78,6 +79,7 @@ class SceneLifecycleManager {
 - Maintains bidirectional relationships (parent → children, child → parent)
 - Updates `childrenOrder` arrays for container layout
 - Handles root-level object tracking separately
+- `isDescendantContainer()` and `getContainerNestingDepth()` share `_walkAncestorChain()` for cycle-safe traversal
 
 ---
 
@@ -97,7 +99,7 @@ class SceneLifecycleManager {
 **Data Access**:
 - Shared: `objects` Map (read-only for queries, write via SceneController)
 - References: `sceneController` for state updates
-- Own: None (stateless layout calculations)
+- Own: `_layoutInProgress` (re-entrancy guard)
 
 **Integration Points**:
 - LayoutEngine: Delegates flex-box calculations
@@ -109,6 +111,8 @@ class SceneLifecycleManager {
 - Handles layout propagation to parent containers
 - Preserves push operation context for proper undo/redo
 - Updates `calculatedGap` for space-between layouts
+- All three modes (layout, hug, manual) use consistent save/restore `_layoutInProgress` guard for safe nested container updates
+- Layout mode uses single-pass calculation — no redundant re-pass after container resize (geometry factories produce exact requested sizes)
 
 ---
 
@@ -145,6 +149,7 @@ class SceneLifecycleManager {
 - Implements retry logic for ObjectStateManager sync (3 attempts)
 - Manages geometry/material disposal for cleanup
 - Emits lifecycle events for UI updates
+- Cleanup steps are individually error-isolated (try/catch per step) to prevent partial cleanup on failure
 
 ---
 
