@@ -8,6 +8,13 @@
 	import YardPanel from '$lib/components/YardPanel.svelte';
 	import MaterialsPanel from '$lib/components/MaterialsPanel.svelte';
 	import { showAddToYardDialog, addToYardObjectData } from '$lib/stores/yard';
+	import TabBar from '$lib/components/ui/tab-bar.svelte';
+
+	const mainTabs = [
+		{ id: 'objects', label: 'Objects' },
+		{ id: 'yard', label: 'Yard' },
+		{ id: 'materials', label: 'Materials' }
+	];
 
 	// Tab state
 	let activeTab: 'objects' | 'yard' | 'materials' | 'files' | 'settings' = 'objects';
@@ -199,35 +206,7 @@
 	</div>
 
 	<!-- Main Tabs: Objects, Yard, Materials -->
-	<div class="flex border-b border-[#2E2E2E] shrink-0">
-		<button
-			type="button"
-			onclick={() => (activeTab = 'objects')}
-			class="flex-1 px-6 py-6 modler-section-title transition-colors {activeTab === 'objects'
-				? 'text-foreground border-b-2 border-blue-500'
-				: 'text-foreground/60 hover:text-foreground/80'}"
-		>
-			Objects
-		</button>
-		<button
-			type="button"
-			onclick={() => (activeTab = 'yard')}
-			class="flex-1 px-6 py-6 modler-section-title transition-colors {activeTab === 'yard'
-				? 'text-foreground border-b-2 border-blue-500'
-				: 'text-foreground/60 hover:text-foreground/80'}"
-		>
-			Yard
-		</button>
-		<button
-			type="button"
-			onclick={() => (activeTab = 'materials')}
-			class="flex-1 px-6 py-6 modler-section-title transition-colors {activeTab === 'materials'
-				? 'text-foreground border-b-2 border-blue-500'
-				: 'text-foreground/60 hover:text-foreground/80'}"
-		>
-			Materials
-		</button>
-	</div>
+	<TabBar tabs={mainTabs} {activeTab} onTabChange={(id) => (activeTab = id as typeof activeTab)} />
 
 	<!-- Tab Content -->
 	<div class="flex-1 overflow-hidden">

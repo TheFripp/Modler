@@ -59,6 +59,13 @@
 	$: unitSystem = ['in', 'ft', 'yd'].includes(currentUnit) ? 'imperial' : 'metric';
 	$: availableUnits = unitSystems[unitSystem as keyof typeof unitSystems];
 
+	// Helper to send messages to parent window
+	function sendToParent(type: string, settings: Record<string, any>) {
+		if (window.parent && window.parent !== window) {
+			window.parent.postMessage({ type, settings }, '*');
+		}
+	}
+
 	function updateVisualSettings(category: 'object' | 'container', property: string, value: any) {
 		visualSettings[category][property] = value;
 
@@ -81,17 +88,12 @@
 		}
 
 		const actualValue = (property === 'opacity' || property === 'faceHighlightOpacity') ? value / 100 : value;
-
-		if (window.parent && window.parent !== window) {
-			window.parent.postMessage({ type: 'visual-settings-changed', settings: { [configPath]: actualValue } }, '*');
-		}
+		sendToParent('visual-settings-changed', { [configPath]: actualValue });
 	}
 
 	function updateWireframeLineWidth(value: number) {
 		wireframeLineWidth = value;
-		if (window.parent && window.parent !== window) {
-			window.parent.postMessage({ type: 'visual-settings-changed', settings: { 'visual.wireframe.lineWidth': value } }, '*');
-		}
+		sendToParent('visual-settings-changed', { 'visual.wireframe.lineWidth': value });
 	}
 
 	function selectSystem(system: string) {
@@ -101,36 +103,23 @@
 
 	function selectUnit(unit: string) {
 		currentUnit = unit;
-
-		if (window.parent && window.parent !== window) {
-			window.parent.postMessage({ type: 'unit-settings-changed', settings: { 'unit.current': unit } }, '*');
-		}
+		sendToParent('unit-settings-changed', { 'unit.current': unit });
 	}
 
 	function updateSceneSettings(property: string, value: any) {
 		sceneSettings[property] = value;
-		const configPath = `scene.${property}`;
-
-		if (window.parent && window.parent !== window) {
-			window.parent.postMessage({ type: 'scene-settings-changed', settings: { [configPath]: value } }, '*');
-		}
+		sendToParent('scene-settings-changed', { [`scene.${property}`]: value });
 	}
 
 	function updateGizmoSettings(property: string, value: any) {
 		gizmoSettings[property] = value;
-		const configPath = `visual.gizmo.${property}`;
-		if (window.parent && window.parent !== window) {
-			window.parent.postMessage({ type: 'visual-settings-changed', settings: { [configPath]: value } }, '*');
-		}
+		sendToParent('visual-settings-changed', { [`visual.gizmo.${property}`]: value });
 	}
 
 	function updateToolSettings(property: string, value: any) {
 		toolSettings[property] = value;
 		const configPath = `visual.measurement.${property === 'measurementColor' ? 'color' : property}`;
-
-		if (window.parent && window.parent !== window) {
-			window.parent.postMessage({ type: 'visual-settings-changed', settings: { [configPath]: value } }, '*');
-		}
+		sendToParent('visual-settings-changed', { [configPath]: value });
 	}
 
 	function handleSettingsResponse(event: MessageEvent) {
@@ -346,27 +335,23 @@
 
 			<SectionHeader label="Units" align="left" class="pt-2" />
 			<!-- System toggle -->
-			<div class="flex h-8 rounded-md overflow-hidden border border-[#2E2E2E]/50">
-				<button
-					class="flex-1 text-xs transition-colors {unitSystem === 'metric' ? 'bg-[#3a3a3a] text-white' : 'bg-[#212121]/50 text-[#888]'}"
-					onclick={() => selectSystem('metric')}
-				>Metric</button>
-				<button
-					class="flex-1 text-xs transition-colors {unitSystem === 'imperial' ? 'bg-[#3a3a3a] text-white' : 'bg-[#212121]/50 text-[#888]'}"
-					onclick={() => selectSystem('imperial')}
-				>Imperial</button>
-			</div>
+			<ButtonGroup
+				options={[
+					{ value: 'metric', label: 'Metric' },
+					{ value: 'imperial', label: 'Imperial' }
+				]}
+				value={unitSystem}
+				onSelect={selectSystem}
+				columns={2}
+				activeClass="bg-[#3a3a3a] text-white border-[#3a3a3a]"
+				inactiveClass="bg-[#212121]/50 text-[#888] border-[#2E2E2E]/50"
+			/>
 			<!-- Unit selector within system -->
-			<select
-				bind:value={currentUnit}
-				onchange={() => selectUnit(currentUnit)}
-				class="w-full h-8 px-3 pr-8 bg-[#212121]/50 border border-[#2E2E2E]/50 rounded-md text-xs text-foreground focus:outline-none focus:border-[#6b7280] transition-colors appearance-none"
-				style="background-image: url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20width%3D%2210%22%20height%3D%225%22%20viewBox%3D%220%200%2010%205%22%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%3E%3Cpath%20fill%3D%22%23999%22%20d%3D%22M0%200l5%205%205-5z%22/%3E%3C/svg%3E'); background-repeat: no-repeat; background-position: right 0.75rem center; background-size: 8px 4px;"
-			>
-				{#each availableUnits as unit}
-					<option value={unit.value}>{unit.label}</option>
-				{/each}
-			</select>
+			<SelectInput
+				options={availableUnits}
+				value={currentUnit}
+				onSelect={selectUnit}
+			/>
 		</div>
 	</PropertyGroup>
 </div>

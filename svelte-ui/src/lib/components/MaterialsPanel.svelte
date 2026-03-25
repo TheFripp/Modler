@@ -1,9 +1,10 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { ChevronDown, ChevronRight } from 'lucide-svelte';
 	import { yardMaterialsList, requestMaterialsList } from '$lib/stores/yard';
 	import type { MaterialsListItem } from '$lib/stores/yard';
 	import { toDisplayValue, currentUnit } from '$lib/stores/units';
+	import CollapsibleCategory from '$lib/components/ui/collapsible-category.svelte';
+	import EmptyState from '$lib/components/ui/empty-state.svelte';
 
 	let collapsedCategories: Record<string, boolean> = $state({});
 
@@ -35,177 +36,44 @@
 	let unit = $derived($currentUnit);
 </script>
 
-<div class="materials-panel">
+<div class="flex flex-col h-full overflow-hidden">
 	{#if $yardMaterialsList.length > 0}
 		<!-- Summary -->
-		<div class="materials-summary">
-			<span class="materials-summary-label">Total items</span>
-			<span class="materials-summary-count">{totalCount}</span>
+		<div class="flex items-center justify-between px-3.5 py-2.5 border-b border-[#2E2E2E]">
+			<span class="text-[11px] text-[#999] uppercase tracking-wide font-semibold">Total items</span>
+			<span class="text-[13px] text-[#e0e0e0] font-semibold">{totalCount}</span>
 		</div>
 
 		<!-- Materials list grouped by category -->
-		<div class="materials-list">
+		<div class="flex-1 overflow-y-auto py-1">
 			{#each Object.entries(grouped) as [category, items]}
-				<div class="materials-category">
-					<button
-						type="button"
-						class="materials-category-header"
-						onclick={() => toggleCategory(category)}
-					>
-						{#if collapsedCategories[category]}
-							<ChevronRight size={14} />
-						{:else}
-							<ChevronDown size={14} />
-						{/if}
-						<span class="materials-category-name">{category}</span>
-						<span class="materials-category-count">{items.reduce((s, i) => s + i.count, 0)}</span>
-					</button>
-
-					{#if !collapsedCategories[category]}
-						<div class="materials-items">
-							{#each items as item (item.yardItemId)}
-								<div class="materials-item">
-									<div class="materials-item-info">
-										<span class="materials-item-name">{item.name}</span>
-										<span class="materials-item-dims">
-											{formatDim(item.dimensions.x)} x {formatDim(item.dimensions.y)} x {formatDim(item.dimensions.z)}
-										</span>
-									</div>
-									<span class="materials-item-count">x{item.count}</span>
+				<CollapsibleCategory
+					title={category}
+					count={items.reduce((s, i) => s + i.count, 0)}
+					collapsed={collapsedCategories[category] ?? false}
+					onToggle={() => toggleCategory(category)}
+					class="mb-0.5"
+				>
+					<div class="flex flex-col gap-0.5 px-2.5 pl-[22px] py-0.5">
+						{#each items as item (item.yardItemId)}
+							<div class="flex items-center justify-between p-1.5 px-2 bg-[#1e1e1e] rounded border border-[#2a2a2a]">
+								<div class="flex flex-col gap-0.5 min-w-0">
+									<span class="text-[11px] text-[#e0e0e0] font-medium">{item.name}</span>
+									<span class="text-[10px] text-[#666]">
+										{formatDim(item.dimensions.x)} x {formatDim(item.dimensions.z)} x {formatDim(item.dimensions.y)}
+									</span>
 								</div>
-							{/each}
-						</div>
-					{/if}
-				</div>
+								<span class="text-[13px] text-[#9b59b6] font-bold shrink-0 ml-2">x{item.count}</span>
+							</div>
+						{/each}
+					</div>
+				</CollapsibleCategory>
 			{/each}
 		</div>
 	{:else}
-		<div class="materials-empty">
-			No yard materials in scene.
+		<EmptyState message="No yard materials in scene.">
 			<br /><br />
 			Place items from the Yard tab to track materials used.
-		</div>
+		</EmptyState>
 	{/if}
 </div>
-
-<style>
-	.materials-panel {
-		display: flex;
-		flex-direction: column;
-		height: 100%;
-		overflow: hidden;
-	}
-
-	.materials-summary {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		padding: 10px 14px;
-		border-bottom: 1px solid #2e2e2e;
-	}
-
-	.materials-summary-label {
-		font-size: 11px;
-		color: #999;
-		text-transform: uppercase;
-		letter-spacing: 0.5px;
-		font-weight: 600;
-	}
-
-	.materials-summary-count {
-		font-size: 13px;
-		color: #e0e0e0;
-		font-weight: 600;
-	}
-
-	.materials-list {
-		flex: 1;
-		overflow-y: auto;
-		padding: 4px 0;
-	}
-
-	.materials-category {
-		margin-bottom: 2px;
-	}
-
-	.materials-category-header {
-		display: flex;
-		align-items: center;
-		gap: 4px;
-		width: 100%;
-		padding: 6px 10px;
-		background: none;
-		border: none;
-		color: #ccc;
-		font-size: 11px;
-		font-weight: 600;
-		text-transform: uppercase;
-		letter-spacing: 0.5px;
-		cursor: pointer;
-		text-align: left;
-	}
-	.materials-category-header:hover {
-		color: #fff;
-	}
-
-	.materials-category-name {
-		flex: 1;
-	}
-
-	.materials-category-count {
-		font-size: 10px;
-		color: #555;
-		font-weight: 400;
-	}
-
-	.materials-items {
-		display: flex;
-		flex-direction: column;
-		gap: 2px;
-		padding: 2px 10px 2px 22px;
-	}
-
-	.materials-item {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		padding: 6px 8px;
-		background: #1e1e1e;
-		border-radius: 3px;
-		border: 1px solid #2a2a2a;
-	}
-
-	.materials-item-info {
-		display: flex;
-		flex-direction: column;
-		gap: 2px;
-		min-width: 0;
-	}
-
-	.materials-item-name {
-		font-size: 11px;
-		color: #e0e0e0;
-		font-weight: 500;
-	}
-
-	.materials-item-dims {
-		font-size: 10px;
-		color: #666;
-	}
-
-	.materials-item-count {
-		font-size: 13px;
-		color: #9b59b6;
-		font-weight: 700;
-		flex-shrink: 0;
-		margin-left: 8px;
-	}
-
-	.materials-empty {
-		padding: 20px;
-		text-align: center;
-		color: #555;
-		font-size: 11px;
-		line-height: 1.5;
-	}
-</style>
