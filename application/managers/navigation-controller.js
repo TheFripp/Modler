@@ -349,28 +349,6 @@ class NavigationController {
         };
     }
 
-    // ====== KEYBOARD NAVIGATION ======
-
-    /**
-     * Handle keyboard shortcuts for navigation
-     * @param {KeyboardEvent} event - Keyboard event
-     * @returns {boolean} True if key was handled
-     */
-    handleKeyDown(event) {
-        if (!this.initialized) return false;
-
-        switch (event.code) {
-            case 'Escape':
-                // Navigate up one level in container hierarchy
-                if (this.currentContainer) {
-                    this.navigateUp();
-                    return true;
-                }
-                break;
-        }
-
-        return false;
-    }
 }
 
 // Export for use in main application

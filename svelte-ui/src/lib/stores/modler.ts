@@ -11,6 +11,7 @@ export const hoveredObjectId: Writable<number | null> = writable(null);
 export const objectHierarchy: Writable<ObjectData[]> = writable([]);
 
 export const containerContext: Writable<ContainerContext | null> = writable(null);
+export const contextDisplayObject: Writable<ObjectData | null> = writable(null);
 export const toolState: Writable<ToolState> = writable({
 	activeTool: 'select',
 	snapEnabled: false
@@ -75,9 +76,11 @@ export const selectedContainer = derived(selectedObject, ($selectedObject) =>
 	$selectedObject?.isContainer ? $selectedObject : null
 );
 
-// Current display object (single selection or multi-selection merged object)
-export const displayObject = derived([selectedObject, multiSelection], ([$selectedObject, $multiSelection]) =>
-	$multiSelection || $selectedObject
+// Current display object: selection takes priority, context container is fallback
+export const displayObject = derived(
+	[selectedObject, multiSelection, contextDisplayObject],
+	([$selectedObject, $multiSelection, $contextDisplayObject]) =>
+		$multiSelection || $selectedObject || $contextDisplayObject
 );
 
 // Utility function to check if a property has mixed values across selected objects
@@ -184,6 +187,20 @@ export function getFieldStates(object: ObjectData | null): FieldStates {
 				};
 			}
 		});
+	}
+
+	// Yard template - fixed dimensions cannot be edited
+	if (object.yardFixed) {
+		const axes = ['x', 'y', 'z'] as const;
+		for (const axis of axes) {
+			if (object.yardFixed[axis]) {
+				states[`dimensions.${axis}`] = {
+					disabled: true,
+					reason: 'yard-fixed',
+					tooltip: 'Fixed by Yard template'
+				};
+			}
+		}
 	}
 
 	// Multi-selection - some fields might be disabled for mixed types
@@ -369,12 +386,17 @@ export function addObjectToHierarchy(objectData: any, rootChildrenOrder?: any[])
 	const current = get(objectHierarchy) as any;
 	const isNewFormat = current && !Array.isArray(current) && current.objects;
 	if (isNewFormat) {
+		// Dedup: skip if object with same ID already exists
+		const exists = current.objects.some((obj: any) => obj.id === objectData.id);
+		if (exists) return;
 		(objectHierarchy as any).set({
 			objects: [...current.objects, objectData],
 			rootChildrenOrder: rootChildrenOrder || current.rootChildrenOrder || []
 		});
 	} else {
 		const arr = Array.isArray(current) ? current : [];
+		// Dedup: skip if object with same ID already exists
+		if (arr.some((obj: any) => obj.id === objectData.id)) return;
 		(objectHierarchy as any).set([...arr, objectData]);
 	}
 }
@@ -398,6 +420,25 @@ export function removeObjectFromHierarchy(objectId: any) {
 // Sync container context from Three.js
 export function syncContainerContextFromThreeJS(context: ContainerContext | null) {
 	containerContext.set(context);
+	if (!context) {
+		contextDisplayObject.set(null);
+	}
+}
+
+// Sync context container display data (full object data for PropertyPanel fallback)
+export function syncContextDisplayFromThreeJS(objectData: ObjectData | null) {
+	contextDisplayObject.set(objectData ? { ...objectData } : null);
+}
+
+// Batch all selection-related store updates from a single selection-changed event
+export function syncSelectionEventFromThreeJS(data: {
+	selectedObjects: ObjectData[],
+	containerContext: ContainerContext | null,
+	contextContainerData: ObjectData | null
+}) {
+	syncSelectionFromThreeJS(data.selectedObjects);
+	syncContainerContextFromThreeJS(data.containerContext);
+	syncContextDisplayFromThreeJS(data.contextContainerData);
 }
 
 // Sync hover state from Three.js (bidirectional: 3D hover highlights tree item)

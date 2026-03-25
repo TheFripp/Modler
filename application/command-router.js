@@ -132,7 +132,6 @@ class CommandRouter {
         this.handlers.set('select-object', this.handleSelectObject.bind(this));
         this.handlers.set('object-select', this.handleSelectObject.bind(this)); // Alias
         this.handlers.set('deselect-all', this.handleDeselectAll.bind(this));
-        this.handlers.set('multi-select', this.handleMultiSelect.bind(this));
         this.handlers.set('object-hover', this.handleObjectHover.bind(this));
 
         // ═══════════════════════════════════════════════════════════
@@ -744,30 +743,10 @@ class CommandRouter {
             return;
         }
 
-        // Clear selection (SelectionController handles visualization and events)
+        // clearSelection() already calls notifySelectionChange() internally
         this.selectionController.clearSelection();
-        this.selectionController.notifySelectionChange();
     }
 
-    handleMultiSelect(data) {
-        const { objectIds } = data;
-
-        if (!this.selectionController || !this.sceneController) {
-            console.error('CommandRouter: SelectionController or SceneController not available');
-            return;
-        }
-
-        // Clear existing selection
-        this.selectionController.clearSelection();
-
-        // Select all objects
-        objectIds.forEach(objectId => {
-            const obj = this.sceneController.getObject(objectId);
-            if (obj && obj.mesh) {
-                this.selectionController.select(obj.mesh);
-            }
-        });
-    }
 
     handleReorderChildren(data) {
         const { parentId, childId, newIndex, childrenOrder, objectId, targetId, position } = data;

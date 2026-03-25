@@ -264,9 +264,10 @@ class SimpleCommunication {
 
         if (changeData.operation === 'created') {
             this._cachedHierarchy = null;
-            const basicData = this.dataExtractor.extractBasicData(
-                this.sceneController.getObject(objectId)
-            );
+            // Skip temporary objects (e.g., during box creation drag phase)
+            const sceneObject = this.sceneController.getObject(objectId);
+            if (!sceneObject || sceneObject.isTemporary) return;
+            const basicData = this.dataExtractor.extractBasicData(sceneObject);
             if (basicData) {
                 // Get current root ordering for the UI to place this correctly
                 const hierarchyManager = this.sceneController.getHierarchyManager();
@@ -335,13 +336,20 @@ class SimpleCommunication {
             .map(id => this.getCompleteObjectData(id))
             .filter(Boolean);
 
+        // Full data for context container (PropertyPanel display fallback)
+        const containerContext = event.changeData?.containerContext || null;
+        const contextContainerData = containerContext?.containerId
+            ? this.getCompleteObjectData(containerContext.containerId)
+            : null;
+
         // Send to all UI iframes
         this.sendToAllIframes({
             type: 'selection-changed',
             data: {
                 selectedObjectIds: selectedObjectIds || [],
                 selectedObjects,
-                containerContext: event.changeData?.containerContext || null
+                containerContext,
+                contextContainerData
             }
         });
     }

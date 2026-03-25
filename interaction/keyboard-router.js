@@ -173,11 +173,13 @@ class KeyboardRouter {
             return;
         }
 
-        // PRIORITY 5: Escape key - clear selection
+        // PRIORITY 5: Escape key - navigate up or clear selection
+        // Delegates to handleEmptySpaceClick which routes through NavigationController:
+        // in container context → navigateUp(), at root → clearSelection()
         if (code === 'Escape') {
             event.preventDefault();
             if (this.selectionController) {
-                this.selectionController.clearSelection();
+                this.selectionController.handleEmptySpaceClick(event);
             }
             return;
         }
@@ -402,14 +404,20 @@ class KeyboardRouter {
             'KeyQ': 'select',
             'KeyW': 'move',
             'KeyE': 'push',
-            'KeyR': 'box-creation',
-            'KeyT': 'tile',
+            'KeyR': 'rotate',
+            'KeyT': 'box-creation',
+            'KeyY': 'tile',
             'KeyM': 'measure'
         };
 
         const toolName = toolMap[code];
         if (toolName) {
-            this.toolController.switchToTool(toolName);
+            // Toggle: if pressing the already-active tool's key, switch back to select
+            if (this.toolController.activeToolName === toolName && toolName !== 'select') {
+                this.toolController.switchToTool('select');
+            } else {
+                this.toolController.switchToTool(toolName);
+            }
             return true;
         }
 

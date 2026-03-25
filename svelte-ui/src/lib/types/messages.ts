@@ -149,11 +149,6 @@ export interface DeselectAllMessage {
 	type: 'deselect-all';
 }
 
-export interface MultiSelectMessage {
-	type: 'multi-select';
-	objectIds: number[];
-}
-
 // ═══════════════════════════════════════════════════════════════
 // HIERARCHY OPERATION MESSAGES
 // ═══════════════════════════════════════════════════════════════
@@ -306,7 +301,6 @@ export type UIToMainMessage =
 	// Selection operations
 	| SelectObjectMessage
 	| DeselectAllMessage
-	| MultiSelectMessage
 	// Hierarchy operations
 	| MoveToContainerMessage
 	| MoveToRootMessage

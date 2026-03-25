@@ -179,7 +179,7 @@ class SelectionController {
         }
     }
 
-    clearSelection() {
+    clearSelection(reason) {
         const objectsToDeselect = Array.from(this.selectedObjects);
 
         // Update visualization for all deselected objects

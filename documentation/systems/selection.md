@@ -31,6 +31,34 @@ All paths go through `resolveSelectionTarget(object, options)` — the single so
 - SimpleCommunication forwards it in `selection-changed` → threejs-bridge → `syncContainerContextFromThreeJS()` → `containerContext` Svelte store
 - ObjectTree uses `$containerContext` for context-aware highlighting
 
+## PropertyPanel Display Target
+
+The PropertyPanel always shows data from the `displayObject` derived store, which uses this priority chain:
+
+```
+displayObject = multiSelection || selectedObject || contextDisplayObject
+```
+
+- **multiSelection**: When 2+ objects selected, a merged object with shared/mixed properties
+- **selectedObject**: When exactly 1 object selected, its full ObjectData
+- **contextDisplayObject**: When nothing is selected but inside a container context, the container's full ObjectData (ensures tile/layout sections show)
+
+### How contextDisplayObject flows:
+1. NavigationController.navigateToContainer() clears selection
+2. SelectionController.notifySelectionChange() emits `object:selection` with `containerContext`
+3. SimpleCommunication.handleSelectionEvent() extracts full container data via `getCompleteObjectData(containerId)`
+4. `selection-changed` postMessage carries `contextContainerData` alongside `selectedObjects` and `containerContext`
+5. threejs-bridge calls `syncSelectionEventFromThreeJS()` which batches all three store updates
+6. PropertyPanel reactively displays tile/layout sections from contextDisplayObject
+
+### Store batching
+`syncSelectionEventFromThreeJS()` in modler.ts groups three store updates into one call:
+- `syncSelectionFromThreeJS(selectedObjects)`
+- `syncContainerContextFromThreeJS(containerContext)`
+- `syncContextDisplayFromThreeJS(contextContainerData)`
+
+This prevents displayObject from recalculating 2-3 times per selection change.
+
 ## Architecture
 
 ### SelectionController

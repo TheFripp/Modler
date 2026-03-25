@@ -2,14 +2,17 @@ import { get } from 'svelte/store';
 import {
 	initializeModlerBridge,
 	syncSelectionFromThreeJS,
+	syncSelectionEventFromThreeJS,
 	syncHierarchyFromThreeJS,
-	syncContainerContextFromThreeJS,
+	syncContextDisplayFromThreeJS,
 	syncHoverFromThreeJS,
 	addObjectToHierarchy,
 	removeObjectFromHierarchy,
 	toolState,
-	selectedObjects
+	selectedObjects,
+	containerContext
 } from '$lib/stores/modler';
+import { syncYardLibrary, syncMaterialsList } from '$lib/stores/yard';
 /**
  * Bridge class to connect Three.js Modler components with Svelte UI
  * Simplified version focusing only on essential functionality
@@ -96,12 +99,12 @@ function setupPostMessageFallback() {
 		// SimpleCommunication: Handle specific message types
 		switch (messageType) {
 			case 'selection-changed':
-				// SimpleCommunication sends complete selected objects data
 				try {
-					if (data && data.selectedObjects) {
-						syncSelectionFromThreeJS(data.selectedObjects);
-					}
-					syncContainerContextFromThreeJS(data?.containerContext || null);
+					syncSelectionEventFromThreeJS({
+						selectedObjects: data?.selectedObjects || [],
+						containerContext: data?.containerContext || null,
+						contextContainerData: data?.contextContainerData || null
+					});
 				} catch (error) {
 					console.error('PostMessage: Error syncing selection:', error);
 				}
@@ -155,6 +158,11 @@ function setupPostMessageFallback() {
 							);
 							syncSelectionFromThreeJS(updatedSelection);
 						}
+						// Refresh context display if changed object is the context container
+						const currentContext = get(containerContext);
+						if (currentContext && currentContext.containerId === data.objectId) {
+							syncContextDisplayFromThreeJS(data.object);
+						}
 					}
 				} catch (error) {
 					console.error('PostMessage: Error syncing object change:', error);
@@ -169,6 +177,10 @@ function setupPostMessageFallback() {
 						let selectionDirty = false;
 						let updatedSelection = [...currentSelection];
 
+						const currentContext = get(containerContext);
+						let contextUpdated = false;
+						let contextData: any = null;
+
 						for (const change of data.changes) {
 							if (change.object) {
 								const idx = updatedSelection.findIndex((obj: any) => obj.id === change.objectId);
@@ -176,11 +188,19 @@ function setupPostMessageFallback() {
 									updatedSelection[idx] = change.object;
 									selectionDirty = true;
 								}
+								// Track context container changes
+								if (currentContext && currentContext.containerId === change.objectId) {
+									contextData = change.object;
+									contextUpdated = true;
+								}
 							}
 						}
 
 						if (selectionDirty) {
 							syncSelectionFromThreeJS(updatedSelection);
+						}
+						if (contextUpdated) {
+							syncContextDisplayFromThreeJS(contextData);
 						}
 					}
 				} catch (error) {
@@ -201,6 +221,27 @@ function setupPostMessageFallback() {
 					}
 				} catch (error) {
 					console.error('PostMessage: Error syncing tool state:', error);
+				}
+				break;
+
+			case 'yard-library-response':
+			case 'yard-library-updated':
+				try {
+					if (data) {
+						syncYardLibrary(data);
+					}
+				} catch (error) {
+					console.error('PostMessage: Error syncing yard library:', error);
+				}
+				break;
+
+			case 'yard-materials-list':
+				try {
+					if (data) {
+						syncMaterialsList(data);
+					}
+				} catch (error) {
+					console.error('PostMessage: Error syncing materials list:', error);
 				}
 				break;
 
@@ -238,9 +279,6 @@ function setupDirectDataSync(components: any) {
 		// Initial sync only
 		syncHierarchyFromSceneController(components.sceneController);
 	}
-
-	// === UI → SCENE: Object Selection Setup ===
-	setupUIToSceneActions(components);
 }
 
 /**
@@ -254,37 +292,6 @@ function syncHierarchyFromSceneController(sceneController: any) {
 	} catch (error) {
 		console.error('❌ Error syncing hierarchy:', error);
 	}
-}
-
-/**
- * Setup UI → Scene action handlers for direct communication
- */
-function setupUIToSceneActions(components: any) {
-	// Make scene selection function globally available for UI
-	(window as any).selectObjectInSceneDirectly = (objectId: string) => {
-			if (!components.sceneController || !components.selectionController) {
-			console.error('❌ Components not available for object selection');
-			return false;
-		}
-
-		try {
-			// Get object from scene
-			const objectData = components.sceneController.getObject(objectId);
-			if (!objectData) {
-				console.error('❌ Object not found:', objectId);
-				return false;
-			}
-
-			// Clear current selection and select the new object
-			components.selectionController.clearSelection();
-			components.selectionController.select(objectData.mesh);
-
-			return true;
-		} catch (error) {
-			console.error('❌ Error selecting object:', error);
-			return false;
-		}
-	};
 }
 
 /**
@@ -313,5 +320,3 @@ export function wrapSelectionInContainer() {
 		window.parent.postMessage({ type: 'wrap-selection-in-container' }, '*');
 	}
 }
-
-
