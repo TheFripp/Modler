@@ -20,7 +20,7 @@ Full 20 principles: see auto-memory `project_guiding_principles.md`
 
 ## Key Architectural Rules
 
-- **`containerMode`** is the sole runtime mode detector (`'manual' | 'layout' | 'hug'`). Read via `getContainerMode(id)` / `isLayoutMode(id)`. Write via `buildContainerModeUpdate(mode)`. NEVER check legacy flags (`autoLayout?.enabled`, `isHug`, `sizingMode`).
+- **`containerMode`** is the sole runtime mode detector (`'manual' | 'layout' | 'hug'`). Read via `getContainerMode(id)` / `isLayoutMode(id)`. Write via `buildContainerModeUpdate(mode)`.
 - **ObjectStateManager** is the single entry point for ALL state changes
 - **SceneController** coordinates geometry — delegates to SceneHierarchyManager, SceneLayoutManager, SceneLifecycleManager. NEVER call these managers directly.
 - **Support meshes**: create once as children, then show/hide only via VisualizationManager
@@ -71,8 +71,7 @@ Full file map & responsibilities: see auto-memory `project_file_responsibilities
 - Bypass ObjectStateManager for state changes
 - Call specialized managers directly — always use ObjectStateManager or SceneController
 - Do layout mode-routing outside SceneLayoutManager — call `sceneController.updateContainer()`
-- Set `isHug`, `sizingMode`, or `layoutMode` directly — use `buildContainerModeUpdate(mode)`
-- Check legacy flags for mode detection — use `containerMode` exclusively
+- Set container mode directly — use `buildContainerModeUpdate(mode)`
 - Use visual transforms instead of CAD geometry
 - Recreate support meshes (show/hide only)
 - Rebuild autoLayout without spreading existing data — always `{ ...displayObject.autoLayout, ...overrides }` to preserve modifiers

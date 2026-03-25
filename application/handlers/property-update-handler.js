@@ -77,8 +77,8 @@ class PropertyUpdateHandler {
             return this.handleContainerLayoutPropertyChange(objectId, property, value);
         }
 
-        // Container mode changes need buildContainerModeUpdate to sync legacy flags
-        if (property === 'containerMode' || property === 'sizingMode') {
+        // Container mode changes route through buildContainerModeUpdate
+        if (property === 'containerMode') {
             return this.handleContainerSizingChange(objectId, property, value);
         }
 
@@ -425,8 +425,8 @@ class PropertyUpdateHandler {
                 return false;
             }
 
-            // Handle container mode changes (accepts both 'sizingMode' and 'containerMode' for backward compat)
-            if (property === 'sizingMode' || property === 'containerMode') {
+            // Handle container mode changes
+            if (property === 'containerMode') {
                 // Get old value for undo — containerMode is the sole authority
                 const oldValue = objectData.containerMode;
 

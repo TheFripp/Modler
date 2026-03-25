@@ -15,7 +15,7 @@
 /**
  * Format version for migration compatibility
  */
-const OBJECT_DATA_FORMAT_VERSION = '1.1.0';
+const OBJECT_DATA_FORMAT_VERSION = '1.2.0';
 
 /**
  * Object type constants — single source of truth for type strings
@@ -66,6 +66,27 @@ const FORMAT_MIGRATIONS = {
                 data.autoLayout.tileMode.sourceObjectId = String(data.autoLayout.tileMode.sourceObjectId);
             }
             data.formatVersion = '1.1.0';
+            return data;
+        }
+    },
+    '1.1.0': {
+        to: '1.2.0',
+        migrate: (data) => {
+            // Derive containerMode from legacy flags if missing
+            if (!data.containerMode && data.isContainer) {
+                if (data.isHug === true) {
+                    data.containerMode = 'hug';
+                } else if (data.autoLayout?.enabled) {
+                    data.containerMode = 'layout';
+                } else {
+                    data.containerMode = 'manual';
+                }
+            }
+            // Remove legacy container mode flags
+            delete data.isHug;
+            delete data.sizingMode;
+            delete data.layoutMode;
+            data.formatVersion = '1.2.0';
             return data;
         }
     }
@@ -122,8 +143,6 @@ const STANDARD_OBJECT_DATA_SCHEMA = {
     // Container properties
     isContainer: 'boolean',
     containerMode: 'string|null', // 'manual' | 'layout' | 'hug' — single source of truth for container mode
-    isHug: 'boolean', // LEGACY: kept for backward compat, derived from containerMode
-    layoutMode: 'string|null', // LEGACY: kept for backward compat, derived from containerMode
     autoLayout: {
         enabled: 'boolean',
         direction: 'string|null',
@@ -426,8 +445,6 @@ function convertFromObjectStateManager(stateData) {
 
         // Container mode — containerMode is the sole authority
         containerMode: stateData.containerMode || null,
-        isHug: (stateData.containerMode || null) === 'hug',
-        sizingMode: stateData.containerMode || null,
         childrenOrder: stateData.childrenOrder || [],
         childIds: stateData.childIds || [],
 
@@ -517,8 +534,7 @@ function ensureStandardFormat(objectData, options = {}) {
         selected: false,
         locked: false,
         visible: true,
-        childIds: [],
-        layoutMode: null
+        childIds: []
     };
 
     // Ensure all required nested objects exist
@@ -541,31 +557,19 @@ function ensureStandardFormat(objectData, options = {}) {
     // CRITICAL FIX: Don't overwrite existing autoLayout with defaults
     // Only create default if autoLayout is truly missing or invalid
     if (!objectData.autoLayout || typeof objectData.autoLayout !== 'object') {
-        objectData.autoLayout = {
-            enabled: false,
-            direction: null,
-            gap: 0,
-            padding: { width: 0, height: 0, depth: 0 }
-        };
+        objectData.autoLayout = createDefaultAutoLayout();
     } else {
-        // Preserve existing autoLayout - ensure it has all required properties
-        if (!objectData.autoLayout.padding || typeof objectData.autoLayout.padding !== 'object') {
-            objectData.autoLayout.padding = { width: 0, height: 0, depth: 0 };
-        }
-        if (!objectData.autoLayout.alignment || typeof objectData.autoLayout.alignment !== 'object') {
-            objectData.autoLayout.alignment = { x: 'center', y: 'center', z: 'center' };
-        }
-        if (typeof objectData.autoLayout.enabled !== 'boolean') {
-            objectData.autoLayout.enabled = false;
-        }
-        if (objectData.autoLayout.direction === undefined) {
-            objectData.autoLayout.direction = null;
-        }
-        if (typeof objectData.autoLayout.gap !== 'number') {
-            objectData.autoLayout.gap = 0;
-        }
-        if (typeof objectData.autoLayout.reversed !== 'boolean') {
-            objectData.autoLayout.reversed = false;
+        // Preserve existing autoLayout - fill in missing properties from canonical defaults
+        const defaults = createDefaultAutoLayout();
+        for (const key of Object.keys(defaults)) {
+            if (key === 'padding' || key === 'alignment') {
+                // Nested objects: ensure they exist with proper shape
+                if (!objectData.autoLayout[key] || typeof objectData.autoLayout[key] !== 'object') {
+                    objectData.autoLayout[key] = defaults[key];
+                }
+            } else if (objectData.autoLayout[key] === undefined) {
+                objectData.autoLayout[key] = defaults[key];
+            }
         }
     }
 
@@ -611,7 +615,6 @@ function createEmptyObjectData(id = null) {
         type: 'object',
         isContainer: false,
         containerMode: null,
-        isHug: false,
 
         position: { x: 0, y: 0, z: 0 },
         rotation: { x: 0, y: 0, z: 0 },
@@ -628,7 +631,6 @@ function createEmptyObjectData(id = null) {
 
         parentContainer: null,
         childIds: [],
-        layoutMode: null,
 
         selected: false,
         locked: false,
@@ -681,9 +683,6 @@ function createObjectMetadata(options = {}) {
         // Container properties - ALWAYS use schema defaults
         isContainer: options.isContainer || false,
         containerMode: options.containerMode || (options.isContainer ? 'hug' : null),
-        // Legacy flags derived from containerMode via buildContainerModeUpdate pattern
-        isHug: (options.containerMode || (options.isContainer ? 'hug' : null)) === 'hug',
-        sizingMode: options.containerMode || (options.isContainer ? 'hug' : null),
         autoLayout: options.autoLayout || createDefaultAutoLayout(), // SCHEMA DEFAULT - never null
         layoutProperties: options.layoutProperties || {
             sizeX: options.sizeX || 'fixed',

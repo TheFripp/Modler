@@ -208,8 +208,6 @@ class ObjectSerializer {
 
             // Container-specific properties
             containerMode: objectData.containerMode,
-            isHug: objectData.isHug, // Legacy
-            layoutMode: objectData.layoutMode, // Legacy
             childrenOrder: objectData.childrenOrder,
 
             // Add parametric and instance data
@@ -332,10 +330,6 @@ class ObjectSerializer {
         // Add container mode
         if (objectData.containerMode) {
             serialized.containerMode = objectData.containerMode;
-        }
-        // Legacy: sizing mode for backward compat
-        if (objectData.sizingMode) {
-            serialized.sizingMode = objectData.sizingMode;
         }
     }
 

@@ -131,7 +131,6 @@ export interface ObjectData {
     // Container properties
     isContainer: boolean;
     containerMode: 'manual' | 'layout' | 'hug' | null;
-    layoutMode: 'manual' | 'grid' | 'stack' | null; // LEGACY
     autoLayout: AutoLayout;
 
     // State flags
@@ -254,7 +253,6 @@ export function createEmptyObjectData(id?: string): ObjectData {
 
         isContainer: false,
         containerMode: null,
-        layoutMode: null,
         autoLayout: {
             enabled: false,
             direction: null,

@@ -38,8 +38,7 @@
 						gap: 0.2,
 						padding: { top: 0.1, bottom: 0.1, left: 0.1, right: 0.1, front: 0.1, back: 0.1 }
 					},
-					containerMode: 'layout',
-					sizingMode: 'layout'
+					containerMode: 'layout'
 				}
 			]);
 
@@ -58,8 +57,7 @@
 						gap: 0.2,
 						padding: { top: 0.1, bottom: 0.1, left: 0.1, right: 0.1, front: 0.1, back: 0.1 }
 					},
-					containerMode: 'layout',
-					sizingMode: 'layout'
+					containerMode: 'layout'
 				},
 				{
 					id: 'demo-object-1',

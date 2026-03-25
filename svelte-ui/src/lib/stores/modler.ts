@@ -41,7 +41,6 @@ export const multiSelection = derived(selectedObjects, ($selectedObjects) => {
 		material: { color: '#ffffff', opacity: 1, transparent: false },
 		autoLayout: { enabled: false, direction: null, gap: 0, padding: { width: 0, height: 0, depth: 0 }, alignment: { x: 'center', y: 'center', z: 'center' }, reversed: false },
 		containerMode: null,
-		layoutMode: null,
 		childIds: [],
 		parentContainer: null,
 		selected: false,

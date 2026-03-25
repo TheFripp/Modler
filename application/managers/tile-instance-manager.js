@@ -1,6 +1,7 @@
 /**
  * Tile Instance Manager
  * Manages tiled object instances - adds/removes instances when repeat count changes
+ * Uses simple child-count-vs-repeat comparison (no tracking state needed)
  */
 
 class TileInstanceManager {
@@ -9,8 +10,8 @@ class TileInstanceManager {
         this.objectStateManager = null;
         this.objectEventBus = null;
 
-        // Track instances by container ID
-        this.tileInstances = new Map(); // containerId -> [instanceIds...]
+        // Re-entrancy guard: prevents cascading during add/remove
+        this._updatingInstances = false;
     }
 
     initialize() {
@@ -35,30 +36,41 @@ class TileInstanceManager {
     }
 
     /**
-     * Handle hierarchy changes - watch for tileMode.repeat changes
+     * Handle hierarchy changes - sync tile instances when repeat doesn't match children count
+     * No tracking needed — just compare actual state every time
      */
     handleHierarchyChange(event) {
-        const { objectId, changeData } = event;
+        // Guard against re-entrant calls (addObject/removeObject trigger hierarchy events)
+        if (this._updatingInstances) return;
 
-        // Get the container object to check for tileMode changes
-        const container = this.sceneController?.getObject(objectId);
-        if (!container || !container.autoLayout?.tileMode?.enabled) {
-            return;
+        const container = this.sceneController?.getObject(event.objectId);
+        if (!container?.autoLayout?.tileMode?.enabled) return;
+
+        const sourceObjectId = container.autoLayout.tileMode.sourceObjectId;
+        if (!sourceObjectId) return;
+
+        const targetCount = parseInt(container.autoLayout.tileMode.repeat);
+        if (isNaN(targetCount) || targetCount < 1) return;
+
+        // Get actual children count
+        const children = this.sceneController.getChildObjects?.(event.objectId) ||
+            this.sceneController.getAllObjects().filter(obj => obj.parentContainer === event.objectId);
+
+        // Already in sync — nothing to do
+        if (children.length === targetCount) return;
+
+        // Sync instances to match repeat count
+        this._updatingInstances = true;
+        try {
+            if (targetCount > children.length) {
+                this.addInstances(event.objectId, sourceObjectId, targetCount - children.length);
+            } else {
+                this.removeInstances(event.objectId, sourceObjectId, children, children.length - targetCount);
+            }
+        } finally {
+            this._updatingInstances = false;
         }
-
-        // Check if repeat count changed by comparing with tracked state
-        const currentRepeat = container.autoLayout.tileMode.repeat;
-        const trackedRepeat = this.trackedRepeats?.get(objectId);
-
-        if (trackedRepeat !== undefined && currentRepeat !== trackedRepeat) {
-            this.updateTileInstances(objectId, currentRepeat, trackedRepeat);
-        }
-
-        // Track current repeat count for future comparisons
-        if (!this.trackedRepeats) {
-            this.trackedRepeats = new Map();
-        }
-        this.trackedRepeats.set(objectId, currentRepeat);
+        // Layout recalculation is handled by the caller (PropertyUpdateHandler or undo/redo command)
     }
 
     /**
@@ -88,16 +100,18 @@ class TileInstanceManager {
 
         if (siblings.length === 0) return;
 
-        // Sync geometry and material from changed object to all siblings
+        // Sync dimensions and material from changed object to all siblings
+        // Read source dimensions through DimensionManager (geometry is truth)
+        const dimensionManager = window.dimensionManager;
+        const sourceDims = dimensionManager?.getDimensions(changedObj.mesh);
+
         for (const sibling of siblings) {
             const updates = {};
 
-            // Sync dimensions (geometry)
-            if (changedObj.dimensions) {
-                // Clone geometry from changed object
-                sibling.mesh.geometry.dispose();
-                sibling.mesh.geometry = changedObj.mesh.geometry.clone();
-                updates.dimensions = { ...changedObj.dimensions };
+            // Sync dimensions via DimensionManager (proper CAD geometry channel)
+            if (sourceDims && dimensionManager) {
+                dimensionManager.setDimensions(sibling.mesh, sourceDims, 'center');
+                updates.dimensions = { ...sourceDims };
             }
 
             // Sync material
@@ -126,42 +140,7 @@ class TileInstanceManager {
     }
 
     /**
-     * Update tile instances when repeat count changes
-     */
-    updateTileInstances(containerId, newRepeat, oldRepeat) {
-        if (!this.sceneController) return;
-
-        const container = this.sceneController.getObject(containerId);
-        if (!container || !container.autoLayout?.tileMode?.enabled) {
-            return;
-        }
-
-        const sourceObjectId = container.autoLayout.tileMode.sourceObjectId;
-        if (!sourceObjectId) return;
-
-        // Get all children of the container
-        const children = this.sceneController.getAllObjects()
-            .filter(obj => obj.parentContainer === containerId);
-
-        const currentCount = children.length;
-        const targetCount = parseInt(newRepeat);
-
-        if (targetCount > currentCount) {
-            // Add more instances
-            this.addInstances(containerId, sourceObjectId, targetCount - currentCount);
-        } else if (targetCount < currentCount) {
-            // Remove instances (keep the first one, remove from the end)
-            this.removeInstances(children, currentCount - targetCount);
-        }
-
-        // Trigger layout recalculation
-        if (this.sceneController) {
-            this.sceneController.updateContainer(containerId);
-        }
-    }
-
-    /**
-     * Add new tile instances
+     * Add new tile instances cloned from source object
      */
     addInstances(containerId, sourceObjectId, count) {
         if (!this.sceneController) return;
@@ -169,35 +148,56 @@ class TileInstanceManager {
         const sourceObject = this.sceneController.getObject(sourceObjectId);
         if (!sourceObject) return;
 
+        // Copy source rotation (convert radians → degrees for addObject)
+        const sourceRotation = {
+            x: (sourceObject.mesh.rotation.x * 180) / Math.PI,
+            y: (sourceObject.mesh.rotation.y * 180) / Math.PI,
+            z: (sourceObject.mesh.rotation.z * 180) / Math.PI
+        };
+
         for (let i = 0; i < count; i++) {
-            // Clone geometry and material
             const clonedGeometry = sourceObject.mesh.geometry.clone();
             const clonedMaterial = sourceObject.mesh.material.clone();
 
-            // Create new instance
             this.sceneController.addObject(clonedGeometry, clonedMaterial, {
                 name: sourceObject.name,
                 parentContainer: containerId,
-                position: { x: 0, y: 0, z: 0 }
+                position: { x: 0, y: 0, z: 0 },
+                rotation: sourceRotation
             });
         }
     }
 
     /**
-     * Remove tile instances from the end
+     * Remove tile instances — always preserves the source object
+     * Removes from the end of childrenOrder for consistency
      */
-    removeInstances(children, count) {
+    removeInstances(containerId, sourceObjectId, children, count) {
         if (!this.sceneController || count <= 0) return;
 
-        // Sort children to ensure consistent removal (newest first via childrenOrder position)
-        const sortedChildren = [...children].reverse();
+        // Never remove the source object
+        const removable = children.filter(child => child.id !== sourceObjectId);
+        if (removable.length === 0) return;
 
-        // Remove from the end, but keep at least the first child (master)
-        const toRemove = sortedChildren.slice(0, Math.min(count, children.length - 1));
+        // Use container's childrenOrder for consistent removal from the end
+        const container = this.sceneController.getObject(containerId);
+        const childrenOrder = container?.childrenOrder || [];
 
-        toRemove.forEach(child => {
-            this.sceneController.removeObject(child.id);
+        // Sort by position in childrenOrder — remove highest index first (newest)
+        removable.sort((a, b) => {
+            const idxA = childrenOrder.indexOf(a.id);
+            const idxB = childrenOrder.indexOf(b.id);
+            // Items not in childrenOrder (-1) should be removed first
+            if (idxA === -1 && idxB === -1) return 0;
+            if (idxA === -1) return -1;
+            if (idxB === -1) return 1;
+            return idxB - idxA;
         });
+
+        const toRemove = removable.slice(0, Math.min(count, removable.length));
+        for (const child of toRemove) {
+            this.sceneController.removeObject(child.id);
+        }
     }
 }
 

@@ -35,8 +35,6 @@ const EXPECTED_TYPESCRIPT_INTERFACE = {
     // Container properties
     isContainer: 'boolean',
     containerMode: 'string|null',
-    isHug: 'boolean',
-    layoutMode: 'string|null',
     autoLayout: {
         enabled: 'boolean',
         direction: 'string|null',

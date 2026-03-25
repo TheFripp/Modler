@@ -332,8 +332,8 @@ class CommandRouter {
             return;
         }
 
-        // containerMode/sizingMode already has its own command in handleContainerSizingChange — skip
-        if (property === 'containerMode' || property === 'sizingMode') {
+        // containerMode already has its own command in handleContainerSizingChange — skip
+        if (property === 'containerMode') {
             this._forwardPropertyUpdate(data);
             return;
         }

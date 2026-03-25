@@ -9,7 +9,6 @@ export type PropertyPath =
 	| `material.color`
 	| `material.opacity`
 	| `direction`
-	| `sizingMode`
 	| `autoLayout.enabled`
 	| `autoLayout.direction`
 	| `autoLayout.gap`
@@ -85,11 +84,6 @@ class PropertyController {
 			type: 'string',
 			allowedValues: ['manual', 'layout', 'hug']
 		});
-		this.constraints.set('sizingMode', {
-			type: 'string',
-			allowedValues: ['hug', 'fixed', 'manual', 'layout']
-		});
-
 		// Auto Layout constraints
 		this.constraints.set('autoLayout.enabled', { type: 'boolean' });
 		this.constraints.set('autoLayout.direction', {

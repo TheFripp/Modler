@@ -22,13 +22,9 @@ ObjectStateManager.updateObject(objectId, {
     rotation: { x: 0, y: Math.PI / 4, z: 0 }
 });
 
-// Update container properties
-ObjectStateManager.updateObject(containerId, {
-    layoutDirection: 'x',
-    gap: 2,
-    padding: 1,
-    sizingMode: 'hug'
-});
+// Update container mode
+const modeUpdate = ObjectStateManager.buildContainerModeUpdate('hug');
+ObjectStateManager.updateObject(containerId, modeUpdate);
 
 // Update custom properties
 ObjectStateManager.updateObject(objectId, {

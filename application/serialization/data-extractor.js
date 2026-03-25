@@ -69,9 +69,6 @@ function extractSerializableData(sceneObject) {
         tileMode: sceneObject.autoLayout.tileMode ? { ...sceneObject.autoLayout.tileMode } : undefined
     } : null;
 
-    // Use containerMode as canonical source of truth
-    const isHug = sceneObject.containerMode === 'hug';
-
     // Direct copy of all properties
     return {
         // Core identification
@@ -96,7 +93,6 @@ function extractSerializableData(sceneObject) {
         // Container properties - DIRECT COPY with validation
         isContainer: sceneObject.isContainer || false,
         containerMode: sceneObject.containerMode || null,
-        isHug: isHug,  // Derived from containerMode for backward compat
         autoLayout: autoLayout,  // EXACT copy or null
         calculatedGap: sceneObject.calculatedGap, // May be undefined - that's OK
         layoutProperties: sceneObject.layoutProperties || null,

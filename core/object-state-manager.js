@@ -290,7 +290,6 @@ class ObjectStateManager {
             structure.scale = { x: 1, y: 1, z: 1 };
             structure.childIds = [];
             structure.containerMode = null;
-            structure.layoutMode = null;
             structure.selected = false;
             structure.locked = false;
             structure.visible = true;
@@ -555,17 +554,10 @@ class ObjectStateManager {
                 // Set the final value
                 current[parts[parts.length - 1]] = value;
             } else {
-                // Direct property — enforce container mode flag sync
-                if (path === 'containerMode' || path === 'isHug' || path === 'sizingMode') {
-                    const mode = path === 'containerMode' ? value :
-                                 path === 'isHug' && value ? 'hug' :
-                                 path === 'sizingMode' ? value :
-                                 object.containerMode;
-                    const modeUpdate = ObjectStateManager.buildContainerModeUpdate(mode);
-                    Object.assign(object, modeUpdate);
+                // Direct property — containerMode is the sole mode authority
+                if (path === 'containerMode') {
+                    object.containerMode = value;
                     changedProperties.add('containerMode');
-                    changedProperties.add('isHug');
-                    changedProperties.add('sizingMode');
                 } else {
                     object[path] = value;
                 }
@@ -988,16 +980,13 @@ class ObjectStateManager {
 
     /**
      * Build the update object for changing container mode.
-     * Sets containerMode and keeps legacy flags (isHug, sizingMode) in sync.
      *
      * @param {'layout'|'hug'|'manual'} mode - Target mode
      * @returns {Object} Update object to spread into updateObject() calls
      */
     static buildContainerModeUpdate(mode) {
         return {
-            containerMode: mode,
-            isHug: mode === 'hug',
-            sizingMode: mode
+            containerMode: mode
         };
     }
 

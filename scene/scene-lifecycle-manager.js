@@ -310,68 +310,15 @@ class SceneLifecycleManager {
      * @returns {Object} Object metadata
      */
     createObjectMetadata(id, mesh, options) {
-        // Use schema-based factory for complete object metadata with proper defaults
-        const objectDataFormat = window.ObjectDataFormat;
+        // SCHEMA-FIRST: Use centralized factory (ensures autoLayout never null)
+        const metadata = window.ObjectDataFormat.createObjectMetadata({
+            ...options,
+            id,
+            mesh
+        });
 
-        if (objectDataFormat && objectDataFormat.createObjectMetadata) {
-            // SCHEMA-FIRST: Use centralized factory (ensures autoLayout never null)
-            const metadata = objectDataFormat.createObjectMetadata({
-                ...options,
-                id,
-                mesh
-            });
-
-            // ARCHITECTURE: Add dimensions getter for backward compatibility
-            // Dimensions are NO LONGER cached - always read from geometry via DimensionManager
-            Object.defineProperty(metadata, 'dimensions', {
-                get() {
-                    return window.dimensionManager?.getDimensions(this.mesh) || { x: 1, y: 1, z: 1 };
-                },
-                enumerable: true,
-                configurable: true
-            });
-
-            return metadata;
-        }
-
-        // FALLBACK: If ObjectDataFormat not available (during initialization), use inline defaults
-        console.warn('SceneLifecycleManager: ObjectDataFormat not available, using fallback');
-        const metadata = {
-            id: id,
-            mesh: mesh,
-            type: options.type || 'mesh',
-            name: options.name || `object_${id}`,
-            category: options.category || 'permanent',
-            created: Date.now(),
-            visible: true,
-            selectable: options.selectable !== false,
-            userData: options.userData || {},
-
-            isTemporary: options.isTemporary || false,
-            isPreview: options.isPreview || false,
-
-            isContainer: options.isContainer || false,
-            autoLayout: options.autoLayout || window.ObjectDataFormat.createDefaultAutoLayout(),
-            parentContainer: options.parentContainer || null,
-
-            containerMode: options.containerMode || (options.isContainer ? 'hug' : null),
-            // Legacy flags derived from containerMode via buildContainerModeUpdate()
-            isHug: (options.containerMode || (options.isContainer ? 'hug' : null)) === 'hug',
-            sizingMode: options.containerMode || (options.isContainer ? 'hug' : null),
-            childrenOrder: options.childrenOrder || [],
-
-            layoutProperties: options.layoutProperties || {
-                sizeX: options.sizeX || 'fixed',
-                sizeY: options.sizeY || 'fixed',
-                sizeZ: options.sizeZ || 'fixed',
-                fixedSize: options.fixedSize || null
-            },
-
-            // Yard (material library) metadata
-            yardItemId: options.yardItemId || null,
-            yardFixed: options.yardFixed || null
-        };
-
+        // ARCHITECTURE: Add dimensions getter for backward compatibility
+        // Dimensions are NO LONGER cached - always read from geometry via DimensionManager
         Object.defineProperty(metadata, 'dimensions', {
             get() {
                 return window.dimensionManager?.getDimensions(this.mesh) || { x: 1, y: 1, z: 1 };

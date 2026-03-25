@@ -33,7 +33,6 @@ const STANDARD_OBJECT_DATA_SCHEMA = {
 
     // Container properties
     isContainer: 'boolean',
-    layoutMode: 'string|null',
     autoLayout: {
         enabled: 'boolean',
         direction: 'string|null',
@@ -76,7 +75,7 @@ function createFullObjectData() {
         },
 
         isContainer: true,
-        layoutMode: 'stack',
+        containerMode: 'layout',
         autoLayout: {
             enabled: true,
             direction: 'x',

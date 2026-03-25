@@ -203,7 +203,7 @@ class StateSerializer {
     /**
      * Compute whether this object is in layout mode
      *
-     * DEFINITION: Layout mode active when object is container AND layoutMode is set
+     * DEFINITION: Layout mode active when containerMode === 'layout'
      *
      * @param {string} objectId
      * @returns {boolean}
@@ -216,7 +216,7 @@ class StateSerializer {
     /**
      * Compute whether this object is in hug mode
      *
-     * DEFINITION: Hug mode active when isHug flag is true
+     * DEFINITION: Hug mode active when containerMode === 'hug'
      *
      * @param {string} objectId
      * @returns {boolean}
@@ -317,9 +317,7 @@ class StateSerializer {
             type: parent.type,
             isContainer: parent.isContainer,
             containerMode: parent.containerMode,
-            layoutMode: parent.layoutMode,
             autoLayout: parent.autoLayout,
-            isHug: parent.isHug,
 
             // Computed properties for parent
             isInLayoutMode: this.computeIsInLayoutMode(parentId)
