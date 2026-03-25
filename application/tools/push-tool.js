@@ -150,6 +150,27 @@ class PushTool extends BaseTool {
                     if (this.pushAxis !== layoutDirection && !isTile) {
                         this.setChildrenToFillOnAxis(objectData, this.pushAxis);
                     }
+                    // Tile containers pushed perpendicular: capture child state for
+                    // uniform resize during drag (tiles can't use fill mode)
+                    if (this.pushAxis !== layoutDirection && isTile) {
+                        const children = sceneController.getChildObjects(objectData.id);
+                        const initialChildStates = {};
+                        children.forEach(child => {
+                            initialChildStates[child.id] = {
+                                dimensions: child.dimensions ? { ...child.dimensions } : null,
+                                position: child.mesh ? {
+                                    x: child.mesh.position.x,
+                                    y: child.mesh.position.y,
+                                    z: child.mesh.position.z
+                                } : null
+                            };
+                        });
+                        this.tileChildSyncState = {
+                            containerId: objectData.id,
+                            syncAxis: this.pushAxis,
+                            initialChildStates
+                        };
+                    }
                 }
             }
         }
@@ -350,6 +371,38 @@ class PushTool extends BaseTool {
             dimensionManager.setDimensions(sibling.mesh, sourceDims, 'center');
             this.objectStateManager.updateObject(sibling.id, {
                 dimensions: { ...sourceDims }
+            }, 'push-tool');
+        }
+    }
+
+    /**
+     * Sync all tile children to match the pushed container's perpendicular dimension.
+     * Called during drag when pushing a tile container perpendicular to layout direction.
+     */
+    syncTileChildrenToContainer(containerData) {
+        const dimensionManager = window.dimensionManager;
+        if (!dimensionManager || !this.objectStateManager) return;
+
+        const containerDims = dimensionManager.getDimensions(containerData.mesh);
+        if (!containerDims) return;
+
+        const axis = this.tileChildSyncState.syncAxis;
+        const padding = containerData.autoLayout?.padding || {};
+        const paddingKey = { x: 'width', y: 'height', z: 'depth' }[axis];
+        const paddingVal = (padding[paddingKey] || 0) * 2;
+
+        const targetDim = containerDims[axis] - paddingVal;
+        if (targetDim <= 0) return;
+
+        const children = this.sceneController.getChildObjects(containerData.id);
+        for (const child of children) {
+            const currentDims = dimensionManager.getDimensions(child.mesh);
+            if (!currentDims) continue;
+
+            const newDims = { ...currentDims, [axis]: targetDim };
+            dimensionManager.setDimensions(child.mesh, newDims, 'center');
+            this.objectStateManager.updateObject(child.id, {
+                dimensions: newDims
             }, 'push-tool');
         }
     }
@@ -583,6 +636,10 @@ class PushTool extends BaseTool {
 
         // If pushed object IS a container, recalculate its layout (mode routing handled internally)
         if (objectData.isContainer) {
+            // Tile container pushed perpendicular: resize children to match container
+            if (this.tileChildSyncState?.containerId === objectData.id) {
+                this.syncTileChildrenToContainer(objectData);
+            }
             sceneController.updateContainer(objectData.id, { pushContext: { axis: this.pushAxis } });
         }
 
@@ -594,6 +651,11 @@ class PushTool extends BaseTool {
             if (parent?.autoLayout?.tileMode?.enabled) {
                 this.syncTileSiblings(objectData, parent);
                 sceneController.updateContainer(objectData.parentContainer);
+                // Ensure container wireframe updates even if resize threshold wasn't met
+                const geometryUtils = window.GeometryUtils;
+                if (geometryUtils && parent.mesh) {
+                    geometryUtils.updateSupportMeshGeometries(parent.mesh);
+                }
                 return;
             }
 
@@ -818,7 +880,7 @@ class PushTool extends BaseTool {
                 Math.abs(finalPosition.y - this.initialPosition.y) > 0.001 ||
                 Math.abs(finalPosition.z - this.initialPosition.z) > 0.001;
 
-            if (dimensionsChanged || positionChanged || this.hugTransitionState || this.fillTransitionState || this.gapTransitionState) {
+            if (dimensionsChanged || positionChanged || this.hugTransitionState || this.fillTransitionState || this.gapTransitionState || this.tileChildSyncState) {
                 // Calculate push distance based on dimension change along push axis
                 let pushDistance = 0;
                 if (this.pushAxis) {
@@ -860,6 +922,26 @@ class PushTool extends BaseTool {
                     }
                 }
 
+                // Capture final tile child state for redo
+                if (this.tileChildSyncState) {
+                    const sceneController = this.sceneController;
+                    const children = sceneController?.getChildObjects(this.tileChildSyncState.containerId);
+                    this.tileChildSyncState.finalChildStates = {};
+                    if (children) {
+                        const dimensionManager = window.dimensionManager;
+                        children.forEach(child => {
+                            this.tileChildSyncState.finalChildStates[child.id] = {
+                                dimensions: dimensionManager ? { ...dimensionManager.getDimensions(child.mesh) } : null,
+                                position: child.mesh ? {
+                                    x: child.mesh.position.x,
+                                    y: child.mesh.position.y,
+                                    z: child.mesh.position.z
+                                } : null
+                            };
+                        });
+                    }
+                }
+
                 const command = new PushFaceCommand(
                     pushedObject.userData.id,
                     this.faceNormal,
@@ -870,7 +952,8 @@ class PushTool extends BaseTool {
                     finalPosition,
                     this.hugTransitionState,
                     this.fillTransitionState,
-                    this.gapTransitionState
+                    this.gapTransitionState,
+                    this.tileChildSyncState
                 );
                 historyManager.executeCommand(command);
             }
@@ -905,6 +988,7 @@ class PushTool extends BaseTool {
         this.hugTransitionState = null;
         this.fillTransitionState = null;
         this.gapTransitionState = null;
+        this.tileChildSyncState = null;
         this.anchorMode = null;
     }
 

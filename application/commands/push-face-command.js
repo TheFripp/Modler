@@ -15,7 +15,7 @@ class PushFaceCommand extends BaseCommand {
      * @param {Object} newPosition - New position {x, y, z}
      * @param {Object} [hugTransitionState] - State for hug→layout transition undo/redo
      */
-    constructor(objectId, faceNormal, pushDistance, oldDimensions, newDimensions, oldPosition, newPosition, hugTransitionState = null, fillTransitionState = null, gapTransitionState = null) {
+    constructor(objectId, faceNormal, pushDistance, oldDimensions, newDimensions, oldPosition, newPosition, hugTransitionState = null, fillTransitionState = null, gapTransitionState = null, tileChildSyncState = null) {
         super('push-face', 'Push face operation');
         this.objectId = objectId;
         this.faceNormal = faceNormal ? { ...faceNormal } : null;
@@ -27,6 +27,7 @@ class PushFaceCommand extends BaseCommand {
         this.hugTransitionState = hugTransitionState;
         this.fillTransitionState = fillTransitionState;
         this.gapTransitionState = gapTransitionState;
+        this.tileChildSyncState = tileChildSyncState;
     }
 
     execute() {
@@ -64,6 +65,11 @@ class PushFaceCommand extends BaseCommand {
                 this.restoreGapState();
             }
 
+            // Restore tile children to original dimensions
+            if (this.tileChildSyncState) {
+                this.restoreTileChildState();
+            }
+
             // Restore geometry to old dimensions and position
             this.restoreGeometryState(objectData.mesh, this.oldDimensions, this.oldPosition);
 
@@ -80,6 +86,11 @@ class PushFaceCommand extends BaseCommand {
             // Recalculate container after gap restored
             if (this.gapTransitionState) {
                 sceneController.updateContainer(this.gapTransitionState.containerId);
+            }
+
+            // Recalculate container after tile children restored
+            if (this.tileChildSyncState) {
+                sceneController.updateContainer(this.tileChildSyncState.containerId);
             }
 
             logger.info(`↩️ Undid push: ${this.objectId}`);
@@ -121,6 +132,11 @@ class PushFaceCommand extends BaseCommand {
                 this.reapplyGapState();
             }
 
+            // Re-apply tile child dimensions
+            if (this.tileChildSyncState) {
+                this.reapplyTileChildState();
+            }
+
             // Restore geometry to new dimensions and position
             this.restoreGeometryState(objectData.mesh, this.newDimensions, this.newPosition);
 
@@ -137,6 +153,11 @@ class PushFaceCommand extends BaseCommand {
             // Recalculate container after gap re-applied
             if (this.gapTransitionState) {
                 sceneController.updateContainer(this.gapTransitionState.containerId);
+            }
+
+            // Recalculate container after tile children re-applied
+            if (this.tileChildSyncState) {
+                sceneController.updateContainer(this.tileChildSyncState.containerId);
             }
 
             logger.info(`↪️ Redid push: ${this.objectId}`);
@@ -262,6 +283,45 @@ class PushFaceCommand extends BaseCommand {
         objectStateManager.updateObject(state.containerId, {
             autoLayout: { ...container.autoLayout, gap: state.newGap }
         }, 'redo');
+    }
+
+    /**
+     * Restore tile children to their initial dimensions (undo)
+     */
+    restoreTileChildState() {
+        this._applyTileChildStates(this.tileChildSyncState.initialChildStates);
+    }
+
+    /**
+     * Re-apply tile children to their final dimensions (redo)
+     */
+    reapplyTileChildState() {
+        this._applyTileChildStates(this.tileChildSyncState.finalChildStates);
+    }
+
+    /**
+     * Apply a set of dimension/position states to tile children
+     * @private
+     */
+    _applyTileChildStates(childStates) {
+        const sceneController = window.modlerComponents?.sceneController;
+        const objectStateManager = window.modlerComponents?.objectStateManager;
+        const dimensionManager = window.dimensionManager;
+        if (!sceneController || !objectStateManager || !dimensionManager) return;
+
+        for (const [childId, state] of Object.entries(childStates)) {
+            const child = sceneController.getObject(childId);
+            if (!child?.mesh || !state.dimensions) continue;
+
+            dimensionManager.setDimensions(child.mesh, state.dimensions, 'center');
+            if (state.position) {
+                child.mesh.position.set(state.position.x, state.position.y, state.position.z);
+            }
+            objectStateManager.updateObject(childId, {
+                dimensions: { ...state.dimensions },
+                ...(state.position ? { position: { ...state.position } } : {})
+            }, 'undo');
+        }
     }
 
     /**
