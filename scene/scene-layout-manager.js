@@ -258,6 +258,9 @@ class SceneLayoutManager {
             // Handle visibility after resize
             containerCrudManager.handleContainerVisibilityAfterResize(container, true);
 
+            // Refresh cell wireframes if currently showing on this container
+            this._refreshCellWireframesIfNeeded(container);
+
             return { success: true };
 
         } finally {

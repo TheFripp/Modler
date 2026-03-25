@@ -729,10 +729,11 @@ class LayoutEngine {
             fillAxes.z ? containerSize.z : bounds.size.z
         );
 
-        // Check if container size actually changed
-        const sizeChanged = Math.abs(effectiveSize.x - containerSize.x) > 0.001 ||
-                            Math.abs(effectiveSize.y - containerSize.y) > 0.001 ||
-                            Math.abs(effectiveSize.z - containerSize.z) > 0.001;
+        // Check if container size actually changed (tight threshold for resize detection)
+        const resizeThreshold = 1e-6;
+        const sizeChanged = Math.abs(effectiveSize.x - containerSize.x) > resizeThreshold ||
+                            Math.abs(effectiveSize.y - containerSize.y) > resizeThreshold ||
+                            Math.abs(effectiveSize.z - containerSize.z) > resizeThreshold;
 
         if (!sizeChanged) {
             return {
@@ -742,11 +743,24 @@ class LayoutEngine {
             };
         }
 
-        // Pass 2: Recalculate with the effective (post-resize) container size
-        const pass2 = this.calculateLayout(objects, layoutConfig, effectiveSize, null, pushContext);
+        // Only run pass 2 if the change is large enough that repositioning matters
+        const significantChange = Math.abs(effectiveSize.x - containerSize.x) > 0.001 ||
+                                  Math.abs(effectiveSize.y - containerSize.y) > 0.001 ||
+                                  Math.abs(effectiveSize.z - containerSize.z) > 0.001;
 
+        if (significantChange) {
+            // Pass 2: Recalculate with the effective (post-resize) container size
+            const pass2 = this.calculateLayout(objects, layoutConfig, effectiveSize, null, pushContext);
+            return {
+                ...pass2,
+                targetContainerSize: effectiveSize,
+                containerResized: true
+            };
+        }
+
+        // Small change: resize container but skip pass 2 recalculation
         return {
-            ...pass2,
+            ...pass1,
             targetContainerSize: effectiveSize,
             containerResized: true
         };
