@@ -253,6 +253,30 @@ class SceneHierarchyManager {
     }
 
     /**
+     * Walk the ancestor chain from startId, calling callback(current, currentId) at each step.
+     * Returns early if callback returns a non-undefined value. Detects cycles.
+     * @private
+     */
+    _walkAncestorChain(startId, callback) {
+        let currentId = startId;
+        const visited = new Set();
+
+        while (currentId) {
+            if (visited.has(currentId)) return { circular: true };
+            visited.add(currentId);
+
+            const current = this.objects.get(currentId);
+            if (!current) break;
+
+            const result = callback(current, currentId);
+            if (result !== undefined) return result;
+
+            currentId = current.parentContainer;
+        }
+        return undefined;
+    }
+
+    /**
      * Check if a container is a descendant of another container
      * @param {string} potentialDescendantId - Container that might be a descendant
      * @param {string} ancestorId - Container that might be an ancestor
@@ -260,35 +284,12 @@ class SceneHierarchyManager {
      */
     isDescendantContainer(potentialDescendantId, ancestorId) {
         const descendant = this.objects.get(potentialDescendantId);
-        if (!descendant || !descendant.isContainer) {
-            return false;
-        }
+        if (!descendant || !descendant.isContainer) return false;
 
-        // Walk up the parent chain
-        let currentId = potentialDescendantId;
-        const visited = new Set(); // Prevent infinite loops in corrupted data
-
-        while (currentId) {
-            // Prevent infinite loops
-            if (visited.has(currentId)) {
-                // Circular reference detected - treat as circular to prevent further nesting
-                return true;
-            }
-            visited.add(currentId);
-
-            const current = this.objects.get(currentId);
-            if (!current) break;
-
-            // Check if current container's parent is our target ancestor
-            if (current.parentContainer === ancestorId) {
-                return true; // Found ancestor relationship
-            }
-
-            // Move up to parent
-            currentId = current.parentContainer;
-        }
-
-        return false;
+        const result = this._walkAncestorChain(potentialDescendantId, (current) => {
+            if (current.parentContainer === ancestorId) return true;
+        });
+        return result?.circular ? true : result === true;
     }
 
     /**
@@ -298,29 +299,14 @@ class SceneHierarchyManager {
      */
     getContainerNestingDepth(containerId) {
         const container = this.objects.get(containerId);
-        if (!container || !container.isContainer) {
-            return 0;
-        }
+        if (!container || !container.isContainer) return 0;
 
         let depth = 0;
-        let currentId = container.parentContainer;
-        const visited = new Set();
-
-        while (currentId) {
-            if (visited.has(currentId)) {
-                // Circular reference in nesting depth calculation
-                return -1; // Error state
-            }
-            visited.add(currentId);
-
-            const parent = this.objects.get(currentId);
-            if (!parent || !parent.isContainer) break;
-
+        const result = this._walkAncestorChain(container.parentContainer, (current) => {
+            if (!current.isContainer) return depth; // stop walking
             depth++;
-            currentId = parent.parentContainer;
-        }
-
-        return depth;
+        });
+        return result?.circular ? -1 : depth;
     }
 
     /**

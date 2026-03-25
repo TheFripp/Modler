@@ -425,9 +425,9 @@ class SceneController {
                 if (updates.position instanceof THREE.Vector3) {
                     mesh.position.copy(updates.position);
                 } else {
-                    mesh.position.set(updates.position.x || mesh.position.x,
-                                    updates.position.y || mesh.position.y,
-                                    updates.position.z || mesh.position.z);
+                    mesh.position.set(updates.position.x ?? mesh.position.x,
+                                    updates.position.y ?? mesh.position.y,
+                                    updates.position.z ?? mesh.position.z);
                 }
             }
 
@@ -435,9 +435,9 @@ class SceneController {
                 if (updates.rotation instanceof THREE.Euler) {
                     mesh.rotation.copy(updates.rotation);
                 } else {
-                    mesh.rotation.set(updates.rotation.x || mesh.rotation.x,
-                                    updates.rotation.y || mesh.rotation.y,
-                                    updates.rotation.z || mesh.rotation.z);
+                    mesh.rotation.set(updates.rotation.x ?? mesh.rotation.x,
+                                    updates.rotation.y ?? mesh.rotation.y,
+                                    updates.rotation.z ?? mesh.rotation.z);
                 }
             }
 
@@ -445,9 +445,9 @@ class SceneController {
                 if (updates.scale instanceof THREE.Vector3) {
                     mesh.scale.copy(updates.scale);
                 } else {
-                    mesh.scale.set(updates.scale.x || mesh.scale.x,
-                                 updates.scale.y || mesh.scale.y,
-                                 updates.scale.z || mesh.scale.z);
+                    mesh.scale.set(updates.scale.x ?? mesh.scale.x,
+                                 updates.scale.y ?? mesh.scale.y,
+                                 updates.scale.z ?? mesh.scale.z);
                 }
             }
         }
@@ -972,52 +972,20 @@ class SceneController {
     /**
      * Update grid colors from configuration
      */
-    updateGridMainColor(color) {
-        // Find the grid object
-        for (const [id, objectData] of this.objects.entries()) {
-            if (objectData.type === 'grid' && objectData.name === 'Floor Grid') {
-                const gridMesh = objectData.mesh;
-                if (gridMesh && gridMesh.children) {
-                    // Find the LineSegments child (the actual grid)
-                    const lineSegments = gridMesh.children.find(child => child.type === 'LineSegments');
-                    if (lineSegments && lineSegments.geometry) {
-                        // Update colors in the geometry
-                        const colors = lineSegments.geometry.attributes.color;
-                        if (colors) {
-                            const mainColor = new THREE.Color(color);
-                            // Update main grid lines (every other set of vertices)
-                            for (let i = 0; i < colors.count; i += 2) {
-                                colors.setXYZ(i, mainColor.r, mainColor.g, mainColor.b);
-                            }
-                            colors.needsUpdate = true;
-                        }
-                    }
-                }
-                break;
-            }
-        }
-    }
+    updateGridMainColor(color) { this._updateGridColor(color, 0); }
+    updateGridSubColor(color) { this._updateGridColor(color, 1); }
 
-    updateGridSubColor(color) {
-        // Find the grid object
+    _updateGridColor(color, startIndex) {
         for (const [id, objectData] of this.objects.entries()) {
             if (objectData.type === 'grid' && objectData.name === 'Floor Grid') {
-                const gridMesh = objectData.mesh;
-                if (gridMesh && gridMesh.children) {
-                    // Find the LineSegments child (the actual grid)
-                    const lineSegments = gridMesh.children.find(child => child.type === 'LineSegments');
-                    if (lineSegments && lineSegments.geometry) {
-                        // Update colors in the geometry
-                        const colors = lineSegments.geometry.attributes.color;
-                        if (colors) {
-                            const subColor = new THREE.Color(color);
-                            // Update sub grid lines (every other set of vertices offset by 1)
-                            for (let i = 1; i < colors.count; i += 2) {
-                                colors.setXYZ(i, subColor.r, subColor.g, subColor.b);
-                            }
-                            colors.needsUpdate = true;
-                        }
+                const lineSegments = objectData.mesh?.children?.find(child => child.type === 'LineSegments');
+                const colors = lineSegments?.geometry?.attributes?.color;
+                if (colors) {
+                    const threeColor = new THREE.Color(color);
+                    for (let i = startIndex; i < colors.count; i += 2) {
+                        colors.setXYZ(i, threeColor.r, threeColor.g, threeColor.b);
                     }
+                    colors.needsUpdate = true;
                 }
                 break;
             }

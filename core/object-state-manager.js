@@ -628,6 +628,12 @@ class ObjectStateManager {
 
         // Refresh selection UI if any changed objects are currently selected
         this.refreshSelectionUI(changedItems);
+
+        // Clear _changedProperties after all consumers have read them.
+        // Without this, stale properties accumulate and pollute determineEventType()
+        // on subsequent unrelated updates (e.g., a prior autoLayout change would make
+        // a later position-only change emit HIERARCHY instead of TRANSFORM).
+        changedItems.forEach(({ object }) => { delete object._changedProperties; });
     }
 
     /**
@@ -649,14 +655,22 @@ class ObjectStateManager {
         const selectedMeshes = selectionController.getSelectedObjects?.() || [];
         if (selectedMeshes.length === 0) return;
 
-        // Build object structure from SceneController (single source of truth for geometry)
+        // Only rebuild structures for objects that actually changed
+        const changedIds = new Set(changedItems.map(({ object }) => object.id));
         const serializedSelection = selectedMeshes.map(mesh => {
             const objectData = this.sceneController?.getObjectByMesh?.(mesh);
             if (!objectData) return null;
 
-            // Use buildObjectStructure to get fresh dimensions from SceneController
+            // Reuse cached structure for unchanged objects
+            if (!changedIds.has(objectData.id) && this._selectionStructureCache?.has(objectData.id)) {
+                return this._selectionStructureCache.get(objectData.id);
+            }
+
             return this.buildObjectStructure(objectData);
         }).filter(Boolean);
+
+        // Cache for next cycle
+        this._selectionStructureCache = new Map(serializedSelection.map(s => [s.id, s]));
 
         if (serializedSelection.length === 0) return;
 
@@ -877,6 +891,9 @@ class ObjectStateManager {
     setSelection(objectIds) {
         this.selection.clear();
         objectIds.forEach(id => this.selection.add(id));
+
+        // Invalidate cached selection structures so next refreshSelectionUI rebuilds fresh
+        this._selectionStructureCache = null;
 
         // NOTE: Do NOT emit to ObjectEventBus here - SelectionController already emits
         // This method is called BY SelectionController.notifySelectionChange() which handles emission

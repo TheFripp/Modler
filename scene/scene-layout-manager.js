@@ -145,17 +145,9 @@ class SceneLayoutManager {
             this._persistCalculatedGap(container, result.calculatedGap, pushContext);
 
             // Resize container geometry if needed (skip during push — push manages its own geometry)
+            // Note: if geometry factories ever clamp/adjust sizes, a re-pass would be needed here
             if (result.containerResized && !pushContext) {
                 this._applyContainerResize(container, result.targetContainerSize);
-
-                // After geometry resize, re-apply positions with the actual new container size
-                // (geometry may have been clamped or adjusted by the factory)
-                const newContainerSize = this.getContainerSize(container);
-                const finalResult = window.LayoutEngine.calculateLayout(
-                    children, container.autoLayout, newContainerSize, null, pushContext
-                );
-                this.applyLayoutPositionsAndSizes(children, finalResult.positions, finalResult.sizes, container, pushContext);
-                this._persistCalculatedGap(container, finalResult.calculatedGap, pushContext);
             }
 
             // Refresh cell wireframes if currently showing on this container
@@ -192,10 +184,7 @@ class SceneLayoutManager {
      * @private
      */
     _updateHugContainer(container, context) {
-        if (this._layoutInProgress) {
-            return { success: false, reason: 'layout in progress' };
-        }
-
+        const wasLayoutInProgress = this._layoutInProgress;
         this._layoutInProgress = true;
 
         try {
@@ -211,7 +200,7 @@ class SceneLayoutManager {
             // If layout direction is configured, arrange children with gap before wrapping.
             // calculateLayout with null containerSize uses fixed gap (no fill, no space-between).
             // Children are centered around origin, so bounds.center ≈ (0,0,0) — no drift.
-            if (container.autoLayout?.enabled && container.autoLayout?.direction) {
+            if (container.autoLayout?.direction) {
                 const result = window.LayoutEngine.calculateLayout(
                     children, container.autoLayout, null
                 );
@@ -257,7 +246,7 @@ class SceneLayoutManager {
                     if (childObj.mesh) {
                         childObj.mesh.position.sub(containerMovement);
                         this.sceneController.updateObject(childObj.id, {
-                            position: childObj.mesh.position.clone()
+                            position: childObj.mesh.position
                         });
                     }
                 });
@@ -272,7 +261,7 @@ class SceneLayoutManager {
             return { success: true };
 
         } finally {
-            this._layoutInProgress = false;
+            this._layoutInProgress = wasLayoutInProgress;
         }
     }
 
@@ -289,45 +278,52 @@ class SceneLayoutManager {
             return { success: false, reason: 'manual mode - no hierarchy change' };
         }
 
-        const children = this.sceneController.getChildObjects(container.id);
-        if (children.length === 0) {
-            return { success: true, reason: 'no children' };
+        const wasLayoutInProgress = this._layoutInProgress;
+        this._layoutInProgress = true;
+
+        try {
+            const children = this.sceneController.getChildObjects(container.id);
+            if (children.length === 0) {
+                return { success: true, reason: 'no children' };
+            }
+
+            const childMeshes = this.getChildMeshesForBounds(children);
+            if (childMeshes.length === 0) {
+                return { success: false, reason: 'no valid child meshes' };
+            }
+
+            // Calculate bounds of all children in container-local space (no padding for manual)
+            const bounds = window.LayoutEngine.calculateHugBounds(childMeshes, {});
+            if (!bounds) {
+                return { success: false, reason: 'bounds calculation failed' };
+            }
+
+            // Container is centered at origin in local space: extends -size/2 to +size/2.
+            // Required half-extent = max distance from origin to any child edge.
+            const currentSize = this.getContainerSize(container);
+            const neededHalfX = Math.max(Math.abs(bounds.min.x), Math.abs(bounds.max.x));
+            const neededHalfY = Math.max(Math.abs(bounds.min.y), Math.abs(bounds.max.y));
+            const neededHalfZ = Math.max(Math.abs(bounds.min.z), Math.abs(bounds.max.z));
+
+            // Expand only — never shrink below current size
+            const expandedSize = new THREE.Vector3(
+                Math.max(currentSize.x, neededHalfX * 2),
+                Math.max(currentSize.y, neededHalfY * 2),
+                Math.max(currentSize.z, neededHalfZ * 2)
+            );
+
+            const grew = expandedSize.x > currentSize.x + 0.001 ||
+                          expandedSize.y > currentSize.y + 0.001 ||
+                          expandedSize.z > currentSize.z + 0.001;
+
+            if (grew) {
+                this._applyContainerResize(container, expandedSize);
+            }
+
+            return { success: true, expanded: grew };
+        } finally {
+            this._layoutInProgress = wasLayoutInProgress;
         }
-
-        const childMeshes = this.getChildMeshesForBounds(children);
-        if (childMeshes.length === 0) {
-            return { success: false, reason: 'no valid child meshes' };
-        }
-
-        // Calculate bounds of all children in container-local space (no padding for manual)
-        const bounds = window.LayoutEngine.calculateHugBounds(childMeshes, {});
-        if (!bounds) {
-            return { success: false, reason: 'bounds calculation failed' };
-        }
-
-        // Container is centered at origin in local space: extends -size/2 to +size/2.
-        // Required half-extent = max distance from origin to any child edge.
-        const currentSize = this.getContainerSize(container);
-        const neededHalfX = Math.max(Math.abs(bounds.min.x), Math.abs(bounds.max.x));
-        const neededHalfY = Math.max(Math.abs(bounds.min.y), Math.abs(bounds.max.y));
-        const neededHalfZ = Math.max(Math.abs(bounds.min.z), Math.abs(bounds.max.z));
-
-        // Expand only — never shrink below current size
-        const expandedSize = new THREE.Vector3(
-            Math.max(currentSize.x, neededHalfX * 2),
-            Math.max(currentSize.y, neededHalfY * 2),
-            Math.max(currentSize.z, neededHalfZ * 2)
-        );
-
-        const grew = expandedSize.x > currentSize.x + 0.001 ||
-                      expandedSize.y > currentSize.y + 0.001 ||
-                      expandedSize.z > currentSize.z + 0.001;
-
-        if (grew) {
-            this._applyContainerResize(container, expandedSize);
-        }
-
-        return { success: true, expanded: grew };
     }
 
     // ====== calculatedGap PERSISTENCE (THE single location) ======
@@ -652,7 +648,6 @@ class SceneLayoutManager {
                 if (geomCenterOffset) obj.mesh.position.add(geomCenterOffset);
             }
 
-            obj.position = { x: obj.mesh.position.x, y: obj.mesh.position.y, z: obj.mesh.position.z };
         });
     }
 

@@ -213,71 +213,72 @@ class SceneLifecycleManager {
             }
         }
 
-        // Clean up visualization caches (must happen before mesh removal)
-        const visualizationManager = window.modlerComponents?.visualizationManager;
-        if (visualizationManager) {
-            visualizationManager.cleanup(objectData.mesh);
-        }
-
-        // Clean up support meshes
-        const supportMeshFactory = this.getSupportMeshFactory();
-        if (supportMeshFactory) {
-            supportMeshFactory.cleanupSupportMeshes(objectData.mesh);
-        }
-
-        // Remove from scene (use removeFromParent to handle both scene-level
-        // and container-parented meshes — setParentContainer reparents meshes
-        // to the container mesh, so this.scene.remove() won't find them)
-        if (objectData.mesh.parent) {
-            objectData.mesh.parent.remove(objectData.mesh);
-        } else {
-            this.scene.remove(objectData.mesh);
-        }
-
-        // Clean up geometry and material
-        if (objectData.mesh.geometry) {
-            objectData.mesh.geometry.dispose();
-        }
-
-        if (objectData.mesh.material) {
-            if (Array.isArray(objectData.mesh.material)) {
-                objectData.mesh.material.forEach(material => material.dispose());
-            } else {
-                objectData.mesh.material.dispose();
+        // Each cleanup step is isolated so a failure in one doesn't prevent the rest
+        try {
+            const visualizationManager = window.modlerComponents?.visualizationManager;
+            if (visualizationManager) {
+                visualizationManager.cleanup(objectData.mesh);
             }
-        }
+        } catch (e) { console.warn('Cleanup: visualization failed for', id, e); }
 
-        // Remove from hierarchy tracking (delegated to hierarchy manager)
-        const manager = this.getHierarchyManager();
-        if (manager) {
-            manager.removeFromParentOrder(id, objectData.parentContainer);
-        } else {
-            // Fallback during cleanup
-            if (!objectData.parentContainer) {
+        try {
+            const supportMeshFactory = this.getSupportMeshFactory();
+            if (supportMeshFactory) {
+                supportMeshFactory.cleanupSupportMeshes(objectData.mesh);
+            }
+        } catch (e) { console.warn('Cleanup: support meshes failed for', id, e); }
+
+        try {
+            if (objectData.mesh.parent) {
+                objectData.mesh.parent.remove(objectData.mesh);
+            } else {
+                this.scene.remove(objectData.mesh);
+            }
+        } catch (e) { console.warn('Cleanup: scene removal failed for', id, e); }
+
+        try {
+            if (objectData.mesh.geometry) {
+                objectData.mesh.geometry.dispose();
+            }
+            if (objectData.mesh.material) {
+                if (Array.isArray(objectData.mesh.material)) {
+                    objectData.mesh.material.forEach(material => material.dispose());
+                } else {
+                    objectData.mesh.material.dispose();
+                }
+            }
+        } catch (e) { console.warn('Cleanup: geometry/material disposal failed for', id, e); }
+
+        try {
+            const manager = this.getHierarchyManager();
+            if (manager) {
+                manager.removeFromParentOrder(id, objectData.parentContainer);
+            } else if (!objectData.parentContainer) {
                 const index = this.rootChildrenOrder.indexOf(id);
                 if (index !== -1) {
                     this.rootChildrenOrder.splice(index, 1);
                 }
             }
-        }
+        } catch (e) { console.warn('Cleanup: hierarchy removal failed for', id, e); }
 
-        // Remove from registry
+        // Registry removal — always attempt even if prior steps failed
         this.objects.delete(id);
 
-        // Remove from ObjectStateManager for unified state management
-        const objectStateManager = this.getObjectStateManager();
-        if (objectStateManager) {
-            objectStateManager.objects.delete(id);
-            // Note: Hierarchy is rebuilt on-demand via getHierarchy(), no need to rebuild here
-        }
+        try {
+            const objectStateManager = this.getObjectStateManager();
+            if (objectStateManager) {
+                objectStateManager.objects.delete(id);
+            }
+        } catch (e) { console.warn('Cleanup: OSM removal failed for', id, e); }
 
-        // Clean up layout propagation caches to prevent stale entries
-        const layoutPropagationManager = window.modlerComponents?.layoutPropagationManager;
-        if (layoutPropagationManager) {
-            layoutPropagationManager.depthCache.delete(id);
-            layoutPropagationManager.scheduledLayoutUpdates.delete(id);
-            layoutPropagationManager.nextFramePropagations.delete(id);
-        }
+        try {
+            const layoutPropagationManager = window.modlerComponents?.layoutPropagationManager;
+            if (layoutPropagationManager) {
+                layoutPropagationManager.depthCache.delete(id);
+                layoutPropagationManager.scheduledLayoutUpdates.delete(id);
+                layoutPropagationManager.nextFramePropagations.delete(id);
+            }
+        } catch (e) { console.warn('Cleanup: layout propagation cache failed for', id, e); }
 
         // UNIFIED ARCHITECTURE: Emit ObjectEventBus LIFECYCLE event for FileManager auto-save
         if (window.objectEventBus) {
