@@ -442,20 +442,56 @@ class CommandRouter {
             return;
         }
 
-        // Capture before-state
-        const oldAutoLayout = container.autoLayout ? JSON.parse(JSON.stringify(container.autoLayout)) : null;
-        const oldContainerMode = container.containerMode;
-        const oldChildPositions = new Map();
-        const children = this.sceneController.getChildObjects?.(objectId) || [];
-        children.forEach(child => {
-            if (child.mesh) {
-                oldChildPositions.set(child.id, {
-                    x: child.mesh.position.x,
-                    y: child.mesh.position.y,
-                    z: child.mesh.position.z
+        // DRAG BATCHING: During drag scrubbing (source='drag'), capture before-state
+        // once and defer command creation until final commit (source='input').
+        // This prevents expensive per-frame snapshotting and undo stack flooding.
+        if (source === 'drag') {
+            if (!this._layoutPropertyDragState) {
+                const children = this.sceneController.getChildObjects?.(objectId) || [];
+                const oldChildPositions = new Map();
+                children.forEach(child => {
+                    if (child.mesh) {
+                        oldChildPositions.set(child.id, {
+                            x: child.mesh.position.x,
+                            y: child.mesh.position.y,
+                            z: child.mesh.position.z
+                        });
+                    }
                 });
+                this._layoutPropertyDragState = {
+                    objectId,
+                    property,
+                    oldAutoLayout: container.autoLayout ? JSON.parse(JSON.stringify(container.autoLayout)) : null,
+                    oldContainerMode: container.containerMode,
+                    childPositionSnapshots: oldChildPositions
+                };
             }
-        });
+            // Forward update for realtime visual feedback (no undo command)
+            this._forwardPropertyUpdate(data);
+            return;
+        }
+
+        // FINAL COMMIT (source='input' or other)
+        // Use stored drag state if available, otherwise capture fresh
+        const dragState = this._layoutPropertyDragState;
+        this._layoutPropertyDragState = null;
+
+        const oldAutoLayout = dragState?.oldAutoLayout ?? (container.autoLayout ? JSON.parse(JSON.stringify(container.autoLayout)) : null);
+        const oldContainerMode = dragState?.oldContainerMode ?? container.containerMode;
+        const oldChildPositions = dragState?.childPositionSnapshots ?? (() => {
+            const positions = new Map();
+            const children = this.sceneController.getChildObjects?.(objectId) || [];
+            children.forEach(child => {
+                if (child.mesh) {
+                    positions.set(child.id, {
+                        x: child.mesh.position.x,
+                        y: child.mesh.position.y,
+                        z: child.mesh.position.z
+                    });
+                }
+            });
+            return positions;
+        })();
 
         // Determine old value for the specific property
         let oldValue = null;
