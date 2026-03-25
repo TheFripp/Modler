@@ -142,10 +142,12 @@ class PushTool extends BaseTool {
                 }
 
                 // If layout container pushed perpendicular to layout direction,
-                // set children to fill on the push axis
+                // set children to fill on the push axis (skip for tile containers —
+                // tile instances must maintain uniform fixed dimensions)
                 if (this.objectStateManager?.isLayoutMode(objectData.id)) {
                     const layoutDirection = objectData.autoLayout?.direction || 'x';
-                    if (this.pushAxis !== layoutDirection) {
+                    const isTile = objectData.autoLayout?.tileMode?.enabled;
+                    if (this.pushAxis !== layoutDirection && !isTile) {
                         this.setChildrenToFillOnAxis(objectData, this.pushAxis);
                     }
                 }
@@ -330,6 +332,27 @@ class PushTool extends BaseTool {
         sceneController.updateContainer(objectData.id, { pushContext: { axis } });
     }
 
+    /**
+     * Sync tile siblings to match pushed child's dimensions.
+     * Direct sync avoids relying on the indirect event chain through TileInstanceManager.
+     */
+    syncTileSiblings(pushedObjectData, container) {
+        const dimensionManager = window.dimensionManager;
+        if (!dimensionManager || !this.objectStateManager) return;
+
+        const sourceDims = dimensionManager.getDimensions(pushedObjectData.mesh);
+        if (!sourceDims) return;
+
+        const siblings = this.sceneController.getAllObjects()
+            .filter(obj => obj.parentContainer === container.id && obj.id !== pushedObjectData.id);
+
+        for (const sibling of siblings) {
+            dimensionManager.setDimensions(sibling.mesh, sourceDims, 'center');
+            this.objectStateManager.updateObject(sibling.id, {
+                dimensions: { ...sourceDims }
+            }, 'push-tool');
+        }
+    }
 
     /**
      * Update push during mouse movement
@@ -566,6 +589,14 @@ class PushTool extends BaseTool {
         // If pushed object is a child INSIDE a container, update the parent
         if (objectData.parentContainer) {
             const parent = sceneController.getObject(objectData.parentContainer);
+
+            // Tile containers: explicitly sync siblings and update layout
+            if (parent?.autoLayout?.tileMode?.enabled) {
+                this.syncTileSiblings(objectData, parent);
+                sceneController.updateContainer(objectData.parentContainer);
+                return;
+            }
+
             if (parent?.isContainer && this.objectStateManager?.isLayoutMode(parent.id)) {
                 // Layout container: pass pushContext so layout uses space-between gap distribution
                 sceneController.updateContainer(objectData.parentContainer, {
