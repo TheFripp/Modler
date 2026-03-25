@@ -41,6 +41,7 @@ class CommandRouter {
 
         // Drag batching: captures before-state on first drag event,
         // defers undo command creation until final commit
+        this._propertyDragState = null;
         this._tileRepeatDragState = null;
     }
 
@@ -344,8 +345,31 @@ class CommandRouter {
             return;
         }
 
-        // Capture before-snapshot
-        const beforeSnapshot = this._capturePropertySnapshot(objectId, property);
+        // DRAG BATCHING: During drag scrubbing (source='drag'), capture before-state
+        // once and defer command creation until final commit (source='input').
+        // This prevents per-frame snapshotting and undo stack flooding.
+        if (source === 'drag') {
+            if (!this._propertyDragState) {
+                this._propertyDragState = {
+                    objectId,
+                    property,
+                    beforeSnapshot: this._capturePropertySnapshot(objectId, property)
+                };
+            }
+            // Forward update for realtime visual feedback (no undo command)
+            this._forwardPropertyUpdate(data);
+            return;
+        }
+
+        // FINAL COMMIT (source='input' or other)
+        // Use stored drag state if available, otherwise capture fresh
+        const dragState = this._propertyDragState;
+        this._propertyDragState = null;
+
+        const beforeSnapshot = (dragState && dragState.objectId === objectId)
+            ? dragState.beforeSnapshot
+            : this._capturePropertySnapshot(objectId, property);
+
         if (!beforeSnapshot) {
             this._forwardPropertyUpdate(data);
             return;

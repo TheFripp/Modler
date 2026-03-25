@@ -34,18 +34,8 @@ export interface PropertyChangeEvent {
 }
 
 class PropertyController {
-	private pendingUpdates = new Map<string, any>();
 	private updateTimeouts = new Map<string, NodeJS.Timeout>();
 	private constraints = new Map<PropertyPath, PropertyConstraints>();
-
-	// Batching for performance optimization
-	private batchedUpdates = new Map<string, Map<string, any>>();
-	private batchTimeout: NodeJS.Timeout | null = null;
-	private readonly BATCH_DELAY = 16; // ~60fps for real-time updates
-
-	// Performance tracking
-	private updateCounts = new Map<string, number>();
-	private readonly MAX_UPDATES_PER_SECOND = 60;
 
 	// Event store for property changes
 	public propertyChanges: Writable<PropertyChangeEvent | null> = writable(null);
@@ -207,67 +197,6 @@ class PropertyController {
 	}
 
 	/**
-	 * Update property with debouncing (for continuous changes like dragging)
-	 */
-	updatePropertyDebounced(
-		objectId: string,
-		property: PropertyPath,
-		value: any,
-		source: PropertyChangeEvent['source'] = 'drag',
-		delay: number = 150
-	): boolean {
-		// For multi-selection, delegate directly to updateThreeJSProperty which handles the multi-selection logic
-		if (objectId === 'multi-selection') {
-			updateThreeJSProperty(objectId, property, value, source);
-			return true;
-		}
-
-		const oldValue = this.getCurrentValue(objectId, property);
-		// Skip step rounding for drag operations to enable smooth movement
-		const skipStepRounding = source === 'drag';
-		const validation = this.validateValue(property, value, skipStepRounding);
-
-		if (!validation.valid) {
-			console.warn(`Property validation failed for ${property}:`, validation.error);
-			return false;
-		}
-
-		const key = `${objectId}.${property}`;
-
-		// Store the pending update
-		this.pendingUpdates.set(key, validation.value);
-
-		// Clear existing timeout
-		const existingTimeout = this.updateTimeouts.get(key);
-		if (existingTimeout) {
-			clearTimeout(existingTimeout);
-		}
-
-		// Set new timeout
-		const timeout = setTimeout(() => {
-			const pendingValue = this.pendingUpdates.get(key);
-			if (pendingValue !== undefined) {
-				updateThreeJSProperty(objectId, property, pendingValue, source);
-
-				// Emit property change event
-				this.propertyChanges.set({
-					objectId,
-					property,
-					value: pendingValue,
-					oldValue,
-					source
-				});
-
-				this.pendingUpdates.delete(key);
-				this.updateTimeouts.delete(key);
-			}
-		}, delay);
-
-		this.updateTimeouts.set(key, timeout);
-		return true;
-	}
-
-	/**
 	 * Increment/decrement a numeric property by its step value
 	 */
 	incrementProperty(objectId: string, property: PropertyPath, direction: 1 | -1 = 1): boolean {
@@ -279,65 +208,6 @@ class PropertyController {
 		const newValue = currentValue + (step * direction);
 
 		return this.updateProperty(objectId, property, newValue, 'arrow');
-	}
-
-	/**
-	 * Flush all pending debounced updates immediately
-	 */
-	flushPendingUpdates(): void {
-		for (const [key, timeout] of this.updateTimeouts.entries()) {
-			clearTimeout(timeout);
-			const pendingValue = this.pendingUpdates.get(key);
-			if (pendingValue !== undefined) {
-				const [objectId, property] = key.split('.', 2) as [string, PropertyPath];
-				updateThreeJSProperty(objectId, property, pendingValue, 'flush');
-			}
-		}
-
-		this.pendingUpdates.clear();
-		this.updateTimeouts.clear();
-	}
-
-	/**
-	 * Update multiple properties in a batch for performance
-	 * Useful for simultaneous property changes (e.g., position.x and position.y)
-	 */
-	updatePropertiesBatched(
-		objectId: string,
-		properties: Array<{ property: PropertyPath; value: any }>,
-		source: PropertyChangeEvent['source'] = 'input'
-	): boolean {
-		// Validate all properties first
-		const validatedProperties = [];
-		for (const { property, value } of properties) {
-			const validation = this.validateValue(property, value);
-			if (!validation.valid) {
-				console.warn(`Property validation failed for ${property}:`, validation.error);
-				return false;
-			}
-			validatedProperties.push({ property, value: validation.value });
-		}
-
-		// Check rate limiting
-		if (!this.checkRateLimit(objectId)) {
-			return false;
-		}
-
-		// Add to batch
-		let objectBatch = this.batchedUpdates.get(objectId);
-		if (!objectBatch) {
-			objectBatch = new Map();
-			this.batchedUpdates.set(objectId, objectBatch);
-		}
-
-		// Add all properties to the batch
-		for (const { property, value } of validatedProperties) {
-			objectBatch.set(property, { value, source });
-		}
-
-		// Schedule batch processing
-		this.scheduleBatchUpdate();
-		return true;
 	}
 
 	/**
@@ -390,111 +260,10 @@ class PropertyController {
 	}
 
 	/**
-	 * Update property with smart performance optimization
-	 * Automatically chooses between immediate, debounced, or batched updates
-	 */
-	updatePropertySmart(
-		objectId: string,
-		property: PropertyPath,
-		value: any,
-		source: PropertyChangeEvent['source'] = 'input'
-	): boolean {
-		// Immediate updates for discrete actions
-		if (source === 'input' || source === 'arrow') {
-			return this.updateProperty(objectId, property, value, source);
-		}
-
-		// Real-time updates for continuous actions
-		if (source === 'drag' || source === 'scene') {
-			// Use batching for transform properties that often change together
-			if (property.startsWith('position.') || property.startsWith('rotation.')) {
-				return this.updatePropertiesBatched(objectId, [{ property, value }], source);
-			}
-
-			// Use debouncing for expensive operations
-			if (property.startsWith('dimensions.') || property.startsWith('autoLayout.')) {
-				return this.updatePropertyDebounced(objectId, property, value, source, 100);
-			}
-		}
-
-		return this.updateProperty(objectId, property, value, source);
-	}
-
-	/**
-	 * Check rate limiting to prevent performance issues
-	 */
-	private checkRateLimit(objectId: string): boolean {
-		const now = Date.now();
-		const key = `${objectId}_rate`;
-		const lastCount = this.updateCounts.get(key) || 0;
-
-		// Reset counter every second
-		if (now % 1000 < 16) {
-			this.updateCounts.set(key, 0);
-			return true;
-		}
-
-		if (lastCount >= this.MAX_UPDATES_PER_SECOND) {
-			console.warn(`Rate limit exceeded for object ${objectId}`);
-			return false;
-		}
-
-		this.updateCounts.set(key, lastCount + 1);
-		return true;
-	}
-
-	/**
-	 * Schedule batch update processing
-	 */
-	private scheduleBatchUpdate(): void {
-		if (this.batchTimeout) {
-			return; // Already scheduled
-		}
-
-		this.batchTimeout = setTimeout(() => {
-			this.processBatchedUpdates();
-			this.batchTimeout = null;
-		}, this.BATCH_DELAY);
-	}
-
-	/**
-	 * Process all batched updates at once
-	 */
-	private processBatchedUpdates(): void {
-		for (const [objectId, properties] of this.batchedUpdates) {
-			for (const [property, { value, source }] of properties) {
-				updateThreeJSProperty(objectId, property, value, source);
-
-				// Emit property change event
-				this.propertyChanges.set({
-					objectId,
-					property: property as PropertyPath,
-					value,
-					oldValue: this.getCurrentValue(objectId, property as PropertyPath),
-					source
-				});
-			}
-		}
-
-		// Clear the batch
-		this.batchedUpdates.clear();
-	}
-
-	/**
 	 * Clean up resources
 	 */
 	destroy(): void {
-		this.flushPendingUpdates();
-
-		// Clean up batching
-		if (this.batchTimeout) {
-			clearTimeout(this.batchTimeout);
-			this.processBatchedUpdates(); // Process any pending batches
-		}
-
 		this.propertyChanges.set(null);
-		this.updateCounts.clear();
-		this.batchedUpdates.clear();
 	}
 }
 
