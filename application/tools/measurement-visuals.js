@@ -372,7 +372,7 @@ class MeasurementVisuals {
      * Format measurement value with unit suffix
      */
     formatMeasurementWithUnit(valueInMeters) {
-        const unitConverter = window.modlerComponents?.unitConverter;
+        const unitConverter = window.unitConverter;
 
         if (!unitConverter) {
             return `${valueInMeters.toFixed(1)}m`;
