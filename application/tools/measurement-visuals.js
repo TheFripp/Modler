@@ -156,7 +156,7 @@ class MeasurementVisuals {
                 // For bottom faces, position measurement on floor plane below object
                 if (currentObject) {
                     const bbox = new THREE.Box3().setFromObject(currentObject);
-                    const floorY = bbox.min.y - 0.5;
+                    const floorY = bbox.min.y - 0.15;
 
                     offsetStart.y = floorY;
                     offsetEnd.y = floorY;
@@ -166,11 +166,14 @@ class MeasurementVisuals {
                 const edgeDirection = end.clone().sub(start).normalize();
                 normalDirection = edgeDirection.clone().cross(faceNormal).normalize();
 
-                if (normalDirection.dot(faceNormal) < 0) {
+                // Ensure offset points toward camera so measurement is always visible
+                const edgeMid = start.clone().add(end).multiplyScalar(0.5);
+                const toCamera = this.camera.position.clone().sub(edgeMid);
+                if (normalDirection.dot(toCamera) < 0) {
                     normalDirection.negate();
                 }
 
-                const offsetAmount = 0.5;
+                const offsetAmount = 0.15;
                 const offset = normalDirection.multiplyScalar(offsetAmount);
                 offsetStart.add(offset);
                 offsetEnd.add(offset);
@@ -183,7 +186,7 @@ class MeasurementVisuals {
             toCamera.sub(edgeDir.multiplyScalar(toCamera.dot(edgeDir)));
             normalDirection = toCamera.normalize();
 
-            const offsetAmount = 0.5;
+            const offsetAmount = 0.15;
             const offset = normalDirection.clone().multiplyScalar(offsetAmount);
             offsetStart.add(offset);
             offsetEnd.add(offset);
@@ -264,7 +267,7 @@ class MeasurementVisuals {
             perpendicular.negate();
         }
 
-        const offsetAmount = 0.5;
+        const offsetAmount = 0.15;
         const offsetStart = startPoint.clone().add(perpendicular.clone().multiplyScalar(offsetAmount));
         const offsetEnd = endPoint.clone().add(perpendicular.clone().multiplyScalar(offsetAmount));
 
@@ -328,7 +331,13 @@ class MeasurementVisuals {
     create3DLabel(text, position) {
         const canvas = document.createElement('canvas');
         const context = canvas.getContext('2d');
-        canvas.width = 42;
+        const font = '14px Arial, sans-serif';
+
+        // Measure text to size canvas dynamically
+        context.font = font;
+        const textWidth = context.measureText(text).width;
+        const padding = 12;
+        canvas.width = Math.max(42, Math.ceil(textWidth + padding));
         canvas.height = 24;
 
         context.fillStyle = this.labelColor;
@@ -336,7 +345,7 @@ class MeasurementVisuals {
         context.roundRect(0, 0, canvas.width, canvas.height, 3);
         context.fill();
 
-        context.font = '14px Arial, sans-serif';
+        context.font = font;
         context.fillStyle = 'white';
         context.textAlign = 'center';
         context.textBaseline = 'middle';
@@ -351,7 +360,9 @@ class MeasurementVisuals {
         });
         const sprite = new THREE.Sprite(spriteMaterial);
         sprite.position.copy(position);
-        sprite.scale.set(0.053, 0.03, 1);
+        const baseScaleX = 0.053;
+        const scaleX = baseScaleX * (canvas.width / 42);
+        sprite.scale.set(scaleX, 0.03, 1);
         sprite.renderOrder = 1000;
 
         return sprite;
@@ -386,7 +397,7 @@ class MeasurementVisuals {
             }
         }
 
-        const convertedValue = unitConverter.convertFromInternal(valueInMeters);
+        const convertedValue = unitConverter.fromInternalUnits(valueInMeters);
         const precision = unitConverter.unitPrecision[userUnit] || 1;
 
         return `${convertedValue.toFixed(precision)}${userUnit}`;

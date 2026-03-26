@@ -331,8 +331,7 @@ function initializeApplication() {
         ['push', PushTool],
         ['rotate', RotationTool],
         ['box-creation', BoxCreationTool],
-        ['tile', TileTool],
-        ['measure', MeasureToolAdapter]
+        ['tile', TileTool]
     ];
     tools.forEach(([name, tool]) => modlerV2Components.toolController.registerTool(name, tool));
     modlerV2Components.toolController.switchToTool('select');

@@ -129,7 +129,7 @@ class InputController {
      */
     isAltKeyPressed() {
         const keyboardRouter = window.modlerComponents?.keyboardRouter;
-        return keyboardRouter?.keys.has('AltLeft') || keyboardRouter?.keys.has('AltRight') || false;
+        return keyboardRouter?.keys.has('AltLeft') || keyboardRouter?.keys.has('AltRight') || keyboardRouter?.keys.has('KeyM') || false;
     }
 
     onMouseDown(event) {

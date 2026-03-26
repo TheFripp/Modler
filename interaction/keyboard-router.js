@@ -406,8 +406,7 @@ class KeyboardRouter {
             'KeyE': 'push',
             'KeyR': 'rotate',
             'KeyT': 'box-creation',
-            'KeyY': 'tile',
-            'KeyM': 'measure'
+            'KeyY': 'tile'
         };
 
         const toolName = toolMap[code];

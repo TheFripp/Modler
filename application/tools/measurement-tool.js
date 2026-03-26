@@ -15,8 +15,8 @@ class MeasurementTool {
         // Configuration - will be updated from settings
         this.lineColor = 0xff0000; // Red (default)
         this.labelColor = '#ff0000'; // Red (default)
-        this.dashSize = 0.2;
-        this.gapSize = 0.1;
+        this.dashSize = 0.05;
+        this.gapSize = 0.03;
         this.screenSpaceLineWidth = 3; // Target width in screen pixels
 
         // Current measurement state for Tab key focus
