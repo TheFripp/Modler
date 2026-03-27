@@ -54,6 +54,11 @@ Events are processed in strict priority order:
 
 5. **Escape** (clear selection)
 
+5.7. **F Key** (frame camera)
+   - With selection: frames selected objects
+   - Without selection: frames all scene objects
+   - Uses `CameraController.frameScene(meshes)`
+
 6. **Tool Switching** (Q/W/E/R/T/M)
    - Only when no modifier keys pressed
 

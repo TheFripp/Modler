@@ -109,15 +109,14 @@ This allows the push tool to "break out" of hug mode naturally. Full undo/redo r
 
 **Files**: `push-tool.js` (`transitionHugToLayout`), `push-face-command.js` (`restoreHugState`/`reapplyLayoutState`)
 
-### Ctrl+F Auto-Orientation Detection
+### Cmd+F Auto-Orientation & Gap Detection
 
-When wrapping objects in a container via Ctrl+F, `ContainerCrudManager.detectAndSetOrientation()` analyzes child positions to pre-set `autoLayout.direction`:
+When wrapping objects in a container via Cmd+F, `ContainerCrudManager.detectAndSetOrientation()` analyzes child positions to pre-set `autoLayout.direction` and `autoLayout.gap`:
 
 - Calculates spread (max - min) of child centers along each axis
 - Axis with greatest spread becomes the direction (default: `x`)
-- Direction is pre-set but container stays in hug mode (`containerMode: 'hug'`)
-
-This direction becomes active when layout mode is later enabled (via property panel or push tool transition).
+- **Gap detection**: `_detectGapFromSpacing()` sorts objects along the detected axis, then calculates average edge-to-edge distance between consecutive objects. This preserves the original spatial arrangement.
+- Container is set to layout mode (`containerMode: 'layout'`) with the detected direction and gap
 
 ---
 

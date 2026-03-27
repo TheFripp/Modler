@@ -41,6 +41,7 @@ Dual geometry containers (visual wireframes + collision meshes) with Three.js hi
 - **From selection**: `containerCrudManager.createContainerFromSelection(selectedObjects)`
 - **Empty container**: `containerCrudManager.createEmptyContainer(position)`
 - **Command**: Cmd+F triggers creation via ToolController
+- **Gap detection**: When wrapping 2+ objects, the existing edge-to-edge spacing is detected and used as the initial `autoLayout.gap`, preserving spatial arrangement
 
 ### Container Resizing (ContainerCrudManager)
 **UNIFIED API** (January 2025): Single entry point with semantic reason parameters
