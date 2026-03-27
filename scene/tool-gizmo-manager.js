@@ -205,31 +205,31 @@ class ToolGizmoManager {
         const group = new THREE.Group();
         group.visible = false;
 
-        // 90° arc starting at face center, curving inward and down toward floor
+        // 90° arc starting at face center, curving outward and down toward floor
         // Local +X = face outward direction, local +Y = toward-floor direction
-        // Arc center at (-R, 0, 0), radius R
-        // Sweep CCW from θ=0 to θ=π/2: start (0,0) → end (-R,R)
-        // Initial tangent = (0,1) = downward, arc curves toward object
+        // Arc center at (R, 0, 0), radius R
+        // Sweep CW from θ=π to θ=π/2: start (0,0) → end (R,R)
+        // Initial tangent = (0,R) = toward floor, final tangent = (R,0) = outward
         const segments = 16;
         const R = 1;
         const positions = [];
         for (let i = 0; i < segments; i++) {
-            const a0 = (i / segments) * (Math.PI / 2);
-            const a1 = ((i + 1) / segments) * (Math.PI / 2);
+            const a0 = Math.PI - (i / segments) * (Math.PI / 2);
+            const a1 = Math.PI - ((i + 1) / segments) * (Math.PI / 2);
             positions.push(
-                -R + R * Math.cos(a0), R * Math.sin(a0), 0,
-                -R + R * Math.cos(a1), R * Math.sin(a1), 0
+                R + R * Math.cos(a0), R * Math.sin(a0), 0,
+                R + R * Math.cos(a1), R * Math.sin(a1), 0
             );
         }
 
-        // Arrowhead at end (-R, R, 0), pointing along tangent (-X direction = inward)
-        const tipX = -R;
+        // Arrowhead at end (R, R, 0), pointing along tangent (+X direction = outward)
+        const tipX = R;
         const tipY = R;
         const headLength = 0.15;
         const headWidth = 0.08;
         positions.push(
-            tipX + headLength, tipY - headWidth, 0,  tipX, tipY, 0,
-            tipX, tipY, 0,  tipX + headLength, tipY + headWidth, 0
+            tipX - headLength, tipY - headWidth, 0,  tipX, tipY, 0,
+            tipX, tipY, 0,  tipX - headLength, tipY + headWidth, 0
         );
 
         // Ground surface indicator — circle at arrowhead tip

@@ -14,7 +14,7 @@ import * as THREE from 'three';
  * | allowLayoutChildren     | false | false | false   |
  *
  * Common rules (always applied):
- * - Only selected objects get face highlights
+ * - Face highlights show on any hovered object; interaction requires selection
  * - Only camera-facing faces get highlights
  * - Container interactive mesh redirects to parent container
  * - Children in selected containers redirect to container face
@@ -78,10 +78,10 @@ class BaseFaceToolBehavior {
     }
 
     /**
-     * Handle face detection and highlighting for selected objects
+     * Handle face detection and highlighting for hovered objects
      *
      * Centralizes the common face detection logic used by both move and push tools.
-     * Only highlights faces on currently selected objects or their collision meshes.
+     * Shows face highlights on any hovered object; interaction gated by hasValidFaceHover.
      *
      * @param {Object} hit - Raycast hit result with object and face information
      * @returns {boolean} True if face was highlighted, false otherwise
@@ -96,25 +96,19 @@ class BaseFaceToolBehavior {
         const isContainerInteractive = hit.object.userData.isContainerInteractive;
         const isContainerCollision = hit.object.userData.isContainerCollision;
 
-        // CRITICAL FIX: If hit object is not selected, ignore it during face tool operations
-        // This prevents non-selected containers from blocking face highlighting on selected containers
+        // Block children of non-selected containers from showing face highlights
+        // Standalone non-selected objects pass through to show hover preview
         if (!this.selectionController.isSelected(targetObject)) {
             const sceneController = window.modlerComponents?.sceneController;
             const objectData = sceneController?.getObjectByMesh(targetObject);
 
-            // Check if it's a child of a selected container (allow this case)
             if (objectData && objectData.parentContainer) {
                 const parentContainer = sceneController.getObject(objectData.parentContainer);
                 if (!parentContainer || !this.selectionController.isSelected(parentContainer.mesh)) {
-                    // Not a child of selected container - ignore this hit
                     this.clearHover();
                     return false;
                 }
-                // It IS a child of selected container - continue processing below
-            } else {
-                // Not selected and not a child of selected - ignore
-                this.clearHover();
-                return false;
+                // Child of selected container - continue processing below
             }
         }
 
@@ -158,80 +152,74 @@ class BaseFaceToolBehavior {
             }
         }
 
-        // Only highlight faces of selected objects (including interactive meshes of selected containers)
-        // Note: targetObject may have been changed above to the container when hitting child objects
-        if (this.selectionController.isSelected(targetObject)) {
-            // CAMERA-FACING CHECK: Only highlight faces oriented toward the camera
-            if (!this.isFaceTowardCamera(hitForFaceDetection)) {
-                this.clearHover();
-                return false;
-            }
+        // Face highlight for any hovered object (interaction still requires selection via hasValidFaceHover)
 
-            // CONTAINER MODE CHECK: Use declarative rules to determine if action is blocked
-            const isDisabledAction = this.rules.blockHugModeContainers && this.isContainerInHugMode(targetObject);
-
-            // Store the actual target object for interaction
-            this.hoveredObject = targetObject;
-            this.hoveredHit = hitForFaceDetection;
-
-            // Face highlighting activated - use support mesh if available
-            const supportMeshes = targetObject.userData.supportMeshes;
-            if (supportMeshes?.faceHighlight) {
-                // ARCHITECTURE COMPLIANCE: Position once per hover session, then show
-                // Only reposition if we're hovering a different face to prevent flicker
-
-                // For containers with synthetic hits, use face normal for change detection
-                // For regular objects, use face indices
-                let currentFaceKey;
-                if (targetObject.userData?.isContainer) {
-                    const normal = hitForFaceDetection.face.normal;
-                    currentFaceKey = `${normal.x.toFixed(2)}-${normal.y.toFixed(2)}-${normal.z.toFixed(2)}`;
-                } else {
-                    currentFaceKey = hitForFaceDetection.face.a + '-' + hitForFaceDetection.face.b + '-' + hitForFaceDetection.face.c;
-                }
-
-                const faceChanged = this.hoveredFaceIndex !== currentFaceKey || this.hoveredObject !== targetObject;
-
-                if (faceChanged) {
-                    this.hoveredFaceIndex = currentFaceKey;
-                    const supportMeshFactory = window.modlerComponents?.supportMeshFactory;
-                    if (supportMeshFactory) {
-                        // For containers, we need to create a modified hit that references the container mesh
-                        // instead of the interactive mesh, so face normal calculation works correctly
-                        let hitForPositioning = hitForFaceDetection;
-                        if ((isContainerInteractive || isContainerCollision) && hitForFaceDetection.object !== targetObject) {
-                            hitForPositioning = {
-                                ...hitForFaceDetection,
-                                object: targetObject // Use container mesh instead of interactive mesh
-                            };
-                        }
-                        supportMeshFactory.positionFaceHighlightForHit(supportMeshes.faceHighlight, hitForPositioning);
-                    }
-                }
-
-                // Show grey "disabled" face highlight if tool is not allowed on this object
-                // Use centralized disabled state management
-                {
-                    const supportMeshFactory = window.modlerComponents?.supportMeshFactory;
-                    if (supportMeshFactory) {
-                        supportMeshFactory.setFaceHighlightDisabled(targetObject, isDisabledAction);
-                        supportMeshFactory.showFaceHighlight(targetObject);
-                    } else {
-                        supportMeshes.faceHighlight.visible = true;
-                    }
-                }
-            } else {
-                // Fallback to Visual Effects for objects without support meshes
-                const materialManager = window.modlerComponents?.materialManager;
-                const disabledColor = materialManager?.colors?.DISABLED_STATE || 0x888888;
-                this.visualEffects.showFaceHighlight(hitForFaceDetection, isDisabledAction ? disabledColor : null);
-            }
-            return !isDisabledAction; // Return false if disabled so hasValidFaceHover works correctly
-        } else {
-            // Object not selected - clearing hover
+        // CAMERA-FACING CHECK: Only highlight faces oriented toward the camera
+        if (!this.isFaceTowardCamera(hitForFaceDetection)) {
             this.clearHover();
             return false;
         }
+
+        // CONTAINER MODE CHECK: Use declarative rules to determine if action is blocked
+        const isDisabledAction = this.rules.blockHugModeContainers && this.isContainerInHugMode(targetObject);
+
+        // Store the actual target object for interaction
+        this.hoveredObject = targetObject;
+        this.hoveredHit = hitForFaceDetection;
+
+        // Face highlighting activated - use support mesh if available
+        const supportMeshes = targetObject.userData.supportMeshes;
+        if (supportMeshes?.faceHighlight) {
+            // ARCHITECTURE COMPLIANCE: Position once per hover session, then show
+            // Only reposition if we're hovering a different face to prevent flicker
+
+            // For containers with synthetic hits, use face normal for change detection
+            // For regular objects, use face indices
+            let currentFaceKey;
+            if (targetObject.userData?.isContainer) {
+                const normal = hitForFaceDetection.face.normal;
+                currentFaceKey = `${normal.x.toFixed(2)}-${normal.y.toFixed(2)}-${normal.z.toFixed(2)}`;
+            } else {
+                currentFaceKey = hitForFaceDetection.face.a + '-' + hitForFaceDetection.face.b + '-' + hitForFaceDetection.face.c;
+            }
+
+            const faceChanged = this.hoveredFaceIndex !== currentFaceKey || this.hoveredObject !== targetObject;
+
+            if (faceChanged) {
+                this.hoveredFaceIndex = currentFaceKey;
+                const supportMeshFactory = window.modlerComponents?.supportMeshFactory;
+                if (supportMeshFactory) {
+                    // For containers, we need to create a modified hit that references the container mesh
+                    // instead of the interactive mesh, so face normal calculation works correctly
+                    let hitForPositioning = hitForFaceDetection;
+                    if ((isContainerInteractive || isContainerCollision) && hitForFaceDetection.object !== targetObject) {
+                        hitForPositioning = {
+                            ...hitForFaceDetection,
+                            object: targetObject // Use container mesh instead of interactive mesh
+                        };
+                    }
+                    supportMeshFactory.positionFaceHighlightForHit(supportMeshes.faceHighlight, hitForPositioning);
+                }
+            }
+
+            // Show grey "disabled" face highlight if tool is not allowed on this object
+            // Use centralized disabled state management
+            {
+                const supportMeshFactory = window.modlerComponents?.supportMeshFactory;
+                if (supportMeshFactory) {
+                    supportMeshFactory.setFaceHighlightDisabled(targetObject, isDisabledAction);
+                    supportMeshFactory.showFaceHighlight(targetObject);
+                } else {
+                    supportMeshes.faceHighlight.visible = true;
+                }
+            }
+        } else {
+            // Fallback to Visual Effects for objects without support meshes
+            const materialManager = window.modlerComponents?.materialManager;
+            const disabledColor = materialManager?.colors?.DISABLED_STATE || 0x888888;
+            this.visualEffects.showFaceHighlight(hitForFaceDetection, isDisabledAction ? disabledColor : null);
+        }
+        return !isDisabledAction;
     }
 
     /**
