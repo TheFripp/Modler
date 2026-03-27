@@ -61,6 +61,10 @@ class MeasurementTool {
         this.visuals.clearMeasurement();
     }
 
+    clearMeasurement() {
+        this.visuals.clearMeasurement();
+    }
+
     /**
      * Handle hover event during measurement mode
      */
