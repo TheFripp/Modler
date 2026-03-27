@@ -193,6 +193,13 @@ class KeyboardRouter {
             return;
         }
 
+        // PRIORITY 5.7: Frame shortcut (F key - frame selection or all objects)
+        if (code === 'KeyF' && !event.metaKey && !event.ctrlKey) {
+            event.preventDefault();
+            this.handleFrameShortcut();
+            return;
+        }
+
         // PRIORITY 6: Tool switching shortcuts (if no modifier keys)
         if (!event.metaKey && !event.ctrlKey && !event.altKey && !event.shiftKey) {
             if (this.handleToolSwitch(code)) {
@@ -391,6 +398,25 @@ class KeyboardRouter {
     getCurrentFieldIndex(toolName) {
         const workflow = this.navigationWorkflows.get(toolName);
         return workflow ? workflow.currentFieldIndex : -1;
+    }
+
+    /**
+     * Handle frame shortcut - frame selection or all objects
+     */
+    handleFrameShortcut() {
+        const cameraController = window.modlerComponents?.cameraController;
+        const sceneController = window.modlerComponents?.sceneController;
+        const selectionController = window.modlerComponents?.selectionController;
+        if (!cameraController || !sceneController) return;
+
+        let meshes;
+        if (selectionController?.hasSelection()) {
+            meshes = selectionController.getSelectedObjects();
+        } else {
+            meshes = sceneController.getAllObjects().map(obj => obj.mesh).filter(Boolean);
+        }
+
+        if (meshes.length > 0) cameraController.frameScene(meshes);
     }
 
     /**

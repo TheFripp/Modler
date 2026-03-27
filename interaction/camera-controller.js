@@ -217,6 +217,40 @@ class CameraController {
     }
 
     /**
+     * Frame multiple objects in the camera view
+     * @param {THREE.Object3D[]} meshes - Array of meshes to frame
+     */
+    frameScene(meshes) {
+        if (!meshes || meshes.length === 0) return;
+        if (meshes.length === 1) { this.frameObject(meshes[0]); return; }
+
+        // Calculate combined bounding box
+        const box = new THREE.Box3();
+        meshes.forEach(mesh => box.expandByObject(mesh));
+
+        const center = box.getCenter(new THREE.Vector3());
+        const size = box.getSize(new THREE.Vector3());
+
+        // Calculate appropriate distance based on scene size
+        const maxDim = Math.max(size.x, size.y, size.z);
+        const distance = maxDim * 2.5;
+
+        // Update orbit target to scene center
+        this.setOrbitTarget(center);
+
+        // Position camera at a nice angle relative to the scene
+        this.camera.position.set(
+            center.x + distance * 0.7,
+            center.y + distance * 0.7,
+            center.z + distance * 0.7
+        );
+        this.camera.lookAt(center);
+
+        this.updateSphericalFromCamera();
+        this._requestRender();
+    }
+
+    /**
      * Reset camera to default position and target
      */
     resetCamera() {

@@ -476,10 +476,19 @@ class FileManager extends EventTarget {
             // Update statistics
             this.stats.loads++;
 
-            // Reset camera to default position for consistent viewing
-            const cameraController = window.modlerComponents?.cameraController;
-            if (cameraController?.resetCamera) {
-                cameraController.resetCamera();
+            // Camera state is restored by the deserializer from saved data.
+            // Only reset if the file had no camera data (deserializer skips restore).
+            if (!fileData.camera) {
+                const cameraController = window.modlerComponents?.cameraController;
+                const sceneController = window.modlerComponents?.sceneController;
+                if (cameraController) {
+                    const meshes = sceneController?.getAllObjects().map(obj => obj.mesh).filter(Boolean) || [];
+                    if (meshes.length > 0) {
+                        cameraController.frameScene(meshes);
+                    } else if (cameraController.resetCamera) {
+                        cameraController.resetCamera();
+                    }
+                }
             }
 
             // Emit event
