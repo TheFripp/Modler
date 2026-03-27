@@ -104,6 +104,16 @@ class InputController {
             return; // Skip tool hover when camera is active
         }
 
+        const tool = this.toolBehaviors[this.currentTool];
+
+        // Skip expensive raycast when tool is actively dragging/pushing —
+        // drag handlers use mouse delta, not hit results
+        if (tool?.isOperationActive?.()) {
+            const isAltPressed = this.isAltKeyPressed();
+            if (tool.onHover) tool.onHover(null, isAltPressed);
+            return;
+        }
+
         // Perform raycast
         const hit = this.raycast();
 
@@ -111,7 +121,6 @@ class InputController {
         const isAltPressed = this.isAltKeyPressed();
 
         // Delegate to current tool - pass Alt state as boolean
-        const tool = this.toolBehaviors[this.currentTool];
         if (tool && tool.onHover) {
             tool.onHover(hit, isAltPressed);
         }

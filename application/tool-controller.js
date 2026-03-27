@@ -52,7 +52,8 @@ class ToolController {
             onMouseMove: (hit, event) => tool.onMouseMove(hit, event),
             onKeyDown: (event) => tool.onKeyDown(event),
             onKeyUp: (event) => tool.onKeyUp(event),
-            hasActiveHighlight: () => tool.hasActiveHighlight()
+            hasActiveHighlight: () => tool.hasActiveHighlight(),
+            isOperationActive: () => tool.isOperationActive()
         };
         
         return tool;

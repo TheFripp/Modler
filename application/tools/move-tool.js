@@ -37,10 +37,8 @@ class MoveTool extends BaseTool {
         // Track cumulative movement for Tab key focus
         this.cumulativeMovement = { x: 0, y: 0, z: 0 };
 
-        // Position update debouncing to prevent UI spam
-        this.lastPositionUpdateTime = 0;
-        this.positionUpdateThrottle = 16; // ~60fps max rate
-        this.pendingPositionUpdate = null;
+        // UI sync throttle — position updates mesh immediately, UI refreshes at ~15fps
+        this._lastUISyncTime = 0;
 
         // Corner drag state
         this.nearestCorner = null;          // { worldPos, screenPos, index } - hovered corner
@@ -286,27 +284,13 @@ class MoveTool extends BaseTool {
         return keyboardRouter?.keys.has('MetaLeft') || keyboardRouter?.keys.has('MetaRight') || false;
     }
 
+    isOperationActive() { return this.isDragging; }
+
     /**
      * Update object position through unified state management
      */
     updateObjectPosition(newPosition) {
         if (!this.dragObject) return;
-
-        // Throttle position updates to prevent UI spam
-        const now = Date.now();
-        if (now - this.lastPositionUpdateTime < this.positionUpdateThrottle) {
-            // Clear previous pending update and set new one
-            if (this.pendingPositionUpdate) {
-                clearTimeout(this.pendingPositionUpdate);
-            }
-
-            this.pendingPositionUpdate = setTimeout(() => {
-                this.performPositionUpdate(newPosition);
-                this.pendingPositionUpdate = null;
-            }, this.positionUpdateThrottle);
-            return;
-        }
-
         this.performPositionUpdate(newPosition);
     }
 
@@ -315,8 +299,6 @@ class MoveTool extends BaseTool {
         if (!this.dragObject) {
             return;
         }
-
-        this.lastPositionUpdateTime = Date.now();
 
         // Get object ID for state management
         const sceneController = this.sceneController;
@@ -329,18 +311,21 @@ class MoveTool extends BaseTool {
             this.dragObject.position.copy(newPosition);
             this.dragObject.updateMatrixWorld(true);
 
-            // Update UI panel in real-time without full ObjectStateManager propagation
+            // Update state + throttled UI sync (position goes to mesh immediately above,
+            // but property panel refresh is capped at ~15fps to avoid serialization overhead)
             if (this.objectStateManager) {
                 const object = this.objectStateManager.getObject(objectId);
                 if (object) {
-                    // Update local state copy for UI sync
                     object.position = {
                         x: newPosition.x,
                         y: newPosition.y,
                         z: newPosition.z
                     };
-                    // Trigger UI update only (skip SceneController and event propagation)
-                    this.objectStateManager.refreshSelectionUI([{ object }]);
+                    const now = Date.now();
+                    if (now - this._lastUISyncTime > 66) {
+                        this._lastUISyncTime = now;
+                        this.objectStateManager.refreshSelectionUI([{ object }]);
+                    }
                 }
             }
             return;
@@ -1090,12 +1075,6 @@ class MoveTool extends BaseTool {
             endCallback: () => this.endFaceDrag()
         });
         this.eventHandler.handleToolDeactivate(deactivationCallbacks);
-
-        // Clear any pending position updates to prevent null access
-        if (this.pendingPositionUpdate) {
-            clearTimeout(this.pendingPositionUpdate);
-            this.pendingPositionUpdate = null;
-        }
 
         // Clean up snap detection state
         if (this.snapController) {

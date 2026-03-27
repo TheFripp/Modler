@@ -41,6 +41,11 @@ class SceneFoundation {
         // Dirty-flag rendering: only call renderer.render() when something changed
         this.needsRender = true;
 
+        // Grid opacity caching — avoid full scene.traverse every frame
+        this._gridObject = null;
+        this._lastBelowFloor = undefined;
+        this._gridAnimating = false;
+
         // Start rendering
         this.isRunning = true;
         this.render();
@@ -131,35 +136,39 @@ class SceneFoundation {
         if (!this.camera) return;
 
         const isBelowFloor = this.camera.position.y < -1;
-        const targetOpacity = isBelowFloor ? 0.2 : 1.0;
 
-        // Find floor grid object
-        this.scene.traverse((object) => {
-            if (object.userData && object.userData.type === 'grid') {
-                // Update all children
-                object.traverse((child) => {
-                    // Hide floor plane when below, show when above
-                    if (child.name === 'Floor Plane') {
-                        child.visible = !isBelowFloor;
-                    }
-                    // Update grid line opacity (only for grid materials, not face highlights)
-                    else if (child.material &&
-                             child.material.opacity !== undefined &&
-                             child.material.userData?.materialManagerType !== 'face-highlight' &&
-                             child.material.userData?.materialManagerType !== 'face-highlight-container') {
-                        // Smoothly transition opacity
-                        if (Math.abs(child.material.opacity - targetOpacity) > 0.01) {
-                            const lerp = (a, b, t) => a + (b - a) * t;
-                            child.material.opacity = lerp(
-                                child.material.opacity,
-                                targetOpacity,
-                                0.1
-                            );
-                            child.material.needsUpdate = true;
-                            this.needsRender = true; // Keep rendering while animating
-                        }
-                    }
-                });
+        // Early exit if state unchanged and no animation in progress
+        if (isBelowFloor === this._lastBelowFloor && !this._gridAnimating) return;
+        this._lastBelowFloor = isBelowFloor;
+
+        // Cache grid object reference — avoid full scene.traverse every frame
+        if (!this._gridObject) {
+            this.scene.traverse((object) => {
+                if (object.userData && object.userData.type === 'grid') {
+                    this._gridObject = object;
+                }
+            });
+        }
+        if (!this._gridObject) return;
+
+        const targetOpacity = isBelowFloor ? 0.2 : 1.0;
+        this._gridAnimating = false;
+
+        // Only traverse the grid subtree, not the entire scene
+        this._gridObject.traverse((child) => {
+            if (child.name === 'Floor Plane') {
+                child.visible = !isBelowFloor;
+            } else if (child.material &&
+                       child.material.opacity !== undefined &&
+                       child.material.userData?.materialManagerType !== 'face-highlight' &&
+                       child.material.userData?.materialManagerType !== 'face-highlight-container') {
+                if (Math.abs(child.material.opacity - targetOpacity) > 0.01) {
+                    const lerp = (a, b, t) => a + (b - a) * t;
+                    child.material.opacity = lerp(child.material.opacity, targetOpacity, 0.1);
+                    child.material.needsUpdate = true;
+                    this._gridAnimating = true;
+                    this.needsRender = true;
+                }
             }
         });
     }

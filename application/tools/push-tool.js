@@ -783,6 +783,8 @@ class PushTool extends BaseTool {
         return this.faceToolBehavior.hasActiveHighlight();
     }
 
+    isOperationActive() { return this.isPushing; }
+
     /**
      * Get tool name
      */

@@ -45,6 +45,7 @@ class BaseTool {
     onKeyUp(event) { return false; }
 
     hasActiveHighlight() { return false; }
+    isOperationActive() { return false; }
 
     // --- Lifecycle ---
 
