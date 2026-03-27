@@ -150,6 +150,17 @@ class SceneLayoutManager {
                 this._applyContainerResize(container, result.targetContainerSize);
             }
 
+            // Always sync support mesh wireframes after layout recalculation.
+            // _applyContainerResize handles this when the container resizes, but when the
+            // container size stays fixed the wireframes can go stale (e.g. gap changes that
+            // redistribute children without changing the outer bounds).
+            if (!pushContext) {
+                const geometryUtils = window.GeometryUtils;
+                if (geometryUtils && container.mesh) {
+                    geometryUtils.updateSupportMeshGeometries(container.mesh);
+                }
+            }
+
             // Refresh cell wireframes if currently showing on this container
             this._refreshCellWireframesIfNeeded(container);
 

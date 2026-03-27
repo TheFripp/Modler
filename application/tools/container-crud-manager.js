@@ -366,6 +366,7 @@ class ContainerCrudManager {
      */
     detectAndSetOrientation(selectedObjects, containerObject) {
         let direction = 'x';
+        let detectedGap = 0;
 
         if (selectedObjects && selectedObjects.length >= 2) {
             let minX = Infinity, maxX = -Infinity;
@@ -389,6 +390,9 @@ class ContainerCrudManager {
             } else if (spreadZ > spreadX && spreadZ > spreadY) {
                 direction = 'z';
             }
+
+            // Detect gap from existing spacing between objects along the layout axis
+            detectedGap = this._detectGapFromSpacing(selectedObjects, direction);
         }
 
         // Route through ObjectStateManager (single source of truth for state changes)
@@ -398,7 +402,8 @@ class ContainerCrudManager {
                 autoLayout: {
                     ...containerObject.autoLayout,
                     enabled: true,
-                    direction: direction
+                    direction: direction,
+                    gap: detectedGap
                 },
                 ...ObjectStateManager.buildContainerModeUpdate('layout')
             }, { source: 'container-creation', skipLayout: true });
@@ -406,7 +411,44 @@ class ContainerCrudManager {
             // Fallback: direct mutation if OSM not yet available
             containerObject.autoLayout.enabled = true;
             containerObject.autoLayout.direction = direction;
+            containerObject.autoLayout.gap = detectedGap;
         }
+    }
+
+    /**
+     * Calculate gap between objects along a given axis from their current spacing.
+     * Gap = edge-to-edge distance between consecutive objects sorted along the axis.
+     * @private
+     */
+    _detectGapFromSpacing(objects, axis) {
+        if (!objects || objects.length < 2) return 0;
+
+        // Collect position and half-size along the layout axis for each object
+        const items = objects.map(obj => {
+            let halfSize = 0;
+            if (obj.geometry) {
+                if (!obj.geometry.boundingBox) obj.geometry.computeBoundingBox();
+                const bb = obj.geometry.boundingBox;
+                if (bb) halfSize = (bb.max[axis] - bb.min[axis]) / 2;
+            }
+            return { center: obj.position[axis], halfSize };
+        });
+
+        // Sort by position along the axis
+        items.sort((a, b) => a.center - b.center);
+
+        // Calculate edge-to-edge gaps between consecutive objects
+        const gaps = [];
+        for (let i = 1; i < items.length; i++) {
+            const edgeGap = (items[i].center - items[i].halfSize) - (items[i - 1].center + items[i - 1].halfSize);
+            gaps.push(Math.max(0, edgeGap));
+        }
+
+        if (gaps.length === 0) return 0;
+
+        // Use average gap (works well for uniform and non-uniform spacing)
+        const sum = gaps.reduce((a, b) => a + b, 0);
+        return sum / gaps.length;
     }
 
     /**
